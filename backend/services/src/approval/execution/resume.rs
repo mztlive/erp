@@ -8,7 +8,6 @@ use bpm::model::{
 };
 
 use super::apply_plan::apply_plan;
-use super::authorization::is_personnel_blocker;
 use super::idempotency::{classify_receipt, resume_digest, ReceiptBranch};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
@@ -49,7 +48,7 @@ pub struct ResumeExecutionInput {
 /// * `input` - 恢复输入
 ///
 /// # 错误
-/// 非人员失效、异载荷冲突或引擎失败时返回错误。
+/// 当前运行事实不允许原审批人恢复、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> {
     let digest = resume_digest(
         input.expected_instance_version,
@@ -66,14 +65,6 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
             });
         }
         ReceiptBranch::Fresh => {}
-    }
-    let Some(code) = input.current.blocker_code else {
-        return Err(Error::ValidationError(
-            "恢复要求当前执行为人员失效阻塞".to_string(),
-        ));
-    };
-    if !is_personnel_blocker(code) {
-        return Err(Error::ValidationError("结构性阻塞不得恢复原审批人".to_string()));
     }
     let receipt_scope = input.instance.base.id.clone();
     let plan = resume(

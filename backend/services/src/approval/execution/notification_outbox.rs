@@ -50,11 +50,7 @@ fn map_one(event: &BpmEvent) -> Option<NotificationIntent> {
         ),
         BpmEventKind::AssigneeRecovered => (
             ApprovalNotificationEventKind::Resumed,
-            format!("resumed:{}", execution_id.unwrap_or(instance_id)),
-        ),
-        BpmEventKind::AssigneeReassigned => (
-            ApprovalNotificationEventKind::Reassigned,
-            format!("reassigned:{}", execution_id.unwrap_or(instance_id)),
+            format!("resumed:{}", execution_id?),
         ),
         BpmEventKind::InstanceCancelled if event.blocker_code.is_some() => (
             ApprovalNotificationEventKind::BlockedCancelled,
@@ -97,9 +93,28 @@ mod tests {
             1,
         )
         .with_execution(ApprovalNodeExecutionId::new("e1"));
-        let intents = map_notification_intents(&[started, entered]);
+        let resumed = BpmEvent::new(
+            BpmEventKind::AssigneeRecovered,
+            ApprovalProcessInstanceId::new("inst"),
+            1,
+        )
+        .with_execution(ApprovalNodeExecutionId::new("e2"));
+        let intents = map_notification_intents(&[started, entered, resumed]);
         assert_eq!(intents[0].dedup_key, "started:inst");
         assert_eq!(intents[1].dedup_key, "entered:e1");
+        assert_eq!(intents[2].dedup_key, "resumed:e2");
         assert_eq!(intents[0].event_kind, ApprovalNotificationEventKind::Started);
+        assert_eq!(intents[2].event_kind, ApprovalNotificationEventKind::Resumed);
+    }
+
+    /// 恢复事件缺少新执行引用时必须失败关闭，不得回退到实例 ID。
+    #[test]
+    fn resumed_outbox_requires_replacement_execution_id() {
+        let resumed_without_execution = BpmEvent::new(
+            BpmEventKind::AssigneeRecovered,
+            ApprovalProcessInstanceId::new("inst"),
+            1,
+        );
+        assert!(map_notification_intents(&[resumed_without_execution]).is_empty());
     }
 }

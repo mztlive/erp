@@ -6,7 +6,7 @@ use bpm::model::ParticipantId;
 
 use crate::errors::{Error, Result};
 
-/// 写时重验失败分类。人员失效必须提交 BLOCKED，而不是回滚。
+/// 写时重验失败分类。允许原审批人恢复的失效必须提交 BLOCKED，而不是回滚。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthorizationFailure {
     /// 账号停用。
@@ -27,7 +27,7 @@ impl AuthorizationFailure {
     /// 映射为合同稳定 blocker。
     ///
     /// # 返回
-    /// 返回人员失效类别 blocker。
+    /// 返回允许原审批人恢复的 blocker。
     pub fn blocker_code(self) -> ApprovalBlockerCode {
         match self {
             Self::AccountInactive => ApprovalBlockerCode::ApproverAccountInactive,
@@ -76,18 +76,7 @@ pub fn converge_eligibility(
     }
 }
 
-/// 判断 blocker 是否属于人员失效类别。
-///
-/// # 参数
-/// * `code` - 结构化阻塞码
-///
-/// # 返回
-/// 原审批人恢复后允许继续时返回 `true`。
-pub fn is_personnel_blocker(code: ApprovalBlockerCode) -> bool {
-    code.allows_personnel_reassign()
-}
-
-/// 非人员一致性 blocker 只能走受阻取消。
+/// 不允许原审批人恢复的 blocker 只能走受阻取消。
 ///
 /// # 参数
 /// * `code` - 当前 blocker
@@ -95,7 +84,7 @@ pub fn is_personnel_blocker(code: ApprovalBlockerCode) -> bool {
 /// # 返回
 /// 结构、任务、版本或内部不变量返回 `true`。
 pub fn requires_blocked_cancel(code: ApprovalBlockerCode) -> bool {
-    !code.allows_personnel_reassign()
+    !code.allows_assignee_recovery()
 }
 
 /// 幂等回读失权时不得泄露资源存在性。
@@ -133,23 +122,21 @@ pub fn ensure_triple_responsibility(
 #[cfg(test)]
 mod tests {
     use super::{
-        converge_eligibility, ensure_triple_responsibility, hidden_forbidden, is_personnel_blocker,
-        requires_blocked_cancel, AuthorizationFailure,
+        converge_eligibility, ensure_triple_responsibility, hidden_forbidden, requires_blocked_cancel,
+        AuthorizationFailure,
     };
     use bpm::model::types::ApprovalBlockerCode;
 
     /// 写时失效收敛为人员 blocker，不得回落默认人。
     #[test]
-    fn execution_auth_converges_personnel_blocker() {
+    fn execution_auth_converges_assignee_recovery_blocker() {
         let eligibility =
             converge_eligibility("u1", "张三", Some(AuthorizationFailure::OutOfDataScope)).unwrap();
         assert_eq!(
             eligibility.blocked_code(),
             Some(ApprovalBlockerCode::ApproverOutOfAuthorizedScope)
         );
-        assert!(is_personnel_blocker(
-            ApprovalBlockerCode::ApproverOutOfAuthorizedScope
-        ));
+        assert!(ApprovalBlockerCode::ApproverOutOfAuthorizedScope.allows_assignee_recovery());
         assert!(requires_blocked_cancel(ApprovalBlockerCode::OpenTaskConflict));
     }
 

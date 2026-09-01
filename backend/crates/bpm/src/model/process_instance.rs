@@ -291,20 +291,23 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 校验当前 blocker 是否允许人员改派。
+    /// 校验当前实例 blocker 是否允许恢复原审批人。
     ///
     /// # 错误
     /// 终态、非受阻或结构性阻塞时返回错误。
-    pub fn ensure_personnel_reassign_allowed(&self) -> ModelResult<()> {
+    pub fn ensure_assignee_recovery_allowed(&self) -> ModelResult<()> {
         self.ensure_not_terminal()
-            .map_err(|_| ModelError::TerminalInstanceCannotReassign)?;
+            .map_err(|_| ModelError::InvalidStatus("终态实例不得恢复原审批人"))?;
+        if self.status != ApprovalProcessInstanceStatus::Blocked {
+            return Err(ModelError::InvalidStatus("只有受阻实例可以恢复原审批人"));
+        }
         let Some(code) = self.blocker_code else {
-            return Err(ModelError::InvalidStatus("只有受阻实例可以改派"));
+            return Err(ModelError::InvalidStatus("受阻实例缺少 blocker"));
         };
-        if code.allows_personnel_reassign() {
+        if code.allows_assignee_recovery() {
             return Ok(());
         }
-        Err(ModelError::StructuralBlockerCannotReassign)
+        Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
     }
 
     fn ensure_not_terminal(&self) -> ModelResult<()> {
@@ -470,9 +473,9 @@ mod tests {
         );
     }
 
-    /// 结构性阻塞不得走领域改派。
+    /// 只有人员类 blocker 允许恢复原审批人。
     #[test]
-    fn structural_blocker_cannot_reassign() {
+    fn only_personnel_blocker_allows_assignee_recovery() {
         let mut inst = instance();
         inst.enter_blocked(
             ApprovalBlockerCode::DefinitionGraphCorrupted,
@@ -480,16 +483,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            inst.ensure_personnel_reassign_allowed(),
-            Err(ModelError::StructuralBlockerCannotReassign)
+            inst.ensure_assignee_recovery_allowed(),
+            Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
         );
         inst.blocker_code = Some(ApprovalBlockerCode::ApproverAccountInactive);
-        assert!(inst.ensure_personnel_reassign_allowed().is_ok());
+        assert!(inst.ensure_assignee_recovery_allowed().is_ok());
         inst.complete_approved(Timestamp::from_unix_secs(31).unwrap())
             .unwrap();
         assert_eq!(
-            inst.ensure_personnel_reassign_allowed(),
-            Err(ModelError::TerminalInstanceCannotReassign)
+            inst.ensure_assignee_recovery_allowed(),
+            Err(ModelError::InvalidStatus("终态实例不得恢复原审批人"))
         );
     }
 

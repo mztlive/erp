@@ -80,7 +80,7 @@ pub enum RuntimeRecoveryAction {
 /// * `blocker` - 结构化 blocker
 ///
 /// # 返回
-/// 人员失效只允许原审批人恢复后继续；其它 blocker 只返回受阻取消；非 BLOCKED 返回空。
+/// 可恢复原审批人的 blocker 只允许恢复；其它 blocker 只返回受阻取消；非 BLOCKED 返回空。
 ///
 /// # 错误
 /// 无。
@@ -94,7 +94,7 @@ pub fn recovery_options_for(
     let Some(code) = blocker else {
         return vec![RuntimeRecoveryAction::CancelBlocked];
     };
-    if code.allows_personnel_reassign() {
+    if code.allows_assignee_recovery() {
         vec![RuntimeRecoveryAction::ResumeCurrentApprover]
     } else {
         vec![RuntimeRecoveryAction::CancelBlocked]
@@ -106,7 +106,7 @@ mod tests {
     use super::{recovery_options_for, RuntimeRecoveryAction};
     use bpm::model::types::ApprovalBlockerCode;
 
-    /// 人员失效只给恢复；结构 blocker 只给受阻取消。
+    /// 可恢复原审批人的 blocker 只给恢复；结构 blocker 只给受阻取消。
     #[test]
     fn recovery_options_follow_blocker_kind() {
         assert!(recovery_options_for(false, Some(ApprovalBlockerCode::ApproverAccountInactive)).is_empty());

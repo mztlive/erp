@@ -52,8 +52,6 @@ pub enum WorkflowActionType {
     ApprovalBlocked,
     /// 审批恢复。
     ApprovalRecovered,
-    /// 审批改派。
-    ApprovalReassigned,
     /// 审批取消。
     ApprovalCancelled,
     /// 受阻取消。
@@ -83,7 +81,6 @@ impl WorkflowActionType {
             Self::ApprovalRoundRestarted => "审批轮次重启",
             Self::ApprovalBlocked => "审批受阻",
             Self::ApprovalRecovered => "审批恢复",
-            Self::ApprovalReassigned => "审批改派",
             Self::ApprovalCancelled => "审批取消",
             Self::ApprovalBlockedCancelled => "受阻取消",
             Self::ApprovalCompleted => "审批完成",
@@ -110,7 +107,6 @@ impl WorkflowActionType {
             Self::ApprovalRoundRestarted => "approval_round_restarted",
             Self::ApprovalBlocked => "approval_blocked",
             Self::ApprovalRecovered => "approval_recovered",
-            Self::ApprovalReassigned => "approval_reassigned",
             Self::ApprovalCancelled => "approval_cancelled",
             Self::ApprovalBlockedCancelled => "approval_blocked_cancelled",
             Self::ApprovalCompleted => "approval_completed",
@@ -120,7 +116,7 @@ impl WorkflowActionType {
     /// 判断是否属于审批审计动作。
     ///
     /// # 返回
-    /// 12 个审批动作返回 `true`。
+    /// 11 个审批动作返回 `true`。
     pub fn is_approval_action(self) -> bool {
         matches!(
             self,
@@ -132,7 +128,6 @@ impl WorkflowActionType {
                 | Self::ApprovalRoundRestarted
                 | Self::ApprovalBlocked
                 | Self::ApprovalRecovered
-                | Self::ApprovalReassigned
                 | Self::ApprovalCancelled
                 | Self::ApprovalBlockedCancelled
                 | Self::ApprovalCompleted
@@ -391,6 +386,7 @@ mod tests {
         assert_eq!(WorkflowActionType::ApprovalStarted.as_str(), "approval_started");
         assert!(WorkflowActionType::ApprovalCompleted.is_approval_action());
         assert!(!WorkflowActionType::Submit.is_approval_action());
+        assert!(serde_json::from_str::<WorkflowActionType>("\"approval_reassigned\"").is_err());
     }
 
     /// 审批动作必须带结构化上下文，身份不得只写在意见里。

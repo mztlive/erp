@@ -895,8 +895,7 @@ impl WorkItemService {
     ) -> Result<Vec<WorkItemReassignCandidateView>> {
         let managed_access = self.managed_access(actor).await?;
         let item = self.load(id).await?;
-        item.ensure_generic_responsibility_mutation()
-            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
+        ensure_generic_work_item_mutation(&item)?;
         ensure_item_in_managed_scope(&item, &managed_access)?;
 
         let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
@@ -970,8 +969,10 @@ impl WorkItemService {
         req: ReassignWorkItemRequest,
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        req.validate()?;
         let managed_access = self.managed_access(actor).await?;
+        let item = self.load(id).await?;
+        ensure_generic_work_item_mutation(&item)?;
+        req.validate()?;
         let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
         let action = "work_item.reassign";
         let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
@@ -987,12 +988,10 @@ impl WorkItemService {
             &idempotency_key,
             [version, target_user_id.clone(), reason.clone()],
         )?;
-        if let Some(item) = self.idempotent_replay(&receipt, id).await? {
-            return self.applied_outcome(item, actor).await;
+        if let Some(replayed) = self.idempotent_replay(&receipt, id).await? {
+            ensure_generic_work_item_mutation(&replayed)?;
+            return self.applied_outcome(replayed, actor).await;
         }
-        let item = self.load(id).await?;
-        item.ensure_generic_responsibility_mutation()
-            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -1032,8 +1031,10 @@ impl WorkItemService {
         req: CloseWorkItemRequest,
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        req.validate()?;
         let managed_access = self.managed_access(actor).await?;
+        let item = self.load(id).await?;
+        ensure_generic_work_item_mutation(&item)?;
+        req.validate()?;
         let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
         let action = "work_item.close";
         let reason_code = required_text(&req.reason_code, "关闭原因代码不能为空")?;
@@ -1062,12 +1063,10 @@ impl WorkItemService {
                     .to_string(),
             ],
         )?;
-        if let Some(item) = self.idempotent_replay(&receipt, id).await? {
-            return self.applied_outcome(item, actor).await;
+        if let Some(replayed) = self.idempotent_replay(&receipt, id).await? {
+            ensure_generic_work_item_mutation(&replayed)?;
+            return self.applied_outcome(replayed, actor).await;
         }
-        let item = self.load(id).await?;
-        item.ensure_generic_responsibility_mutation()
-            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -3746,7 +3745,9 @@ fn allowed_actions(
         actions.push(WorkItemAllowedAction::Approve);
         actions.push(WorkItemAllowedAction::Reject);
     }
-    if access.can_manage && scope == WorkItemScope::Managed {
+    let is_approval_responsibility =
+        item.work_item_type.is_document_approval() || item.approval_node_execution_id.is_some();
+    if access.can_manage && scope == WorkItemScope::Managed && !is_approval_responsibility {
         if has_permission(access, REASSIGN_PERMISSION) {
             actions.push(WorkItemAllowedAction::Reassign);
         }
@@ -3755,6 +3756,12 @@ fn allowed_actions(
         }
     }
     actions
+}
+
+/// 将实体对审批任务的通用责任变更禁令映射为稳定审批错误码。
+fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
+    item.ensure_generic_responsibility_mutation()
+        .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))
 }
 
 fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
@@ -4071,18 +4078,20 @@ mod tests {
     use super::{
         allowed_actions, approval_assignment_separated, audited_fact_operator_actors, authorized_fields,
         authorized_item_fields, business_day_bounds_at, counts_as_processable_stat, detail_scope,
-        expected_task_version, family_counts_for_types, has_assignment_candidate_access,
-        non_empty_assignment_actors, object_access_shapes, object_policy,
+        ensure_generic_work_item_mutation, expected_task_version, family_counts_for_types,
+        has_assignment_candidate_access, non_empty_assignment_actors, object_access_shapes, object_policy,
         purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions, ActorAccess,
         AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
         ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
+    use crate::errors::ErrorCode;
     use entities::{
         common::time::Instant,
         ids::WorkItemId,
         work_item::{
-            AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+            AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
+            WorkItemStatus, WorkItemType,
         },
         AccountKind, AuditLog, AuditLogData, Permission,
     };
@@ -4316,6 +4325,71 @@ mod tests {
             responsibility_scopes: Vec::new(),
             can_manage: false,
         }
+    }
+
+    fn managed_action_access() -> ActorAccess {
+        ActorAccess {
+            actor_id: "manager-1".to_string(),
+            permissions: ["work_item:reassign", "work_item:close"]
+                .into_iter()
+                .map(|code| Permission::parse(code).unwrap())
+                .collect(),
+            participant_document_ids: HashSet::new(),
+            organization_ids: vec!["company".to_string()],
+            responsibility_scopes: Vec::new(),
+            can_manage: true,
+        }
+    }
+
+    fn managed_w29_item() -> WorkItem {
+        WorkItem::new_at(
+            WorkItemId::new("wi-managed-w29"),
+            WorkItemData {
+                work_item_type: WorkItemType::BusinessException,
+                business_object_type: "integration_error_task".to_string(),
+                business_object_id: "error-task-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "integration_error_handler".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "worker-1".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some("INTEGRATION_RESULT_UNKNOWN".to_string()),
+                impact_summary: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap()
+    }
+
+    fn managed_w29_fields(has_approval_step: bool) -> super::dto::WorkItemFields {
+        let item = managed_w29_item();
+        let mut fields = super::dto::WorkItemFields::from(item);
+        fields.approval_node_execution_id = has_approval_step.then(|| "approval-execution-1".to_string());
+        fields
+    }
+
+    fn document_approval_fields_without_execution() -> super::dto::WorkItemFields {
+        let item = WorkItem::new_document_approval(
+            WorkItemId::new("wi-document-approval"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("approval-execution-1"),
+                business_object_type: "stock_adjustment".to_string(),
+                business_object_id: "adjustment-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "stock_adjustment_approver".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "worker-1".to_string(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap();
+        let mut fields = super::dto::WorkItemFields::from(item);
+        fields.approval_node_execution_id = None;
+        fields
     }
 
     #[test]
@@ -4637,6 +4711,102 @@ mod tests {
         assert!(remove_approval_decision_actions(&mut actions));
         assert_eq!(actions, vec![WorkItemAllowedAction::View]);
         assert!(!remove_approval_decision_actions(&mut actions));
+    }
+
+    #[test]
+    fn managed_approval_items_never_project_generic_responsibility_actions() {
+        let access = managed_action_access();
+
+        let type_bound = document_approval_fields_without_execution();
+        assert_eq!(
+            allowed_actions(&type_bound, WorkItemScope::Managed, "manager-1", &access),
+            vec![WorkItemAllowedAction::View]
+        );
+
+        let execution_bound = managed_w29_fields(true);
+        assert_eq!(
+            allowed_actions(&execution_bound, WorkItemScope::Managed, "manager-1", &access,),
+            vec![WorkItemAllowedAction::View]
+        );
+    }
+
+    #[test]
+    fn managed_non_approval_item_still_projects_reassign_and_close() {
+        let access = managed_action_access();
+        let item = managed_w29_fields(false);
+
+        assert_eq!(
+            allowed_actions(&item, WorkItemScope::Managed, "manager-1", &access),
+            vec![
+                WorkItemAllowedAction::View,
+                WorkItemAllowedAction::Reassign,
+                WorkItemAllowedAction::Close,
+            ]
+        );
+    }
+
+    /// 类型标记或 execution 关联任一成立时，新鲜与回放分支都映射同一稳定错误。
+    #[test]
+    fn approval_generic_mutation_guard_is_stable_for_fresh_and_replay() {
+        let mut type_bound = WorkItem::new_document_approval(
+            WorkItemId::new("wi-approval-type-only"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("approval-execution-1"),
+                business_object_type: "stock_adjustment".to_string(),
+                business_object_id: "adjustment-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "stock_adjustment_approver".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "worker-1".to_string(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap();
+        type_bound.approval_node_execution_id = None;
+
+        let mut execution_bound = managed_w29_item();
+        execution_bound.approval_node_execution_id =
+            Some(bpm::ApprovalNodeExecutionId::new("approval-execution-2"));
+
+        for item in [&type_bound, &execution_bound] {
+            for branch in ["fresh", "replay"] {
+                let error =
+                    ensure_generic_work_item_mutation(item).expect_err("审批任务的通用责任变更必须失败关闭");
+                assert_eq!(
+                    error.code(),
+                    Some(ErrorCode::ApprovalGenericWorkItemMutationForbidden),
+                    "{branch} 分支必须返回相同稳定错误",
+                );
+            }
+        }
+        assert!(ensure_generic_work_item_mutation(&managed_w29_item()).is_ok());
+    }
+
+    /// Service 必须在查询正式命令回执前识别并拒绝审批任务。
+    #[test]
+    fn generic_mutation_guard_precedes_idempotent_replay() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+        for method in ["pub async fn reassign(", "pub async fn close("] {
+            let body = production
+                .split_once(method)
+                .map(|(_, tail)| tail)
+                .expect("通用责任命令必须存在")
+                .split_once("\n    }")
+                .map(|(body, _)| body)
+                .expect("通用责任命令必须闭合");
+            let guard = body
+                .find("ensure_generic_work_item_mutation(&item)")
+                .expect("命令必须先识别审批任务");
+            let replay = body
+                .find("idempotent_replay(&receipt, id)")
+                .expect("命令必须保留幂等回放");
+            assert!(guard < replay, "审批任务守卫必须先于命令回放");
+        }
     }
 
     #[test]

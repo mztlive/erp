@@ -19,7 +19,7 @@ pub use action::{
     ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort, FailClosedApprovalActionPort,
 };
 pub use dto::{
-    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand, ApprovalReassignCommand,
+    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
 pub(crate) use scope::{

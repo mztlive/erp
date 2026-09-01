@@ -66,15 +66,6 @@ pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
         }
         ReceiptBranch::Fresh => {}
     }
-    if input
-        .bindings
-        .iter()
-        .any(|item| item.eligibility.blocked_code().is_some())
-    {
-        return Err(Error::ValidationError(
-            "启动时全部审批人必须有效，不得创建审批实例".to_string(),
-        ));
-    }
     let plan = start(
         StartCommand {
             instance_id: input.instance_id,

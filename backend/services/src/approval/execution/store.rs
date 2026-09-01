@@ -273,9 +273,6 @@ fn apply_all(
     for assignee in &writes.created_assignees {
         store.assignees.insert(assignee_key(assignee), assignee.clone());
     }
-    for assignee in &writes.updated_assignees {
-        store.assignees.insert(assignee_key(assignee), assignee.clone());
-    }
     apply_task_intents(store, writes, ctx)?;
     enqueue_notifications(store, &writes.notifications, ctx)?;
     Ok(())

@@ -160,9 +160,6 @@ pub enum ErrorCode {
     ApprovalInstanceBlocked,
     ApprovalResumeNotAllowedForBlocker,
     ApprovalCurrentApproverNotRecovered,
-    ApprovalCurrentApproverRecovered,
-    ApprovalReassignTargetIneligible,
-    ApprovalReassignNotAllowedForBlocker,
     ApprovalBlockedCancelNotAllowed,
     ApprovalGenericWorkItemMutationForbidden,
     ApprovalIdempotencyPayloadConflict,
@@ -170,7 +167,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// 审批合同冻结的全部结构化错误码。
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 21] = [
         Self::ApprovalPolicyNotRegistered,
         Self::ApprovalProcessNotConfigured,
         Self::ApprovalDraftSourceNotAvailable,
@@ -189,9 +186,6 @@ impl ErrorCode {
         Self::ApprovalInstanceBlocked,
         Self::ApprovalResumeNotAllowedForBlocker,
         Self::ApprovalCurrentApproverNotRecovered,
-        Self::ApprovalCurrentApproverRecovered,
-        Self::ApprovalReassignTargetIneligible,
-        Self::ApprovalReassignNotAllowedForBlocker,
         Self::ApprovalBlockedCancelNotAllowed,
         Self::ApprovalGenericWorkItemMutationForbidden,
         Self::ApprovalIdempotencyPayloadConflict,
@@ -218,9 +212,6 @@ impl ErrorCode {
             Self::ApprovalInstanceBlocked => "APPROVAL_INSTANCE_BLOCKED",
             Self::ApprovalResumeNotAllowedForBlocker => "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER",
             Self::ApprovalCurrentApproverNotRecovered => "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED",
-            Self::ApprovalCurrentApproverRecovered => "APPROVAL_CURRENT_APPROVER_RECOVERED",
-            Self::ApprovalReassignTargetIneligible => "APPROVAL_REASSIGN_TARGET_INELIGIBLE",
-            Self::ApprovalReassignNotAllowedForBlocker => "APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER",
             Self::ApprovalBlockedCancelNotAllowed => "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED",
             Self::ApprovalGenericWorkItemMutationForbidden => "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
             Self::ApprovalIdempotencyPayloadConflict => "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT",
@@ -232,9 +223,7 @@ impl ErrorCode {
         match self {
             Self::ApprovalPolicyNotRegistered => ErrorClass::Internal,
             Self::ApprovalTaskNotAssignedToActor => ErrorClass::Forbidden,
-            Self::ApprovalDefinitionInvalid
-            | Self::ApprovalRejectReasonRequired
-            | Self::ApprovalReassignTargetIneligible => ErrorClass::BusinessRule,
+            Self::ApprovalDefinitionInvalid | Self::ApprovalRejectReasonRequired => ErrorClass::BusinessRule,
             _ => ErrorClass::Conflict,
         }
     }
@@ -391,7 +380,6 @@ mod tests {
         for code in [
             ErrorCode::ApprovalDefinitionInvalid,
             ErrorCode::ApprovalRejectReasonRequired,
-            ErrorCode::ApprovalReassignTargetIneligible,
         ] {
             let error = Error::from_approval_code(code);
             assert_eq!(code.class(), ErrorClass::BusinessRule, "{code} 必须是 422 语义");
@@ -401,7 +389,7 @@ mod tests {
 
     #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(ErrorCode::ALL.len(), 24);
+        assert_eq!(ErrorCode::ALL.len(), 21);
         assert!(ErrorCode::ALL
             .iter()
             .all(|code| code.as_str().starts_with("APPROVAL_")));

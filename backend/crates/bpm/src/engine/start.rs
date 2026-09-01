@@ -6,12 +6,12 @@ use crate::model::{
     ApprovalInstanceAssignee, ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
 
-use super::enter_node::plan_enter_node;
+use super::enter_node::{plan_enter_node, EnterNodeInput};
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::TransitionPlan;
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
-/// 启动命令：调用方提供全部 ID、时间与入口资格。
+/// 启动命令：调用方提供全部 ID、时间；全部节点资格随绑定一并传入。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartCommand {
     /// 实例主键。
@@ -39,7 +39,7 @@ pub struct StartAssigneeBinding {
     pub node_key: String,
     /// 定义审批人。
     pub participant: ParticipantId,
-    /// 入口节点资格；非入口节点仅校验绑定完整。
+    /// 启动时该定义审批人的资格；全部节点都必须有效。
     pub eligibility: Eligibility,
 }
 
@@ -59,7 +59,7 @@ pub fn start(
     graph: &DefinitionGraph,
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
-    ensure_all_assignees_eligible(bindings)?;
+    ensure_bindings_valid(graph, bindings)?;
     let instance = ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
         id: command.instance_id.clone(),
         process_definition_id: graph.definition.base.id.clone().into_definition(),
@@ -73,7 +73,7 @@ pub fn start(
     let assignees = freeze_assignees(&instance, graph, bindings, command.now)?;
     let entry = graph.entry_node()?;
     let entry_binding = binding_for(bindings, &entry.node_key)?;
-    let mut plan = plan_enter_node(super::EnterNodeInput {
+    let mut plan = plan_enter_node(EnterNodeInput {
         instance,
         graph,
         node_key: &entry.node_key,
@@ -94,15 +94,31 @@ pub fn start(
     Ok(plan)
 }
 
-/// 启动前全部节点审批人必须有效，否则不得形成运行链。
-fn ensure_all_assignees_eligible(bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
-    if bindings
-        .iter()
-        .any(|item| item.eligibility.blocked_code().is_some())
-    {
+/// 启动绑定必须逐节点匹配定义责任人及其有效资格。
+fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
+    if bindings.len() != graph.nodes.len() {
         return Err(EngineError::InvalidCommand(
-            "启动时全部审批人必须有效，不得创建受阻实例",
+            "实例审批人绑定必须与定义节点一一对应",
         ));
+    }
+    for (index, binding) in bindings.iter().enumerate() {
+        if bindings[..index].iter().any(|prior| prior.id == binding.id) {
+            return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
+        }
+    }
+    for node in &graph.nodes {
+        let binding = binding_for(bindings, &node.node_key)?;
+        if binding.participant != node.assignee_participant_id {
+            return Err(EngineError::InvalidCommand("实例审批人绑定必须匹配定义审批人"));
+        }
+        if binding.eligibility.participant() != binding.participant {
+            return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
+        }
+        if binding.eligibility.blocked_code().is_some() {
+            return Err(EngineError::InvalidCommand(
+                "启动时全部审批人必须有效，不得创建受阻实例",
+            ));
+        }
     }
     Ok(())
 }

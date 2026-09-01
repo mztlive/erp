@@ -7,8 +7,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use bpm::engine::{
-    cancel, decide, plan_enter_node, reassign, resume, start, CancelCommand, DecideCommand, DefinitionGraph,
-    Eligibility, EnterNodeInput, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand,
+    cancel, decide, resume, start, CancelCommand, DecideCommand, DefinitionGraph, Eligibility, ResumeCommand,
+    StartAssigneeBinding, StartCommand,
 };
 use bpm::graph::generate_linear_transitions;
 use bpm::ids::{
@@ -601,7 +601,7 @@ fn linear_graph_generation_is_deterministic_for_stock_adjustment() {
 
 /// BPM 引擎在无数据库、无业务 Service 时对试点图产生确定计划。
 #[test]
-fn bpm_engine_start_decide_cancel_reassign_are_pure() {
+fn bpm_engine_start_decide_cancel_are_pure() {
     let single = single_node_graph();
     let started = start_stock(&single, "inst-1", "adj-1");
     assert_eq!(started.instance.process_kind, PILOT_KIND);
@@ -660,24 +660,6 @@ fn bpm_engine_start_decide_cancel_reassign_are_pure() {
         cancelled.instance.status,
         ApprovalProcessInstanceStatus::Cancelled
     );
-
-    let two = two_node_graph();
-    let two_started = start_stock(&two, "inst-2", "adj-2");
-    let entered = plan_enter_node(EnterNodeInput {
-        instance: two_started.instance.clone(),
-        graph: &two,
-        node_key: "n2",
-        round_no: 1,
-        participant: participant("u2"),
-        eligibility: eligible("u2", "财务"),
-        execution_id: ApprovalNodeExecutionId::new("exec-n2"),
-        execution_no: 2,
-        assignment_source: ApprovalExecutionAssignmentSource::Definition,
-        replaces_execution_id: None,
-        now: at(23),
-    })
-    .expect("enter_node 必须可计算");
-    assert_eq!(entered.created_executions[0].node_key, "n2");
 }
 
 /// 下一节点人员失效保留前一通过事实并形成 BLOCKED。
@@ -877,30 +859,26 @@ fn resume_supersedes_personnel_blocked_execution() {
         ApprovalExecutionAssignmentSource::AssigneeRecovery
     );
     assert_eq!(resumed.instance.status, ApprovalProcessInstanceStatus::Running);
+    assert_eq!(resumed.created_executions.len(), 1);
+    assert!(resumed.created_assignees.is_empty());
+    assert_eq!(
+        resumed.created_executions[0].assignee_participant_id,
+        assignees[0].definition_assignee_participant_id
+    );
+    assert_eq!(
+        assignees[0].current_assignee_participant_id,
+        assignees[0].definition_assignee_participant_id
+    );
+    assert!(assignees[0].changed_by.is_none());
+    assert!(assignees[0].changed_at.is_none());
+    assert!(assignees[0].change_reason.is_none());
 }
 
-/// 人员失效改派只能替换受阻执行；ACTIVE 不得改派。
+/// 腐化的实例审批人绑定不得用于恢复，原绑定保持定义冻结。
 #[test]
-fn reassign_only_replaces_personnel_blocked_execution() {
+fn recovery_rejects_changed_assignee_binding() {
     let graph = two_node_graph();
-    let started = start_stock(&graph, "inst-reassign", "adj-reassign");
-    let active = reassign(
-        started.instance.clone(),
-        started.created_executions[0].clone(),
-        started.created_assignees[0].clone(),
-        &graph,
-        ReassignCommand {
-            target: participant("u9"),
-            actor: participant("admin"),
-            reason: "改派".to_string(),
-            target_eligibility: eligible("u9", "新人"),
-            next_execution_id: ApprovalNodeExecutionId::new("exec-re"),
-            next_execution_no: 2,
-            now: at(40),
-        },
-    );
-    assert!(active.is_err(), "ACTIVE 不得改派");
-
+    let started = start_stock(&graph, "inst-fixed-binding", "adj-fixed-binding");
     let assignees = started.created_assignees.clone();
     let blocked = decide(
         started.instance,
@@ -916,46 +894,43 @@ fn reassign_only_replaces_personnel_blocked_execution() {
                 assignee_name_snapshot: "仓储".to_string(),
             },
             next_eligibility: eligible("u2", "财务"),
-            next_execution_id: ApprovalNodeExecutionId::new("exec-re-2"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-fixed-2"),
             next_execution_no: 2,
             now: at(41),
         },
     )
     .expect("人员失效必须提交 BLOCKED");
-    let reassigned = reassign(
-        blocked.instance,
+    let mut changed = assignees[0].clone();
+    changed.current_assignee_participant_id = participant("u9");
+    changed.changed_by = Some(participant("operator"));
+    changed.changed_at = Some(at(42));
+    changed.change_reason = Some("unexpected change".to_string());
+
+    let error = resume(
+        blocked.instance.clone(),
         blocked.updated_executions[0].clone(),
-        assignees[0].clone(),
+        &changed,
         &graph,
-        ReassignCommand {
-            target: participant("u9"),
-            actor: participant("admin"),
-            reason: "原审批人离职".to_string(),
-            target_eligibility: eligible("u9", "新人"),
-            next_execution_id: ApprovalNodeExecutionId::new("exec-re-3"),
+        ResumeCommand {
+            next_execution_id: ApprovalNodeExecutionId::new("exec-fixed-3"),
             next_execution_no: 3,
+            eligibility: eligible("u1", "仓储"),
             now: at(42),
         },
     )
-    .expect("人员失效后改派必须成功");
+    .unwrap_err();
     assert_eq!(
-        reassigned.updated_executions[0].ended_reason,
-        Some(ApprovalExecutionEndReason::AdminReassigned)
+        error,
+        bpm::engine::EngineError::Model(bpm::model::types::ModelError::InvalidStatus(
+            "实例审批人绑定必须保持定义快照不变"
+        ))
     );
+    assert_eq!(blocked.instance.status, ApprovalProcessInstanceStatus::Blocked);
     assert_eq!(
-        reassigned.updated_executions[0].status,
-        ApprovalNodeExecutionStatus::Superseded
+        blocked.updated_executions[0].status,
+        ApprovalNodeExecutionStatus::Blocked
     );
-    assert_eq!(
-        reassigned.created_executions[0].assignment_source,
-        ApprovalExecutionAssignmentSource::AdminReassign
-    );
-    assert_eq!(
-        reassigned.updated_assignees[0]
-            .current_assignee_participant_id
-            .as_str(),
-        "u9"
-    );
+    assert!(assignees[0].ensure_unchanged_from_definition().is_ok());
 }
 
 /// 同一 SubjectRef + subject_version 只能有一条活动链；定义 ID 不得拆分唯一性。

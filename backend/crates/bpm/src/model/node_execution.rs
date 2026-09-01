@@ -153,58 +153,27 @@ impl ApprovalNodeExecution {
         touch_base(&mut self.base, at)
     }
 
-    /// 仅把受阻执行转为已替换，并写入固定结束原因。
+    /// 仅为原审批人恢复把受阻执行转为已替换，并写入固定结束原因。
     ///
     /// # 参数
-    /// * `reason` - `ADMIN_REASSIGNED` 或 `ASSIGNEE_RECOVERED`
     /// * `at` - 结束时间
     ///
     /// # 错误
     /// 当前不是受阻时返回错误。
-    pub fn supersede(&mut self, reason: ApprovalExecutionEndReason, at: Timestamp) -> ModelResult<()> {
+    pub(crate) fn supersede_for_assignee_recovery(&mut self, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalNodeExecutionStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻执行可以替换"));
         }
+        let Some(code) = self.blocker_code else {
+            return Err(ModelError::InvalidStatus("受阻执行缺少 blocker"));
+        };
+        if !code.allows_assignee_recovery() {
+            return Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"));
+        }
         self.status = ApprovalNodeExecutionStatus::Superseded;
-        self.ended_reason = Some(reason);
+        self.ended_reason = Some(ApprovalExecutionEndReason::AssigneeRecovered);
         self.ended_at = Some(at);
         touch_base(&mut self.base, at)
-    }
-
-    /// 创建同轮次、同节点、更大序号的替换执行。
-    ///
-    /// 旧执行审批人快照保持不变。
-    ///
-    /// # 错误
-    /// 新序号未递增或快照非法时返回错误。
-    pub fn spawn_replacement(
-        &self,
-        id: ApprovalNodeExecutionId,
-        execution_no: u32,
-        source: ApprovalExecutionAssignmentSource,
-        assignee: ParticipantId,
-        assignee_name: impl Into<String>,
-        at: Timestamp,
-    ) -> ModelResult<Self> {
-        if execution_no <= self.execution_no {
-            return Err(ModelError::InvalidField("替换执行序号必须递增"));
-        }
-        if self.node_key.is_empty() {
-            return Err(ModelError::InvalidField("节点键不能为空"));
-        }
-        Self::new_active(NewNodeExecution {
-            id,
-            process_instance_id: self.process_instance_id.clone(),
-            node_key: self.node_key.clone(),
-            node_name: self.node_name.clone(),
-            round_no: self.round_no,
-            execution_no,
-            assignment_source: source,
-            replaces_execution_id: Some(ApprovalNodeExecutionId::new(self.base.id.clone())),
-            assignee_participant_id: assignee,
-            assignee_name_snapshot: assignee_name.into(),
-            at,
-        })
     }
 
     fn new_current(
@@ -217,6 +186,23 @@ impl ApprovalNodeExecution {
         }
         if !status.is_current() {
             return Err(ModelError::InvalidStatus("构造器不得创建已结束执行"));
+        }
+        match (
+            input.assignment_source,
+            input.replaces_execution_id.is_some(),
+            status,
+        ) {
+            (ApprovalExecutionAssignmentSource::Definition, false, _)
+            | (
+                ApprovalExecutionAssignmentSource::AssigneeRecovery,
+                true,
+                ApprovalNodeExecutionStatus::Active,
+            ) => {}
+            _ => {
+                return Err(ModelError::InvalidField(
+                    "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行",
+                ));
+            }
         }
         let blocked_at = blocker_code.map(|_| input.at);
         Ok(Self {
@@ -353,17 +339,14 @@ mod tests {
             Err(ModelError::ExecutionAlreadyEnded)
         );
         assert_eq!(
-            exec.supersede(
-                ApprovalExecutionEndReason::AdminReassigned,
-                Timestamp::from_unix_secs(5).unwrap()
-            ),
+            exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(5).unwrap()),
             Err(ModelError::InvalidStatus("只有受阻执行可以替换"))
         );
     }
 
-    /// 受阻到已替换必须写入固定结束原因，并生成同轮递增执行。
+    /// 原审批人恢复必须写入固定结束原因并保留旧责任快照。
     #[test]
-    fn supersede_only_from_blocked_and_keeps_snapshot() {
+    fn assignee_recovery_supersedes_blocked_and_keeps_snapshot() {
         let mut exec = active();
         exec.block(
             ApprovalBlockerCode::ApproverEmploymentInvalid,
@@ -371,45 +354,98 @@ mod tests {
         )
         .unwrap();
         let old_assignee = exec.assignee_participant_id.clone();
-        exec.supersede(
-            ApprovalExecutionEndReason::AdminReassigned,
-            Timestamp::from_unix_secs(7).unwrap(),
-        )
-        .unwrap();
+        exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(7).unwrap())
+            .unwrap();
         assert_eq!(exec.status, ApprovalNodeExecutionStatus::Superseded);
         assert_eq!(
             exec.ended_reason,
-            Some(ApprovalExecutionEndReason::AdminReassigned)
+            Some(ApprovalExecutionEndReason::AssigneeRecovered)
         );
         assert_eq!(exec.assignee_participant_id, old_assignee);
+    }
 
-        let replacement = exec
-            .spawn_replacement(
-                ApprovalNodeExecutionId::new("e3"),
-                2,
-                ApprovalExecutionAssignmentSource::AdminReassign,
-                ParticipantId::new("u2").unwrap(),
-                "李四",
-                Timestamp::from_unix_secs(8).unwrap(),
-            )
-            .unwrap();
-        assert_eq!(replacement.round_no, exec.round_no);
-        assert_eq!(replacement.node_key, exec.node_key);
-        assert_eq!(replacement.execution_no, 2);
-        assert_eq!(replacement.assignee_name_snapshot, "李四");
+    /// 结构性 blocker 不得通过执行模型旁路恢复守卫。
+    #[test]
+    fn structural_blocker_cannot_be_superseded_for_assignee_recovery() {
+        let mut exec = active();
+        exec.block(
+            ApprovalBlockerCode::DefinitionGraphCorrupted,
+            Timestamp::from_unix_secs(6).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            replacement.assignment_source,
-            ApprovalExecutionAssignmentSource::AdminReassign
+            exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(7).unwrap()),
+            Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
         );
-        assert!(exec
-            .spawn_replacement(
-                ApprovalNodeExecutionId::new("e4"),
-                1,
-                ApprovalExecutionAssignmentSource::AssigneeRecovery,
-                ParticipantId::new("u1").unwrap(),
-                "张三",
-                Timestamp::from_unix_secs(9).unwrap(),
-            )
-            .is_err());
+        assert_eq!(exec.status, ApprovalNodeExecutionStatus::Blocked);
+        assert!(exec.ended_reason.is_none());
+        assert!(exec.ended_at.is_none());
+    }
+
+    /// 执行来源与被替换执行引用必须成对出现。
+    #[test]
+    fn assignment_source_requires_matching_replacement_reference() {
+        let invalid_definition = ApprovalNodeExecution::new_active(NewNodeExecution {
+            id: ApprovalNodeExecutionId::new("e3"),
+            process_instance_id: ApprovalProcessInstanceId::new("inst"),
+            node_key: "n1".into(),
+            node_name: "仓储复核".into(),
+            round_no: 1,
+            execution_no: 2,
+            assignment_source: ApprovalExecutionAssignmentSource::Definition,
+            replaces_execution_id: Some(ApprovalNodeExecutionId::new("e1")),
+            assignee_participant_id: ParticipantId::new("u1").unwrap(),
+            assignee_name_snapshot: "张三".into(),
+            at: Timestamp::from_unix_secs(8).unwrap(),
+        });
+        assert_eq!(
+            invalid_definition,
+            Err(ModelError::InvalidField(
+                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
+            ))
+        );
+
+        let missing_replacement = ApprovalNodeExecution::new_active(NewNodeExecution {
+            id: ApprovalNodeExecutionId::new("e4"),
+            process_instance_id: ApprovalProcessInstanceId::new("inst"),
+            node_key: "n1".into(),
+            node_name: "仓储复核".into(),
+            round_no: 1,
+            execution_no: 2,
+            assignment_source: ApprovalExecutionAssignmentSource::AssigneeRecovery,
+            replaces_execution_id: None,
+            assignee_participant_id: ParticipantId::new("u1").unwrap(),
+            assignee_name_snapshot: "张三".into(),
+            at: Timestamp::from_unix_secs(8).unwrap(),
+        });
+        assert_eq!(
+            missing_replacement,
+            Err(ModelError::InvalidField(
+                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
+            ))
+        );
+
+        let blocked_recovery = ApprovalNodeExecution::new_blocked(
+            NewNodeExecution {
+                id: ApprovalNodeExecutionId::new("e5"),
+                process_instance_id: ApprovalProcessInstanceId::new("inst"),
+                node_key: "n1".into(),
+                node_name: "仓储复核".into(),
+                round_no: 1,
+                execution_no: 2,
+                assignment_source: ApprovalExecutionAssignmentSource::AssigneeRecovery,
+                replaces_execution_id: Some(ApprovalNodeExecutionId::new("e1")),
+                assignee_participant_id: ParticipantId::new("u1").unwrap(),
+                assignee_name_snapshot: "张三".into(),
+                at: Timestamp::from_unix_secs(8).unwrap(),
+            },
+            ApprovalBlockerCode::ApproverNotEligible,
+        );
+        assert_eq!(
+            blocked_recovery,
+            Err(ModelError::InvalidField(
+                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
+            ))
+        );
     }
 }

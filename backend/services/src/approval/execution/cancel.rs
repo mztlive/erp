@@ -43,7 +43,7 @@ pub struct CancelExecutionInput {
     pub receipt_id: ApprovalCommandReceiptId,
 }
 
-/// 规划取消。人员失效走业务取消，非人员一致性 blocker 必须走受阻取消。
+/// 规划取消。允许原审批人恢复的 blocker 走业务取消，其余 blocker 必须走受阻取消。
 ///
 /// # 参数
 /// * `input` - 取消输入
@@ -87,7 +87,9 @@ fn prepare_cancel_with_document_version(
             .or(input.current.blocker_code)
             .ok_or_else(|| Error::ValidationError("受阻取消缺少 blocker".to_string()))?;
         if !requires_blocked_cancel(blocker) {
-            return Err(Error::ValidationError("人员失效不得走受阻取消".to_string()));
+            return Err(Error::ValidationError(
+                "原审批人可恢复时不得走受阻取消".to_string(),
+            ));
         }
         cancel_blocked_digest(
             blocker.as_str(),
@@ -100,7 +102,7 @@ fn prepare_cancel_with_document_version(
     } else {
         if input.instance.blocker_code.is_some_and(requires_blocked_cancel) {
             return Err(Error::ValidationError(
-                "非人员一致性阻塞只能走受阻取消".to_string(),
+                "不可恢复原审批人的阻塞只能走受阻取消".to_string(),
             ));
         }
         match expected_document_version {

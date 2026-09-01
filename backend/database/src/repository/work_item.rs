@@ -614,7 +614,7 @@ impl<'a> Repository<'a, WorkItem> {
 
     /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
     ///
-    /// 改派和人员恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。
+    /// 原审批人恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。
     ///
     /// # 参数
     /// * `item` - 已完成实体状态变更的审批任务

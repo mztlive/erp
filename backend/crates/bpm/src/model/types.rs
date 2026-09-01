@@ -26,18 +26,6 @@ pub enum ModelError {
     /// 已结束的节点执行不得重开或覆盖决定。
     #[error("节点执行已结束，不得重开或覆盖")]
     ExecutionAlreadyEnded,
-    /// 结构性或一致性阻塞不得走人员改派。
-    #[error("结构性阻塞不得改派")]
-    StructuralBlockerCannotReassign,
-    /// 改派原因必填。
-    #[error("改派原因不能为空")]
-    EmptyReassignReason,
-    /// 目标与当前审批人相同。
-    #[error("不得改派给当前审批人")]
-    MeaninglessReassign,
-    /// 终态实例不得改派。
-    #[error("终态实例不得改派")]
-    TerminalInstanceCannotReassign,
     /// 轮次或版本 checked add 溢出。
     #[error("计数溢出: {0}")]
     Overflow(&'static str),
@@ -216,7 +204,7 @@ pub enum ApprovalNodeExecutionStatus {
     Cancelled,
     /// 人员或结构校验失败。
     Blocked,
-    /// 已被改派或恢复替换。
+    /// 已被原审批人恢复替换。
     Superseded,
 }
 
@@ -253,36 +241,22 @@ impl ApprovalNodeExecutionStatus {
     }
 }
 
-/// 实例审批人绑定来源。类型上不能持有人员恢复。
+/// 实例审批人绑定来源。运行时绑定只能从已发布定义冻结。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalAssigneeBindingSource {
     /// 从已发布定义复制。
     Definition,
-    /// 管理员改派后的当前责任。
-    AdminReassign,
 }
 
 impl ApprovalAssigneeBindingSource {
     /// 返回稳定代码。
     ///
     /// # 返回
-    /// 返回 `DEFINITION` 或 `ADMIN_REASSIGN`。
+    /// 返回 `DEFINITION`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
-            Self::AdminReassign => "ADMIN_REASSIGN",
-        }
-    }
-
-    /// 普通进入节点时，把绑定来源复制为执行来源。
-    ///
-    /// # 返回
-    /// 返回对应的执行分派来源，不含人员恢复。
-    pub fn to_execution_source(self) -> ApprovalExecutionAssignmentSource {
-        match self {
-            Self::Definition => ApprovalExecutionAssignmentSource::Definition,
-            Self::AdminReassign => ApprovalExecutionAssignmentSource::AdminReassign,
         }
     }
 }
@@ -291,10 +265,8 @@ impl ApprovalAssigneeBindingSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalExecutionAssignmentSource {
-    /// 从已发布定义或未改派绑定进入。
+    /// 从已发布定义冻结的绑定进入。
     Definition,
-    /// 管理员改派后的新执行。
-    AdminReassign,
     /// 原审批人恢复后的当次重建执行。
     AssigneeRecovery,
 }
@@ -303,11 +275,10 @@ impl ApprovalExecutionAssignmentSource {
     /// 返回稳定代码。
     ///
     /// # 返回
-    /// 返回 `DEFINITION`、`ADMIN_REASSIGN` 或 `ASSIGNEE_RECOVERY`。
+    /// 返回 `DEFINITION` 或 `ASSIGNEE_RECOVERY`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
-            Self::AdminReassign => "ADMIN_REASSIGN",
             Self::AssigneeRecovery => "ASSIGNEE_RECOVERY",
         }
     }
@@ -317,8 +288,6 @@ impl ApprovalExecutionAssignmentSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalExecutionEndReason {
-    /// 管理员改派结束旧执行。
-    AdminReassigned,
     /// 原审批人恢复结束旧执行。
     AssigneeRecovered,
 }
@@ -327,10 +296,9 @@ impl ApprovalExecutionEndReason {
     /// 返回稳定代码。
     ///
     /// # 返回
-    /// 返回 `ADMIN_REASSIGNED` 或 `ASSIGNEE_RECOVERED`。
+    /// 返回 `ASSIGNEE_RECOVERED`。
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::AdminReassigned => "ADMIN_REASSIGNED",
             Self::AssigneeRecovered => "ASSIGNEE_RECOVERED",
         }
     }
@@ -386,11 +354,11 @@ impl ApprovalBlockerCode {
         }
     }
 
-    /// 判断是否属于允许改派或恢复的人员失效类别。
+    /// 判断是否属于允许恢复原审批人的人员失效类别。
     ///
     /// # 返回
     /// 前六类人员资格阻塞返回 `true`，其余结构或一致性阻塞返回 `false`。
-    pub fn allows_personnel_reassign(self) -> bool {
+    pub fn allows_assignee_recovery(self) -> bool {
         matches!(
             self,
             Self::ApproverAccountInactive
@@ -423,8 +391,6 @@ pub enum ApprovalCommandKind {
     CancelApproval,
     /// 恢复原审批人。
     ResumeApprover,
-    /// 管理员改派。
-    ReassignApprover,
     /// 受阻取消。
     CancelBlocked,
 }
@@ -444,7 +410,6 @@ impl ApprovalCommandKind {
             Self::SubmitDecision => "SUBMIT_DECISION",
             Self::CancelApproval => "CANCEL_APPROVAL",
             Self::ResumeApprover => "RESUME_APPROVER",
-            Self::ReassignApprover => "REASSIGN_APPROVER",
             Self::CancelBlocked => "CANCEL_BLOCKED",
         }
     }
@@ -558,31 +523,42 @@ pub(crate) fn normalize_optional(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalDecision, ApprovalDefinitionStatus,
-        ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason, ApprovalNodeExecutionStatus,
-        ApprovalProcessInstanceStatus, ApprovalTerminalResult, ApprovalTransitionEvent,
+        ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision,
+        ApprovalDefinitionStatus, ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason,
+        ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus, ApprovalTerminalResult,
+        ApprovalTransitionEvent,
     };
 
-    /// 绑定来源不能表示人员恢复。
+    /// 绑定来源固定为定义，执行来源只增加原审批人恢复。
     #[test]
-    fn binding_source_cannot_hold_assignee_recovery() {
-        let sources = [
-            ApprovalAssigneeBindingSource::Definition,
-            ApprovalAssigneeBindingSource::AdminReassign,
+    fn assignment_sources_only_allow_definition_and_assignee_recovery() {
+        let binding_sources = [ApprovalAssigneeBindingSource::Definition];
+        let execution_sources = [
+            ApprovalExecutionAssignmentSource::Definition,
+            ApprovalExecutionAssignmentSource::AssigneeRecovery,
         ];
-        assert_eq!(sources.len(), 2);
-        assert_eq!(
-            ApprovalAssigneeBindingSource::Definition.to_execution_source(),
-            ApprovalExecutionAssignmentSource::Definition
-        );
-        assert_eq!(
-            ApprovalAssigneeBindingSource::AdminReassign.to_execution_source(),
-            ApprovalExecutionAssignmentSource::AdminReassign
-        );
+        let end_reasons = [ApprovalExecutionEndReason::AssigneeRecovered];
+        assert_eq!(binding_sources.len(), 1);
+        assert_eq!(execution_sources.len(), 2);
+        assert_eq!(end_reasons.len(), 1);
+        assert_eq!(ApprovalAssigneeBindingSource::Definition.as_str(), "DEFINITION");
         assert_eq!(
             ApprovalExecutionAssignmentSource::AssigneeRecovery.as_str(),
             "ASSIGNEE_RECOVERY"
         );
+        assert_eq!(
+            ApprovalExecutionEndReason::AssigneeRecovered.as_str(),
+            "ASSIGNEE_RECOVERED"
+        );
+    }
+
+    /// 开发期硬切换不得为已删除的审批改派枚举保留反序列化别名。
+    #[test]
+    fn removed_reassign_codes_are_rejected() {
+        assert!(serde_json::from_str::<ApprovalAssigneeBindingSource>("\"ADMIN_REASSIGN\"").is_err());
+        assert!(serde_json::from_str::<ApprovalExecutionAssignmentSource>("\"ADMIN_REASSIGN\"").is_err());
+        assert!(serde_json::from_str::<ApprovalExecutionEndReason>("\"ADMIN_REASSIGNED\"").is_err());
+        assert!(serde_json::from_str::<ApprovalCommandKind>("\"REASSIGN_APPROVER\"").is_err());
     }
 
     /// 固定枚举代码与合同取值一致。
@@ -598,20 +574,20 @@ mod tests {
         assert!(ApprovalNodeExecutionStatus::Approved.is_ended());
         assert!(!ApprovalNodeExecutionStatus::Blocked.is_ended());
         assert_eq!(
-            ApprovalExecutionEndReason::AdminReassigned.as_str(),
-            "ADMIN_REASSIGNED"
+            ApprovalExecutionEndReason::AssigneeRecovered.as_str(),
+            "ASSIGNEE_RECOVERED"
         );
     }
 
-    /// 仅前六类人员阻塞允许改派。
+    /// 仅前六类人员阻塞允许恢复原审批人。
     #[test]
-    fn only_personnel_blockers_allow_reassign() {
-        assert!(ApprovalBlockerCode::ApproverAccountInactive.allows_personnel_reassign());
-        assert!(ApprovalBlockerCode::SeparationOfDutiesViolation.allows_personnel_reassign());
-        assert!(!ApprovalBlockerCode::DefinitionGraphCorrupted.allows_personnel_reassign());
-        assert!(!ApprovalBlockerCode::InstanceLinkCorrupted.allows_personnel_reassign());
-        assert!(!ApprovalBlockerCode::OpenTaskConflict.allows_personnel_reassign());
-        assert!(!ApprovalBlockerCode::SubjectVersionConflict.allows_personnel_reassign());
-        assert!(!ApprovalBlockerCode::InternalInvariantBroken.allows_personnel_reassign());
+    fn only_personnel_blockers_allow_assignee_recovery() {
+        assert!(ApprovalBlockerCode::ApproverAccountInactive.allows_assignee_recovery());
+        assert!(ApprovalBlockerCode::SeparationOfDutiesViolation.allows_assignee_recovery());
+        assert!(!ApprovalBlockerCode::DefinitionGraphCorrupted.allows_assignee_recovery());
+        assert!(!ApprovalBlockerCode::InstanceLinkCorrupted.allows_assignee_recovery());
+        assert!(!ApprovalBlockerCode::OpenTaskConflict.allows_assignee_recovery());
+        assert!(!ApprovalBlockerCode::SubjectVersionConflict.allows_assignee_recovery());
+        assert!(!ApprovalBlockerCode::InternalInvariantBroken.allows_assignee_recovery());
     }
 }

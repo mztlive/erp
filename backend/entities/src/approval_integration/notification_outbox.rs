@@ -38,8 +38,6 @@ pub enum ApprovalNotificationEventKind {
     Blocked,
     /// 原审批人已恢复。
     Resumed,
-    /// 已改派。
-    Reassigned,
     /// 正常取消。
     Cancelled,
     /// 受阻取消。
@@ -61,7 +59,6 @@ impl ApprovalNotificationEventKind {
             Self::NodeRejected => "NODE_REJECTED",
             Self::Blocked => "BLOCKED",
             Self::Resumed => "RESUMED",
-            Self::Reassigned => "REASSIGNED",
             Self::Cancelled => "CANCELLED",
             Self::BlockedCancelled => "BLOCKED_CANCELLED",
             Self::Completed => "COMPLETED",
@@ -398,6 +395,12 @@ mod tests {
         assert_eq!(item.recipient_user_ids, vec!["user-1".to_string()]);
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Pending);
         assert_eq!(item.attempt_count, 0);
+    }
+
+    /// 开发期硬切换不得接受已删除的审批改派通知种类。
+    #[test]
+    fn removed_reassigned_event_is_rejected() {
+        assert!(serde_json::from_str::<ApprovalNotificationEventKind>("\"REASSIGNED\"").is_err());
     }
 
     /// 成功后不得再取租约。

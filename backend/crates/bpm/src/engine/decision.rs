@@ -9,7 +9,7 @@ use crate::model::{
     ApprovalNodeExecution, ApprovalProcessInstance, ApprovalTransitionDefinition, ParticipantId, Timestamp,
 };
 
-use super::enter_node::{plan_enter_node, require_decision_edges};
+use super::enter_node::{plan_enter_node, require_decision_edges, EnterNodeInput};
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
@@ -164,16 +164,7 @@ fn enter_after_decision(
     command: DecideCommand,
     keep_commit: bool,
 ) -> EngineResult<TransitionPlan> {
-    let source = match plan
-        .created_assignees
-        .iter()
-        .chain(plan.updated_assignees.iter())
-        .find(|item| item.node_key == node_key)
-    {
-        Some(binding) => binding.assignment_source.to_execution_source(),
-        None => ApprovalExecutionAssignmentSource::Definition,
-    };
-    let enter = plan_enter_node(super::EnterNodeInput {
+    let enter = plan_enter_node(EnterNodeInput {
         instance: plan.instance.clone(),
         graph,
         node_key,
@@ -182,7 +173,7 @@ fn enter_after_decision(
         eligibility: command.next_eligibility,
         execution_id: command.next_execution_id,
         execution_no: command.next_execution_no,
-        assignment_source: source,
+        assignment_source: ApprovalExecutionAssignmentSource::Definition,
         replaces_execution_id: None,
         now: command.now,
     })?;

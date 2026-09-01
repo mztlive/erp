@@ -94,30 +94,6 @@ pub struct ApprovalResumeCommand {
     pub actor_id: String,
 }
 
-/// 管理员改派命令。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ApprovalReassignCommand {
-    /// 实例 ID。
-    pub approval_process_instance_id: String,
-    /// 目标用户。
-    pub target_user_id: String,
-    /// 非空原因。
-    pub reason: String,
-    /// 期望实例版本。
-    pub expected_instance_version: u64,
-    /// 期望执行版本。
-    pub expected_execution_version: u64,
-    /// 期望绑定版本。
-    pub expected_assignment_version: u64,
-    /// 可空已关闭任务版本。
-    pub expected_task_version: Option<u64>,
-    /// 幂等键。
-    pub idempotency_key: String,
-    /// 已认证改派人。
-    #[serde(skip)]
-    pub actor_id: String,
-}
-
 /// 受阻取消命令。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalCancelBlockedCommand {

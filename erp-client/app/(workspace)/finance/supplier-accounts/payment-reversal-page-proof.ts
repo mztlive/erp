@@ -15,7 +15,6 @@ export const SUPPLIER_ACCOUNTS_PAYMENT_REVERSAL_SERVER_ACTIONS = [
     "通过",
     "驳回",
     "撤回审批",
-    "改派当前审批人",
     "恢复当前审批人",
     "取消受阻审批",
 ] as const

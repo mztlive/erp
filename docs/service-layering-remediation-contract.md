@@ -49,30 +49,30 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **179 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、43 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **178 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、44 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
 | 业务域 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 开放问题合计 |
 | --- | ---: | ---: | ---: | ---: |
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
-| Approval | 3 | 6 | 2 | 11 |
+| Approval | 3 | 5 | 2 | 10 |
 | Master | 4 | 8 | 0 | 12 |
 | Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 10 | 0 | 17 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **76** | **105** | **2** | **183** |
+| **合计** | **76** | **104** | **2** | **182** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **10 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
 | P0 | 13 | 45 | 1 | 59 |
-| P1 | 58 | 48 | 1 | 107 |
+| P1 | 58 | 47 | 1 | 106 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **76** | **105** | **2** | **183** |
+| **合计** | **76** | **104** | **2** | **182** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -174,7 +174,7 @@ git diff --check
 | `APP-E01` | P1 | OPEN | `approval/process_kind.rs:16-70 process_kind_of / document_type_of`、`business_adapter.rs:131-180 document_type_of_sales_business / subject_ref_for / document_type_from_subject_kind`、`sales_order/adapter.rs:272-297 subject_ref_for_sales_business / document_type_for_sales_create` 重复身份映射。 | 在 `entities::approval_integration` 建立 `DocumentType <-> ProcessKind`、BusinessType→DocumentType、DocumentType+ID→SubjectRef 唯一转换。 | 20 种 DocumentType round-trip；固定 `GoodsService -> SalesOrder`、`Voucher -> VoucherSalesOrder`；非法 kind/空 ID 拒绝；BPM 不得反向依赖 entities。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | `APP-E02` | P0 | OPEN | `approval/execution/idempotency.rs:30-300` 与 `definition.rs:101-208`、`:1533-1554 write_receipt`、`:1680-1703 create_draft_digest / lock_command_digest / payload_digest` 维护两套 key/digest；两者均以未转义 U+001F 连接外部文本并把空值编码为字面量 `NULL`，存在分隔符和空值载荷碰撞。`bpm/src/model/command_receipt.rs:47-74 ApprovalCommandReceipt::new` 写入时才规范化，而查询仍使用 raw key，空白等价 key 可能无法回放；摘要整体没有统一版本。 | BPM 提供 `IdempotencyKey` 与带长度前缀或等价无碰撞编码的 canonical payload VO；Command DTO 统一 `prepare/scope/digest`，Repository 只接收规范 key。必须先删除权威审批合同禁止的 reassign 命令种类，再固定剩余命令枚举和摘要集合。 | 空白等价 key 命中；空/超长查库前拒绝；分隔符、字面量 `NULL`、空值和 Unicode 文本无碰撞；同 key+同 payload 回放、同 key+异 payload 冲突；每类命令 golden hash；历史格式版本化双读或迁移；真实 Mongo 并发单胜者及失败事务新会话回读。 | 批次：未分配；责任人：未分配；依赖：先按权威合同完成 `APP-E04` 的运行时 reassign surface 删除，再与 `APP-S06` 同批实施；关闭证据：— |
 | `APP-E03` | P1 | OPEN | `definition.rs:1244-1277 node_replacement_drafts` 持有 node ID 空白、assignee trim 与 draft 构造规则。 | DTO `prepare` 清洗外部文本；BPM `NodeReplacementDraft::new` 负责节点/participant 不变量；ID/时间由 Service 注入。 | 已有/新增节点、空白/重复/外来 ID、assignee/name/order 边界；BPM 不生成 ID、不依赖 services DTO。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| `APP-E04` | P1 | OPEN | `execution/start.rs:69-77 prepare_start` 对照 `bpm/engine/start.rs:57-63,97-108 start / ensure_all_assignees_eligible`；`resume.rs:70-77 prepare_resume` 对照 BPM `resume / ensure_personnel_blocked`；`reassign.rs:59-70 prepare_reassign` 对照 BPM `ReassignCommand / reassign / ensure_reassignable`。前两者重复前置，原审批人恢复后不得改派仅在 Service。 | 删除 start/resume 镜像判断；在已有 target eligibility 外向 `ReassignCommand` 增加原审批人当前 eligibility，由 BPM 独占恢复/改派互斥。 | 直接 BPM 测试不合格 start、结构 blocker resume、原人恢复后拒绝改派、仍失效时可改派；实时 RBAC 仍归 Service。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| `APP-E04` | P1 | DONE | `execution/start.rs:69-77 prepare_start` 与 `resume.rs:70-77 prepare_resume` 重复 BPM 的全部审批人资格和人员 blocker 纯规则；更严重的是审批合同第 3.2、8.2、8.3、12.3 节已禁止运行时改派，代码仍公开 `ApprovalReassignCommand`、`execution::reassign`、`ReassignCommand`、`ReassignApprover` receipt kind/digest、改派事件/通知/workflow action/错误码及审批专属 `AdminReassign` 责任变体。`work_item::allowed_actions` 还可能向 Managed `DocumentApproval` 签发通用 `REASSIGN` 动作码。 | 删除 start/resume 的 Service 纯规则镜像，由 BPM 独占启动和原审批人恢复状态规则；实时账号、RBAC、对象读取、DataScope 与岗位分离继续归 Service。删除全部审批专属 reassign DTO、应用端口、BPM 命令、收据种类与摘要、事件、通知、业务动作、错误码、责任变更方法及审批专属 `AdminReassign/AdminReassigned` 变体；实例审批人 `changed_by/changed_at/change_reason` 字段必须保留并永久为空，`current_assignee` 必须等于 `definition_assignee`。人员 blocker 分类与实例守卫必须改为原审批人恢复语义。Managed 审批任务不得返回 `REASSIGN`；通用非审批 `work_item:reassign` 必须保留，并继续对审批任务固定失败关闭。 | **验收：**BPM 直接覆盖入口合格但非入口失效的 start 拒绝、结构 blocker resume 拒绝、原审批人仍失效时 resume 拒绝且状态不变、恢复合格后只重建原审批人的新执行；腐化绑定来源、当前人与定义人不一致或 change 审计非空时恢复失败。审批路由、权限、DTO、公开命令、receipt kind、摘要、事件、通知和页面入口均不得保留运行时 reassign；Managed `DocumentApproval.allowed_actions` 不含 `REASSIGN`，普通非审批任务仍可转交，通用改派/候选入口对审批任务保持相同 409 稳定错误。启动候选和恢复写事务必须继续覆盖账号、对象读权、DataScope、岗位分离及失败零写。<br>**风险：**分层整改合同不得复活权威审批合同明确不交付的能力；不得全局删除非审批 WorkItem 的 `AdminReassign`、权限、路由或前端转交。项目处于开发期且审批合同不建设历史迁移；存在旧审批改派持久化值时必须按既有开发重置合同清除，不得增加兼容双读。 | 批次：`APP-6.2-E04-20260901`；责任人：Codex；依赖：权威审批合同禁止运行时改派，且本项已先于 `APP-E02` 独立关闭；关闭证据：审批专属 reassign 生产 surface 清零且旧枚举值反序列化失败，通用非审批 WorkItem 转交保留；BPM 70 项、Service execution 60 项、WorkItem 双 marker/fresh/replay 与 Managed 投影定向测试通过；MongoDB 7.0.39 单节点副本集 5 项真实事务验收通过；客户端 347 项 Vitest、69 项 Node test、46 页构建通过；后端 workspace 37 suites、2715 passed、0 failed、66 ignored 及全部统一门禁通过。 |
 | `APP-E05` | P2 | OPEN | `business_adapter.rs:433-442 ensure_published_status`、`binding.rs:247-285 load_published_graph / revalidate_published_graph` 用 Service 枚举比较定义“只有 Published 图可绑定”。 | BPM 提供 `is_published` 与 `DefinitionGraph::validate_published_linear`。 | draft/published/retired/损坏 published 图；Service 只映射配置错误，Repository 过滤不能替代 BPM 确认。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | `APP-E06` | P1 | DONE | `runtime_service.rs:1592-1601 item_from_summary` 只比 document type 和 ID，漏比 immutable `subject_version`，虽 Entity 已有三元校验；`:1236` 的快照单号检索也未先验证三元组。 | 列表 hydration 与快照单号检索必须以运行行的 document type、ID、immutable `subject_version` 调用实体 exact triple 校验；快照只提供 label、document number 检索和组织范围证明，禁止覆盖运行时身份。快照缺失或漂移时，仅 Started 发起人、Mine 当前责任人和 Company 管理范围等已由独立事实证明读取权的行可保留，并令 `document_label=None` 且不得命中快照 `q`；组织受限的 Managed/Blocked 必须在 total、cursor 和 facet 前排除无法由 exact 快照证明负责组织的行；正式命令继续失败关闭。 | exact match 返回快照单号；缺失及 type/ID/version 漂移在独立授权范围保留空 label，在组织受限范围排除；跨 DocumentType 组织范围不得合并；任何快照不得覆盖运行时 document type/ID。正式决定、恢复、取消的 triple 冲突仍按审批合同返回冲突/BLOCKED。 | 批次：`APP-6.2-READ-20260831`；责任人：Codex；依赖：无；关闭证据：`ApprovalRuntimeReadScope` 区分 Started 与 Managed；Repository 在组织受限范围按 DocumentType 分组过滤后再计算 total/cursor/facet，Service 只用 exact snapshot 补充 label；缺失、漂移、Company、错误组织及跨类型组织回归通过。 |
 | `APP-E07` | P1 | OPEN | `approval/action.rs:12-33 ApprovalActionContext` 公开可选字段；`runtime_service.rs:532-542 submit_decision` 与 `:1043-1053 cancel_blocked` 手写两种不受约束的 action_context shape。 | DTO 隐藏字段并提供 `for_decision`、`for_blocked_cancel` 构造器。 | 合法两形态；缺/空业务对象、实例、execution、task ID；受阻取消错误携带 task；空 reason/key、非法 subject version；跨聚合动作仍归 Service。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -205,6 +205,13 @@ git diff --check
 10. 定向与统一门禁：WorkItem Repository/Service、runtime query、HTTP extractor 和授权定向测试通过；`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。代表性 `explain` 不使用 hint，`idx_work_items_document_approval_owner_page` 与 `idx_work_items_document_approval_owner_type_page` 在有/无 cursor 查询中均被自然选择，且无 `COLLSCAN` 或阻塞 `SORT`。
 11. 兼容与回滚合同：本批不改变 HTTP 路由、view/status 枚举或 opaque cursor wire shape；非法 query 原被框架映射为 400 的行为统一收紧为合同规定的 422。新增两个 WorkItem 部分索引必须先通过现行 index ensure 正向建立；回滚必须先回滚应用代码，再按变更审批选择是否移除新增索引。无 BSON 字段、既有数据或业务状态迁移。
 12. 外部验收边界：浏览器视觉、生产数据量下索引构建时长和生产执行计划登记为 `N/A`，不得以本地隔离库结果替代发布审批。发布前必须扫描同 execution/instance 多开放审批责任、确认两个部分索引建立成功，并按生产代表数据复核有/无 cursor 的自然执行计划。
+13. 批次编号：`APP-6.2-E04-20260901`。交付范围仅为 `APP-E04`；责任人：Codex。本批必须在 `APP-E02` 固定合法命令 identity/digest 前独立关闭并独立提交，不得把 `APP-E02` 或 `APP-S06` 的幂等重构并入本批。
+14. 权威语义合同：`docs/approval-workflow-contract.md` 第 3.2、8.2、8.3、12.3、14.2、16.5 节对审批运行时 reassign 的禁止优先于本文件历史描述。本批不得实现目标审批人、候选人、改派原因、改派收据或改派后的责任替换；人员失效时只能保持 `BLOCKED`，原审批人全部资格恢复后才能执行 resume。通用非审批 WorkItem reassign 仍属于独立责任合同，不得删除或收窄。
+15. 分层实施合同：BPM 必须独占 start 全节点资格、resume blocker、原审批人绑定不变和恢复资格规则；Service 必须删除等价镜像，只保留实时账号、任职、动作权限、对象读取、DataScope、岗位分离、事务和错误适配。审批专属 reassign 必须从 Service DTO/port、BPM engine/model、receipt kind/digest、event、notification、workflow action、错误目录与 Managed 动作投影中清零；`ApprovalInstanceAssignee` 的 change 审计字段必须保留但禁止写入。通用 WorkItem 层必须先识别 `DocumentApproval` 或 execution 关联，再拒绝候选查询和写命令，并不得向 Managed 投影签发 `REASSIGN`。
+16. 验收合同：直接 BPM 测试必须证明非入口审批人失效时 start 失败、结构 blocker 与仍失效人员 blocker 的 resume 均失败、腐化实例绑定失败、合格原审批人恢复后绑定不变且只产生一个 replacement execution。Service 与真实 Mongo 必须证明启动候选授权失败全部零写，恢复失权或错范围时实例保持 `BLOCKED`、旧执行和任务不被替换、无新 receipt/audit/execution/task，恢复资格后成功。静态 surface gate 必须限定审批域并证明 reassign 命令、收据、事件、错误、权限、路由和前端入口不存在；不得把通用非审批 `work_item:reassign` 计为违规命中。
+17. 兼容、发布与回滚合同：本批不新增路由、权限、集合、索引或 BSON 字段；删除的审批枚举值和命令不提供兼容双读或历史重放。发布前必须执行既有开发业务数据重置 preview，确认旧审批改派值为零；非零时按审批合同安全重置，不得用保留死枚举替代清理。回滚会重新暴露禁止能力和 Managed 动作码，禁止在生产无保护回滚；如需回滚，必须先停用审批运行时入口并取得合同变更批准。
+18. 未执行边界：真实浏览器、生产数据扫描、开发业务数据重置、生产代表数据执行计划、分片集群、主从切换、长事务冲突和并发压测不得由本地编译、单元测试或单节点副本集替代。本批关闭不得宣称上述项目已执行。
+19. 关闭证据登记：审批专属 reassign DTO、应用端口、BPM command、receipt kind/digest、event、notification kind、workflow action、错误码、权限、路由和页面操作生产 surface 为零；旧 `ADMIN_REASSIGN`、`ADMIN_REASSIGNED`、`REASSIGN_APPROVER`、`REASSIGNED` 与 `approval_reassigned` 只允许存在于硬切换拒绝测试。BPM 70 项、Service execution 60 项、WorkItem 双 marker/fresh/replay 与 Managed 动作投影定向测试通过。MongoDB `7.0.39` 单节点 `rs0` PRIMARY、`enableTestCommands=true` 环境中，启动候选失败零写 1 项、恢复事务 1 项、运行授权 3 项合计 `5 passed / 0 failed / 0 ignored`，harness `103.57s`、wall `112.42s`；随机库、failpoint、容器、端口和约 `3.6G` 专用 target 全部清理。客户端定向 5 项、Vitest `347/347`、Node `69/69`、TypeScript、lint、46 页生产构建通过。后端 `cargo fmt`、workspace check、workspace clippy `-D warnings`、37 suites `2715 passed / 0 failed / 66 ignored`、BPM/Service boundary、permissions drift 和 `git diff --check` 全部通过；两个独立只读审查均为无 blocker。
 
 ### 6.3 Master
 

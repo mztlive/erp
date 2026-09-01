@@ -82,8 +82,6 @@ pub struct TransitionPlan {
     pub updated_executions: Vec<ApprovalNodeExecution>,
     /// 启动时冻结的实例审批人。
     pub created_assignees: Vec<ApprovalInstanceAssignee>,
-    /// 改派后的实例审批人。
-    pub updated_assignees: Vec<ApprovalInstanceAssignee>,
     /// 中性任务意图。
     pub task_intents: Vec<TaskIntent>,
     /// 中性领域事件。
@@ -107,7 +105,6 @@ impl TransitionPlan {
             created_executions: Vec::new(),
             updated_executions: Vec::new(),
             created_assignees: Vec::new(),
-            updated_assignees: Vec::new(),
             task_intents: Vec::new(),
             events: Vec::new(),
             commit,
@@ -129,7 +126,6 @@ impl TransitionPlan {
         self.created_executions.extend(enter.created_executions);
         self.updated_executions.extend(enter.updated_executions);
         self.created_assignees.extend(enter.created_assignees);
-        self.updated_assignees.extend(enter.updated_assignees);
         self.task_intents.extend(enter.task_intents);
         self.events.extend(enter.events);
         if !keep_commit {

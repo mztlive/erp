@@ -328,11 +328,8 @@ fn message_of(code: ErrorCode) -> &'static str {
         ErrorCode::ApprovalResumeNotAllowedForBlocker => {
             "当前暂停原因不允许恢复原审批人，请改用其他可用处理方式"
         }
-        ErrorCode::ApprovalCurrentApproverNotRecovered => "原审批人仍不具备审批资格，请先恢复资格或改派",
-        ErrorCode::ApprovalCurrentApproverRecovered => "原审批人已恢复资格，无需改派，请刷新后继续审批",
-        ErrorCode::ApprovalReassignTargetIneligible => "改派目标不具备审批资格，请重新选择审批人",
-        ErrorCode::ApprovalReassignNotAllowedForBlocker => "当前暂停原因不允许改派，请改用恢复或取消",
-        ErrorCode::ApprovalBlockedCancelNotAllowed => "当前暂停原因不允许取消审批，请改用恢复或改派",
+        ErrorCode::ApprovalCurrentApproverNotRecovered => "原审批人仍不具备审批资格，请先恢复全部资格后重试",
+        ErrorCode::ApprovalBlockedCancelNotAllowed => "当前暂停原因不允许取消审批，请恢复原审批人后继续审批",
         ErrorCode::ApprovalGenericWorkItemMutationForbidden => "请在审批任务页面处理该任务",
         ErrorCode::ApprovalIdempotencyPayloadConflict => "该任务号已用于其他请求，请关闭弹窗后重新发起操作",
     }
@@ -379,7 +376,7 @@ mod tests {
             status_of(ErrorCode::ApprovalPolicyNotRegistered),
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
-        assert_eq!(ErrorCode::ALL.len(), 24);
+        assert_eq!(ErrorCode::ALL.len(), 21);
     }
 
     #[tokio::test]

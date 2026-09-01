@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalInstanceAssigneeId, ApprovalProcessInstanceId};
 use crate::model::types::{
-    base_model_at, normalize_required, touch_base, ApprovalAssigneeBindingSource, ModelError, ModelResult,
-    NODE_KEY_MAX_LEN, REASON_MAX_LEN,
+    base_model_at, normalize_required, ApprovalAssigneeBindingSource, ModelError, ModelResult,
+    NODE_KEY_MAX_LEN,
 };
 use crate::model::{ParticipantId, Timestamp};
 
@@ -22,15 +22,15 @@ pub struct ApprovalInstanceAssignee {
     pub node_key: String,
     /// 从发布定义复制，永久保留。
     pub definition_assignee_participant_id: ParticipantId,
-    /// 当前及后续轮次使用的责任人。
+    /// 当前及后续轮次使用的责任人，永久等于定义审批人。
     pub current_assignee_participant_id: ParticipantId,
-    /// 绑定来源，不能是人员恢复。
+    /// 绑定来源，永久为定义冻结。
     pub assignment_source: ApprovalAssigneeBindingSource,
-    /// 改派人。
+    /// 保留的变更审计字段，运行时永久为空。
     pub changed_by: Option<ParticipantId>,
-    /// 改派时间。
+    /// 保留的变更时间字段，运行时永久为空。
     pub changed_at: Option<Timestamp>,
-    /// 改派原因。
+    /// 保留的变更原因字段，运行时永久为空。
     pub change_reason: Option<String>,
 }
 
@@ -66,36 +66,20 @@ impl ApprovalInstanceAssignee {
         })
     }
 
-    /// 原子更新当前审批人与改派审计，定义审批人不变。
-    ///
-    /// # 参数
-    /// * `target` - 新的当前审批人
-    /// * `actor` - 改派人
-    /// * `reason` - 非空原因
-    /// * `at` - 改派时间
+    /// 校验实例绑定仍是启动时从定义冻结的原始事实。
     ///
     /// # 错误
-    /// 原因为空或目标与当前相同时返回错误。
-    pub fn reassign(
-        &mut self,
-        target: ParticipantId,
-        actor: ParticipantId,
-        reason: impl Into<String>,
-        at: Timestamp,
-    ) -> ModelResult<()> {
-        let reason = normalize_required(reason, "改派原因不能为空", REASON_MAX_LEN, "改派原因过长")
-            .map_err(|_| ModelError::EmptyReassignReason)?;
-        if target == self.current_assignee_participant_id {
-            return Err(ModelError::MeaninglessReassign);
+    /// 来源、当前责任人或保留审计字段发生变化时返回错误。
+    pub fn ensure_unchanged_from_definition(&self) -> ModelResult<()> {
+        if self.assignment_source != ApprovalAssigneeBindingSource::Definition
+            || self.current_assignee_participant_id != self.definition_assignee_participant_id
+            || self.changed_by.is_some()
+            || self.changed_at.is_some()
+            || self.change_reason.is_some()
+        {
+            return Err(ModelError::InvalidStatus("实例审批人绑定必须保持定义快照不变"));
         }
-        let definition_assignee = self.definition_assignee_participant_id.clone();
-        self.current_assignee_participant_id = target;
-        self.assignment_source = ApprovalAssigneeBindingSource::AdminReassign;
-        self.changed_by = Some(actor);
-        self.changed_at = Some(at);
-        self.change_reason = Some(reason);
-        self.definition_assignee_participant_id = definition_assignee;
-        touch_base(&mut self.base, at)
+        Ok(())
     }
 }
 
@@ -117,48 +101,43 @@ mod tests {
         .unwrap()
     }
 
-    /// 定义审批人在改派后保持不变。
+    /// 定义冻结绑定的责任人与保留审计字段必须保持不变。
     #[test]
-    fn reassign_keeps_definition_assignee() {
-        let mut assignee = binding();
-        let original = assignee.definition_assignee_participant_id.clone();
-        assignee
-            .reassign(
-                ParticipantId::new("u2").unwrap(),
-                ParticipantId::new("admin").unwrap(),
-                "人员失效",
-                Timestamp::from_unix_secs(2).unwrap(),
-            )
-            .unwrap();
-        assert_eq!(assignee.definition_assignee_participant_id, original);
-        assert_eq!(assignee.current_assignee_participant_id.as_str(), "u2");
+    fn definition_binding_is_unchanged() {
+        let assignee = binding();
         assert_eq!(
             assignee.assignment_source,
-            ApprovalAssigneeBindingSource::AdminReassign
+            ApprovalAssigneeBindingSource::Definition
         );
+        assert_eq!(
+            assignee.current_assignee_participant_id,
+            assignee.definition_assignee_participant_id
+        );
+        assert!(assignee.changed_by.is_none());
+        assert!(assignee.changed_at.is_none());
+        assert!(assignee.change_reason.is_none());
+        assert!(assignee.ensure_unchanged_from_definition().is_ok());
     }
 
-    /// 空原因与同人改派失败关闭。
+    /// 当前责任或任一保留审计字段漂移时失败关闭。
     #[test]
-    fn reassign_rejects_empty_reason_and_same_person() {
-        let mut assignee = binding();
-        assert_eq!(
-            assignee.reassign(
-                ParticipantId::new("u2").unwrap(),
-                ParticipantId::new("admin").unwrap(),
-                "  ",
-                Timestamp::from_unix_secs(2).unwrap(),
-            ),
-            Err(ModelError::EmptyReassignReason)
-        );
-        assert_eq!(
-            assignee.reassign(
-                ParticipantId::new("u1").unwrap(),
-                ParticipantId::new("admin").unwrap(),
-                "相同的人",
-                Timestamp::from_unix_secs(2).unwrap(),
-            ),
-            Err(ModelError::MeaninglessReassign)
-        );
+    fn changed_definition_binding_is_rejected() {
+        let expected = Err(ModelError::InvalidStatus("实例审批人绑定必须保持定义快照不变"));
+
+        let mut changed_current = binding();
+        changed_current.current_assignee_participant_id = ParticipantId::new("u2").unwrap();
+        assert_eq!(changed_current.ensure_unchanged_from_definition(), expected);
+
+        let mut changed_by = binding();
+        changed_by.changed_by = Some(ParticipantId::new("operator").unwrap());
+        assert_eq!(changed_by.ensure_unchanged_from_definition(), expected);
+
+        let mut changed_at = binding();
+        changed_at.changed_at = Some(Timestamp::from_unix_secs(2).unwrap());
+        assert_eq!(changed_at.ensure_unchanged_from_definition(), expected);
+
+        let mut changed_reason = binding();
+        changed_reason.change_reason = Some("unexpected change".into());
+        assert_eq!(changed_reason.ensure_unchanged_from_definition(), expected);
     }
 }

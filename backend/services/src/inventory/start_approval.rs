@@ -1032,7 +1032,6 @@ fn validate_start_writes(
                 && assignee.current_assignee_participant_id == first.assignee_participant_id
         })
         || !writes.updated_executions.is_empty()
-        || !writes.updated_assignees.is_empty()
         || !writes.complete_tasks.is_empty()
         || !writes.close_tasks.is_empty()
     {

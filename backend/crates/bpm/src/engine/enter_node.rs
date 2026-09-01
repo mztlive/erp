@@ -1,4 +1,4 @@
-//! 统一节点进入。启动、通过、驳回、恢复与改派必须复用本函数。
+//! 统一节点进入。启动、通过、驳回与恢复必须复用本函数。
 
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
@@ -15,7 +15,7 @@ use super::transition_plan::{CommitRequired, TaskIntent, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 规划进入指定节点所需的实例、图与责任快照。
-pub struct EnterNodeInput<'a> {
+pub(crate) struct EnterNodeInput<'a> {
     /// 当前实例快照。
     pub instance: ApprovalProcessInstance,
     /// 已加载的定义图。
@@ -55,8 +55,8 @@ pub struct EnterNodeInput<'a> {
 /// 节点缺失且无法形成合法快照，或模型不变式失败时返回错误。
 ///
 /// # 约束
-/// 启动、通过、驳回、恢复与改派必须复用本函数。
-pub fn plan_enter_node(input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
+/// 启动、通过、驳回与恢复必须复用本函数。
+pub(crate) fn plan_enter_node(input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
     let node = match input.graph.node(input.node_key) {
         Some(node) => node,
         None => {
@@ -90,6 +90,11 @@ fn build_enter_plan(
     mut input: EnterNodeInput<'_>,
     node: &ApprovalNodeDefinition,
 ) -> EngineResult<TransitionPlan> {
+    if input.participant != node.assignee_participant_id
+        || input.eligibility.participant() != node.assignee_participant_id
+    {
+        return Err(EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
+    }
     let execution_input = NewNodeExecution {
         id: input.execution_id.clone(),
         process_instance_id: crate::ids::ApprovalProcessInstanceId::new(input.instance.base.id.clone()),

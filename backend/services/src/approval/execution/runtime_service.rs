@@ -1237,13 +1237,13 @@ impl ApprovalRuntimeService {
         )?;
         let db = self.db.clone();
         let client = self.db.client().clone();
-        let actor_id = actor.id().to_string();
         let owner_role = spec.owner_role.as_str().to_string();
         let owner_organization_id = snapshot.payload.responsible_org_id.clone();
         let subject_version = snapshot.subject_version.to_string();
         let business_object_id = snapshot.business_object_id.clone();
         let document_type_label = document_type.label().to_string();
-        let current_node_name = current.node_name.clone();
+        let document_no = snapshot.payload.document_no.clone();
+        let submitted_by = snapshot.payload.submitted_by.clone();
         let ended_execution_id = current.base.id.clone();
         let rbac = self.rbac.clone();
         let stock_resume_revalidation = (document_type == DocumentType::StockAdjustment).then(|| {
@@ -1286,13 +1286,13 @@ impl ApprovalRuntimeService {
                             list_projection: &list_projection,
                             audit: &audit,
                             now,
-                            actor_id: &actor_id,
                             owner_role: &owner_role,
                             owner_organization_id: &owner_organization_id,
                             subject_version: &subject_version,
                             business_object_id: &business_object_id,
                             document_type_label: &document_type_label,
-                            current_node_name: &current_node_name,
+                            document_no: &document_no,
+                            submitted_by: &submitted_by,
                         },
                         session,
                     )
@@ -1312,7 +1312,7 @@ impl ApprovalRuntimeService {
         Ok(view)
     }
 
-    /// 取消允许人工终止的非人员一致性受阻实例。
+    /// 取消不允许原审批人恢复、但允许人工终止的受阻实例。
     ///
     /// # 参数
     /// * `actor` - 当前认证且具备恢复权限的审计主体
@@ -1322,7 +1322,7 @@ impl ApprovalRuntimeService {
     /// 返回取消后的审批命令视图；幂等回放返回已持久化视图。
     ///
     /// # 错误
-    /// 人员失效 blocker、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
+    /// 原审批人恢复前置不满足、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
     ///
     /// # 关键业务约束
     /// 仅允许无开放任务的受阻端口取消，冻结快照三项主体引用必须全部精确匹配。
@@ -3850,10 +3850,10 @@ async fn persist_decision_writes(
     for execution in &writes.created_executions {
         db.bpm_workflow().insert_execution(execution, session).await?;
     }
-    let mut assignees = writes.created_assignees.clone();
-    assignees.extend(writes.updated_assignees.clone());
-    if !assignees.is_empty() {
-        db.bpm_workflow().insert_assignees(&assignees, session).await?;
+    if !writes.created_assignees.is_empty() {
+        db.bpm_workflow()
+            .insert_assignees(&writes.created_assignees, session)
+            .await?;
     }
     // 任务：完成当前、按原因关闭、为下一节点新建。
     complete_or_close_tasks(
@@ -3921,13 +3921,13 @@ struct ResumePersistInput<'a> {
     list_projection: &'a ApprovalInstanceListProjection,
     audit: &'a entities::audit_log::AuditLog,
     now: Instant,
-    actor_id: &'a str,
     owner_role: &'a str,
     owner_organization_id: &'a str,
     subject_version: &'a str,
     business_object_id: &'a str,
     document_type_label: &'a str,
-    current_node_name: &'a str,
+    document_no: &'a str,
+    submitted_by: &'a str,
 }
 
 /// 在一个 MongoDB 事务内应用人员恢复全部正式事实。
@@ -3950,6 +3950,11 @@ async fn persist_resume_writes(
     input: ResumePersistInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let [new_execution] = input.writes.created_executions.as_slice() else {
+        return Err(Error::Internal(
+            "原审批人恢复必须且只能创建一个新执行".to_string(),
+        ));
+    };
     if let Some(guard) = input.closed_task_guard {
         let task = db
             .work_items()
@@ -3989,12 +3994,10 @@ async fn persist_resume_writes(
             "受阻审批执行",
         )?;
     }
-    if !input.writes.created_assignees.is_empty() || !input.writes.updated_assignees.is_empty() {
+    if !input.writes.created_assignees.is_empty() {
         return Err(Error::Internal("原审批人恢复不得修改实例审批人绑定".to_string()));
     }
-    for execution in &input.writes.created_executions {
-        db.bpm_workflow().insert_execution(execution, session).await?;
-    }
+    db.bpm_workflow().insert_execution(new_execution, session).await?;
     db.bpm_workflow()
         .insert_command_receipt(&input.writes.receipt, session)
         .await?;
@@ -4012,32 +4015,86 @@ async fn persist_resume_writes(
         session,
     )
     .await?;
-    let recipient = input
-        .writes
-        .created_executions
-        .last()
-        .map(|execution| execution.assignee_participant_id.as_str().to_string())
-        .unwrap_or_else(|| input.actor_id.to_string());
-    for intent in &input.writes.notifications {
+    persist_resume_notifications(
+        db,
+        input.writes,
+        new_execution,
+        input.submitted_by,
+        input.document_type_label,
+        input.document_no,
+        input.now,
+        session,
+    )
+    .await?;
+    db.audit_logs().create(input.audit, session).await?;
+    Ok(())
+}
+
+/// 在恢复事务内按新执行事实追加进入节点与原审批人恢复通知。
+#[allow(clippy::too_many_arguments)]
+async fn persist_resume_notifications(
+    db: &Database,
+    writes: &PlannedWrites,
+    new_execution: &ApprovalNodeExecution,
+    submitted_by: &str,
+    document_type_label: &str,
+    document_no: &str,
+    now: Instant,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    use entities::approval_integration::ApprovalNotificationEventKind as EventKind;
+
+    if writes.notifications.len() != 2 {
+        return Err(Error::Internal(
+            "原审批人恢复必须产生进入节点和恢复两条通知意图".to_string(),
+        ));
+    }
+    let mut seen = HashSet::with_capacity(2);
+    for intent in &writes.notifications {
+        if !seen.insert(intent.event_kind) {
+            return Err(Error::Internal("原审批人恢复包含重复通知意图".to_string()));
+        }
+        let expected_dedup = match intent.event_kind {
+            EventKind::Entered => format!("entered:{}", new_execution.base.id),
+            EventKind::Resumed => format!("resumed:{}", new_execution.base.id),
+            _ => {
+                return Err(Error::Internal(
+                    "原审批人恢复包含非进入节点或恢复通知".to_string(),
+                ));
+            }
+        };
+        if intent.dedup_key != expected_dedup {
+            return Err(Error::Internal("原审批人恢复通知去重键不匹配".to_string()));
+        }
+        let primary = new_execution.assignee_participant_id.as_str();
+        let recipients = match intent.event_kind {
+            EventKind::Entered => vec![primary.to_string()],
+            EventKind::Resumed => notification_recipients(primary, [submitted_by]),
+            _ => unreachable!("unsupported resume event was rejected above"),
+        };
         let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
             entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),
             intent.event_kind,
-            vec![recipient.clone()],
+            recipients,
             entities::approval_integration::ApprovalNotificationTemplateParams {
-                document_type_label: input.document_type_label.to_string(),
-                document_no: input.business_object_id.to_string(),
-                current_node_name: input.current_node_name.to_string(),
-                current_approver_display_name: recipient.clone(),
-                round_no: input.writes.instance.current_round_no,
+                document_type_label: document_type_label.to_string(),
+                document_no: document_no.to_string(),
+                current_node_name: new_execution.node_name.clone(),
+                current_approver_display_name: new_execution.assignee_name_snapshot.clone(),
+                round_no: new_execution.round_no,
                 reject_reason_summary: None,
             },
-            input.now,
+            now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
         db.approval_notification_outbox().create(&record, session).await?;
     }
-    db.audit_logs().create(input.audit, session).await?;
+    if !seen.contains(&EventKind::Entered) || !seen.contains(&EventKind::Resumed) {
+        return Err(Error::Internal(
+            "原审批人恢复缺少进入节点或恢复通知意图".to_string(),
+        ));
+    }
     Ok(())
 }
 

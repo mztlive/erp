@@ -7,7 +7,6 @@ mod cancel;
 mod decision;
 mod enter_node;
 mod event;
-mod reassign;
 mod resume;
 mod start;
 mod transition_plan;
@@ -15,9 +14,7 @@ mod transition_plan;
 pub use crate::graph::DefinitionGraph;
 pub use cancel::{cancel, CancelCommand};
 pub use decision::{block_current, decide, DecideCommand};
-pub use enter_node::{plan_enter_node, EnterNodeInput};
 pub use event::{BpmEvent, BpmEventKind};
-pub use reassign::{reassign, ReassignCommand};
 pub use resume::{resume, ResumeCommand};
 pub use start::{start, StartAssigneeBinding, StartCommand};
 pub use transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
@@ -141,11 +138,11 @@ pub fn refuse_unwired() -> Result<TransitionPlan> {
 
 #[cfg(test)]
 mod tests {
+    use super::enter_node::{plan_enter_node, EnterNodeInput};
     use super::{
-        block_current, cancel, decide, plan_enter_node, reassign, refuse_unwired, resume, start,
-        CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
-        EnterNodeInput, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason,
-        TaskIntent,
+        block_current, cancel, decide, refuse_unwired, resume, start, CancelCommand, CommitRequired,
+        DecideCommand, DefinitionGraph, Eligibility, EngineError, ResumeCommand, StartAssigneeBinding,
+        StartCommand, TaskCloseReason, TaskIntent,
     };
     use crate::error::Error;
     use crate::ids::{
@@ -154,7 +151,7 @@ mod tests {
     };
     use crate::model::types::{
         ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason,
-        ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus, ApprovalTransitionEvent,
+        ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus, ApprovalTransitionEvent, ModelError,
     };
     use crate::model::{
         ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalProcessInstance,
@@ -185,9 +182,9 @@ mod tests {
             .any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
     }
 
-    /// 入口或任一审批人失效时启动失败关闭，不得创建运行链。
+    /// 即使入口合格，任一非入口审批人失效时也必须拒绝启动。
     #[test]
-    fn engine_start_rejects_ineligible_assignee() {
+    fn engine_start_rejects_ineligible_non_entry_assignee() {
         let error = start(
             StartCommand {
                 instance_id: ApprovalProcessInstanceId::new("inst"),
@@ -204,18 +201,39 @@ mod tests {
                     id: ApprovalInstanceAssigneeId::new("a1"),
                     node_key: "n1".into(),
                     participant: participant("u1"),
-                    eligibility: blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+                    eligibility: eligible("u1", "张三"),
                 },
                 StartAssigneeBinding {
                     id: ApprovalInstanceAssigneeId::new("a2"),
                     node_key: "n2".into(),
                     participant: participant("u2"),
-                    eligibility: eligible("u2", "李四"),
+                    eligibility: blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive),
                 },
             ],
         )
         .unwrap_err();
         assert!(matches!(error, EngineError::InvalidCommand(_)));
+    }
+
+    /// 入口审批人失效时同样不得创建运行链。
+    #[test]
+    fn engine_start_rejects_ineligible_entry_assignee() {
+        let error = try_start_two_node(
+            blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+            eligible("u2", "李四"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例")
+        );
+    }
+
+    /// 资格结果必须逐节点属于定义中冻结的审批人。
+    #[test]
+    fn engine_start_rejects_eligibility_for_another_participant() {
+        let error = try_start_two_node(eligible("u9", "钱七"), eligible("u2", "李四")).unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
 
     /// 通过进入下一节点；下一审批人失效时保留本次通过。
@@ -253,6 +271,29 @@ mod tests {
             .task_intents
             .iter()
             .any(|intent| matches!(intent, TaskIntent::HumanTaskRequested { .. })));
+    }
+
+    /// 下一节点资格主体不得伪装成定义责任人形成隐藏换人通道。
+    #[test]
+    fn engine_decide_rejects_next_participant_outside_definition() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let error = decide(
+            started.instance,
+            started.created_executions[0].clone(),
+            &two_node_graph(),
+            DecideCommand {
+                decision: ApprovalDecision::Approve,
+                reason: None,
+                actor: participant("u1"),
+                current_eligibility: eligible("u1", "张三"),
+                next_eligibility: eligible("u9", "钱七"),
+                next_execution_id: ApprovalNodeExecutionId::new("e2"),
+                next_execution_no: 2,
+                now: at(20),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
 
     /// 末节点通过生成待终结计划。
@@ -483,6 +524,7 @@ mod tests {
         let blocked = block_after_start(ApprovalBlockerCode::ApproverEmploymentInvalid);
         let current = blocked.updated_executions[0].clone();
         let assignee = blocked.created_assignees[0].clone();
+        let original_assignee = assignee.clone();
         let plan = resume(
             blocked.instance,
             current,
@@ -512,6 +554,19 @@ mod tests {
             plan.created_executions[0].assignment_source,
             ApprovalExecutionAssignmentSource::AssigneeRecovery
         );
+        assert_eq!(plan.created_executions.len(), 1);
+        assert_eq!(plan.updated_executions.len(), 1);
+        assert_eq!(
+            plan.created_executions[0].replaces_execution_id.as_ref(),
+            Some(&ApprovalNodeExecutionId::new("e1"))
+        );
+        assert_eq!(
+            plan.created_executions[0].assignee_participant_id,
+            assignee.definition_assignee_participant_id
+        );
+        assert!(plan.created_assignees.is_empty());
+        assert_eq!(assignee, original_assignee);
+        assert!(assignee.ensure_unchanged_from_definition().is_ok());
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
         assert!(matches!(
             plan.task_intents.first(),
@@ -519,10 +574,11 @@ mod tests {
         ));
     }
 
-    /// 结构性阻塞不得改派。
+    /// 结构性 blocker 不得进入原审批人恢复。
     #[test]
-    fn engine_reassign_rejects_structural_blocker() {
+    fn engine_resume_rejects_structural_blocker() {
         let started = start_two_node(eligible("u1", "张三"));
+        let assignee = started.created_assignees[0].clone();
         let mut instance = started.instance;
         instance
             .enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27))
@@ -531,67 +587,156 @@ mod tests {
         current
             .block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27))
             .unwrap();
-        let error = reassign(
+        let error = resume(
             instance,
             current,
-            started.created_assignees[0].clone(),
+            &assignee,
             &two_node_graph(),
-            ReassignCommand {
-                target: participant("u9"),
-                actor: participant("admin"),
-                reason: "换人".into(),
-                target_eligibility: eligible("u9", "钱七"),
+            ResumeCommand {
                 next_execution_id: ApprovalNodeExecutionId::new("e2"),
                 next_execution_no: 2,
+                eligibility: eligible("u1", "张三"),
                 now: at(28),
             },
         )
         .unwrap_err();
-        assert!(matches!(
+        assert_eq!(
             error,
-            EngineError::Model(_) | EngineError::InvalidCommand(_)
-        ));
+            EngineError::Model(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
+        );
     }
 
-    /// 管理员改派结束旧执行并创建新执行。
+    /// 原审批人仍失效时恢复失败且输入事实保持不变。
     #[test]
-    fn engine_reassign_replaces_blocked_execution() {
-        let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
-        let plan = reassign(
-            blocked.instance,
-            blocked.updated_executions[0].clone(),
-            blocked.created_assignees[0].clone(),
+    fn engine_resume_rejects_still_ineligible_assignee_without_state_change() {
+        let blocked_plan = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
+        let instance = blocked_plan.instance;
+        let current = blocked_plan.updated_executions[0].clone();
+        let assignee = blocked_plan.created_assignees[0].clone();
+        let original_instance = instance.clone();
+        let original_current = current.clone();
+        let original_assignee = assignee.clone();
+        let error = resume(
+            instance.clone(),
+            current.clone(),
+            &assignee,
             &two_node_graph(),
-            ReassignCommand {
-                target: participant("u9"),
-                actor: participant("admin"),
-                reason: "原审批人离职".into(),
-                target_eligibility: eligible("u9", "钱七"),
+            ResumeCommand {
                 next_execution_id: ApprovalNodeExecutionId::new("e2"),
                 next_execution_no: 2,
+                eligibility: blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
                 now: at(29),
             },
         )
-        .unwrap();
-        assert_eq!(
-            plan.updated_executions[0].ended_reason,
-            Some(ApprovalExecutionEndReason::AdminReassigned)
-        );
-        assert_eq!(
-            plan.created_executions[0].assignment_source,
-            ApprovalExecutionAssignmentSource::AdminReassign
-        );
-        assert_eq!(
-            plan.updated_assignees[0].current_assignee_participant_id.as_str(),
-            "u9"
-        );
-        assert_eq!(
-            plan.updated_assignees[0]
-                .definition_assignee_participant_id
-                .as_str(),
-            "u1"
-        );
-        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
+        .unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("原审批人资格尚未恢复"));
+        assert_eq!(instance, original_instance);
+        assert_eq!(current, original_current);
+        assert_eq!(assignee, original_assignee);
+    }
+
+    /// 当前责任或保留变更审计漂移时恢复失败关闭。
+    #[test]
+    fn engine_resume_rejects_corrupted_definition_binding() {
+        let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
+        let instance = blocked.instance;
+        let current = blocked.updated_executions[0].clone();
+        let binding = blocked.created_assignees[0].clone();
+        let mut corrupted = Vec::new();
+
+        let mut changed_current = binding.clone();
+        changed_current.current_assignee_participant_id = participant("u9");
+        corrupted.push(changed_current);
+
+        let mut changed_by = binding.clone();
+        changed_by.changed_by = Some(participant("operator"));
+        corrupted.push(changed_by);
+
+        let mut changed_at = binding.clone();
+        changed_at.changed_at = Some(at(28));
+        corrupted.push(changed_at);
+
+        let mut changed_reason = binding;
+        changed_reason.change_reason = Some("unexpected change".into());
+        corrupted.push(changed_reason);
+
+        for (index, assignee) in corrupted.iter().enumerate() {
+            let error = resume(
+                instance.clone(),
+                current.clone(),
+                assignee,
+                &two_node_graph(),
+                ResumeCommand {
+                    next_execution_id: ApprovalNodeExecutionId::new(format!("e-corrupted-{index}")),
+                    next_execution_no: 2,
+                    eligibility: eligible("u1", "张三"),
+                    now: at(29),
+                },
+            )
+            .unwrap_err();
+            assert_eq!(
+                error,
+                EngineError::Model(ModelError::InvalidStatus("实例审批人绑定必须保持定义快照不变"))
+            );
+        }
+    }
+
+    /// 旧执行、资格结果与轮次必须全部属于同一原审批人恢复事实。
+    #[test]
+    fn engine_resume_rejects_mismatched_recovery_facts() {
+        let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
+        let instance = blocked.instance;
+        let current = blocked.updated_executions[0].clone();
+        let assignee = blocked.created_assignees[0].clone();
+
+        let mut wrong_execution_assignee = current.clone();
+        wrong_execution_assignee.assignee_participant_id = participant("u9");
+        let error = resume(
+            instance.clone(),
+            wrong_execution_assignee,
+            &assignee,
+            &two_node_graph(),
+            ResumeCommand {
+                next_execution_id: ApprovalNodeExecutionId::new("e-wrong-current"),
+                next_execution_no: 2,
+                eligibility: eligible("u1", "张三"),
+                now: at(29),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("原审批人与旧受阻执行不一致"));
+
+        let error = resume(
+            instance.clone(),
+            current.clone(),
+            &assignee,
+            &two_node_graph(),
+            ResumeCommand {
+                next_execution_id: ApprovalNodeExecutionId::new("e-wrong-eligibility"),
+                next_execution_no: 2,
+                eligibility: eligible("u9", "钱七"),
+                now: at(29),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("资格结果必须属于原审批人"));
+
+        let mut wrong_round = current;
+        wrong_round.round_no = 2;
+        let error = resume(
+            instance,
+            wrong_round,
+            &assignee,
+            &two_node_graph(),
+            ResumeCommand {
+                next_execution_id: ApprovalNodeExecutionId::new("e-wrong-round"),
+                next_execution_no: 2,
+                eligibility: eligible("u1", "张三"),
+                now: at(29),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, EngineError::InvalidCommand("受阻执行不属于实例当前轮次"));
     }
 
     /// 缺失节点不得构造缺字段执行。
@@ -652,6 +797,13 @@ mod tests {
     }
 
     fn start_two_node(entry: Eligibility) -> super::TransitionPlan {
+        try_start_two_node(entry, eligible("u2", "李四")).unwrap()
+    }
+
+    fn try_start_two_node(
+        entry: Eligibility,
+        second: Eligibility,
+    ) -> Result<super::TransitionPlan, EngineError> {
         start(
             StartCommand {
                 instance_id: ApprovalProcessInstanceId::new("inst"),
@@ -674,11 +826,10 @@ mod tests {
                     id: ApprovalInstanceAssigneeId::new("a2"),
                     node_key: "n2".into(),
                     participant: participant("u2"),
-                    eligibility: eligible("u2", "李四"),
+                    eligibility: second,
                 },
             ],
         )
-        .unwrap()
     }
 
     fn start_single_node(entry: Eligibility) -> super::TransitionPlan {

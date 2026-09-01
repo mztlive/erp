@@ -265,42 +265,6 @@ pub fn resume_digest(
     ]))
 }
 
-/// 改派命令 canonical 载荷。
-///
-/// # 参数
-/// * `target_user` - 目标用户
-/// * `expected_instance_version` - 期望实例版本
-/// * `expected_execution_version` - 期望执行版本
-/// * `expected_assignment_version` - 期望绑定版本
-/// * `expected_task_version` - 可空任务版本
-/// * `reason` - 已 trim 原因
-/// * `actor_id` - 改派人
-///
-/// # 返回
-/// 返回改派载荷摘要。
-pub fn reassign_digest(
-    target_user: &str,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_assignment_version: u64,
-    expected_task_version: Option<u64>,
-    reason: &str,
-    actor_id: &str,
-) -> String {
-    let task_version = expected_task_version
-        .map(|value| value.to_string())
-        .unwrap_or_default();
-    payload_digest(&canonical_payload(&[
-        target_user,
-        &expected_instance_version.to_string(),
-        &expected_execution_version.to_string(),
-        &expected_assignment_version.to_string(),
-        &task_version,
-        reason,
-        actor_id,
-    ]))
-}
-
 /// 受阻取消 canonical 载荷。
 ///
 /// # 参数

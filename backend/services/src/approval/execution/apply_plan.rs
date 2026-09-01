@@ -30,8 +30,6 @@ pub struct PlannedWrites {
     pub updated_executions: Vec<ApprovalNodeExecution>,
     /// 新审批人绑定。
     pub created_assignees: Vec<ApprovalInstanceAssignee>,
-    /// 更新审批人绑定。
-    pub updated_assignees: Vec<ApprovalInstanceAssignee>,
     /// 需要创建的任务。
     pub create_tasks: Vec<TaskIntent>,
     /// 需要完成的任务执行。
@@ -81,7 +79,6 @@ pub fn apply_plan(
         created_executions: plan.created_executions,
         updated_executions: plan.updated_executions,
         created_assignees: plan.created_assignees,
-        updated_assignees: plan.updated_assignees,
         create_tasks,
         complete_tasks,
         close_tasks,

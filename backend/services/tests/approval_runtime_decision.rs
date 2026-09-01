@@ -15,8 +15,8 @@ use bpm::ids::{
     ApprovalProcessDefinitionId, ApprovalProcessInstanceId, ApprovalTransitionDefinitionId,
 };
 use bpm::model::types::{
-    ApprovalBlockerCode, ApprovalCommandKind, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
-    ApprovalTransitionEvent,
+    ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalCommandKind, ApprovalNodeExecutionStatus,
+    ApprovalProcessInstanceStatus, ApprovalTransitionEvent,
 };
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition,
@@ -858,6 +858,75 @@ async fn resume_audit_count(db: &Database, name: &str) -> u64 {
         .expect("统计恢复审计")
 }
 
+async fn assert_resume_failure_preserves_blocked_runtime(db: &Database, name: &str) {
+    let instance_id = ApprovalProcessInstanceId::new(instance_id(name));
+    let expected_execution_id = ApprovalNodeExecutionId::new(execution_id(name));
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&instance_id, &mut NoTransaction)
+        .await
+        .expect("读取恢复失败后的实例")
+        .expect("恢复失败后实例必须存在");
+    assert_eq!(instance.status, ApprovalProcessInstanceStatus::Blocked);
+    assert_eq!(
+        instance.current_node_execution_id.as_ref(),
+        Some(&expected_execution_id),
+        "恢复失败不得替换实例当前执行",
+    );
+
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&expected_execution_id, &mut NoTransaction)
+        .await
+        .expect("读取恢复失败后的受阻执行")
+        .expect("恢复失败后受阻执行必须存在");
+    assert_eq!(execution.status, ApprovalNodeExecutionStatus::Blocked);
+    assert!(execution.ended_reason.is_none(), "恢复失败不得结束受阻执行");
+    let execution_count = db
+        .collection::<Document>("approval_node_executions")
+        .count_documents(doc! { "process_instance_id": instance_id.as_ref() })
+        .await
+        .expect("统计恢复失败后的执行");
+    assert_eq!(execution_count, 1, "恢复失败不得创建 replacement execution");
+
+    let tasks = db
+        .work_items()
+        .approval_tasks_for_execution(&expected_execution_id, &mut NoTransaction)
+        .await
+        .expect("读取恢复失败后的旧任务");
+    assert!(matches!(tasks.as_slice(), [task] if task.status == WorkItemStatus::Closed));
+    let task_count = db
+        .collection::<Document>("work_items")
+        .count_documents(doc! { "business_object_id": object_id(name) })
+        .await
+        .expect("统计恢复失败后的任务");
+    assert_eq!(task_count, 1, "恢复失败不得创建新审批任务");
+
+    let assignee = db
+        .bpm_workflow()
+        .find_assignee_for_node(&instance_id, &execution.node_key, &mut NoTransaction)
+        .await
+        .expect("读取恢复失败后的实例审批人绑定")
+        .expect("恢复失败后实例审批人绑定必须存在");
+    assert_eq!(
+        assignee.current_assignee_participant_id,
+        assignee.definition_assignee_participant_id,
+    );
+    assert_eq!(
+        assignee.assignment_source,
+        ApprovalAssigneeBindingSource::Definition,
+    );
+    assert!(assignee.changed_by.is_none());
+    assert!(assignee.changed_at.is_none());
+    assert!(assignee.change_reason.is_none());
+    let assignee_count = db
+        .collection::<Document>("approval_instance_assignees")
+        .count_documents(doc! { "process_instance_id": instance_id.as_ref() })
+        .await
+        .expect("统计恢复失败后的实例审批人绑定");
+    assert_eq!(assignee_count, 1, "恢复失败不得创建或替换实例审批人绑定");
+}
+
 async fn blocked_cancel_receipt_count(db: &Database, name: &str) -> u64 {
     db.collection::<Document>("approval_command_receipts")
         .count_documents(doc! {
@@ -1505,6 +1574,7 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
         );
         assert_eq!(resume_receipt_count(&fixture.db, "resume-lost-read").await, 0);
         assert_eq!(resume_audit_count(&fixture.db, "resume-lost-read").await, 0);
+        assert_resume_failure_preserves_blocked_runtime(&fixture.db, "resume-lost-read").await;
 
         enable_approver_role(&fixture.db).await;
         set_approver_read_scope(&fixture.db, WRONG_ORG).await;
@@ -1520,6 +1590,7 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
         );
         assert_eq!(resume_receipt_count(&fixture.db, "resume-wrong-org").await, 0);
         assert_eq!(resume_audit_count(&fixture.db, "resume-wrong-org").await, 0);
+        assert_resume_failure_preserves_blocked_runtime(&fixture.db, "resume-wrong-org").await;
 
         set_approver_read_scope(&fixture.db, ORG).await;
         let success = resume_command(&fixture.db, "resume-success", "resume-key-success").await;
@@ -1549,6 +1620,27 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
             .current_node_execution_id
             .as_ref()
             .expect("恢复后实例必须指向新执行");
+        assert_ne!(
+            current_execution_id.as_ref(),
+            execution_id("resume-success"),
+            "恢复必须创建新执行而不是重开旧执行",
+        );
+        let new_execution = fixture
+            .db
+            .bpm_workflow()
+            .find_execution_by_id(current_execution_id, &mut NoTransaction)
+            .await
+            .expect("读取恢复后的新执行")
+            .expect("恢复后的新执行必须存在");
+        assert_eq!(
+            new_execution.assignee_participant_id.as_str(),
+            APPROVER,
+            "恢复后的新执行只能属于原审批人",
+        );
+        assert_eq!(
+            new_execution.assignment_source,
+            bpm::model::types::ApprovalExecutionAssignmentSource::AssigneeRecovery,
+        );
         let open_tasks = fixture
             .db
             .work_items()
@@ -1556,6 +1648,42 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
             .await
             .expect("读取恢复后开放任务");
         assert_eq!(open_tasks.len(), 1, "恢复后新执行必须恰有一个开放任务");
+        assert_eq!(open_tasks[0].owner_user_id.as_deref(), Some(APPROVER));
+
+        let assignee = fixture
+            .db
+            .bpm_workflow()
+            .find_assignee_for_node(
+                &ApprovalProcessInstanceId::new(instance_id("resume-success")),
+                &new_execution.node_key,
+                &mut NoTransaction,
+            )
+            .await
+            .expect("读取恢复后的实例审批人绑定")
+            .expect("恢复后的实例审批人绑定必须存在");
+        assert!(assignee.ensure_unchanged_from_definition().is_ok());
+        assert_eq!(assignee.current_assignee_participant_id.as_str(), APPROVER);
+
+        let entered_notice =
+            notification(&fixture.db, &format!("entered:{}", current_execution_id.as_ref())).await;
+        assert_eq!(entered_notice.event_kind, ApprovalNotificationEventKind::Entered);
+        assert_eq!(entered_notice.recipient_user_ids, vec![APPROVER.to_string()]);
+        let resumed_notice =
+            notification(&fixture.db, &format!("resumed:{}", current_execution_id.as_ref())).await;
+        assert_eq!(resumed_notice.event_kind, ApprovalNotificationEventKind::Resumed);
+        assert_eq!(
+            resumed_notice.recipient_user_ids,
+            vec![APPROVER.to_string(), SUBMITTER.to_string()],
+        );
+        for notice in [&entered_notice, &resumed_notice] {
+            assert_eq!(notice.template_params.document_no, document_no("resume-success"));
+            assert_eq!(notice.template_params.current_node_name, NODE_NAME);
+            assert_eq!(
+                notice.template_params.current_approver_display_name,
+                APPROVER_NAME,
+            );
+            assert_eq!(notice.template_params.round_no, new_execution.round_no);
+        }
         drop(fixture);
         tokio::time::sleep(Duration::from_millis(250)).await;
     });

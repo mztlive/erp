@@ -11,7 +11,6 @@ pub mod idempotency;
 pub mod notification_outbox;
 pub mod notification_worker;
 pub mod observability;
-pub mod reassign;
 pub mod resume;
 pub mod runtime_history;
 pub mod runtime_query;
@@ -30,7 +29,6 @@ pub use authorization::{converge_eligibility, AuthorizationFailure};
 pub use cancel::{prepare_cancel, prepare_document_cancel, CancelExecutionInput};
 pub use decision::{prepare_decision, DecisionExecutionInput};
 pub use notification_worker::ApprovalNotificationOutboxPort;
-pub use reassign::{prepare_reassign, ReassignExecutionInput};
 pub use resume::{prepare_resume, ResumeExecutionInput};
 pub use runtime_history::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
@@ -89,9 +87,9 @@ pub fn refuse_unwired() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        prepare_cancel, prepare_decision, prepare_document_cancel, prepare_reassign, prepare_resume,
-        prepare_start, refuse_unwired, CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput,
-        PreparedExecution, ReassignExecutionInput, ResumeExecutionInput, StartExecutionInput,
+        prepare_cancel, prepare_decision, prepare_document_cancel, prepare_resume, prepare_start,
+        refuse_unwired, CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput,
+        PreparedExecution, ResumeExecutionInput, StartExecutionInput,
     };
     use crate::approval::execution::decision::decision_commits_blocked;
     use crate::approval::execution::idempotency::normalize_idempotency_key;
@@ -123,7 +121,7 @@ mod tests {
         assert_eq!(message, "审批运行编排尚未接入，已按安全策略拒绝");
     }
 
-    /// 启动、通过、驳回、取消、恢复、改派均为单次编排计划。
+    /// 启动、通过、驳回、取消和恢复均为单次编排计划。
     #[test]
     fn execution_commands_are_single_transaction_plans() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -272,9 +270,9 @@ mod tests {
             .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
-    /// 恢复与改派创建新执行；结构阻塞不能改派。
+    /// 原审批人恢复创建新执行且不改变审批人绑定。
     #[test]
-    fn execution_resume_and_reassign_replace_execution() {
+    fn execution_resume_replaces_execution_without_changing_assignee() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
         let PreparedExecution::Apply(start_writes) = started else {
             panic!("启动必须写入");
@@ -290,7 +288,7 @@ mod tests {
         ))
         .unwrap();
         let PreparedExecution::Apply(writes) = blocked_now else {
-            panic!("人员失效必须提交 BLOCKED");
+            panic!("原审批人失效必须提交 BLOCKED");
         };
         let resumed = prepare_resume(resume_input(
             writes.instance.clone(),
@@ -306,45 +304,32 @@ mod tests {
             resume_writes.created_executions[0].status,
             ApprovalNodeExecutionStatus::Active
         );
-
-        let reassigned = prepare_reassign(reassign_input(
-            writes.instance,
-            writes.updated_executions[0].clone(),
-            start_writes.created_assignees[0].clone(),
-            blocked("u1", "张三", ApprovalBlockerCode::ApproverEmploymentInvalid),
-            None,
-        ))
-        .unwrap();
-        let PreparedExecution::Apply(reassign_writes) = reassigned else {
-            panic!("改派必须写入");
-        };
+        assert!(resume_writes.created_assignees.is_empty());
         assert_eq!(
-            reassign_writes.updated_assignees[0]
-                .current_assignee_participant_id
+            resume_writes.created_executions[0]
+                .assignee_participant_id
                 .as_str(),
-            "u9"
+            "u1"
         );
     }
 
-    /// 启动时任一审批人失效不得创建实例。
+    /// 入口有效但非入口审批人失效时，由 BPM 拒绝创建实例。
     #[test]
     fn execution_start_rejects_ineligible_assignee() {
-        let error = prepare_start(start_input(
-            blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
-            None,
-        ))
-        .unwrap_err();
+        let mut input = start_input(eligible("u1", "张三"), None);
+        input.bindings[1].eligibility = blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive);
+        let error = prepare_start(input).unwrap_err();
         assert!(error.to_string().contains("全部审批人必须有效"));
     }
 
-    /// 人员失效不得走受阻取消；结构阻塞只能走受阻取消。
+    /// 原审批人可恢复的 blocker 不得走受阻取消；结构 blocker 只能走受阻取消。
     #[test]
-    fn execution_cancel_blocked_rejects_personnel_and_accepts_structural() {
+    fn execution_cancel_blocked_rejects_assignee_recovery_and_accepts_structural() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
         let PreparedExecution::Apply(start_writes) = started else {
             panic!("启动必须写入");
         };
-        let personnel = prepare_decision(decision_input(
+        let recoverable = prepare_decision(decision_input(
             start_writes.instance.clone(),
             start_writes.created_executions[0].clone(),
             ApprovalDecision::Approve,
@@ -354,17 +339,19 @@ mod tests {
             None,
         ))
         .unwrap();
-        let PreparedExecution::Apply(personnel_writes) = personnel else {
-            panic!("人员失效必须提交");
+        let PreparedExecution::Apply(recoverable_writes) = recoverable else {
+            panic!("原审批人失效必须提交");
         };
-        let personnel_blocked = prepare_cancel(cancel_input(
-            personnel_writes.instance,
-            personnel_writes.updated_executions[0].clone(),
+        let recoverable_blocked = prepare_cancel(cancel_input(
+            recoverable_writes.instance,
+            recoverable_writes.updated_executions[0].clone(),
             true,
             None,
         ))
         .unwrap_err();
-        assert!(personnel_blocked.to_string().contains("人员失效不得走受阻取消"));
+        assert!(recoverable_blocked
+            .to_string()
+            .contains("原审批人可恢复时不得走受阻取消"));
 
         let mut graph = two_node_graph();
         graph.transitions.clear();
@@ -395,7 +382,7 @@ mod tests {
         .unwrap_err();
         assert!(normal_cancel
             .to_string()
-            .contains("非人员一致性阻塞只能走受阻取消"));
+            .contains("不可恢复原审批人的阻塞只能走受阻取消"));
         let blocked_cancel = prepare_cancel(cancel_input(
             structural_writes.instance,
             structural_writes.updated_executions[0].clone(),
@@ -657,38 +644,6 @@ mod tests {
             next_execution_no: 2,
             receipt_id: ApprovalCommandReceiptId::new("r-resume"),
             actor_id: "admin".into(),
-        }
-    }
-
-    fn reassign_input(
-        instance: bpm::model::ApprovalProcessInstance,
-        current: bpm::model::ApprovalNodeExecution,
-        assignee: bpm::model::ApprovalInstanceAssignee,
-        current_eligibility: Eligibility,
-        receipt: Option<ApprovalCommandReceipt>,
-    ) -> ReassignExecutionInput {
-        ReassignExecutionInput {
-            command: ExecutionCommandInput {
-                graph: two_node_graph(),
-                current_eligibility,
-                next_eligibility: eligible("u9", "钱七"),
-                receipt,
-                idempotency_key: "reassign-1".into(),
-                now: at(50),
-            },
-            instance,
-            current,
-            assignee,
-            target: participant("u9"),
-            actor: participant("admin"),
-            reason: "原审批人离职".into(),
-            expected_instance_version: 2,
-            expected_execution_version: 2,
-            expected_assignment_version: 1,
-            expected_task_version: Some(2),
-            next_execution_id: ApprovalNodeExecutionId::new("e2"),
-            next_execution_no: 2,
-            receipt_id: ApprovalCommandReceiptId::new("r-reassign"),
         }
     }
 

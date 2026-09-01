@@ -25,8 +25,6 @@ pub enum BpmEventKind {
     InstanceBlocked,
     /// 原审批人恢复。
     AssigneeRecovered,
-    /// 管理员改派。
-    AssigneeReassigned,
     /// 旧执行已被替换。
     ExecutionSuperseded,
 }
@@ -47,7 +45,6 @@ impl BpmEventKind {
             Self::InstanceCancelled => "INSTANCE_CANCELLED",
             Self::InstanceBlocked => "INSTANCE_BLOCKED",
             Self::AssigneeRecovered => "ASSIGNEE_RECOVERED",
-            Self::AssigneeReassigned => "ASSIGNEE_REASSIGNED",
             Self::ExecutionSuperseded => "EXECUTION_SUPERSEDED",
         }
     }

@@ -1030,7 +1030,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
-    /// 插入新的节点执行。改派与恢复不得更新旧 `CLOSED` 任务对应的旧执行。
+    /// 插入新的节点执行。原审批人恢复不得更新旧 `CLOSED` 任务对应的旧执行。
     ///
     /// # 错误
     /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
@@ -1042,7 +1042,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         mongo_ops::insert_one(&self.db.collection(EXECUTIONS), execution, executor).await
     }
 
-    /// 追加实例审批人绑定（通过/驳回进入新节点或新一轮时写入）。
+    /// 启动实例时一次性冻结全部节点审批人绑定；运行时不得更新或追加。
     ///
     /// # 错误
     /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
