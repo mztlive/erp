@@ -14,7 +14,9 @@
 //! - 跨聚合校验（资质失效不得用于新供给/采购单等）留给 P3，注释标注条目号。
 
 pub mod business_category;
+pub mod eligibility;
 pub mod payment_term;
+pub mod profile_change;
 pub mod supplier_account;
 pub mod supplier_capability;
 pub mod supplier_capability_revision;

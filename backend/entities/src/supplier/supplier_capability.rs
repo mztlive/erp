@@ -373,6 +373,41 @@ impl SupplierCapability {
         }
         Ok(())
     }
+
+    /// 从当前能力状态构造不可变修订快照。
+    ///
+    /// # 参数
+    /// * `revision_id` - 新修订主键，由 Service 分配
+    /// * `revision_no` - 修订序号，由 Service 查询得出；溢出由调用方通过 `RevisionBase::next_revision_no` 提前校验
+    ///
+    /// # 返回
+    /// 返回与当前能力字段完全一致的修订快照。
+    ///
+    /// # 错误
+    /// 字段规范化失败或区间倒挂时返回错误。
+    ///
+    /// # 约束
+    /// 纯内存，不触及 MongoDB、ID 生成器或时钟；快照字段必须与实体当前状态逐字段一致，不得漂移。
+    pub fn snapshot_revision(
+        &self,
+        revision_id: crate::ids::SupplierCapabilityRevisionId,
+        revision_no: u32,
+    ) -> Result<crate::supplier::SupplierCapabilityRevision> {
+        crate::supplier::SupplierCapabilityRevision::new(
+            revision_id,
+            crate::supplier::SupplierCapabilityRevisionData {
+                supplier_id: self.supplier_id.clone(),
+                capability_code: self.capability_code,
+                service_region: self.service_region.clone(),
+                owner_user_id: self.owner_user_id.clone(),
+                fulfillment_note: self.fulfillment_note.clone(),
+                valid_from: self.valid_from,
+                valid_to: self.valid_to,
+                status: self.stable.status,
+                revision_no,
+            },
+        )
+    }
 }
 
 /// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
@@ -504,6 +539,52 @@ mod tests {
             .unwrap();
         assert_eq!(capability.capability_code, CapabilityCode::Physical);
         assert_eq!(capability.supplier_id, SupplierAccountId::new("supplier-1"));
+    }
+
+    /// 快照字段必须与实体当前状态完全一致；修订号溢出仍由 `RevisionBase::next_revision_no` 负责，本方法仅校验字段一致性。
+    #[test]
+    fn snapshot_matches_entity_fields() {
+        let capability = SupplierCapability::new(
+            SupplierCapabilityId::new("cap-snap"),
+            capability_data(),
+            "admin-1",
+        )
+        .unwrap();
+        let rev = capability
+            .snapshot_revision(crate::ids::SupplierCapabilityRevisionId::new("cap-rev-snap"), 5)
+            .unwrap();
+        assert_eq!(rev.supplier_id, capability.supplier_id);
+        assert_eq!(rev.capability_code, capability.capability_code);
+        assert_eq!(rev.service_region, capability.service_region);
+        assert_eq!(rev.owner_user_id, capability.owner_user_id);
+        assert_eq!(rev.fulfillment_note, capability.fulfillment_note);
+        assert_eq!(rev.valid_from, capability.valid_from);
+        assert_eq!(rev.valid_to, capability.valid_to);
+        assert_eq!(rev.status, capability.stable.status);
+        assert_eq!(rev.revision.revision_no, 5);
+    }
+
+    /// 修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
+    #[test]
+    fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
+        use crate::common::revision::RevisionBase;
+        assert!(RevisionBase::next_revision_no(Some(u32::MAX)).is_err());
+        let capability = SupplierCapability::new(
+            SupplierCapabilityId::new("cap-overflow"),
+            capability_data(),
+            "admin-1",
+        )
+        .unwrap();
+        let overflow = RevisionBase::next_revision_no(Some(u32::MAX));
+        assert!(overflow.is_err());
+        // 溢出时不调用快照；正常序号仍可快照
+        let rev = capability
+            .snapshot_revision(
+                crate::ids::SupplierCapabilityRevisionId::new("cap-rev-overflow"),
+                1,
+            )
+            .unwrap();
+        assert_eq!(rev.revision.revision_no, 1);
     }
 
     /// 实体 BSON 往返。

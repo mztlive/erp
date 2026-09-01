@@ -3,9 +3,14 @@
 //! 规则只允许指向具体后台账号；账号状态与 RBAC 权限属于跨聚合事实，由 Service
 //! 在维护和解析时校验。本模块负责选择器形状、文本规范化与同层唯一命中规则。
 
+mod catalog;
 mod resolution;
 mod rule;
 
+pub use catalog::{
+    build_catalog_facts, category_chain, current_revision_ids, dedup_sorted_ids, ProcurementCatalogBundle,
+    ProcurementCatalogFact,
+};
 pub use resolution::{
     EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
     ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,

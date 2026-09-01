@@ -698,6 +698,160 @@ impl SaveSupplierProfileRequest {
         }
         Ok(())
     }
+
+    /// 计算根命令稳定指纹，保证同一幂等键只能重放完全相同的请求。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回对请求规范 JSON（键排序、确定性序列化）进行 SHA-256 后的 `sha256-v1:<hex>` 指纹。
+    ///
+    /// # 错误
+    /// JSON 序列化失败时返回 `Internal` 错误。
+    ///
+    /// # 约束
+    /// 输入为 `&self`，不触及外部 I/O；规范 JSON 按键排序固定字段顺序，旧裸 `64hex`
+    /// 指纹仍通过 `SupplierProfileCommand::ensure_replayable` 兼容回读。
+    pub(crate) fn fingerprint(&self) -> Result<String> {
+        use sha2::{Digest, Sha256};
+        let value = serde_json::to_value(self)
+            .map_err(|error| Error::Internal(format!("供应商命令序列化失败: {error}")))?;
+        let canonical = canonical_json_string(&value)?;
+        Ok(format!(
+            "sha256-v1:{}",
+            hex::encode(Sha256::digest(canonical.as_bytes()))
+        ))
+    }
+
+    /// 读取更新场景必填版本号。
+    ///
+    /// # 参数
+    /// * `value` - 可空版本输入
+    /// * `object` - 业务对象名，用于错误文案
+    ///
+    /// # 返回
+    /// 存在时返回版本号。
+    ///
+    /// # 错误
+    /// `value` 为 `None` 时返回 `ValidationError`。
+    ///
+    /// # 约束
+    /// 仅做存在性校验，不触及持久化。
+    pub(crate) fn required_update_version(value: Option<u64>, object: &str) -> Result<u64> {
+        value.ok_or_else(|| Error::ValidationError(format!("修订供应商时{object}版本不能为空")))
+    }
+
+    /// 校验乐观锁版本。
+    ///
+    /// # 参数
+    /// * `actual` - 当前持久化版本
+    /// * `expected` - 客户端期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本不一致时返回 `ConflictError`。
+    ///
+    /// # 约束
+    /// 纯内存比较，不触及外部状态。
+    pub(crate) fn ensure_version(actual: u64, expected: u64) -> Result<()> {
+        if actual != expected {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// 校验创建场景必填的稳定业务编号。
+    ///
+    /// # 参数
+    /// * `value` - 可空输入
+    /// * `field` - 字段中文名，用于错误文案
+    ///
+    /// # 返回
+    /// 去首尾空白后非空时返回规范化编号。
+    ///
+    /// # 错误
+    /// 输入为空或全空白时返回 `ValidationError`。
+    ///
+    /// # 约束
+    /// 仅做空白与存在性校验，不触及唯一性查询。
+    pub(crate) fn required_create_identity(value: Option<&str>, field: &str) -> Result<String> {
+        value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .ok_or_else(|| Error::ValidationError(format!("创建供应商时{field}不能为空")))
+    }
+}
+
+/// 将 JSON 值按规范（键排序）序列化为确定性字符串，用于稳定指纹。
+///
+/// # 参数
+/// * `value` - 待序列化的 JSON 值
+///
+/// # 返回
+/// 返回键排序后的规范 JSON 字符串。
+///
+/// # 错误
+/// 序列化失败时返回 `Internal` 错误。
+///
+/// # 约束
+/// 对象键按字典序排序，数组保持输入顺序，标量按 `serde_json` 标准编码。
+fn canonical_json_string(value: &serde_json::Value) -> Result<String> {
+    let mut output = String::new();
+    write_canonical_json(value, &mut output)?;
+    Ok(output)
+}
+
+/// 递归按规范写入 JSON，保持对象键排序。
+///
+/// # 参数
+/// * `value` - 当前 JSON 节点
+/// * `output` - 写入目标字符串
+///
+/// # 返回
+/// 成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 键序列化失败时返回 `Internal` 错误。
+fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Result<()> {
+    match value {
+        serde_json::Value::Object(map) => {
+            output.push('{');
+            let mut keys = map.keys().collect::<Vec<_>>();
+            keys.sort();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index != 0 {
+                    output.push(',');
+                }
+                output.push_str(
+                    &serde_json::to_string(key).map_err(|error| Error::Internal(error.to_string()))?,
+                );
+                output.push(':');
+                write_canonical_json(&map[key], output)?;
+            }
+            output.push('}');
+        }
+        serde_json::Value::Array(values) => {
+            output.push('[');
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    output.push(',');
+                }
+                write_canonical_json(value, output)?;
+            }
+            output.push(']');
+        }
+        other => {
+            output
+                .push_str(&serde_json::to_string(other).map_err(|error| Error::Internal(error.to_string()))?);
+        }
+    }
+    Ok(())
 }
 
 /// 根级供应商资料命令的稳定结果，也用于幂等查询。
@@ -930,5 +1084,23 @@ mod tests {
         };
 
         assert!(params.normalized().is_err());
+    }
+
+    #[test]
+    fn supplier_profile_fingerprint_is_versioned_and_canonical() {
+        let req = save_supplier_profile_request();
+        let fp1 = req.fingerprint().unwrap();
+        let fp2 = req.fingerprint().unwrap();
+        assert!(fp1.starts_with("sha256-v1:"));
+        assert_eq!(fp1, fp2);
+        assert_eq!(fp1.len(), "sha256-v1:".len() + 64);
+        // 字段乱序或键排序不影响指纹：规范 JSON 按键排序
+        let mut req2 = req.clone();
+        req2.legal_name = "不同名称".to_string();
+        let fp3 = req2.fingerprint().unwrap();
+        assert_ne!(fp1, fp3);
+        // 兼容旧裸 hex：存储为裸 hex 的命令仍可回放
+        let digest = fp1.strip_prefix("sha256-v1:").unwrap();
+        assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

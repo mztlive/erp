@@ -20,26 +20,22 @@ use entities::{
         SupplierQualificationRevisionId, SupplierRatingRevisionId,
     },
     party::{
-        AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyAddressUpdate,
-        PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate, PartyContact, PartyContactData,
-        PartyContactUpdate, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus,
-        PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate, PartyUpdate,
+        AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
+        PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyKind, PartyRevision,
+        PartyRevisionData, PartyStatus, PartyTaxProfile, PartyTaxProfileData,
     },
     supplier::{
-        next_supplier_revision_no, qualification_identity_key, validate_profile_selection, CapabilityStatus,
+        next_supplier_revision_no, profile_change, qualification_identity_key, validate_profile_selection,
         QualificationAttachmentSensitivity, QualificationStatus, SupplierAccount, SupplierAccountData,
-        SupplierAccountStatus, SupplierAccountUpdate, SupplierCapability, SupplierCapabilityData,
-        SupplierCapabilityRevision, SupplierCapabilityRevisionData, SupplierCapabilityUpdate,
+        SupplierAccountStatus, SupplierCapability, SupplierCapabilityRevision, SupplierCapabilityUpdate,
         SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData, SupplierProfileCommand,
         SupplierProfileCommandData, SupplierProfileUpdateViolation, SupplierQualification,
-        SupplierQualificationCapability, SupplierQualificationCapabilityData, SupplierQualificationData,
-        SupplierQualificationRevision, SupplierQualificationRevisionData, SupplierQualificationSelection,
+        SupplierQualificationCapability, SupplierQualificationRevision, SupplierQualificationSelection,
         SupplierQualificationUpdate, SupplierRatingRevision, SupplierRatingRevisionData,
     },
 };
 use id_generator::next_id;
 use mongodb::Database;
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::{
@@ -103,18 +99,23 @@ impl SupplierProfileService {
                 "创建供应商时不能提交清空既有资料的意图".to_string(),
             ));
         }
-        let request_fingerprint = request_fingerprint(&req)?;
+        let request_fingerprint = req.fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            command
+                .ensure_replayable("create", None, &request_fingerprint)
+                .map_err(|e| Error::ConflictError(e.to_string()))?;
             return Ok(SupplierProfileWithAssetsResult {
-                view: replay_command(command, "create", None, &request_fingerprint)?,
+                view: command_view(command),
                 assets_committed: false,
             });
         }
         let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let used = resolve_supplier_file_references(&mut req, &pending_assets)?;
         pending_assets.ensure_all_used(&used)?;
-        let party_no = required_create_identity(req.party_no.as_deref(), "主体编号")?;
-        let supplier_no = required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
+        let party_no =
+            SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
+        let supplier_no =
+            SaveSupplierProfileRequest::required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
         self.ensure_attachment_references(&req.qualifications, &pending_assets)
@@ -175,10 +176,13 @@ impl SupplierProfileService {
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
         req.validate_contract()?;
-        let request_fingerprint = request_fingerprint(&req)?;
+        let request_fingerprint = req.fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            command
+                .ensure_replayable("update", Some(supplier_id), &request_fingerprint)
+                .map_err(|e| Error::ConflictError(e.to_string()))?;
             return Ok(SupplierProfileWithAssetsResult {
-                view: replay_command(command, "update", Some(supplier_id), &request_fingerprint)?,
+                view: command_view(command),
                 assets_committed: false,
             });
         }
@@ -261,10 +265,15 @@ impl SupplierProfileService {
             Err(error) => {
                 let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
                 match self.command_record(idempotency_key).await? {
-                    Some(command) => Ok(SupplierProfileWithAssetsResult {
-                        view: replay_command(command, operation, supplier_id, request_fingerprint)?,
-                        assets_committed: assets_may_be_committed,
-                    }),
+                    Some(command) => {
+                        command
+                            .ensure_replayable(operation, supplier_id, request_fingerprint)
+                            .map_err(|e| Error::ConflictError(e.to_string()))?;
+                        Ok(SupplierProfileWithAssetsResult {
+                            view: command_view(command),
+                            assets_committed: assets_may_be_committed,
+                        })
+                    }
                     None => Err(error),
                 }
             }
@@ -606,9 +615,35 @@ impl SupplierProfileService {
         let supplier_id = SupplierAccountId::new(supplier_id);
         let party_revision_no = self.next_party_revision_no(&party_id).await?;
         let profile_revision_no = self.next_profile_revision_no(&supplier_id).await?;
-        let party_revision = update_party(&mut party, &req, party_revision_no, actor.id())?;
-        let commercial_profile =
-            update_commercial_profile(&mut supplier, &req, profile_revision_no, actor.id())?;
+        let party_revision_id = PartyRevisionId::new(next_id());
+        let commercial_profile_id = SupplierCommercialProfileRevisionId::new(next_id());
+        let party_revision = profile_change::plan_party_revision(
+            &mut party,
+            req.unified_credit_code.clone(),
+            req.legal_name.clone(),
+            req.short_name.clone(),
+            req.change_reason.clone(),
+            party_revision_id,
+            party_revision_no,
+            actor.id(),
+        )
+        .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+        let commercial_profile = profile_change::plan_commercial_profile_revision(
+            &mut supplier,
+            req.settlement_mode,
+            req.reconciliation_cycle,
+            req.payment_term_snapshot.clone(),
+            req.business_category.clone(),
+            req.invoice_type,
+            req.invoice_tax_rate,
+            req.signing_entity_party_id.clone(),
+            req.payment_entity_party_id.clone(),
+            req.change_reason.clone(),
+            commercial_profile_id,
+            profile_revision_no,
+            actor.id(),
+        )
+        .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
         let facts = self.prepare_party_facts(&party_id, &req, actor.id()).await?;
         let capabilities = self
             .prepare_capability_changes(&supplier_id, &req, actor.id())
@@ -659,7 +694,8 @@ impl SupplierProfileService {
             .account(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        let expected = required_update_version(req.expected_supplier_version, "供应商")?;
+        let expected =
+            SaveSupplierProfileRequest::required_update_version(req.expected_supplier_version, "供应商")?;
         match supplier.profile_update_violation(expected) {
             None => Ok(supplier),
             Some(SupplierProfileUpdateViolation::VersionMismatch) => Err(Error::ConflictError(
@@ -693,8 +729,9 @@ impl SupplierProfileService {
             .party(&supplier.party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联主体不存在".to_string()))?;
-        let expected = required_update_version(req.expected_party_version, "主体")?;
-        ensure_version(party.base.version, expected)?;
+        let expected =
+            SaveSupplierProfileRequest::required_update_version(req.expected_party_version, "主体")?;
+        SaveSupplierProfileRequest::ensure_version(party.base.version, expected)?;
         if !party.is_active() {
             return Err(Error::BusinessLogicError("供应商关联主体已停用".to_string()));
         }
@@ -762,7 +799,8 @@ impl SupplierProfileService {
                 .party_contacts()
                 .list_by_party(party_id, &mut NoTransaction)
                 .await?;
-            disable_contacts(&mut changes.contacts, actor_id)?;
+            profile_change::disable_contacts(&mut changes.contacts, actor_id)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_contact = self.create_contact(req, party_id, actor_id)?;
         }
         if req.address.is_some() || req.clear_address {
@@ -771,7 +809,8 @@ impl SupplierProfileService {
                 .party_addresses()
                 .list_by_party(party_id, &mut NoTransaction)
                 .await?;
-            disable_addresses(&mut changes.addresses, actor_id)?;
+            profile_change::disable_addresses(&mut changes.addresses, actor_id)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_address = self.create_address(req, party_id, actor_id)?;
         }
         if req.clear_tax_profile
@@ -785,7 +824,8 @@ impl SupplierProfileService {
                 .party_tax_profiles()
                 .list_by_party(party_id, &mut NoTransaction)
                 .await?;
-            disable_tax_profiles(&mut changes.tax_profiles, actor_id)?;
+            profile_change::disable_tax_profiles(&mut changes.tax_profiles, actor_id)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_tax_profile = create_tax_profile(req, party_id, actor_id)?;
         }
         if req.bank_account.is_some() || req.clear_bank_account {
@@ -794,7 +834,8 @@ impl SupplierProfileService {
                 .party_bank_accounts()
                 .list_by_party(party_id, &mut NoTransaction)
                 .await?;
-            disable_bank_accounts(&mut changes.bank_accounts, actor_id)?;
+            profile_change::disable_bank_accounts(&mut changes.bank_accounts, actor_id)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_bank_account = self.create_bank_account(req, party_id, actor_id)?;
         }
         Ok(changes)
@@ -823,45 +864,71 @@ impl SupplierProfileService {
             .supplier()
             .list_capabilities(supplier_id, &mut NoTransaction)
             .await?;
+        let plan = profile_change::SupplierProfileChangePlan::from_loaded(
+            &existing,
+            &[],
+            &HashMap::new(),
+            &HashMap::new(),
+            &req.capability_codes,
+            &[],
+        )
+        .map_err(|e| Error::ValidationError(e.to_string()))?;
         let mut changes = CapabilityChanges::default();
-        let requested: HashMap<String, _> = req
-            .capability_codes
-            .iter()
-            .map(|code| (code.as_str().to_string(), *code))
+        let mut existing_by_code: HashMap<String, SupplierCapability> = existing
+            .into_iter()
+            .map(|cap| (cap.capability_code.as_str().to_string(), cap))
             .collect();
-        for mut capability in existing {
-            let wanted = requested.contains_key(capability.capability_code.as_str());
+        for cap in existing_by_code.values() {
             changes.ids.insert(
-                capability.capability_code.as_str().to_string(),
-                SupplierCapabilityId::new(&capability.base.id),
+                cap.capability_code.as_str().to_string(),
+                SupplierCapabilityId::new(&cap.base.id),
             );
-            if wanted == capability.is_active() {
-                continue;
-            }
-            let status = if wanted {
-                CapabilityStatus::Active
-            } else {
-                CapabilityStatus::Disabled
-            };
-            capability.update(
-                SupplierCapabilityUpdate {
-                    service_region: FieldUpdate::Unchanged,
-                    owner_user_id: None,
-                    fulfillment_note: FieldUpdate::Unchanged,
-                    valid_to: FieldUpdate::Unchanged,
-                    status: Some(status),
-                },
-                actor_id,
-            )?;
-            let revision = self.capability_revision(&mut capability).await?;
+        }
+        for toggle in plan.capability_toggles {
+            let mut capability = existing_by_code
+                .remove(toggle.code.as_str())
+                .ok_or_else(|| Error::Internal("能力计划与已加载事实不一致".to_string()))?;
+            capability
+                .update(
+                    SupplierCapabilityUpdate {
+                        service_region: FieldUpdate::Unchanged,
+                        owner_user_id: None,
+                        fulfillment_note: FieldUpdate::Unchanged,
+                        valid_to: FieldUpdate::Unchanged,
+                        status: Some(toggle.target_status),
+                    },
+                    actor_id,
+                )
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            let revision_no = self
+                .db
+                .supplier()
+                .next_capability_revision_no(
+                    &capability.supplier_id,
+                    capability.capability_code,
+                    &mut NoTransaction,
+                )
+                .await?;
+            let revision_id = SupplierCapabilityRevisionId::new(next_id());
+            capability.stable.current_revision_id = Some(revision_id.to_string());
+            let revision = capability
+                .snapshot_revision(revision_id, revision_no)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.updated.push(capability);
             changes.revisions.push(revision);
         }
-        for code in requested.into_values() {
-            if changes.ids.contains_key(code.as_str()) {
-                continue;
-            }
-            let (capability, revision) = new_capability(supplier_id, code, req.effective_from, actor_id)?;
+        for code in plan.capability_creates {
+            let capability_id = SupplierCapabilityId::new(next_id());
+            let revision_id = SupplierCapabilityRevisionId::new(next_id());
+            let (capability, revision) = profile_change::new_capability(
+                supplier_id,
+                code,
+                req.effective_from,
+                actor_id,
+                capability_id.clone(),
+                revision_id,
+            )
+            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.ids.insert(
                 code.as_str().to_string(),
                 SupplierCapabilityId::new(&capability.base.id),
@@ -870,48 +937,6 @@ impl SupplierProfileService {
             changes.revisions.push(revision);
         }
         Ok(changes)
-    }
-
-    /// 为能力状态变更创建下一不可变快照。
-    ///
-    /// # 参数
-    /// * `capability` - 已完成领域状态变更的能力实体
-    ///
-    /// # 返回
-    /// 返回下一修订快照，并原地推进能力当前修订指针。
-    ///
-    /// # 错误
-    /// 修订号查询、实体构造或版本范围校验失败时返回错误。
-    async fn capability_revision(
-        &self,
-        capability: &mut SupplierCapability,
-    ) -> Result<SupplierCapabilityRevision> {
-        let revision_no = self
-            .db
-            .supplier()
-            .next_capability_revision_no(
-                &capability.supplier_id,
-                capability.capability_code,
-                &mut NoTransaction,
-            )
-            .await?;
-        let revision_id = SupplierCapabilityRevisionId::new(next_id());
-        capability.stable.current_revision_id = Some(revision_id.to_string());
-        SupplierCapabilityRevision::new(
-            revision_id,
-            SupplierCapabilityRevisionData {
-                supplier_id: capability.supplier_id.clone(),
-                capability_code: capability.capability_code,
-                service_region: capability.service_region.clone(),
-                owner_user_id: capability.owner_user_id.clone(),
-                fulfillment_note: capability.fulfillment_note.clone(),
-                valid_from: capability.valid_from,
-                valid_to: capability.valid_to,
-                status: capability.stable.status,
-                revision_no,
-            },
-        )
-        .map_err(Into::into)
     }
 
     /// 将资质集合解析为新增、更新、停用、快照及能力关联替换。
@@ -955,8 +980,29 @@ impl SupplierProfileService {
                 .or_default()
                 .insert(link.capability_id.to_string());
         }
-        let requested: HashMap<String, &SupplierProfileQualificationInput> = req
+        let planned_inputs: Vec<profile_change::PlannedQualificationInput> = req
             .qualifications
+            .iter()
+            .map(|input| profile_change::PlannedQualificationInput {
+                qualification_type: input.qualification_type,
+                certificate_no: input.certificate_no.clone(),
+                issuer: input.issuer.clone(),
+                valid_from: input.valid_from,
+                valid_to: input.valid_to,
+                attachment_id: input.attachment_id.clone(),
+                capability_codes: input.capability_codes.clone(),
+            })
+            .collect();
+        let plan = profile_change::SupplierProfileChangePlan::from_loaded(
+            &[],
+            &existing,
+            &linked_capabilities,
+            capability_ids,
+            &[],
+            &planned_inputs,
+        )
+        .map_err(|e| Error::ValidationError(e.to_string()))?;
+        let requested_map: HashMap<String, &profile_change::PlannedQualificationInput> = planned_inputs
             .iter()
             .map(|input| {
                 (
@@ -965,43 +1011,66 @@ impl SupplierProfileService {
                 )
             })
             .collect();
+        let mut existing_by_key: HashMap<String, SupplierQualification> = existing
+            .into_iter()
+            .map(|qual| (qual.identity_key(), qual))
+            .collect();
         let mut changes = QualificationChanges::default();
-        for mut qualification in existing {
-            let key = qualification.identity_key();
-            if let Some(input) = requested.get(&key) {
-                let desired_links: HashSet<String> = input
-                    .capability_codes
-                    .iter()
-                    .map(|code| {
-                        capability_ids
-                            .get(code.as_str())
-                            .map(ToString::to_string)
-                            .ok_or_else(|| Error::ValidationError("资质适用能力不存在".to_string()))
-                    })
-                    .collect::<Result<_>>()?;
-                let current_links = linked_capabilities
-                    .get(&qualification.base.id)
-                    .cloned()
-                    .unwrap_or_default();
-                if qualification.matches_profile_fields(
-                    input.issuer.as_deref(),
-                    input.valid_from,
-                    input.valid_to,
-                    input.attachment_id.as_ref(),
-                ) && current_links == desired_links
-                {
-                    continue;
-                }
-                apply_qualification_input(&mut qualification, input, actor_id)?;
-                let revision = self.qualification_revision(&mut qualification).await?;
-                let links = qualification_links(&qualification, input, capability_ids)?;
-                changes
-                    .replacements
-                    .push((SupplierQualificationId::new(&qualification.base.id), links));
-                changes.updated.push(qualification);
-                changes.revisions.push(revision);
-            } else if qualification.is_valid() {
-                qualification.update(
+        for key in plan.qualification_updates {
+            let mut qualification = existing_by_key
+                .remove(&key)
+                .ok_or_else(|| Error::Internal("资质计划与已加载事实不一致".to_string()))?;
+            let input = requested_map
+                .get(&key)
+                .ok_or_else(|| Error::Internal("资质请求与计划不一致".to_string()))?;
+            profile_change::apply_qualification_input(
+                &mut qualification,
+                input.issuer.clone(),
+                input.valid_from,
+                input.valid_to,
+                input.attachment_id.clone(),
+                actor_id,
+            )
+            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            let revision_no = self
+                .db
+                .supplier()
+                .next_qualification_revision_no(
+                    &qualification.supplier_id,
+                    qualification.qualification_type,
+                    &qualification.certificate_no,
+                    &mut NoTransaction,
+                )
+                .await?;
+            let revision_id = SupplierQualificationRevisionId::new(next_id());
+            qualification.stable.current_revision_id = Some(revision_id.to_string());
+            let revision = qualification
+                .snapshot_revision(revision_id, revision_no)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            let link_ids = input
+                .capability_codes
+                .iter()
+                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
+                .collect();
+            let links = SupplierQualificationCapability::links_for_qualification(
+                SupplierQualificationId::new(&qualification.base.id),
+                &input.capability_codes,
+                capability_ids,
+                link_ids,
+            )
+            .map_err(|e| Error::ValidationError(e.to_string()))?;
+            changes
+                .replacements
+                .push((SupplierQualificationId::new(&qualification.base.id), links));
+            changes.updated.push(qualification);
+            changes.revisions.push(revision);
+        }
+        for key in plan.qualification_disables {
+            let mut qualification = existing_by_key
+                .remove(&key)
+                .ok_or_else(|| Error::Internal("资质停用计划与已加载事实不一致".to_string()))?;
+            qualification
+                .update(
                     SupplierQualificationUpdate {
                         issuer: FieldUpdate::Unchanged,
                         attachment_id: FieldUpdate::Unchanged,
@@ -1010,57 +1079,57 @@ impl SupplierProfileService {
                         status: Some(QualificationStatus::Disabled),
                     },
                     actor_id,
-                )?;
-                let revision = self.qualification_revision(&mut qualification).await?;
-                changes.updated.push(qualification);
-                changes.revisions.push(revision);
-            }
+                )
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            let revision_no = self
+                .db
+                .supplier()
+                .next_qualification_revision_no(
+                    &qualification.supplier_id,
+                    qualification.qualification_type,
+                    &qualification.certificate_no,
+                    &mut NoTransaction,
+                )
+                .await?;
+            let revision_id = SupplierQualificationRevisionId::new(next_id());
+            qualification.stable.current_revision_id = Some(revision_id.to_string());
+            let revision = qualification
+                .snapshot_revision(revision_id, revision_no)
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            changes.updated.push(qualification);
+            changes.revisions.push(revision);
         }
-        for input in requested.into_values() {
-            let exists = changes.updated.iter().any(|item| {
-                item.identity_key()
-                    == qualification_identity_key(input.qualification_type, &input.certificate_no)
-            });
-            if !exists {
-                let (qualification, revision, links) =
-                    new_qualification(supplier_id, input, capability_ids, actor_id)?;
-                changes
-                    .replacements
-                    .push((SupplierQualificationId::new(&qualification.base.id), links));
-                changes.created.push(qualification);
-                changes.revisions.push(revision);
-            }
+        for input in plan.qualification_creates {
+            let qualification_id = SupplierQualificationId::new(next_id());
+            let revision_id = SupplierQualificationRevisionId::new(next_id());
+            let link_ids = input
+                .capability_codes
+                .iter()
+                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
+                .collect();
+            let (qualification, revision, links) = profile_change::new_qualification(
+                supplier_id,
+                input.qualification_type,
+                input.certificate_no.clone(),
+                input.issuer.clone(),
+                input.valid_from,
+                input.valid_to,
+                input.attachment_id.clone(),
+                &input.capability_codes,
+                capability_ids,
+                actor_id,
+                qualification_id.clone(),
+                revision_id,
+                link_ids,
+            )
+            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            changes
+                .replacements
+                .push((SupplierQualificationId::new(&qualification.base.id), links));
+            changes.created.push(qualification);
+            changes.revisions.push(revision);
         }
         Ok(changes)
-    }
-
-    /// 为资质变更创建下一不可变快照。
-    ///
-    /// # 参数
-    /// * `qualification` - 已完成领域状态或字段变更的资质实体
-    ///
-    /// # 返回
-    /// 返回下一修订快照，并原地推进资质当前修订指针。
-    ///
-    /// # 错误
-    /// 修订号查询、实体构造或版本范围校验失败时返回错误。
-    async fn qualification_revision(
-        &self,
-        qualification: &mut SupplierQualification,
-    ) -> Result<SupplierQualificationRevision> {
-        let revision_no = self
-            .db
-            .supplier()
-            .next_qualification_revision_no(
-                &qualification.supplier_id,
-                qualification.qualification_type,
-                &qualification.certificate_no,
-                &mut NoTransaction,
-            )
-            .await?;
-        let revision_id = SupplierQualificationRevisionId::new(next_id());
-        qualification.stable.current_revision_id = Some(revision_id.to_string());
-        qualification_snapshot(revision_id, qualification, revision_no)
     }
 
     /// 构造评级开放区间关闭与下一评级版本。
@@ -1477,288 +1546,6 @@ impl RatingChanges {
     }
 }
 
-/// 创建主体名称新修订并更新统一社会信用代码。
-fn update_party(
-    party: &mut Party,
-    req: &SaveSupplierProfileRequest,
-    revision_no: u32,
-    actor_id: &str,
-) -> Result<PartyRevision> {
-    let revision_id = PartyRevisionId::new(next_id());
-    party.update(
-        PartyUpdate {
-            unified_credit_code: option_as_authoritative_update(req.unified_credit_code.clone()),
-            status: None,
-        },
-        actor_id,
-    )?;
-    party.stable.current_revision_id = Some(revision_id.to_string());
-    PartyRevision::new(
-        revision_id,
-        PartyRevisionData {
-            party_id: PartyId::new(&party.base.id),
-            revision_no,
-            legal_name: req.legal_name.clone(),
-            short_name: req.short_name.clone(),
-            change_reason: req.change_reason.clone(),
-        },
-    )
-    .map_err(Into::into)
-}
-
-/// 创建商务资料新修订并推进供应商当前指针。
-fn update_commercial_profile(
-    supplier: &mut SupplierAccount,
-    req: &SaveSupplierProfileRequest,
-    revision_no: u32,
-    actor_id: &str,
-) -> Result<SupplierCommercialProfileRevision> {
-    let revision_id = SupplierCommercialProfileRevisionId::new(next_id());
-    let revision = SupplierCommercialProfileRevision::new(
-        revision_id.clone(),
-        SupplierCommercialProfileRevisionData {
-            supplier_id: SupplierAccountId::new(&supplier.base.id),
-            revision_no,
-            settlement_mode: req.settlement_mode,
-            reconciliation_cycle: req.reconciliation_cycle,
-            payment_term_snapshot: req.payment_term_snapshot.clone(),
-            business_category: req.business_category.clone(),
-            invoice_type: req.invoice_type,
-            invoice_tax_rate: req.invoice_tax_rate,
-            signing_entity_party_id: req.signing_entity_party_id.clone(),
-            payment_entity_party_id: req.payment_entity_party_id.clone(),
-            change_reason: req.change_reason.clone(),
-        },
-    )?;
-    supplier.update(
-        SupplierAccountUpdate {
-            default_payment_term_id: FieldUpdate::Unchanged,
-            current_commercial_profile_revision_id: FieldUpdate::Set(revision_id),
-            status: None,
-        },
-        actor_id,
-    )?;
-    Ok(revision)
-}
-
-/// 停用既有联系人事实行，供新默认事实行接替。
-fn disable_contacts(items: &mut Vec<PartyContact>, actor_id: &str) -> Result<()> {
-    items.retain(PartyContact::is_active);
-    for item in items.iter_mut().filter(|item| item.is_active()) {
-        item.update(
-            PartyContactUpdate {
-                status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: FieldUpdate::Unchanged,
-                is_default: Some(false),
-            },
-            actor_id,
-        )?;
-    }
-    Ok(())
-}
-
-/// 停用既有地址事实行，供新默认事实行接替。
-fn disable_addresses(items: &mut Vec<PartyAddress>, actor_id: &str) -> Result<()> {
-    items.retain(PartyAddress::is_active);
-    for item in items.iter_mut().filter(|item| item.is_active()) {
-        item.update(
-            PartyAddressUpdate {
-                status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: FieldUpdate::Unchanged,
-                is_default: Some(false),
-            },
-            actor_id,
-        )?;
-    }
-    Ok(())
-}
-
-/// 停用既有税务事实行，供新默认事实行接替。
-fn disable_tax_profiles(items: &mut Vec<PartyTaxProfile>, actor_id: &str) -> Result<()> {
-    items.retain(PartyTaxProfile::is_active);
-    for item in items.iter_mut().filter(|item| item.is_active()) {
-        item.update(
-            PartyTaxProfileUpdate {
-                status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: FieldUpdate::Unchanged,
-                is_default: Some(false),
-            },
-            actor_id,
-        )?;
-    }
-    Ok(())
-}
-
-/// 停用既有银行账户事实行，供新默认事实行接替。
-fn disable_bank_accounts(items: &mut Vec<PartyBankAccount>, actor_id: &str) -> Result<()> {
-    items.retain(PartyBankAccount::is_active);
-    for item in items.iter_mut().filter(|item| item.is_active()) {
-        item.update(
-            PartyBankAccountUpdate {
-                status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: FieldUpdate::Unchanged,
-                is_default: Some(false),
-            },
-            actor_id,
-        )?;
-    }
-    Ok(())
-}
-
-/// 创建一项新能力及首版快照。
-fn new_capability(
-    supplier_id: &SupplierAccountId,
-    code: entities::supplier::CapabilityCode,
-    valid_from: entities::common::time::BusinessDate,
-    actor_id: &str,
-) -> Result<(SupplierCapability, SupplierCapabilityRevision)> {
-    let capability_id = SupplierCapabilityId::new(next_id());
-    let revision_id = SupplierCapabilityRevisionId::new(next_id());
-    let mut capability = SupplierCapability::new(
-        capability_id,
-        SupplierCapabilityData {
-            supplier_id: supplier_id.clone(),
-            capability_code: code,
-            service_region: None,
-            owner_user_id: actor_id.to_string(),
-            fulfillment_note: None,
-            valid_from,
-            valid_to: None,
-            status: CapabilityStatus::Active,
-        },
-        actor_id,
-    )?;
-    capability.stable.current_revision_id = Some(revision_id.to_string());
-    let revision = SupplierCapabilityRevision::new(
-        revision_id,
-        SupplierCapabilityRevisionData {
-            supplier_id: supplier_id.clone(),
-            capability_code: code,
-            service_region: None,
-            owner_user_id: actor_id.to_string(),
-            fulfillment_note: None,
-            valid_from,
-            valid_to: None,
-            status: CapabilityStatus::Active,
-            revision_no: 1,
-        },
-    )?;
-    Ok((capability, revision))
-}
-
-/// 将根命令资质字段应用到同一稳定资质。
-fn apply_qualification_input(
-    qualification: &mut SupplierQualification,
-    input: &SupplierProfileQualificationInput,
-    actor_id: &str,
-) -> Result<()> {
-    let status = (!qualification.is_valid()).then_some(QualificationStatus::Active);
-    qualification.update(
-        SupplierQualificationUpdate {
-            issuer: option_as_authoritative_update(input.issuer.clone()),
-            attachment_id: option_as_authoritative_update(input.attachment_id.clone()),
-            valid_from: Some(input.valid_from),
-            valid_to: option_as_authoritative_update(input.valid_to),
-            status,
-        },
-        actor_id,
-    )?;
-    Ok(())
-}
-
-/// 创建一份新资质、首版快照及适用能力关联。
-fn new_qualification(
-    supplier_id: &SupplierAccountId,
-    input: &SupplierProfileQualificationInput,
-    capability_ids: &HashMap<String, SupplierCapabilityId>,
-    actor_id: &str,
-) -> Result<(
-    SupplierQualification,
-    SupplierQualificationRevision,
-    Vec<SupplierQualificationCapability>,
-)> {
-    let qualification_id = SupplierQualificationId::new(next_id());
-    let revision_id = SupplierQualificationRevisionId::new(next_id());
-    let mut qualification = SupplierQualification::new(
-        qualification_id,
-        SupplierQualificationData {
-            supplier_id: supplier_id.clone(),
-            qualification_type: input.qualification_type,
-            certificate_no: input.certificate_no.clone(),
-            issuer: input.issuer.clone(),
-            valid_from: input.valid_from,
-            valid_to: input.valid_to,
-            attachment_id: input.attachment_id.clone(),
-            status: QualificationStatus::Active,
-        },
-        actor_id,
-    )?;
-    qualification.stable.current_revision_id = Some(revision_id.to_string());
-    let revision = qualification_snapshot(revision_id, &qualification, 1)?;
-    let links = qualification_links(&qualification, input, capability_ids)?;
-    Ok((qualification, revision, links))
-}
-
-/// 从当前资质构造不可变快照。
-fn qualification_snapshot(
-    revision_id: SupplierQualificationRevisionId,
-    qualification: &SupplierQualification,
-    revision_no: u32,
-) -> Result<SupplierQualificationRevision> {
-    SupplierQualificationRevision::new(
-        revision_id,
-        SupplierQualificationRevisionData {
-            supplier_id: qualification.supplier_id.clone(),
-            qualification_type: qualification.qualification_type,
-            certificate_no: qualification.certificate_no.clone(),
-            issuer: qualification.issuer.clone(),
-            valid_from: qualification.valid_from,
-            valid_to: qualification.valid_to,
-            attachment_id: qualification.attachment_id.clone(),
-            status: qualification.stable.status,
-            revision_no,
-        },
-    )
-    .map_err(Into::into)
-}
-
-/// 构造一份资质的完整能力关联集合。
-fn qualification_links(
-    qualification: &SupplierQualification,
-    input: &SupplierProfileQualificationInput,
-    capability_ids: &HashMap<String, SupplierCapabilityId>,
-) -> Result<Vec<SupplierQualificationCapability>> {
-    input
-        .capability_codes
-        .iter()
-        .map(|code| {
-            let capability_id = capability_ids
-                .get(code.as_str())
-                .ok_or_else(|| Error::ValidationError("资质适用能力不存在".to_string()))?;
-            SupplierQualificationCapability::new(
-                SupplierQualificationCapabilityId::new(next_id()),
-                SupplierQualificationCapabilityData {
-                    qualification_id: SupplierQualificationId::new(&qualification.base.id),
-                    capability_id: capability_id.clone(),
-                },
-            )
-            .map_err(Into::into)
-        })
-        .collect()
-}
-
-/// 将当前集合中的可空字段映射为明确设置或清空意图。
-fn option_as_authoritative_update<T>(value: Option<T>) -> FieldUpdate<T> {
-    value.map_or(FieldUpdate::Clear, FieldUpdate::Set)
-}
-
-/// 计算根命令稳定指纹，保证同一幂等键只能重放完全相同的请求。
-fn request_fingerprint(req: &SaveSupplierProfileRequest) -> Result<String> {
-    let bytes =
-        serde_json::to_vec(req).map_err(|error| Error::Internal(format!("供应商命令序列化失败: {error}")))?;
-    Ok(hex::encode(Sha256::digest(bytes)))
-}
-
 /// 解析供应商根命令中的临时资质文件引用。
 fn resolve_supplier_file_references(
     req: &mut SaveSupplierProfileRequest,
@@ -1771,39 +1558,6 @@ fn resolve_supplier_file_references(
         }
     }
     Ok(used)
-}
-
-/// 校验幂等命令的操作、目标与请求指纹，并返回持久化结果。
-fn replay_command(
-    command: SupplierProfileCommand,
-    operation: &str,
-    supplier_id: Option<&str>,
-    request_fingerprint: &str,
-) -> Result<SupplierProfileMutationView> {
-    if command.operation != operation || command.request_fingerprint != request_fingerprint {
-        return Err(Error::ConflictError(
-            "幂等键已用于不同的供应商资料请求".to_string(),
-        ));
-    }
-    if supplier_id.is_some_and(|expected| command.supplier_id != expected) {
-        return Err(Error::ConflictError("幂等键已用于其他供应商命令".to_string()));
-    }
-    Ok(command_view(command))
-}
-
-/// 读取修订场景必填版本号。
-fn required_update_version(value: Option<u64>, object: &str) -> Result<u64> {
-    value.ok_or_else(|| Error::ValidationError(format!("修订供应商时{object}版本不能为空")))
-}
-
-/// 校验乐观锁版本。
-fn ensure_version(actual: u64, expected: u64) -> Result<()> {
-    if actual != expected {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 /// 校验敏感事实行归属于令牌限定供应商的 Party。
@@ -1932,34 +1686,13 @@ fn create_capabilities(
     for code in &req.capability_codes {
         let capability_id = SupplierCapabilityId::new(next_id());
         let revision_id = SupplierCapabilityRevisionId::new(next_id());
-        let mut capability = SupplierCapability::new(
-            capability_id.clone(),
-            SupplierCapabilityData {
-                supplier_id: supplier_id.clone(),
-                capability_code: *code,
-                service_region: None,
-                owner_user_id: actor_id.to_string(),
-                fulfillment_note: None,
-                valid_from: req.effective_from,
-                valid_to: None,
-                status: CapabilityStatus::Active,
-            },
+        let (capability, revision) = profile_change::new_capability(
+            supplier_id,
+            *code,
+            req.effective_from,
             actor_id,
-        )?;
-        capability.stable.current_revision_id = Some(revision_id.to_string());
-        let revision = SupplierCapabilityRevision::new(
+            capability_id.clone(),
             revision_id,
-            SupplierCapabilityRevisionData {
-                supplier_id: supplier_id.clone(),
-                capability_code: *code,
-                service_region: None,
-                owner_user_id: actor_id.to_string(),
-                fulfillment_note: None,
-                valid_from: req.effective_from,
-                valid_to: None,
-                status: CapabilityStatus::Active,
-                revision_no: 1,
-            },
         )?;
         ids.insert(code.as_str().to_string(), capability_id);
         capabilities.push(capability);
@@ -1972,7 +1705,7 @@ fn create_capabilities(
     })
 }
 
-/// 创建资质、首版快照与适用能力关联。
+/// 创建资质、首版快照与适用能力关联；委托领域工厂保证修订快照与实体一致。
 fn create_qualifications(
     req: &SaveSupplierProfileRequest,
     supplier_id: &SupplierAccountId,
@@ -1989,48 +1722,29 @@ fn create_qualifications(
     for input in &req.qualifications {
         let qualification_id = SupplierQualificationId::new(next_id());
         let revision_id = SupplierQualificationRevisionId::new(next_id());
-        let mut qualification = SupplierQualification::new(
-            qualification_id.clone(),
-            SupplierQualificationData {
-                supplier_id: supplier_id.clone(),
-                qualification_type: input.qualification_type,
-                certificate_no: input.certificate_no.clone(),
-                issuer: input.issuer.clone(),
-                valid_from: input.valid_from,
-                valid_to: input.valid_to,
-                attachment_id: input.attachment_id.clone(),
-                status: QualificationStatus::Active,
-            },
+        let link_ids = input
+            .capability_codes
+            .iter()
+            .map(|_| SupplierQualificationCapabilityId::new(next_id()))
+            .collect();
+        let (qualification, revision, new_links) = profile_change::new_qualification(
+            supplier_id,
+            input.qualification_type,
+            input.certificate_no.clone(),
+            input.issuer.clone(),
+            input.valid_from,
+            input.valid_to,
+            input.attachment_id.clone(),
+            &input.capability_codes,
+            capability_ids,
             actor_id,
-        )?;
-        qualification.stable.current_revision_id = Some(revision_id.to_string());
-        revisions.push(SupplierQualificationRevision::new(
+            qualification_id,
             revision_id,
-            SupplierQualificationRevisionData {
-                supplier_id: supplier_id.clone(),
-                qualification_type: input.qualification_type,
-                certificate_no: qualification.certificate_no.clone(),
-                issuer: qualification.issuer.clone(),
-                valid_from: qualification.valid_from,
-                valid_to: qualification.valid_to,
-                attachment_id: qualification.attachment_id.clone(),
-                status: QualificationStatus::Active,
-                revision_no: 1,
-            },
-        )?);
-        for code in &input.capability_codes {
-            let capability_id = capability_ids
-                .get(code.as_str())
-                .ok_or_else(|| Error::ValidationError("资质适用能力不存在".to_string()))?;
-            links.push(SupplierQualificationCapability::new(
-                SupplierQualificationCapabilityId::new(next_id()),
-                SupplierQualificationCapabilityData {
-                    qualification_id: qualification_id.clone(),
-                    capability_id: capability_id.clone(),
-                },
-            )?);
-        }
+            link_ids,
+        )?;
         qualifications.push(qualification);
+        revisions.push(revision);
+        links.extend(new_links);
     }
     Ok((qualifications, revisions, links))
 }
@@ -2058,15 +1772,6 @@ fn create_rating(
     )?))
 }
 
-/// 创建场景必填的稳定业务编号。
-fn required_create_identity(value: Option<&str>, field: &str) -> Result<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .ok_or_else(|| Error::ValidationError(format!("创建供应商时{field}不能为空")))
-}
-
 /// 将命令实体转换为稳定 HTTP 结果。
 fn command_view(command: SupplierProfileCommand) -> SupplierProfileMutationView {
     SupplierProfileMutationView {
@@ -2088,16 +1793,19 @@ mod tests {
         supplier::{SupplierProfileCommand, SupplierProfileCommandData},
     };
 
-    use super::{ensure_version, replay_command};
+    use super::{command_view, SaveSupplierProfileRequest};
 
     #[test]
-    fn command_replay_is_bound_to_supplier() {
+    fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
+        const FP1: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+        const FP1_V1: &str = "sha256-v1:0000000000000000000000000000000000000000000000000000000000000000";
+        const FP2: &str = "1111111111111111111111111111111111111111111111111111111111111111";
         let command = SupplierProfileCommand::new(
             "command-1",
             SupplierProfileCommandData {
                 idempotency_key: "key-1".to_string(),
                 operation: "update".to_string(),
-                request_fingerprint: "fingerprint-1".to_string(),
+                request_fingerprint: FP1.to_string(),
                 supplier_id: "supplier-1".to_string(),
                 supplier_no: "SUP-1".to_string(),
                 revision_id: "revision-1".to_string(),
@@ -2108,14 +1816,102 @@ mod tests {
             },
         )
         .unwrap();
-        let replayed =
-            replay_command(command.clone(), "update", Some("supplier-1"), "fingerprint-1").unwrap();
+        assert!(command
+            .ensure_replayable("update", Some("supplier-1"), FP1)
+            .is_ok());
+        assert!(command
+            .ensure_replayable("update", Some("supplier-1"), FP1_V1)
+            .is_ok());
+        let replayed = command_view(command.clone());
         assert_eq!(replayed.effective_from, "2026-01-01");
         assert_eq!(replayed.recorded_at, command.base.created_at);
         assert_eq!(replayed.change_reason, "修订");
-        assert!(replay_command(command.clone(), "update", Some("supplier-2"), "fingerprint-1").is_err());
-        assert!(replay_command(command, "update", Some("supplier-1"), "different").is_err());
-        assert!(ensure_version(3, 3).is_ok());
-        assert!(ensure_version(3, 2).is_err());
+        assert!(command
+            .ensure_replayable("update", Some("supplier-2"), FP1)
+            .is_err());
+        assert!(command
+            .ensure_replayable("update", Some("supplier-1"), FP2)
+            .is_err());
+        assert!(command
+            .ensure_replayable("create", Some("supplier-1"), FP1)
+            .is_err());
+        assert!(SupplierProfileCommand::ensure_version(3, 3).is_ok());
+        assert!(SupplierProfileCommand::ensure_version(3, 2).is_err());
+        assert!(matches!(
+            SupplierProfileCommand::required_update_version(None, "主体"),
+            Err(e) if e.to_string().contains("版本不能为空")
+        ));
+        assert_eq!(
+            SupplierProfileCommand::required_create_identity(Some(" SUP-001 "), "供应商编号").unwrap(),
+            "SUP-001"
+        );
+        let req1 = SaveSupplierProfileRequest {
+            idempotency_key: "key-1".to_string(),
+            party_no: Some("PARTY-1".to_string()),
+            supplier_no: Some("SUP-1".to_string()),
+            expected_party_version: None,
+            expected_supplier_version: None,
+            legal_name: "示例".to_string(),
+            short_name: None,
+            unified_credit_code: None,
+            contact: None,
+            clear_contact: false,
+            address: None,
+            clear_address: false,
+            tax_no: None,
+            clear_tax_profile: false,
+            bank_account: None,
+            clear_bank_account: false,
+            settlement_mode: entities::supplier::SettlementMode::Prepayment,
+            reconciliation_cycle: entities::supplier::ReconciliationCycle::Monthly,
+            payment_term_snapshot: "PREPAY_30".to_string(),
+            business_category: None,
+            invoice_type: entities::supplier::InvoiceType::VatSpecial,
+            invoice_tax_rate: entities::money::Rate::from_str("0.13").unwrap(),
+            signing_entity_party_id: entities::ids::PartyId::new("party-1"),
+            payment_entity_party_id: entities::ids::PartyId::new("party-2"),
+            capability_codes: vec![],
+            qualifications: vec![],
+            rating: None,
+            effective_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
+            change_reason: "首次".to_string(),
+        };
+        let mut req2 = req1.clone();
+        let fp1 = req1.fingerprint().unwrap();
+        let fp2 = req2.fingerprint().unwrap();
+        assert_eq!(fp1, fp2);
+        assert!(fp1.starts_with("sha256-v1:"));
+        assert_eq!(fp1.len(), "sha256-v1:".len() + 64);
+        req2.legal_name = "不同".to_string();
+        let fp3 = req2.fingerprint().unwrap();
+        assert_ne!(fp1, fp3);
+        assert!(SaveSupplierProfileRequest::required_create_identity(None, "主体编号").is_err());
+        assert!(SaveSupplierProfileRequest::ensure_version(1, 2).is_err());
+        let digest = fp1.strip_prefix("sha256-v1:").unwrap();
+        assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
+        // 兼容旧裸 hex：存储为裸 hex 的命令仍可与新版指纹回放
+        let bare = fp1.strip_prefix("sha256-v1:").unwrap().to_string();
+        let cmd_bare = SupplierProfileCommand::new(
+            "cmd-bare-fp",
+            SupplierProfileCommandData {
+                idempotency_key: "key-1".to_string(),
+                operation: "update".to_string(),
+                request_fingerprint: bare.clone(),
+                supplier_id: "supplier-1".to_string(),
+                supplier_no: "SUP-1".to_string(),
+                revision_id: "revision-1".to_string(),
+                revision_no: 2,
+                supplier_version: 2,
+                effective_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                change_reason: "修订".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(cmd_bare
+            .ensure_replayable("update", Some("supplier-1"), &fp1)
+            .is_ok());
+        assert_eq!(cmd_bare.request_fingerprint, bare);
     }
+
+    use std::str::FromStr;
 }

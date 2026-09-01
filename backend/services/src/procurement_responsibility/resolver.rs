@@ -2,13 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, CatalogExt, Executor, NoTransaction, ProcurementResponsibilityExt};
+use database::{AccessControlExt, Executor, NoTransaction, ProcurementResponsibilityExt};
 use entities::catalog::{Product, ProductCategory, ProductRevision, Sku};
-use entities::ids::{ProductCategoryId, ProductRevisionId};
 use entities::procurement_responsibility::{
-    EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
-    ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,
-    ProcurementResponsibilityRuleSet, ProcurementResponsibilityRuleType,
+    build_catalog_facts, EligibleProcurementOwner, ProcurementResponsibilityContext,
+    ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityResolutionIdentity,
+    ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRuleSet,
+    ProcurementResponsibilityRuleType,
 };
 use entities::{AccountCore, AccountKind, Permission};
 
@@ -140,7 +140,20 @@ impl ProcurementResponsibilityService {
         let inputs = ProcurementResponsibilityResolutionBatch::new(inputs)
             .map_err(Error::Logic)?
             .lines();
-        let facts = load_catalog_facts(&self.db, inputs, executor).await?;
+        let sku_ids = unique_sku_ids(inputs);
+        let bundle = self
+            .db
+            .load_procurement_catalog_bundle(&sku_ids, executor)
+            .await
+            .map_err(|e| Error::Internal(e.to_string()))?;
+        let facts = build_catalog_facts(
+            inputs,
+            &bundle.skus,
+            &bundle.products,
+            &bundle.revisions,
+            &bundle.categories,
+        )
+        .map_err(Error::Logic)?;
         let rules = self
             .db
             .procurement_responsibility_rules()
@@ -212,42 +225,24 @@ impl ProcurementResponsibilityService {
     }
 }
 
-/// 单行目录解析事实。
-struct CatalogFact {
-    category_chain: Vec<ProductCategoryId>,
-    product_kind: entities::catalog::ProductKind,
-}
-
-/// 批量加载 SKU、商品、当前修订及分类父链。
-async fn load_catalog_facts(
-    db: &mongodb::Database,
-    inputs: &[ResolutionInput],
-    executor: &mut dyn Executor,
-) -> Result<HashMap<String, CatalogFact>> {
-    let sku_ids = unique_values(inputs.iter().map(|line| line.sku_id.clone()));
-    let skus = db
-        .skus()
-        .list_procurement_responsibility_skus(&sku_ids, executor)
-        .await?;
-    let sku_map = by_id(skus);
-    ensure_all_ids_present("SKU", &ids_to_strings(&sku_ids), &sku_map)?;
-    let product_ids = unique_values(sku_map.values().map(|sku| sku.product_id.clone()));
-    let products = db
-        .products()
-        .list_procurement_responsibility_products(&product_ids, executor)
-        .await?;
-    let product_map = by_id(products);
-    ensure_all_ids_present("商品", &ids_to_strings(&product_ids), &product_map)?;
-    let revision_ids = current_revision_ids(&product_map)?;
-    let revisions = db
-        .product_revisions()
-        .list_procurement_responsibility_product_revisions(&revision_ids, executor)
-        .await?;
-    let revision_map = by_id(revisions);
-    ensure_all_ids_present("商品当前修订", &ids_to_strings(&revision_ids), &revision_map)?;
-    let category_ids = unique_values(revision_map.values().map(|revision| revision.category_id.clone()));
-    let categories = load_category_ancestors(db, category_ids, executor).await?;
-    build_catalog_facts(inputs, &sku_map, &product_map, &revision_map, &categories)
+/// 对解析输入去重并保持首次出现顺序收集 SKU。
+///
+/// # 参数
+/// * `inputs` - 采购责任解析输入
+///
+/// # 返回
+/// 返回去重后的 SKU 集合。
+///
+/// # 错误
+/// 无。
+fn unique_sku_ids(inputs: &[ResolutionInput]) -> Vec<entities::ids::SkuId> {
+    let mut unique = Vec::new();
+    for input in inputs {
+        if !unique.contains(&input.sku_id) {
+            unique.push(input.sku_id.clone());
+        }
+    }
+    unique
 }
 
 /// 提供批量目录映射所需的实体主键。
@@ -320,40 +315,6 @@ fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     values
 }
 
-/// 对强类型目录 ID 去重并保持首次出现顺序。
-///
-/// # 参数
-/// * `values` - 待批量查询的强类型 ID
-///
-/// # 返回
-/// 返回按首次出现顺序排列的唯一值集合。
-///
-/// # 错误
-/// 无。
-fn unique_values<T: PartialEq>(values: impl Iterator<Item = T>) -> Vec<T> {
-    let mut unique = Vec::new();
-    for value in values {
-        if !unique.contains(&value) {
-            unique.push(value);
-        }
-    }
-    unique
-}
-
-/// 把强类型目录 ID 转换为完整性校验使用的稳定字符串。
-///
-/// # 参数
-/// * `ids` - 同类强类型目录 ID
-///
-/// # 返回
-/// 返回保持输入顺序的字符串 ID 集合。
-///
-/// # 错误
-/// 无。
-fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
-    ids.iter().map(ToString::to_string).collect()
-}
-
 /// 校验批量查询完整返回全部请求 ID。
 ///
 /// # 参数
@@ -373,142 +334,6 @@ fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, 
         )));
     }
     Ok(())
-}
-
-/// 提取全部商品当前修订 ID。
-///
-/// # 参数
-/// * `products` - 商品稳定 ID 到商品实体的映射
-///
-/// # 返回
-/// 返回去重后的当前商品修订 ID。
-///
-/// # 错误
-/// 任一商品尚未形成当前修订时返回校验错误。
-fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<ProductRevisionId>> {
-    let ids = products
-        .values()
-        .map(|product| {
-            product
-                .stable
-                .current_revision_id
-                .as_deref()
-                .map(ProductRevisionId::new)
-                .ok_or_else(|| Error::ValidationError(format!("商品 {} 没有当前修订", product.base.id)))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(unique_values(ids.into_iter()))
-}
-
-/// 分层批量加载当前分类及全部父分类。
-///
-/// # 参数
-/// * `db` - 当前应用数据库
-/// * `initial_ids` - 商品当前修订直接引用的分类 ID
-/// * `executor` - 数据库执行器，可加入销售形式化事务
-///
-/// # 返回
-/// 返回当前分类和全部可达父分类的 ID 映射。
-///
-/// # 错误
-/// 分类缺失或仓储查询失败时返回错误；分类环由后续链构造失败关闭。
-async fn load_category_ancestors(
-    db: &mongodb::Database,
-    initial_ids: Vec<ProductCategoryId>,
-    executor: &mut dyn Executor,
-) -> Result<HashMap<String, ProductCategory>> {
-    let mut categories = HashMap::new();
-    let mut pending = initial_ids;
-    while !pending.is_empty() {
-        let rows = db
-            .product_categories()
-            .list_procurement_responsibility_categories(&pending, executor)
-            .await?;
-        let row_map = by_id(rows);
-        ensure_all_ids_present("商品分类", &ids_to_strings(&pending), &row_map)?;
-        pending = unique_values(
-            row_map
-                .values()
-                .filter_map(|category| category.parent_category_id.clone())
-                .filter(|id| !categories.contains_key(id.as_ref())),
-        );
-        categories.extend(row_map);
-    }
-    Ok(categories)
-}
-
-/// 由批量目录映射构造每行解析事实。
-///
-/// # 参数
-/// * `inputs` - 已校验的采购责任解析行
-/// * `skus` - SKU ID 到稳定 SKU 的映射
-/// * `products` - 商品 ID 到稳定商品的映射
-/// * `revisions` - 商品修订 ID 到当前修订的映射
-/// * `categories` - 当前分类与父分类的完整映射
-///
-/// # 返回
-/// 返回行键到分类链和商品类型事实的映射。
-///
-/// # 错误
-/// 分类链缺失或存在环时返回错误。
-fn build_catalog_facts(
-    inputs: &[ResolutionInput],
-    skus: &HashMap<String, Sku>,
-    products: &HashMap<String, Product>,
-    revisions: &HashMap<String, ProductRevision>,
-    categories: &HashMap<String, ProductCategory>,
-) -> Result<HashMap<String, CatalogFact>> {
-    let mut facts = HashMap::with_capacity(inputs.len());
-    for input in inputs {
-        let sku = skus.get(input.sku_id.as_ref()).expect("完整性已校验");
-        let product = products.get(sku.product_id.as_ref()).expect("完整性已校验");
-        let revision_id = product
-            .stable
-            .current_revision_id
-            .as_deref()
-            .expect("完整性已校验");
-        let revision = revisions.get(revision_id).expect("完整性已校验");
-        let category_chain = category_chain(&revision.category_id, categories)?;
-        facts.insert(
-            input.line_key.clone(),
-            CatalogFact {
-                category_chain,
-                product_kind: product.product_kind,
-            },
-        );
-    }
-    Ok(facts)
-}
-
-/// 构造当前分类到根分类的有序链并检测环。
-///
-/// # 参数
-/// * `first` - 商品当前修订直接引用的分类
-/// * `categories` - 当前分类与全部父分类映射
-///
-/// # 返回
-/// 返回从当前分类到根分类的有序强类型 ID 链。
-///
-/// # 错误
-/// 分类缺失或父级关系成环时返回错误。
-fn category_chain(
-    first: &ProductCategoryId,
-    categories: &HashMap<String, ProductCategory>,
-) -> Result<Vec<ProductCategoryId>> {
-    let mut chain = Vec::new();
-    let mut seen = HashSet::new();
-    let mut current = Some(first.clone());
-    while let Some(category_id) = current {
-        if !seen.insert(category_id.to_string()) {
-            return Err(Error::ConflictError("商品分类父级关系存在环".to_string()));
-        }
-        let category = categories
-            .get(category_id.as_ref())
-            .ok_or_else(|| Error::ValidationError(format!("商品分类不存在：{category_id}")))?;
-        chain.push(category_id);
-        current = category.parent_category_id.clone();
-    }
-    Ok(chain)
 }
 
 /// 批量加载并校验候选负责人的账号状态。
@@ -545,7 +370,7 @@ async fn attach_owner_accounts(
         .collect()
 }
 
-/// 加载并校验单个采购负责人账号仍可登录。
+/// 加载并校验单个采购负责人账号仍可登录.
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -570,13 +395,13 @@ pub(super) async fn load_owner_account(
     eligible_owner(&account)
 }
 
-/// 将账号事实转换为合格采购负责人。
+/// 将账号事实转换为合格采购负责人.
 ///
 /// # 参数
 /// * `account` - 仓储返回的统一账号事实
 ///
 /// # 返回
-/// 返回已验证可登录且为后台管理员的负责人值对象。
+/// 返回已验证可登录且为后台管理员的负责人值对象.
 ///
 /// # 错误
 /// 账号状态或类型不满足采购负责人约束时返回校验错误。
@@ -585,7 +410,7 @@ fn eligible_owner(account: &AccountCore) -> Result<EligibleProcurementOwner> {
         .map_err(|_| Error::ValidationError(format!("采购负责人 {} 必须为可登录后台账号", account.base.id)))
 }
 
-/// 校验单个账号拥有采购建单权限。
+/// 校验单个账号拥有采购建单权限.
 ///
 /// # 参数
 /// * `rbac` - 当前应用共享的 RBAC 服务
@@ -613,10 +438,10 @@ async fn ensure_purchase_create_permission(
     )))
 }
 
-/// 构造采购建单权限值对象。
+/// 构造采购建单权限值对象.
 ///
 /// # 返回
-/// 返回固定 `purchase_order:create` 权限。
+/// 返回固定 `purchase_order:create` 权限.
 ///
 /// # 错误
 /// 固定权限代码无法解析时返回实体错误。
@@ -624,7 +449,7 @@ fn purchase_create_permission() -> Result<Permission> {
     Permission::parse("purchase_order:create").map_err(Error::Logic)
 }
 
-/// 把解析视图转换为忽略展示姓名的稳定责任身份。
+/// 把解析视图转换为忽略展示姓名的稳定责任身份.
 ///
 /// # 参数
 /// * `views` - 待比对的采购责任解析视图
@@ -651,7 +476,7 @@ fn resolution_identities(
         .collect()
 }
 
-/// 将候选责任转换为稳定授权视图。
+/// 将候选责任转换为稳定授权视图.
 ///
 /// # 参数
 /// * `candidate` - 已完成目录与账号资格校验的候选责任

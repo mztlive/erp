@@ -473,6 +473,41 @@ impl SupplierQualification {
         }
         Ok(())
     }
+
+    /// 从当前资质状态构造不可变修订快照。
+    ///
+    /// # 参数
+    /// * `revision_id` - 新修订主键，由 Service 分配
+    /// * `revision_no` - 修订序号，由 Service 查询得出；溢出由调用方提前校验
+    ///
+    /// # 返回
+    /// 返回与当前资质字段逐字段一致的修订快照。
+    ///
+    /// # 错误
+    /// 字段规范化失败或区间倒挂时返回错误。
+    ///
+    /// # 约束
+    /// 纯内存，不触及 MongoDB 或 ID 生成器；快照字段必须与实体当前状态完全一致。
+    pub fn snapshot_revision(
+        &self,
+        revision_id: crate::ids::SupplierQualificationRevisionId,
+        revision_no: u32,
+    ) -> Result<crate::supplier::SupplierQualificationRevision> {
+        crate::supplier::SupplierQualificationRevision::new(
+            revision_id,
+            crate::supplier::SupplierQualificationRevisionData {
+                supplier_id: self.supplier_id.clone(),
+                qualification_type: self.qualification_type,
+                certificate_no: self.certificate_no.clone(),
+                issuer: self.issuer.clone(),
+                valid_from: self.valid_from,
+                valid_to: self.valid_to,
+                attachment_id: self.attachment_id.clone(),
+                status: self.stable.status,
+                revision_no,
+            },
+        )
+    }
 }
 
 /// 构造由资质类型和规范化证书编号组成的稳定身份键。
@@ -727,6 +762,54 @@ mod tests {
         )
         .unwrap();
         assert!(SupplierQualification::expiry_cutoff(max, 1).is_err());
+    }
+
+    /// 快照字段必须与实体当前状态完全一致，无遗漏且修订号溢出仍由调用方校验。
+    #[test]
+    fn snapshot_matches_entity_fields() {
+        let qualification = SupplierQualification::new(
+            SupplierQualificationId::new("qual-snap"),
+            qualification_data(),
+            "admin-1",
+        )
+        .unwrap();
+        let rev = qualification
+            .snapshot_revision(
+                crate::ids::SupplierQualificationRevisionId::new("qual-rev-snap"),
+                7,
+            )
+            .unwrap();
+        assert_eq!(rev.supplier_id, qualification.supplier_id);
+        assert_eq!(rev.qualification_type, qualification.qualification_type);
+        assert_eq!(rev.certificate_no, qualification.certificate_no);
+        assert_eq!(rev.issuer, qualification.issuer);
+        assert_eq!(rev.valid_from, qualification.valid_from);
+        assert_eq!(rev.valid_to, qualification.valid_to);
+        assert_eq!(rev.attachment_id, qualification.attachment_id);
+        assert_eq!(rev.status, qualification.stable.status);
+        assert_eq!(rev.revision.revision_no, 7);
+    }
+
+    /// 修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
+    #[test]
+    fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
+        use crate::common::revision::RevisionBase;
+        assert!(RevisionBase::next_revision_no(Some(u32::MAX)).is_err());
+        let qualification = SupplierQualification::new(
+            SupplierQualificationId::new("qual-overflow"),
+            qualification_data(),
+            "admin-1",
+        )
+        .unwrap();
+        let overflow = RevisionBase::next_revision_no(Some(u32::MAX));
+        assert!(overflow.is_err());
+        let rev = qualification
+            .snapshot_revision(
+                crate::ids::SupplierQualificationRevisionId::new("qual-rev-overflow"),
+                1,
+            )
+            .unwrap();
+        assert_eq!(rev.revision.revision_no, 1);
     }
 
     /// 实体 BSON 往返。
