@@ -1,6 +1,6 @@
 let meta = #{
     name: "remediate-service-layering",
-    description: "按 docs/service-layering-remediation-contract.md 分波关闭剩余 OPEN 责任簇：P0 优先、耦合 R+E 同批、顺序实现、对抗评审、统一门禁，并回写合同状态",
+    description: "按 docs/service-layering-remediation-contract.md 分波关闭剩余 OPEN 责任簇：P0 优先、耦合 R+E 同批、顺序实现、对抗评审、统一门禁、回写合同，Quality 通过后每波提交一次",
     when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。",
     phases: [
         #{ title: "Inventory", detail: "读取合同状态并与波次目录求交" },
@@ -8,6 +8,7 @@ let meta = #{
         #{ title: "Review", detail: "每簇独立对抗评审" },
         #{ title: "Repair", detail: "只修复本波引入的评审 blocker" },
         #{ title: "Quality", detail: "第 5 节统一门禁、Mongo 证据与合同回写" },
+        #{ title: "Commit", detail: "Quality 通过且有关闭项时提交本波，失败不提交" },
         #{ title: "Report", detail: "写出本轮关闭证据和下波建议" },
     ],
 };
@@ -108,6 +109,18 @@ let quality_schema = #{
         "mongo_commands": #{ "type": "array", "maxItems": 16, "items": #{ "type": "string" } },
         "files_changed": #{ "type": "array", "maxItems": 80, "items": #{ "type": "string" } },
         "remaining_issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
+        "summary": #{ "type": "string" },
+    },
+};
+
+let commit_schema = #{
+    "type": "object",
+    "required": ["committed", "commit_sha", "files_staged", "skipped_dirty", "summary"],
+    "properties": #{
+        "committed": #{ "type": "boolean" },
+        "commit_sha": #{ "type": "string" },
+        "files_staged": #{ "type": "array", "maxItems": 80, "items": #{ "type": "string" } },
+        "skipped_dirty": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
         "summary": #{ "type": "string" },
     },
 };
@@ -395,7 +408,8 @@ fn layering_rules_text() {
     text += "New methods, public or private, need multi-line Rust docs covering purpose, params, return, errors, and constraints.\n";
     text += "New behavior must land in a responsibility-named file, not appended to a giant mod.rs/service.rs/repository.rs.\n";
     text += "Never git reset, checkout, restore, clean, or discard unrelated dirty work. Do not change public HTTP shapes unless the row requires it.\n";
-    text += "Do not mark contract rows DONE. Quality does that only after gates. You may set IN_PROGRESS and fill 执行登记 batch/owner on assigned IDs.\n";
+    text += "Do not git add or git commit. Do not mark contract rows DONE. Quality updates DONE after gates; a later wave commit step creates one commit for the whole wave.\n";
+    text += "You may set IN_PROGRESS and fill 执行登记 batch/owner on assigned IDs.\n";
     text
 }
 
@@ -458,6 +472,28 @@ fn quality_prompt_for(wave, batch_id, cluster_payloads, review_payloads, mongo_n
     prompt += "and append a 批次验收登记 covering layering result, targeted tests, Mongo N/A-or-results, unified gates, compat/rollback, and unrun external bounds.\n";
     prompt += "Do not mark BLOCKED rows DONE. Do not close SALES-E19 without SALES-R02..R05. Do not invent occupancy policy.\n";
     prompt += "closed_ids must be a subset of this wave's attempted IDs. held_ids are attempted but not closed.\n";
+    prompt += "Do not git add or git commit. Leave this wave's code and contract edits in the working tree. A later commit agent will create one commit if this wave passed with closed_ids.\n";
+    prompt
+}
+
+fn commit_prompt_for(wave, batch_id, closed_ids, quality_payload) {
+    let prompt = "";
+    prompt += "Create exactly one git commit for service-layering wave " + wave.id + ".\n";
+    prompt += "Batch id: " + batch_id + ". Closed IDs: " + json_encode(closed_ids) + ".\n";
+    prompt += "Quality payload: " + quality_payload + "\n";
+    prompt += "Inspect git status and diff first. Commit only this wave's files: Quality files_changed plus docs/service-layering-remediation-contract.md if this wave updated it, plus matching tests.\n";
+    prompt += "Do not stage unrelated dirty or untracked files. Record any left-unstaged paths in skipped_dirty.\n";
+    prompt += "Never git reset, checkout, restore, clean, stash, rebase, merge, or push. Never amend a commit you did not just create in this step.\n";
+    prompt += "If this wave has no staged changes after the scoped add, set committed=false and commit_sha=none. Do not create an empty commit.\n";
+    prompt += "If unrelated dirty files block a clean scoped commit, set committed=false rather than scooping them in.\n";
+    prompt += "Use a HEREDOC commit message in this repo's style, for example:\n";
+    prompt += "git commit -m \"$(cat <<'EOF'\n";
+    prompt += "refactor(backend): 完成 Service 分层整改波次 " + wave.id + "\n";
+    prompt += "\n";
+    prompt += "关闭 " + json_encode(closed_ids) + "。批次：" + batch_id + "。\n";
+    prompt += "EOF\n";
+    prompt += ")\"\n";
+    prompt += "After a successful commit, commit_sha must be `git rev-parse HEAD`. If not committed, commit_sha must be the string none.\n";
     prompt
 }
 
@@ -471,6 +507,7 @@ let max_waves = 1;
 let max_clusters = 3;
 let include_blocked = false;
 let allow_p1 = false;
+let do_commit = true;
 let custom_ids = [];
 let batch_date = "WAVE";
 let dirty_note = "Preserve all pre-existing dirty files. Do not revert unrelated work.";
@@ -483,6 +520,7 @@ if args != () {
     if args.max_clusters != () { max_clusters = integer_or(args.max_clusters, 3); }
     if args.include_blocked != () { include_blocked = is_true(args.include_blocked); }
     if args.allow_p1_with_open_p0 != () { allow_p1 = is_true(args.allow_p1_with_open_p0); }
+    if args.commit != () { do_commit = is_true(args.commit); }
     if is_text_array(args.item_ids) { custom_ids = args.item_ids; }
     if is_text(args.batch_date) { batch_date = args.batch_date; }
     if is_text(args.dirty_note) { dirty_note = args.dirty_note; }
@@ -688,6 +726,7 @@ log("Selected waves: " + json_encode(selected_names));
 let wave_reports = [];
 let closed_total = [];
 let held_total = [];
+let commits_total = [];
 let quality_passed_all = true;
 
 for wave in selected {
@@ -921,11 +960,58 @@ for wave in selected {
     for item_id in wave_held { held_total = add_unique(held_total, item_id); }
     work_ids = subtract_ids(work_ids, wave_closed);
     p0_still_open = any_kind_open(waves, "p0", work_ids);
+
+    let commit_output = #{
+        committed: false,
+        commit_sha: "none",
+        files_staged: [],
+        skipped_dirty: [],
+        summary: "commit skipped",
+    };
+    if do_commit && wave_passed && wave_closed.len() > 0 {
+        phase("Commit");
+        let quality_payload = "quality unavailable";
+        if quality_result != () { quality_payload = json_encode(quality_result); }
+        let commit_result = agent(commit_prompt_for(wave, batch_id, wave_closed, quality_payload), #{
+            label: "commit:" + wave.id,
+            capability_mode: "all",
+            output_schema: commit_schema,
+        });
+        if commit_result != () && commit_result.success && commit_result.output != () {
+            commit_output = #{
+                committed: is_true(commit_result.output.committed),
+                commit_sha: commit_result.output.commit_sha,
+                files_staged: commit_result.output.files_staged,
+                skipped_dirty: commit_result.output.skipped_dirty,
+                summary: commit_result.output.summary,
+            };
+            if !is_text(commit_output.commit_sha) { commit_output.commit_sha = "none"; }
+            if is_true(commit_output.committed) && commit_output.commit_sha != "none" {
+                commits_total.push(#{ wave: wave.id, commit_sha: commit_output.commit_sha });
+            }
+        } else {
+            commit_output.summary = "commit agent failed";
+            quality_passed_all = false;
+        }
+    } else if !do_commit {
+        commit_output.summary = "args.commit=false";
+    } else if !wave_passed {
+        commit_output.summary = "quality did not pass; left uncommitted";
+    } else {
+        commit_output.summary = "no closed_ids; left uncommitted";
+    }
+    if do_commit && wave_passed && wave_closed.len() > 0 && !is_true(commit_output.committed) {
+        quality_passed_all = false;
+    }
+
     wave_reports.push(#{
         wave: wave.id,
         passed: wave_passed,
         closed_ids: wave_closed,
         held_ids: wave_held,
+        committed: commit_output.committed,
+        commit_sha: commit_output.commit_sha,
+        commit_summary: commit_output.summary,
         quality: quality_result,
     });
 }
@@ -936,6 +1022,7 @@ report += "- Wave arg: " + wave_arg + "\n";
 report += "- Closed this run: " + json_encode(closed_total) + "\n";
 report += "- Held: " + json_encode(held_total) + "\n";
 report += "- Quality passed all selected waves: " + quality_passed_all.to_string() + "\n";
+report += "- Per-wave commit: " + do_commit.to_string() + " (one commit after Quality pass with closed_ids; no commit on failure)\n";
 report += "- Remaining executable OPEN after run (inventory minus closed): " + work_ids.len().to_string() + "\n";
 report += "- BLOCKED still excluded: " + json_encode(blocked_ids) + "\n\n";
 report += "Next: re-run with args.wave=next (or the next p0-* id) until P0 waves are empty, then P1 waves. ";
@@ -944,10 +1031,11 @@ report += "## Wave results\n\n```json\n" + json_encode(wave_reports) + "\n```\n"
 let report_path = write_scratch_file("service-layering-remediation-report.md", report);
 
 complete(#{
-    summary: closed_total.len().to_string() + " IDs closed, " + held_total.len().to_string() + " held, quality_passed_all=" + quality_passed_all.to_string(),
+    summary: closed_total.len().to_string() + " IDs closed, " + held_total.len().to_string() + " held, commits=" + commits_total.len().to_string() + ", quality_passed_all=" + quality_passed_all.to_string(),
     report_path: report_path,
     closed_ids: closed_total,
     held_ids: held_total,
+    commits: commits_total,
     quality_passed_all: quality_passed_all,
     remaining_open_estimate: work_ids.len(),
 });
