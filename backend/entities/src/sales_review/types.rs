@@ -210,6 +210,117 @@ impl From<crate::sales_order::CardForm> for CardForm {
     }
 }
 
+impl From<BusinessType> for crate::sales_order::BusinessType {
+    /// 将审核域业务性质转为销售单域同形类型。
+    ///
+    /// # 参数
+    /// * `value` - 审核域业务性质
+    ///
+    /// # 返回
+    /// 返回销售单域业务性质。
+    fn from(value: BusinessType) -> Self {
+        match value {
+            BusinessType::Voucher => Self::Voucher,
+            BusinessType::GoodsService => Self::GoodsService,
+        }
+    }
+}
+
+impl From<LineType> for crate::sales_order::LineType {
+    /// 将审核域行类型转为销售单域同形类型。
+    ///
+    /// # 参数
+    /// * `value` - 审核域行类型
+    ///
+    /// # 返回
+    /// 返回销售单域行类型。
+    fn from(value: LineType) -> Self {
+        match value {
+            LineType::GoodsService => Self::GoodsService,
+            LineType::Voucher => Self::Voucher,
+        }
+    }
+}
+
+impl From<WelfareScenario> for crate::sales_order::WelfareScenario {
+    /// 将审核域福利场景转为销售单域同形类型。
+    ///
+    /// # 参数
+    /// * `value` - 审核域福利场景
+    ///
+    /// # 返回
+    /// 返回销售单域福利场景。
+    fn from(value: WelfareScenario) -> Self {
+        match value {
+            WelfareScenario::AnnualGiftBag => Self::AnnualGiftBag,
+            WelfareScenario::MealSubsidy => Self::MealSubsidy,
+            WelfareScenario::CondolenceGift => Self::CondolenceGift,
+            WelfareScenario::ConsumptionFund => Self::ConsumptionFund,
+            WelfareScenario::Other => Self::Other,
+        }
+    }
+}
+
+impl From<CardForm> for crate::sales_order::CardForm {
+    /// 将审核域卡形态转为销售单域同形类型。
+    ///
+    /// # 参数
+    /// * `value` - 审核域卡形态
+    ///
+    /// # 返回
+    /// 返回销售单域卡形态。
+    fn from(value: CardForm) -> Self {
+        match value {
+            CardForm::Electronic => Self::Electronic,
+            CardForm::Physical => Self::Physical,
+        }
+    }
+}
+
+impl From<GoodsLineFields> for crate::sales_order::GoodsLineFields {
+    /// 将审核域实物字段组转为销售单域同形字段组。
+    ///
+    /// # 参数
+    /// * `value` - 审核域实物字段组
+    ///
+    /// # 返回
+    /// 返回销售单域实物字段组。
+    fn from(value: GoodsLineFields) -> Self {
+        Self {
+            sku_id: value.sku_id,
+            sku_revision_id: value.sku_revision_id,
+            welfare_scenario: value.welfare_scenario.map(Into::into),
+            service_region: value.service_region,
+            fulfillment_due_at: value.fulfillment_due_at,
+            quantity: value.quantity,
+            base_unit_code: value.base_unit_code,
+            unit_price_gross: value.unit_price_gross,
+        }
+    }
+}
+
+impl From<VoucherLineDraft> for crate::sales_order::VoucherLineDraft {
+    /// 将审核域卡券字段组转为销售单域同形字段组。
+    ///
+    /// # 参数
+    /// * `value` - 审核域卡券草稿字段组
+    ///
+    /// # 返回
+    /// 返回销售单域卡券草稿字段组。
+    fn from(value: VoucherLineDraft) -> Self {
+        Self {
+            face_value: value.face_value,
+            card_count: value.card_count,
+            unit_price_gross: value.unit_price_gross,
+            face_value_total: value.face_value_total,
+            transaction_amount: value.transaction_amount,
+            gift_amount: value.gift_amount,
+            gift_rate: value.gift_rate,
+            card_form: value.card_form.into(),
+        }
+    }
+}
+
 /// 实物及服务行字段组（数据模型 §6.4/§6.5「商品、数量、价格、履约字段组」）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoodsLineFields {
@@ -543,6 +654,50 @@ mod tests {
 
     fn rate(value: &str) -> Rate {
         Rate::from_str(value).unwrap()
+    }
+
+    #[test]
+    fn sales_order_enum_conversions_round_trip() {
+        let business = [
+            crate::sales_order::BusinessType::Voucher,
+            crate::sales_order::BusinessType::GoodsService,
+        ];
+        for value in business {
+            assert_eq!(
+                crate::sales_order::BusinessType::from(BusinessType::from(value)),
+                value
+            );
+        }
+
+        let lines = [
+            crate::sales_order::LineType::GoodsService,
+            crate::sales_order::LineType::Voucher,
+        ];
+        for value in lines {
+            assert_eq!(crate::sales_order::LineType::from(LineType::from(value)), value);
+        }
+
+        let scenarios = [
+            crate::sales_order::WelfareScenario::AnnualGiftBag,
+            crate::sales_order::WelfareScenario::MealSubsidy,
+            crate::sales_order::WelfareScenario::CondolenceGift,
+            crate::sales_order::WelfareScenario::ConsumptionFund,
+            crate::sales_order::WelfareScenario::Other,
+        ];
+        for value in scenarios {
+            assert_eq!(
+                crate::sales_order::WelfareScenario::from(WelfareScenario::from(value)),
+                value
+            );
+        }
+
+        let cards = [
+            crate::sales_order::CardForm::Electronic,
+            crate::sales_order::CardForm::Physical,
+        ];
+        for value in cards {
+            assert_eq!(crate::sales_order::CardForm::from(CardForm::from(value)), value);
+        }
     }
 
     #[test]

@@ -19,6 +19,7 @@
 
 mod amount_validation;
 mod entity;
+pub(crate) mod formal_revision;
 mod procurement;
 pub mod revision;
 pub mod snapshot;
@@ -33,6 +34,10 @@ mod working_copy_types;
 pub use entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
     ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
+};
+pub use formal_revision::{
+    FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
+    FormalRevisionSubtypeIdentity, SalesOrderRevisionAggregate,
 };
 pub use procurement::{procurement_responsibility_key, ProcurementCoverageSummary};
 pub use revision::{

@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **173 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、49 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **170 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、52 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -58,21 +58,21 @@
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
 | Approval | 3 | 4 | 1 | 8 |
 | Master | 3 | 6 | 0 | 9 |
-| Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
+| Sales / Contract / Returns / Projection | 7 | 16 | 0 | 23 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 10 | 0 | 17 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **75** | **101** | **1** | **177** |
+| **合计** | **75** | **98** | **1** | **174** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **10 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 42 | 0 | 55 |
-| P1 | 57 | 47 | 1 | 105 |
+| P0 | 13 | 40 | 0 | 53 |
+| P1 | 57 | 46 | 1 | 104 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **75** | **101** | **1** | **177** |
+| **合计** | **75** | **98** | **1** | **174** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -307,17 +307,17 @@ git diff --check
 | SALES-E01 | P2 | OPEN | `backend/services/src/contract/mod.rs:316`、`:397`，`archive_contract_revision` / `terminate_contract`：两处直接比较 `contract.base.version`；同类实体已使用 `matches_version`。 | `Contract` 必须提供 `matches_version(expected)`；Service 只负责将不匹配映射为稳定 409 语义；实体不得依赖 Service Error。 | 必须覆盖当前版本匹配、旧版本拒绝；两处字段级直接比较必须删除。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E02 | P1 | OPEN | `backend/services/src/sales_order/command.rs:263`，`resolve_sales_command_draft`：Service 直接判断修订是否属于合同，并在 266–269 行比较结算主体。 | `ContractRevision` 必须提供合同归属与结算主体一致性方法或统一关系 VO；Service 继续加载合同/修订并决定 Validation 与 Conflict 映射。 | 必须覆盖正确合同、错误合同、结算主体漂移。跨聚合读取与最终选择必须留在 Service。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E03 | P1 | OPEN | `backend/services/src/sales_order/draft_working_copy.rs:39`，`assert_draft_allows_working_copy`；`:154` 直接比较副本版本。草稿资格与版本规则未统一归属实体。 | `SalesOrder` 必须提供首次提交副本可编辑事实/校验；Service 必须复用现有 `SalesOrderWorkingCopy::matches_version`；有效副本查询、补开及事务写入保留 Service。 | 必须覆盖 Draft、PendingReview、Effective、Voided、Closed 及匹配/陈旧版本。禁止把“是否存在有效副本”的仓储判断放入 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| SALES-E04 | P1 | OPEN | `backend/services/src/sales_order/mapper.rs:239`，`draft_hash`；`sales_review/sales_change_order.rs:254`；`sales_order/formalize.rs:605`、`:738`；`sales_review/formalization.rs:85`：`draft`、`change`、`sub` 内容标识格式散落 Service。 | 必须建立强类型 `SalesContentHash` 或实体工厂，统一 draft/change/submission 派生；Service 只传身份与版本。命令幂等 SHA-256 fingerprint 不得并入该 VO。 | 必须为既有格式建立 golden tests；迁移不得改变已持久化语义；空 ID、非法版本和长度边界必须失败关闭。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| SALES-E04 | P1 | OPEN | `backend/services/src/sales_order/mapper.rs:239`，`draft_hash`；`sales_review/sales_change_order.rs:254`、`:588`：draft/change 内容标识仍散落 Service。正式版本 `sub:{id}` 已由 `SALES-E06`/`SALES-E10` 迁入聚合工厂，本项不得重复关闭该指纹。 | 必须建立强类型 `SalesContentHash` 或实体工厂，统一 draft/change/submission 派生；Service 只传身份与版本。命令幂等 SHA-256 fingerprint 不得并入该 VO。 | 必须为既有格式建立 golden tests；迁移不得改变已持久化语义；空 ID、非法版本和长度边界必须失败关闭。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E05 | P1 | OPEN | `backend/services/src/sales_order/mapper.rs:258`，`build_submission`；`:342`，`build_submission_lines`：工作副本向提交快照的字段、快照、金额和字段组复制规则完整滞留 Service。 | 必须新增 `SalesOrderSubmissionData::from_working_copy(...)` 与 `SalesOrderSubmissionLineData::from_working_copy_line(...)`；ID 生成、外部身份解析、提交序号读取和事务写入保留 Service；Entity 禁止依赖 `services::dto` 或 `id-generator`。 | 必须覆盖 GoodsService、Voucher、可选快照、外部身份、金额、行顺序及字段组缺失；转换测试必须直接位于 entities。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| SALES-E06 | P0 | OPEN | `backend/services/src/sales_order/formalize.rs:572`，`build_revision_for_order`，及 `build_goods_service_revision`、`build_voucher_revision`、`new_revision_header`、`new_revision_line`：正式版本聚合生成规则由 Service 持有。 | entities 必须提供不依赖持久化的正式版本聚合数据工厂；Service 提供 ID、时间、提交实体及行并持久化。卡券单行约束与字段组一致性必须由工厂失败关闭。 | 必须覆盖 GoodsService 多行、Voucher 单行、空行、混合行、多卡券行、金额/快照完整性及上一版本关系。`formalize_submission` 写入和事务顺序不得移动。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| SALES-E06 | P0 | DONE | `backend/services/src/sales_order/formalize.rs:572`，`build_revision_for_order`，及 `build_goods_service_revision`、`build_voucher_revision`、`new_revision_header`、`new_revision_line`：正式版本聚合生成规则由 Service 持有。 | entities 必须提供不依赖持久化的正式版本聚合数据工厂；Service 提供 ID、时间、提交实体及行并持久化。卡券单行约束与字段组一致性必须由工厂失败关闭。 | 必须覆盖 GoodsService 多行、Voucher 单行、空行、混合行、多卡券行、金额/快照完整性及上一版本关系。`formalize_submission` 写入和事务顺序不得移动。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：与 `SALES-E10` 同批，直接前置 `SALES-E09`；关闭证据：`SalesOrderRevisionAggregate::from_sales_order_submission` 一次构造版本头、公共行和子类型行；Service 只注入 ID、时间、版本号与上一版本指针；旧 Service 聚合 helper 已删除。 |
 | SALES-E07 | P0 | OPEN | `backend/services/src/sales_order/adapter.rs:543`，`build_sales_order_snapshot`；`:572`，`sum_line_quantity`：当前只 `filter_map(quantity)`，Voucher 行以 `card_count` 表达数量，导致审批快照漏量。 | `SalesOrderSubmission` / 行实体按业务性质计算审批总数量：GoodsService 汇总各行基础单位 `quantity`；Voucher 固定取唯一卡券行 `card_count`，单位为“张”，精确转换成 Quantity；适用行缺量必须失败，Service 只映射快照。 | 覆盖单/多行实物、唯一卡券行、空行、缺量、非法混合行及数值溢出；不得用 `filter_map` 静默跳过或由 Service 临时兜底。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E08 | P1 | OPEN | `backend/services/src/sales_order/status.rs:77`，`CloseEligibilityInputs`；`:118`，`compute_close_eligibility`：Service 重复解释终态、履约及回款事实；无子账时金额兜底可能形成 `0 >= 0`。 | `SalesOrder` / `SalesOrderClosureFacts` 必须承载单聚合状态事实与金额兜底边界；Service 保留应收摘要读取、跨聚合最终编排及中文 View 文案。无子账不得仅因零金额比较视为结清。 | 必须覆盖 Closed、Voided、Draft、Effective、履约未完成、回款未结清、无子账、合法零额及“开票不参与结案”。`has_active_change_order` 等仓储事实不得下沉 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| SALES-E09 | P1 | OPEN | `backend/services/src/sales_review/sales_change_mapping.rs:55`，`change_submission_goods`；`:99`，`change_submission_voucher`：变更提交行字段组反向还原规则位于 Service，而销售提交行已有实体镜像能力。 | `SalesChangeSubmissionLine` 必须提供 `goods_fields()`、`voucher_fields()`；Service 镜像 helper 必须删除；entities 错误由 Service 统一转换。 | 必须覆盖正确字段组、错误行类型、每个必填字段缺失及可选字段保留。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| SALES-E10 | P0 | OPEN | `backend/services/src/sales_review/formalization.rs:69`，`build_change_revision`：销售变更到正式修订头、公共行及子类型行的生成规则在 Service，并与首次形式化形成双规则源。 | 正式版本聚合必须提供 `from_sales_change_submission(...)`，并与首次形式化复用公共行/快照规则；Service 保留 latest revision no 查询、基准版本复验和事务写入。 | 必须覆盖实物、卡券、上一版本指针、修订来源、内容哈希、字段组及金额一致性。Entity 禁止查询 latest revision no。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| SALES-E09 | P1 | DONE | `backend/services/src/sales_review/sales_change_mapping.rs:55`，`change_submission_goods`；`:99`，`change_submission_voucher`：变更提交行字段组反向还原规则位于 Service，而销售提交行已有实体镜像能力。 | `SalesChangeSubmissionLine` 必须提供 `goods_fields()`、`voucher_fields()`；Service 镜像 helper 必须删除；entities 错误由 Service 统一转换。 | 必须覆盖正确字段组、错误行类型、每个必填字段缺失及可选字段保留。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：`SALES-E10` 直接前置；关闭证据：变更提交行拥有 `goods_fields`/`voucher_fields`；`sales_change_mapping.rs` 已删除；错误行类型、必填缺失和可选字段保留由实体单测固定。 |
+| SALES-E10 | P0 | DONE | `backend/services/src/sales_review/formalization.rs:69`，`build_change_revision`：销售变更到正式修订头、公共行及子类型行的生成规则在 Service，并与首次形式化形成双规则源。 | 正式版本聚合必须提供 `from_sales_change_submission(...)`，并与首次形式化复用公共行/快照规则；Service 保留 latest revision no 查询、基准版本复验和事务写入。 | 必须覆盖实物、卡券、上一版本指针、修订来源、内容哈希、字段组及金额一致性。Entity 禁止查询 latest revision no。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：与 `SALES-E06` 同批；关闭证据：`from_sales_change_submission` 复用 `from_prepared` 公共行/快照规则；Service 继续查询 latest revision no 并注入版本号；Entity 无仓储依赖。 |
 | SALES-E11 | P0 | OPEN | `backend/services/src/sales_review/formalization.rs:195`，`build_receivable_delta`；`:246`，`receivable_delta_review_update`：差额方向、绝对金额、账户新总额及卡券复核缓存迁移均在 Service。 | `AccountReviewStatus` / `ReceivableAccount` 必须封装销售变更差额允许的复核迁移；差额 VO 必须封装 Increase/Decrease 与绝对金额；Service 保留账户读取、跨聚合决定和事务写入。 | 必须覆盖零、正、负差额，Voucher Reviewed/未复核，GoodsService NotApplicable/非法状态及金额边界。账户存在性属于仓储事实，不得下沉。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E12 | P1 | OPEN | `backend/services/src/projection/dto.rs:533`，`projection_content_hash`；`backend/services/src/projection/revision.rs:71`、`:166` 先写 placeholder 后回填：投影内容指纹归属 DTO 文件且实体存在临时非法值。 | `SalesOrderProjectionRevision` 必须拥有 canonical serialization 与内容哈希计算；构造必须一次形成有效哈希；DTO 中 FNV helper 与 placeholder/pending 回填路径必须删除。 | 必须保持当前 canonical 字段顺序及 golden hash；内容字段变化必须改变哈希，非内容字段范围必须固定。不得擅自更换算法破坏历史幂等语义。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E13 | P1 | OPEN | `backend/services/src/projection/revision.rs:315`，`voucher_expiry`：Service 通过类目与履约期限组合判断销售版本是否可生成卡券投影。 | `SalesOrderRevision` 必须提供 `required_voucher_expiry()` 或强类型 `VoucherProjectionFacts`；Service 保留销售版本及唯一卡券行的仓储读取。 | 必须覆盖类目与期限同时存在、分别缺一、全部缺失。唯一卡券行数量依赖仓储结果，仍由 Service 判定。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| SALES-E14 | P2 | OPEN | `backend/services/src/projection/revision.rs:331`，`to_projection_card_form`；`sales_review/sales_change_mapping.rs:7`、`:15`、`:25`；`sales_order/formalize.rs:849`：同构 CardForm/LineType/WelfareScenario 转换散落多处。 | 在拥有目标类型的 entities 模块实现显式 `From` / `TryFrom`；Service 必须直接调用类型转换；禁止字符串中转和未知值兜底。 | 所有枚举变体必须逐项测试；新增变体时编译必须强制补齐转换。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| SALES-E14 | P2 | OPEN | `backend/services/src/projection/revision.rs:331`，`to_projection_card_form`；`sales_order/formalize.rs` 卡券投影 `CardForm` match：D13/D14 `LineType`/`CardForm`/`WelfareScenario` 已有双向 `From`，投影 CardForm 仍散落 Service。 | 在拥有目标类型的 entities 模块实现显式 `From` / `TryFrom`；Service 必须直接调用类型转换；禁止字符串中转和未知值兜底。 | 所有枚举变体必须逐项测试；新增变体时编译必须强制补齐转换。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E15 | P0 | OPEN | `backend/services/src/projection/delivery.rs:1072`，`load_command_delivery`；`:1085`，`load_command_revision`；`:1140`，`ensure_delivery_relation`；`:1309`，`should_advance_acked_revision`：命令匹配、投影链关系及 ACK 指针单调性位于 Service。 | Projection/Revision/Delivery 实体必须封装命令身份与版本匹配、三段关系校验及 ACK 指针推进单调性；Service 只负责加载当前修订、connector、事务和审计。 | 必须覆盖正确/错误 projection、revision、mall，陈旧命令版本，同修订重复 ACK，旧/新 ACK，同序号不同身份。当前修订读取和外部 connector 禁止进入 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E16 | P0 | OPEN | `backend/services/src/returns/reversal_plan.rs:40`，`plan_receipt_reverse`；`:123`，`plan_payment_reverse`：有效 APPLY、既有 REVERSE 扣除、逐笔分摊与不足拒绝均在 Service；实现依赖未声明排序的 Repository 返回顺序。 | 反向计划与计划行/块必须移入 ReceiptAllocation / PaymentAllocation 领域模块；必须按 `allocation_seq` 确定性排序，并按原分配 ID 预聚合 Reverse，禁止依赖 MongoDB 自然顺序。 | 必须覆盖乱序输入、部分/完全反向、多次 Reverse、金额不足、零额、重复序号及收付镜像一致性。查询与计划持久化仍归 Service/Repository。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E17 | P0 | OPEN | `backend/services/src/returns/customer_refund.rs:792`、`supplier_refund.rs:741`、`receipt_reversal.rs:784`、`payment_reversal.rs:751`：四处重复 `max(allocation_seq) + 1`，未处理 `u32::MAX`。 | ReceiptAllocation / PaymentAllocation 必须提供 checked next-sequence 或 sequence-range 规则；四处 Service 计算必须删除。 | 必须覆盖空集合从 1 开始、乱序、重复现有序号、多行连续编号及 `u32::MAX` 失败。并发唯一性仍须索引、CAS 或等价约束。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -334,6 +334,16 @@ git diff --check
 | 查询编排 | 查询过滤、分页参数组织、批量结果组合 | Service 内保留 MongoDB 聚合、N+1 或无界完整实体读取 |
 | 协议与视图 | submission/revision/审批 View、中文阶段标签、响应 DTO 映射 | Repository 返回 HTTP/Service View；Entity 依赖 Service DTO |
 | 审批与外部系统 | 审批 adapter、BPM start/cancel 输入、定义绑定、Mall connector、超时/结果未知分类、重试升级与操作审计 | 将外部调用、运行时持久化或副作用编排下沉 Entity |
+
+#### 6.4 批次验收登记
+
+1. 批次编号：`SALES-6.4-E06-E09-E10-20260901`。交付范围：`SALES-E06`、`SALES-E09`、`SALES-E10`。责任人：Grok。外部依赖：无。`SALES-E09` 作为 `SALES-E10` 的直接前置纳入同一可回滚批次。
+2. 分层结果：`SalesOrderRevisionAggregate` 独占首次提交与变更提交的正式版本构造；公共行、表头快照、内容指纹 `sub:{id}`、卡券单行约束和字段组一致性由 `from_prepared` 共用。`SalesChangeSubmissionLine` 拥有 `goods_fields`/`voucher_fields`。Service 生成 ID、查询 latest revision no、注入版本号/上一版本指针/时间，并保持 `formalize_submission` 写入顺序、审批事务、应收入账和投影编排。原 Service 聚合 helper 与 `sales_change_mapping.rs` 已删除。
+3. 定向验收：`cargo test -p entities --all-features --locked --lib formal_revision` 通过 8 项；`goods_fields`/`voucher_fields` 2 项覆盖正确字段组、错误行类型、必填缺失和可选字段保留；D13/D14 枚举双向 round-trip 通过。`cargo test -p services --all-features --locked --lib formalize` 通过 3 项；`cargo test -p services --all-features --locked --lib sales_review` 通过 18 项。`cargo test -p entities --all-features --locked --lib sales_order` 通过 92 项。
+4. 真实 MongoDB 验收：本批不新增查询、聚合、索引、事务原语或并发 CAS；Exact/Exists、Batch、Page、Aggregation、Index 均标记 `N/A`。首次生效与变更生效仍由既有 Service 事务路径写入，不在本批重跑隔离副本集。
+5. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+6. 兼容与回滚合同：本批不改变 HTTP DTO、BSON 字段、索引或已持久化 `sub:{id}` 指纹形态，不执行数据或索引迁移。应用代码可按整个批次原子回滚；回滚后会重新暴露 Service 双规则源和变更行 Optional 拆解。
+7. 外部验收边界：浏览器、真实商城和生产数据扫描为 `N/A`；本批不改变用户界面或外部调用。`SALES-E04` 内容身份 VO 与 `SALES-E14` 投影 CardForm 转换仍保持 OPEN，不得宣称已关闭。
 
 ### 6.5 Procurement / Supplier
 

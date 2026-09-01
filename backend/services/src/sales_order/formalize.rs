@@ -10,8 +10,8 @@ use database::{
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
     ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderProjectionDeliveryId,
-    SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-    SalesOrderSubmissionId, SalesOrderVoucherLineRevisionId, WorkItemId,
+    SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId, SalesOrderSubmissionId,
+    WorkItemId,
 };
 use entities::money::Amount;
 use entities::projection::{
@@ -24,11 +24,9 @@ use entities::receivable::{
     ReceivableEntryData, ReceivableEntryType,
 };
 use entities::sales_order::{
-    procurement_responsibility_key, BusinessType, CardForm, RevisionSource, SalesOrder,
-    SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
-    SalesOrderGoodsServiceLineRevisionId, SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine,
-    SalesOrderRevisionLineData, SalesOrderSubmission, SalesOrderSubmissionLine,
-    SalesOrderVoucherLineRevision, SalesOrderVoucherLineRevisionData,
+    procurement_responsibility_key, CardForm, FormalRevisionContext, FormalRevisionIdentities,
+    FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder,
+    SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
@@ -48,14 +46,6 @@ use crate::procurement_responsibility::{
 use crate::projection::projection_content_hash;
 use crate::purchase_order::sync_procurement_tasks_for_sales_order;
 
-/// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
-struct RevisionAggregate {
-    revision: SalesOrderRevision,
-    lines: Vec<SalesOrderRevisionLine>,
-    goods_lines: Vec<SalesOrderGoodsServiceLineRevision>,
-    voucher_lines: Vec<SalesOrderVoucherLineRevision>,
-}
-
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 struct ProcurementFormalizationPlan {
     inputs: Vec<ResolutionInput>,
@@ -69,7 +59,7 @@ struct FormalizedSubmissionWrite {
     order_id: String,
     order: SalesOrder,
     submission: SalesOrderSubmission,
-    aggregate: RevisionAggregate,
+    aggregate: SalesOrderRevisionAggregate,
     procurement: Option<ProcurementFormalizationPlan>,
     procurement_items: Vec<WorkItem>,
     projection: Option<(
@@ -513,7 +503,7 @@ async fn persist_procurement_work_items(
 async fn create_original_receivable(
     db: &Database,
     order: &SalesOrder,
-    aggregate: &RevisionAggregate,
+    aggregate: &SalesOrderRevisionAggregate,
     posted_at: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -565,6 +555,34 @@ async fn create_original_receivable(
     Ok(())
 }
 
+/// 为提交行分配正式版本头、公共行和子类型身份。
+///
+/// # 参数
+/// * `lines` - 已冻结提交行
+///
+/// # 返回
+/// 返回与行顺序一致的身份清单。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// ID 由服务层生成，工厂不得调用 ID 生成器。
+fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> FormalRevisionIdentities {
+    FormalRevisionIdentities::new(
+        SalesOrderRevisionId::new(next_id()),
+        lines
+            .iter()
+            .map(|line| {
+                FormalRevisionLineIdentity::new(
+                    entities::ids::SalesOrderRevisionLineId::new(next_id()),
+                    FormalRevisionSubtypeIdentity::from_line_type(line.line_type, next_id()),
+                )
+            })
+            .collect(),
+    )
+}
+
 /// 按业务性质构造正式版本。
 ///
 /// # 错误
@@ -574,223 +592,20 @@ fn build_revision_for_order(
     submission: &SalesOrderSubmission,
     submission_lines: &[SalesOrderSubmissionLine],
     effective_at: Instant,
-) -> Result<RevisionAggregate> {
-    match order.business_type {
-        BusinessType::Voucher => build_voucher_revision(order, submission, submission_lines, effective_at),
-        BusinessType::GoodsService => {
-            build_goods_service_revision(order, submission, submission_lines, effective_at)
-        }
-    }
-}
-
-/// 由实物及服务提交构造正式版本。卡券行失败关闭。
-///
-/// # 错误
-/// 行字段组缺失或版本字段校验失败时返回错误。
-fn build_goods_service_revision(
-    order: &SalesOrder,
-    submission: &SalesOrderSubmission,
-    submission_lines: &[SalesOrderSubmissionLine],
-    effective_at: Instant,
-) -> Result<RevisionAggregate> {
-    let revision_id = SalesOrderRevisionId::new(next_id());
-    let revision = SalesOrderRevision::new(
-        revision_id.clone(),
-        SalesOrderRevisionData {
-            sales_order_id: submission.sales_order_id.clone(),
-            revision_no: 1,
-            revision_source: RevisionSource::ErpApproval,
-            source_snapshot_id: None,
-            previous_revision_id: order.stable.current_revision_id.clone().map(Into::into),
-            content_hash: format!("sub:{}", submission.base.id),
-            customer_revision_id: None,
-            contract_revision_id: submission.contract_revision_id.clone(),
-            snapshot: entities::sales_order::HeaderSnapshotData {
-                customer_name: submission.customer_snapshot.customer_name.clone(),
-                contract_no: submission
-                    .contract_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.contract_no.clone()),
-                settlement_party_name: submission
-                    .settlement_party_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.settlement_party_name.clone()),
-                payment_term_code: submission.payment_term_snapshot.payment_term_code.clone(),
-                payment_term_name: submission.payment_term_snapshot.payment_term_name.clone(),
-                invoice_type: submission.invoice_requirement_snapshot.invoice_type.clone(),
-                tax_point: submission.invoice_requirement_snapshot.tax_point.clone(),
-            },
-            project_name: submission.project_name.clone(),
-            business_remark: submission.business_remark.clone(),
-            voucher_category_sku_id: submission.voucher_category_sku_id.clone(),
-            voucher_expiry_at: submission.voucher_expiry_at,
-            gross_amount: submission.gross_amount,
-            net_amount: submission.net_amount,
-            tax_amount: submission.tax_amount,
+) -> Result<SalesOrderRevisionAggregate> {
+    SalesOrderRevisionAggregate::from_sales_order_submission(
+        allocate_formal_revision_identities(submission_lines),
+        FormalRevisionContext::new(
+            1,
+            RevisionSource::ErpApproval,
+            order.stable.current_revision_id.clone().map(Into::into),
+            order.business_type,
             effective_at,
-            recorded_at: effective_at,
-        },
-    )?;
-    let mut revision_lines = Vec::with_capacity(submission_lines.len());
-    let mut goods_lines = Vec::new();
-    for sub_line in submission_lines {
-        let revision_line_id = SalesOrderRevisionLineId::new(next_id());
-        revision_lines.push(SalesOrderRevisionLine::new(
-            revision_line_id.clone(),
-            SalesOrderRevisionLineData {
-                sales_order_revision_id: revision_id.clone(),
-                sales_order_line_id: sub_line.sales_order_line_id.clone(),
-                line_no: sub_line.line_no,
-                line_type: sub_line.line_type,
-                gross_amount: sub_line.gross_amount,
-                net_amount: sub_line.net_amount,
-                tax_amount: sub_line.tax_amount,
-                sales_tax_rate: sub_line.sales_tax_rate,
-                item_name_snapshot: sub_line.item_name_snapshot.clone(),
-                spec_snapshot: sub_line.spec_snapshot.clone(),
-                unit_snapshot: sub_line.unit_snapshot.clone(),
-            },
-        )?);
-        let goods = sub_line.goods_fields()?;
-        goods_lines.push(SalesOrderGoodsServiceLineRevision::new(
-            SalesOrderGoodsServiceLineRevisionId::new(next_id()),
-            SalesOrderGoodsServiceLineRevisionData {
-                revision_line_id,
-                sku_id: goods.sku_id,
-                sku_revision_id: goods.sku_revision_id,
-                welfare_scenario: goods.welfare_scenario,
-                service_region: goods.service_region,
-                fulfillment_due_at: goods.fulfillment_due_at,
-                quantity: goods.quantity,
-                base_unit_code: goods.base_unit_code,
-                unit_price_gross: goods.unit_price_gross,
-            },
-        )?);
-    }
-    Ok(RevisionAggregate {
-        revision,
-        lines: revision_lines,
-        goods_lines,
-        voucher_lines: Vec::new(),
-    })
-}
-
-/// 由卡券提交构造正式版本。实物行失败关闭。
-///
-/// # 错误
-/// 行字段组缺失、非卡券行或版本字段校验失败时返回错误。
-fn build_voucher_revision(
-    order: &SalesOrder,
-    submission: &SalesOrderSubmission,
-    submission_lines: &[SalesOrderSubmissionLine],
-    effective_at: Instant,
-) -> Result<RevisionAggregate> {
-    let revision_id = SalesOrderRevisionId::new(next_id());
-    let revision = new_revision_header(order, submission, revision_id.clone(), effective_at)?;
-    let mut revision_lines = Vec::with_capacity(submission_lines.len());
-    let mut voucher_lines = Vec::new();
-    for sub_line in submission_lines {
-        let revision_line_id = SalesOrderRevisionLineId::new(next_id());
-        revision_lines.push(new_revision_line(&revision_id, &revision_line_id, sub_line)?);
-        let voucher = sub_line.voucher_fields()?;
-        voucher_lines.push(SalesOrderVoucherLineRevision::new(
-            SalesOrderVoucherLineRevisionId::new(next_id()),
-            SalesOrderVoucherLineRevisionData {
-                revision_line_id,
-                face_value: voucher.face_value,
-                card_count: voucher.card_count,
-                unit_price_gross: voucher.unit_price_gross,
-                card_form: voucher.card_form,
-            },
-        )?);
-    }
-    if voucher_lines.len() != 1 || revision_lines.len() != 1 {
-        return Err(Error::BusinessLogicError(
-            "卡券销售正式版本必须且只能包含一条卡券明细".to_string(),
-        ));
-    }
-    Ok(RevisionAggregate {
-        revision,
-        lines: revision_lines,
-        goods_lines: Vec::new(),
-        voucher_lines,
-    })
-}
-
-/// 构造正式版本头。
-///
-/// # 错误
-/// 版本字段校验失败时返回错误。
-fn new_revision_header(
-    order: &SalesOrder,
-    submission: &SalesOrderSubmission,
-    revision_id: SalesOrderRevisionId,
-    effective_at: Instant,
-) -> Result<SalesOrderRevision> {
-    Ok(SalesOrderRevision::new(
-        revision_id,
-        SalesOrderRevisionData {
-            sales_order_id: submission.sales_order_id.clone(),
-            revision_no: 1,
-            revision_source: RevisionSource::ErpApproval,
-            source_snapshot_id: None,
-            previous_revision_id: order.stable.current_revision_id.clone().map(Into::into),
-            content_hash: format!("sub:{}", submission.base.id),
-            customer_revision_id: None,
-            contract_revision_id: submission.contract_revision_id.clone(),
-            snapshot: entities::sales_order::HeaderSnapshotData {
-                customer_name: submission.customer_snapshot.customer_name.clone(),
-                contract_no: submission
-                    .contract_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.contract_no.clone()),
-                settlement_party_name: submission
-                    .settlement_party_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.settlement_party_name.clone()),
-                payment_term_code: submission.payment_term_snapshot.payment_term_code.clone(),
-                payment_term_name: submission.payment_term_snapshot.payment_term_name.clone(),
-                invoice_type: submission.invoice_requirement_snapshot.invoice_type.clone(),
-                tax_point: submission.invoice_requirement_snapshot.tax_point.clone(),
-            },
-            project_name: submission.project_name.clone(),
-            business_remark: submission.business_remark.clone(),
-            voucher_category_sku_id: submission.voucher_category_sku_id.clone(),
-            voucher_expiry_at: submission.voucher_expiry_at,
-            gross_amount: submission.gross_amount,
-            net_amount: submission.net_amount,
-            tax_amount: submission.tax_amount,
-            effective_at,
-            recorded_at: effective_at,
-        },
-    )?)
-}
-
-/// 构造正式版本公共行。
-///
-/// # 错误
-/// 行字段校验失败时返回错误。
-fn new_revision_line(
-    revision_id: &SalesOrderRevisionId,
-    revision_line_id: &SalesOrderRevisionLineId,
-    sub_line: &SalesOrderSubmissionLine,
-) -> Result<SalesOrderRevisionLine> {
-    Ok(SalesOrderRevisionLine::new(
-        revision_line_id.clone(),
-        SalesOrderRevisionLineData {
-            sales_order_revision_id: revision_id.clone(),
-            sales_order_line_id: sub_line.sales_order_line_id.clone(),
-            line_no: sub_line.line_no,
-            line_type: sub_line.line_type,
-            gross_amount: sub_line.gross_amount,
-            net_amount: sub_line.net_amount,
-            tax_amount: sub_line.tax_amount,
-            sales_tax_rate: sub_line.sales_tax_rate,
-            item_name_snapshot: sub_line.item_name_snapshot.clone(),
-            spec_snapshot: sub_line.spec_snapshot.clone(),
-            unit_snapshot: sub_line.unit_snapshot.clone(),
-        },
-    )?)
+        ),
+        submission,
+        submission_lines,
+    )
+    .map_err(Error::Logic)
 }
 
 /// 由已形式化卡券版本构造商城执行投影与待下发记录。
@@ -800,7 +615,7 @@ fn new_revision_line(
 fn build_voucher_execution_projection(
     order: &SalesOrder,
     submission: &SalesOrderSubmission,
-    aggregate: &RevisionAggregate,
+    aggregate: &SalesOrderRevisionAggregate,
     at: Instant,
 ) -> Result<(
     SalesOrderProjection,

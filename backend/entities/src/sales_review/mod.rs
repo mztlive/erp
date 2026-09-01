@@ -3,6 +3,7 @@
 //! 采购二次确认、低毛利上级确认、卡券专用审批记录与旧变更复核实体已删除。
 //! 销售变更走统一审批；选源由采购单创建路径承担。
 
+mod formal_revision;
 pub mod sales_change_order;
 pub mod sales_change_submission;
 pub mod snapshot;

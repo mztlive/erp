@@ -549,6 +549,34 @@ impl SalesOrderSubmission {
         self.stable.touch(updated_by);
         Ok(())
     }
+
+    /// 将提交表头快照转为正式版本所需的快照入参。
+    ///
+    /// # 返回
+    /// 返回与当前提交快照字段一一对应的表头入参。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 只复制已规范化快照，不再次 trim 或改写空合同/结算主体。
+    pub fn header_snapshot_data(&self) -> super::snapshot::HeaderSnapshotData {
+        super::snapshot::HeaderSnapshotData {
+            customer_name: self.customer_snapshot.customer_name.clone(),
+            contract_no: self
+                .contract_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.contract_no.clone()),
+            settlement_party_name: self
+                .settlement_party_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.settlement_party_name.clone()),
+            payment_term_code: self.payment_term_snapshot.payment_term_code.clone(),
+            payment_term_name: self.payment_term_snapshot.payment_term_name.clone(),
+            invoice_type: self.invoice_requirement_snapshot.invoice_type.clone(),
+            tax_point: self.invoice_requirement_snapshot.tax_point.clone(),
+        }
+    }
 }
 
 /// 提交行创建数据（行字段组按 `line_type` 二选一）。

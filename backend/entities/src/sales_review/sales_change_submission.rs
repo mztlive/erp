@@ -475,6 +475,34 @@ impl SalesChangeSubmission {
         self.transition(SubmissionStatus::Superseded, updated_by)
     }
 
+    /// 将变更提交表头快照转为正式销售版本所需的 D13 快照入参。
+    ///
+    /// # 返回
+    /// 返回销售单域表头快照入参。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 只复制已规范化快照字段，不在转换时改写空合同或结算主体。
+    pub fn sales_order_header_snapshot(&self) -> crate::sales_order::HeaderSnapshotData {
+        crate::sales_order::HeaderSnapshotData {
+            customer_name: self.customer_snapshot.customer_name.clone(),
+            contract_no: self
+                .contract_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.contract_no.clone()),
+            settlement_party_name: self
+                .settlement_party_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.settlement_party_name.clone()),
+            payment_term_code: self.payment_term_snapshot.payment_term_code.clone(),
+            payment_term_name: self.payment_term_snapshot.payment_term_name.clone(),
+            invoice_type: self.invoice_requirement_snapshot.invoice_type.clone(),
+            tax_point: self.invoice_requirement_snapshot.tax_point.clone(),
+        }
+    }
+
     /// 执行一次固定状态机迁移。
     ///
     /// # 参数
@@ -727,6 +755,87 @@ impl SalesChangeSubmissionLine {
             gift_amount: built.voucher.as_ref().map(|v| v.gift_amount),
             gift_rate: built.voucher.as_ref().map(|v| v.gift_rate),
             card_form: built.voucher.as_ref().map(|v| v.card_form),
+        })
+    }
+
+    /// 还原实物及服务字段组。
+    ///
+    /// # 返回
+    /// 返回用于正式版本行构造的完整实物及服务字段组。
+    ///
+    /// # 错误
+    /// 行类型不是实物及服务，或任一必填字段缺失时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 可选的福利场景和服务区域缺失时必须保留为 `None`，不得填默认值。
+    pub fn goods_fields(&self) -> Result<GoodsLineFields> {
+        if self.line_type != LineType::GoodsService {
+            return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
+        }
+        Ok(GoodsLineFields {
+            sku_id: self
+                .sku_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
+            sku_revision_id: self
+                .sku_revision_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
+            welfare_scenario: self.welfare_scenario,
+            service_region: self.service_region.clone(),
+            fulfillment_due_at: self
+                .fulfillment_due_at
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
+            quantity: self
+                .quantity
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            base_unit_code: self
+                .base_unit_code
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
+        })
+    }
+
+    /// 还原卡券字段组。
+    ///
+    /// # 返回
+    /// 返回用于正式版本行构造的完整卡券字段组。
+    ///
+    /// # 错误
+    /// 行类型不是卡券，或任一必填字段缺失时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 可选配赠率缺失时必须保留为 `None`，由卡券行实体按公式推导。
+    pub fn voucher_fields(&self) -> Result<VoucherLineDraft> {
+        if self.line_type != LineType::Voucher {
+            return Err(Error::from(format!("第 {} 行不是卡券行", self.line_no)));
+        }
+        Ok(VoucherLineDraft {
+            face_value: self
+                .face_value
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
+            card_count: self
+                .card_count
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
+            face_value_total: self
+                .face_value_total
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
+            transaction_amount: self
+                .transaction_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
+            gift_amount: self
+                .gift_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
+            gift_rate: self.gift_rate,
+            card_form: self
+                .card_form
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
         })
     }
 }
@@ -1041,6 +1150,111 @@ mod tests {
             line.net_amount.to_decimal() + line.tax_amount.to_decimal(),
             "gross = net + tax 逐行成立"
         );
+    }
+
+    fn voucher_line_data(line_no: u32) -> SalesChangeSubmissionLineData {
+        SalesChangeSubmissionLineData {
+            line_type: LineType::Voucher,
+            goods: None,
+            voucher: Some(VoucherLineDraft {
+                face_value: amt("100.00"),
+                card_count: 3,
+                unit_price_gross: price("90.0000"),
+                face_value_total: amt("300.00"),
+                transaction_amount: amt("270.00"),
+                gift_amount: amt("30.00"),
+                gift_rate: None,
+                card_form: super::super::types::CardForm::Electronic,
+            }),
+            ..line_data(line_no)
+        }
+    }
+
+    #[test]
+    fn goods_fields_preserve_optionals_and_reject_wrong_type_or_missing() {
+        let line = SalesChangeSubmissionLine::new(
+            SalesChangeSubmissionLineId::new("csl-1"),
+            SalesChangeSubmissionId::new("cs-1"),
+            line_data(1),
+        )
+        .unwrap();
+        let goods = line.goods_fields().unwrap();
+        assert_eq!(goods.sku_id.as_ref(), "sku-1");
+        assert_eq!(goods.welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
+        assert_eq!(goods.service_region.as_deref(), Some("EAST"));
+
+        let mut no_optional = line.clone();
+        no_optional.welfare_scenario = None;
+        no_optional.service_region = None;
+        let stripped = no_optional.goods_fields().unwrap();
+        assert!(stripped.welfare_scenario.is_none());
+        assert!(stripped.service_region.is_none());
+
+        let mut wrong_type = line.clone();
+        wrong_type.line_type = LineType::Voucher;
+        assert!(wrong_type.goods_fields().is_err());
+        assert!(wrong_type.voucher_fields().is_err());
+
+        let mut missing_sku = line.clone();
+        missing_sku.sku_id = None;
+        assert!(missing_sku.goods_fields().is_err());
+        missing_sku = line.clone();
+        missing_sku.sku_revision_id = None;
+        assert!(missing_sku.goods_fields().is_err());
+        missing_sku = line.clone();
+        missing_sku.fulfillment_due_at = None;
+        assert!(missing_sku.goods_fields().is_err());
+        missing_sku = line.clone();
+        missing_sku.quantity = None;
+        assert!(missing_sku.goods_fields().is_err());
+        missing_sku = line.clone();
+        missing_sku.base_unit_code = None;
+        assert!(missing_sku.goods_fields().is_err());
+        missing_sku = line.clone();
+        missing_sku.unit_price_gross = None;
+        assert!(missing_sku.goods_fields().is_err());
+    }
+
+    #[test]
+    fn voucher_fields_preserve_optional_rate_and_reject_missing() {
+        let line = SalesChangeSubmissionLine::new(
+            SalesChangeSubmissionLineId::new("csl-1"),
+            SalesChangeSubmissionId::new("cs-1"),
+            voucher_line_data(1),
+        )
+        .unwrap();
+        let voucher = line.voucher_fields().unwrap();
+        assert_eq!(voucher.card_count, 3);
+        assert_eq!(voucher.card_form, super::super::types::CardForm::Electronic);
+        let mut without_rate = line.clone();
+        without_rate.gift_rate = None;
+        assert!(without_rate.voucher_fields().unwrap().gift_rate.is_none());
+
+        let mut wrong_type = line.clone();
+        wrong_type.line_type = LineType::GoodsService;
+        assert!(wrong_type.voucher_fields().is_err());
+
+        let mut missing = line.clone();
+        missing.face_value = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.card_count = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.unit_price_gross = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.face_value_total = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.transaction_amount = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.gift_amount = None;
+        assert!(missing.voucher_fields().is_err());
+        missing = line.clone();
+        missing.card_form = None;
+        assert!(missing.voucher_fields().is_err());
     }
 
     #[test]
