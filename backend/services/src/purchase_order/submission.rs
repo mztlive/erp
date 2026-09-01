@@ -16,10 +16,12 @@ use super::adapter::{
     purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_start_command,
     purchase_order_subject_ref, require_frozen_binding, start_approval_command_kind, RECENT_HISTORY_LIMIT,
 };
-use super::draft_edit::{ensure_payment_term_unchanged, resolve_line_patches};
+use super::draft_edit::map_draft_edit_violation;
 use super::dto::{
-    SavePurchaseOrderLine, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, PURCHASE_SUBMIT_ACTION,
+    SavePurchaseOrderLine, SavePurchaseOrderLinePatch, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+    PURCHASE_SUBMIT_ACTION,
 };
+use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
 use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
     persist_purchase_order_start, replay_purchase_order_start_with_executor, PurchaseOrderStartInput,
@@ -134,9 +136,12 @@ impl PurchaseOrderService {
         let procurement_guard = if req.line_patches.is_empty() {
             None
         } else {
-            ensure_payment_term_unchanged(&order.payment_term_code, req.payment_term_code.as_deref())?;
+            order
+                .ensure_payment_term_unchanged(req.payment_term_code.as_deref())
+                .map_err(map_draft_edit_violation)?;
             let existing_lines = draft_lines.clone();
-            let requested_lines = resolve_line_patches(&req.line_patches, &existing_lines)?;
+            let requested_lines =
+                SavePurchaseOrderLinePatch::resolve_all(&req.line_patches, &existing_lines)?;
             let (submission, lines) = self
                 .freeze_submission_from_lines(&order, &draft, &requested_lines, actor)
                 .await?;
@@ -427,7 +432,8 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
         let next_no = self.next_submission_no(order).await?;
-        let (gross, net, tax) = self.compute_request_totals(requested_lines).await?;
+        let inputs = to_line_inputs(requested_lines)?;
+        let (gross, net, tax) = compute_request_totals(&inputs)?;
         let mut formal = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(next_id()),
             PurchaseOrderSubmissionData {
@@ -445,9 +451,7 @@ impl PurchaseOrderService {
             },
         )?;
         formal.submit(Instant::now(), actor.id())?;
-        let lines = self
-            .build_lines_from_request(&formal.base.id.clone().into(), requested_lines)
-            .await?;
+        let lines = build_submission_lines(&formal.base.id.clone().into(), &inputs)?;
         Ok((formal, lines))
     }
 

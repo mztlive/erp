@@ -4,13 +4,12 @@
 //! 原子预占现有库存并生成仓发草稿，再把剩余采购分配按供应商、采购类型、
 //! 付款条件和履约责任拆成采购单并启动审批。
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
 use database::{
     AccessControlExt, Executor, FulfillmentExt, InventoryExt, NoTransaction, SalesOrderExt, WorkItemExt,
 };
-use entities::common::time::BusinessDate;
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::ids::{
     DeliveryId, DeliveryLineId, SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId,
@@ -27,20 +26,19 @@ use entities::purchase_order::{
 use entities::work_item::{WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::ClientSession;
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::creation_basis::{
-    basis_groups_for_order, basis_id_for, basis_scope_key, load_effective_sales_order, persist_basis_draft,
-    procurement_quantity_changed, stable_line_id, stock_basis_groups_for_order, stock_basis_id_for,
-    validate_requested_quantities, BasisGroup, CreateBasisCommand, RequestedLine, StockBasisGroup,
+    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, persist_basis_draft,
+    procurement_quantity_changed, stock_basis_groups_for_order, validate_requested_quantities,
+    CreateBasisCommand, VerifiedBasisInput,
 };
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
     CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
-    ExistingStockReservationResult, SupplySourceType, CREATE_SOURCING_ACTION,
+    ExistingStockReservationResult, CREATE_SOURCING_ACTION,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
@@ -49,6 +47,10 @@ use super::PurchaseOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use entities::purchase_order::{
+    basis_id_for, SourcingAssignmentSet, SourcingPlan, SourcingPlanError, StockAllocationPlan,
+    StockBasisGroup,
+};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
@@ -76,35 +78,6 @@ struct SourcingReceipt {
     /// 本次命令同步完成时的原任务状态。
     #[serde(default)]
     work_item_status: Option<WorkItemStatus>,
-}
-
-/// 已归入一张采购单的选源计划。
-#[derive(Debug, Clone)]
-struct SourcingDraftPlan {
-    /// 命中的精确依据分组。
-    group: BasisGroup,
-    /// 仓库履约采购的目标收货仓。
-    target_warehouse_id: Option<WarehouseId>,
-    /// 本单规范化后的逐行数量。
-    requested_lines: Vec<RequestedLine>,
-}
-
-/// 已归入一个库存余额的现有库存分配计划。
-#[derive(Debug, Clone)]
-struct StockAllocationPlan {
-    /// 命中的现有库存依据。
-    group: StockBasisGroup,
-    /// 本余额逐销售行分配数量。
-    requested_lines: Vec<RequestedStockLine>,
-}
-
-/// 已规范化的现有库存分配行。
-#[derive(Debug, Clone)]
-struct RequestedStockLine {
-    /// 稳定销售行。
-    sales_order_line_id: String,
-    /// 本次预占数量。
-    quantity: Quantity,
 }
 
 /// 已持久化的现有库存分配及其公开结果。
@@ -139,8 +112,8 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
         req.validate()?;
-        let assignments = normalize_sourcing_assignments(&req)?;
-        let request_fingerprint = req.request_fingerprint(&assignments)?;
+        let assignments = req.sourcing_assignments()?;
+        let request_fingerprint = req.request_fingerprint(assignments.assignments())?;
         let sales_order_id = SalesOrderId::new(req.sales_order_id.trim().to_string());
         let receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
             CREATE_SOURCING_RECEIPT_PREFIX,
@@ -217,7 +190,7 @@ impl PurchaseOrderService {
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
 /// * `req` - 原始选源请求
-/// * `assignments` - 已规范化且稳定行不重复的选源行
+/// * `assignments` - 已规范化且稳定行不重复的选源集合
 /// * `sales_order_id` - 来源销售单
 /// * `audit_id` - 整批命令收据 ID
 /// * `request_fingerprint` - 整批命令载荷指纹
@@ -237,7 +210,7 @@ async fn create_from_sourcing_in_transaction(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
     req: &CreatePurchaseOrdersFromSourcingRequest,
-    assignments: &[RequestedSourcingLine],
+    assignments: &SourcingAssignmentSet,
     sales_order_id: &SalesOrderId,
     audit_id: &str,
     request_fingerprint: &str,
@@ -263,17 +236,17 @@ async fn create_from_sourcing_in_transaction(
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
     let stock_groups =
         stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    let plans = plan_sourcing_drafts(&order, &groups, &req.work_item_id, assignments)?;
-    let stock_plans = plan_stock_allocations(&order, &stock_groups, &req.work_item_id, assignments)?;
-    validate_combined_line_totals(&plans, &stock_plans)?;
+    let plan = SourcingPlan::plan(&order, &groups, &stock_groups, &req.work_item_id, assignments)
+        .map_err(map_sourcing_plan_error)?;
     order.advance_procurement_guard(actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
     let latest_stock_groups =
         stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    validate_stock_totals(&stock_plans, &latest_stock_groups)?;
+    plan.validate_against_latest_stock(&latest_stock_groups)
+        .map_err(map_sourcing_plan_error)?;
     let persisted_stock = persist_stock_allocations(
         db,
-        &stock_plans,
+        plan.stock_plans(),
         &latest_stock_groups,
         sales_order_id,
         audit_id,
@@ -286,10 +259,12 @@ async fn create_from_sourcing_in_transaction(
         .into_iter()
         .map(|allocation| allocation.result)
         .collect::<Vec<_>>();
-    let latest_groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    validate_sourcing_totals(&plans, &latest_groups)?;
-    let mut orders = Vec::with_capacity(plans.len());
-    for plan in plans {
+    let (latest_groups, latest_facts) =
+        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), session).await?;
+    plan.validate_against_latest_sourcing(&latest_groups)
+        .map_err(map_sourcing_plan_error)?;
+    let mut orders = Vec::with_capacity(plan.purchase_plans().len());
+    for plan in plan.purchase_plans() {
         let latest = latest_groups
             .iter()
             .find(|group| group.scope == plan.group.scope)
@@ -335,7 +310,21 @@ async fn create_from_sourcing_in_transaction(
             request_fingerprint,
             actor,
         };
-        orders.push(persist_basis_draft(db, rbac, &order, latest, &selected_lines, &command, session).await?);
+        orders.push(
+            persist_basis_draft(
+                db,
+                rbac,
+                &VerifiedBasisInput {
+                    sales_order: &order,
+                    group: latest,
+                    selected_lines: &selected_lines,
+                    facts: &latest_facts,
+                },
+                &command,
+                session,
+            )
+            .await?,
+        );
     }
     sync_procurement_tasks_for_sales_order(db, sales_order_id, session).await?;
     let work_item_status = db
@@ -377,299 +366,20 @@ async fn create_from_sourcing_in_transaction(
 }
 
 /// 已规范化的选源行。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct RequestedSourcingLine {
-    /// 稳定销售行。
-    pub(super) sales_order_line_id: String,
-    /// 本行选用的精确创建依据。
-    pub(super) basis_id: String,
-    /// 供给来源。
-    pub(super) source_type: SupplySourceType,
-    /// 仓库履约采购的目标收货仓。
-    pub(super) target_warehouse_id: Option<String>,
-    /// 本次分配数量。
-    pub(super) quantity: Quantity,
-    /// 采购确认的预计交付日。
-    pub(super) expected_delivery_date: BusinessDate,
-}
-
-/// 规范化并校验选源行。
-///
-/// # 参数
-/// * `req` - 选源创建请求
-///
-/// # 返回
-/// 返回履约分配去重、数量已类型化且稳定排序的选源行。
-///
-/// # 错误
-/// 同一销售行重复使用同一依据、依据空白、数量非法或数量不大于零时返回校验错误。
-///
-/// # 关键业务约束
-/// 同一稳定销售行可按不同依据拆分，但同一依据只能出现一次。
-fn normalize_sourcing_assignments(
-    req: &CreatePurchaseOrdersFromSourcingRequest,
-) -> Result<Vec<RequestedSourcingLine>> {
-    let mut seen = HashSet::new();
-    let mut lines = Vec::with_capacity(req.lines.len());
-    for line in &req.lines {
-        let sales_order_line_id = line.sales_order_line_id.trim().to_string();
-        let basis_id = line.basis_id.trim().to_string();
-        if sales_order_line_id.is_empty() {
-            return Err(Error::ValidationError("销售行不能为空".to_string()));
-        }
-        if basis_id.is_empty() {
-            return Err(Error::ValidationError("履约方案不能为空".to_string()));
-        }
-        if !seen.insert((sales_order_line_id.clone(), basis_id.clone())) {
-            return Err(Error::ValidationError(
-                "同一销售行不能重复使用同一履约方案".to_string(),
-            ));
-        }
-        let quantity = Quantity::from_str(line.quantity.trim())
-            .map_err(|error| Error::ValidationError(format!("本次分配数量非法: {error}")))?;
-        let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
-            .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
-        let target_warehouse_id = line
-            .target_warehouse_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        if line.source_type == SupplySourceType::ExistingStock && target_warehouse_id.is_some() {
-            return Err(Error::ValidationError(
-                "现有库存由所选库存余额确定仓库，不能另行指定目标仓".to_string(),
-            ));
-        }
-        let zero =
-            Quantity::from_str("0").map_err(|error| Error::Internal(format!("零数量常量非法: {error}")))?;
-        if quantity <= zero {
-            return Err(Error::ValidationError("本次分配数量必须大于 0".to_string()));
-        }
-        lines.push(RequestedSourcingLine {
-            sales_order_line_id,
-            basis_id,
-            source_type: line.source_type,
-            target_warehouse_id,
-            quantity,
-            expected_delivery_date,
-        });
-    }
-    lines.sort_by(|left, right| {
-        left.sales_order_line_id
-            .cmp(&right.sales_order_line_id)
-            .then_with(|| left.basis_id.cmp(&right.basis_id))
-    });
-    Ok(lines)
-}
-
-/// 把采购来源行归入精确依据分组，形成待创建采购单计划。
-///
-/// # 参数
-/// * `groups` - 当前任务范围内的精确依据
-/// * `assignments` - 已规范化选源行
-///
-/// # 返回
-/// 返回按拆分维度稳定排序的草稿计划。
-///
-/// # 错误
-/// 销售行不属于当前任务、所选供应商无合格供给时返回校验错误。
-///
-/// # 关键业务约束
-/// 同一拆分维度的选源行合并为一张采购单。
-fn plan_sourcing_drafts(
-    order: &entities::sales_order::SalesOrder,
-    groups: &[BasisGroup],
-    work_item_id: &str,
-    assignments: &[RequestedSourcingLine],
-) -> Result<Vec<SourcingDraftPlan>> {
-    let mut plans: BTreeMap<String, SourcingDraftPlan> = BTreeMap::new();
-    for assignment in assignments
-        .iter()
-        .filter(|assignment| assignment.source_type == SupplySourceType::Purchase)
-    {
-        let group = find_assignment_group(order, groups, work_item_id, assignment)?;
-        let target_warehouse_id = target_warehouse_for_assignment(group, assignment)?;
-        let key = format!(
-            "{}|{}",
-            basis_scope_key(&group.scope),
-            target_warehouse_id
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_default()
-        );
-        let requested = RequestedLine {
-            sales_order_line_id: assignment.sales_order_line_id.clone(),
-            quantity: assignment.quantity,
-            expected_delivery_date: assignment.expected_delivery_date,
-        };
-        if let Some(plan) = plans.get_mut(&key) {
-            plan.requested_lines.push(requested);
-        } else {
-            plans.insert(
-                key,
-                SourcingDraftPlan {
-                    group: group.clone(),
-                    target_warehouse_id,
-                    requested_lines: vec![requested],
-                },
-            );
-        }
-    }
-    Ok(plans.into_values().collect())
-}
-
-/// 校验采购选源行的目标仓库契约。
-///
-/// # 参数
-/// * `group` - 选源行命中的采购依据
-/// * `assignment` - 已规范化选源行
-///
-/// # 返回
-/// 仓库履约返回目标仓库，其他履约返回空。
-///
-/// # 错误
-/// 仓库履约缺少目标仓，或非仓库履约携带目标仓时返回校验错误。
-fn target_warehouse_for_assignment(
-    group: &BasisGroup,
-    assignment: &RequestedSourcingLine,
-) -> Result<Option<WarehouseId>> {
-    match group.scope.fulfillment_responsibility {
-        entities::purchase_order::FulfillmentResponsibility::Warehouse => assignment
-            .target_warehouse_id
-            .as_ref()
-            .map(|value| Some(WarehouseId::new(value.clone())))
-            .ok_or_else(|| Error::ValidationError("仓库履约必须先选择目标收货仓".to_string())),
-        _ if assignment.target_warehouse_id.is_some() => {
-            Err(Error::ValidationError("非仓库履约不能指定目标收货仓".to_string()))
-        }
-        _ => Ok(None),
-    }
-}
-
-/// 把现有库存选源行按库存余额归组。
-fn plan_stock_allocations(
-    order: &entities::sales_order::SalesOrder,
-    groups: &[StockBasisGroup],
-    work_item_id: &str,
-    assignments: &[RequestedSourcingLine],
-) -> Result<Vec<StockAllocationPlan>> {
-    let mut plans = BTreeMap::<String, StockAllocationPlan>::new();
-    for assignment in assignments
-        .iter()
-        .filter(|assignment| assignment.source_type == SupplySourceType::ExistingStock)
-    {
-        let group = groups
-            .iter()
-            .find(|group| {
-                stock_basis_id_for(order, group, work_item_id) == assignment.basis_id
-                    && group.lines.iter().any(|line| {
-                        line.coverage.revision_line.sales_order_line_id.as_ref()
-                            == assignment.sales_order_line_id
-                    })
-            })
-            .ok_or_else(procurement_quantity_changed)?;
-        let requested = RequestedStockLine {
-            sales_order_line_id: assignment.sales_order_line_id.clone(),
-            quantity: assignment.quantity,
-        };
-        plans
-            .entry(group.balance.base.id.clone())
-            .and_modify(|plan| plan.requested_lines.push(requested.clone()))
-            .or_insert_with(|| StockAllocationPlan {
-                group: group.clone(),
-                requested_lines: vec![requested],
-            });
-    }
-    Ok(plans.into_values().collect())
-}
-
-/// 校验同一命令内库存和采购拆分合计不超过当前销售缺口。
-fn validate_combined_line_totals(
-    purchase_plans: &[SourcingDraftPlan],
-    stock_plans: &[StockAllocationPlan],
-) -> Result<()> {
-    let mut totals = HashMap::<String, Decimal>::new();
-    let mut caps = HashMap::<String, Decimal>::new();
-    for plan in purchase_plans {
-        for requested in &plan.requested_lines {
-            let line = plan
-                .group
-                .lines
-                .iter()
-                .find(|line| stable_line_id(line) == requested.sales_order_line_id)
-                .ok_or_else(procurement_quantity_changed)?;
-            add_requested_total(
-                &mut totals,
-                &mut caps,
-                &requested.sales_order_line_id,
-                requested.quantity,
-                line.coverage.summary.remaining_quantity,
-            );
-        }
-    }
-    for plan in stock_plans {
-        for requested in &plan.requested_lines {
-            let line = stock_line(&plan.group, &requested.sales_order_line_id)?;
-            add_requested_total(
-                &mut totals,
-                &mut caps,
-                &requested.sales_order_line_id,
-                requested.quantity,
-                line.coverage.summary.remaining_quantity,
-            );
-        }
-    }
-    if exceeds_any_cap(&totals, &caps) {
-        return Err(procurement_quantity_changed());
-    }
-    Ok(())
-}
-
-/// 校验 guard 推进后的库存余额与销售缺口仍可承载本次分配。
-fn validate_stock_totals(plans: &[StockAllocationPlan], latest_groups: &[StockBasisGroup]) -> Result<()> {
-    let mut line_totals = HashMap::<String, Decimal>::new();
-    let mut line_caps = HashMap::<String, Decimal>::new();
-    let mut balance_totals = HashMap::<String, Decimal>::new();
-    let mut balance_caps = HashMap::<String, Decimal>::new();
-    for plan in plans {
-        let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
-        for requested in &plan.requested_lines {
-            let line = stock_line(latest, &requested.sales_order_line_id)?;
-            add_requested_total(
-                &mut line_totals,
-                &mut line_caps,
-                &requested.sales_order_line_id,
-                requested.quantity,
-                line.coverage.summary.remaining_quantity,
-            );
-            *balance_totals
-                .entry(latest.balance.base.id.clone())
-                .or_insert(Decimal::ZERO) += requested.quantity.to_decimal();
-            balance_caps.insert(
-                latest.balance.base.id.clone(),
-                latest.balance.available_quantity.to_decimal(),
-            );
-        }
-    }
-    if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&balance_totals, &balance_caps) {
-        return Err(procurement_quantity_changed());
-    }
-    Ok(())
-}
-
-/// 累加一条请求数量并登记该稳定销售行的统一上限。
-fn add_requested_total(
-    totals: &mut HashMap<String, Decimal>,
-    caps: &mut HashMap<String, Decimal>,
-    line_id: &str,
-    quantity: Quantity,
-    cap: Quantity,
-) {
-    *totals.entry(line_id.to_string()).or_insert(Decimal::ZERO) += quantity.to_decimal();
-    caps.insert(line_id.to_string(), cap.to_decimal());
-}
-
 /// 查找 guard 后仍有效的库存余额依据。
+///
+/// # 参数
+/// * `groups` - 最新库存余额依据
+/// * `balance_id` - 计划命中的余额主键
+///
+/// # 返回
+/// 命中时返回该余额依据。
+///
+/// # 错误
+/// 余额已失效时返回可刷新冲突。
+///
+/// # 关键业务约束
+/// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
 fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Result<&'a StockBasisGroup> {
     groups
         .iter()
@@ -677,116 +387,23 @@ fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Re
         .ok_or_else(procurement_quantity_changed)
 }
 
-/// 查找库存依据中的稳定销售行。
-fn stock_line<'a>(
-    group: &'a StockBasisGroup,
-    sales_order_line_id: &str,
-) -> Result<&'a super::creation_basis::StockBasisLine> {
-    group
-        .lines
-        .iter()
-        .find(|line| line.coverage.revision_line.sales_order_line_id.as_ref() == sales_order_line_id)
-        .ok_or_else(procurement_quantity_changed)
-}
-
-/// 查找一条选源行命中的精确依据。
+/// 把选源计划领域错误映射为服务层稳定业务错误。
 ///
 /// # 参数
-/// * `groups` - 当前任务范围内的精确依据
-/// * `assignment` - 已规范化选源行
+/// * `error` - 选源计划领域错误
 ///
 /// # 返回
-/// 返回同时包含该销售行且 ID 与客户端选择一致的依据分组。
+/// 依据失效映射为可刷新冲突，仓库契约违规映射为参数验证错误。
 ///
 /// # 错误
-/// 销售行不存在或依据已失效时返回校验错误。
-///
-/// # 关键业务约束
-/// 不以供应商或 SKU 猜测路线，只接受当前开放任务生成的精确依据。
-fn find_assignment_group<'a>(
-    order: &entities::sales_order::SalesOrder,
-    groups: &'a [BasisGroup],
-    work_item_id: &str,
-    assignment: &RequestedSourcingLine,
-) -> Result<&'a BasisGroup> {
-    groups
-        .iter()
-        .find(|group| {
-            basis_id_for(order, group, work_item_id, None) == assignment.basis_id
-                && group
-                    .lines
-                    .iter()
-                    .any(|line| stable_line_id(line) == assignment.sales_order_line_id)
-        })
-        .ok_or_else(procurement_quantity_changed)
-}
-
-/// 校验跨采购单拆分后的销售行总量与单一供给总量。
-///
-/// # 参数
-/// * `plans` - guard 推进前按精确依据形成的建单计划
-/// * `latest_groups` - guard 推进后重新计算的最新依据
-///
-/// # 返回
-/// 所有拆分数量均未超过最新销售剩余量和供给上限时返回 `Ok(())`。
-///
-/// # 错误
-/// 依据失效、销售行累计超量或同一供给跨履约责任累计超量时返回并发冲突。
-///
-/// # 关键业务约束
-/// 一条销售行可以拆到多个方案，但一次命令的总量不得突破同一份最新剩余量；
-/// 同一供应商供给跨销售行或履约责任时仍共享该供给的可用量。
-fn validate_sourcing_totals(plans: &[SourcingDraftPlan], latest_groups: &[BasisGroup]) -> Result<()> {
-    let mut line_totals = HashMap::<String, Decimal>::new();
-    let mut line_caps = HashMap::<String, Decimal>::new();
-    let mut supply_totals = HashMap::<String, Decimal>::new();
-    let mut supply_caps = HashMap::<String, Decimal>::new();
-    for plan in plans {
-        let latest = latest_groups
-            .iter()
-            .find(|group| group.scope == plan.group.scope)
-            .ok_or_else(procurement_quantity_changed)?;
-        for requested in &plan.requested_lines {
-            let basis = latest
-                .lines
-                .iter()
-                .find(|line| stable_line_id(line) == requested.sales_order_line_id)
-                .ok_or_else(procurement_quantity_changed)?;
-            *line_totals
-                .entry(requested.sales_order_line_id.clone())
-                .or_insert(Decimal::ZERO) += requested.quantity.to_decimal();
-            line_caps.insert(
-                requested.sales_order_line_id.clone(),
-                basis.coverage.summary.remaining_quantity.to_decimal(),
-            );
-            let supply_key = basis.supply.offering.base.id.clone();
-            *supply_totals.entry(supply_key.clone()).or_insert(Decimal::ZERO) +=
-                requested.quantity.to_decimal();
-            supply_caps.insert(
-                supply_key,
-                basis
-                    .supply
-                    .availability
-                    .available_quantity
-                    .map(Quantity::to_decimal)
-                    .unwrap_or(Decimal::MAX),
-            );
-        }
+/// 无。
+fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
+    match error {
+        SourcingPlanError::StaleFacts => procurement_quantity_changed(),
+        SourcingPlanError::WarehouseContract(message) => Error::ValidationError(message),
     }
-    if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&supply_totals, &supply_caps) {
-        return Err(procurement_quantity_changed());
-    }
-    Ok(())
 }
 
-/// 判断任一累计数量是否缺少上限或超过上限。
-fn exceeds_any_cap(totals: &HashMap<String, Decimal>, caps: &HashMap<String, Decimal>) -> bool {
-    totals
-        .iter()
-        .any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
-}
-
-/// 在事务内原子预占现有库存并写入预占建立流水。
 #[allow(clippy::too_many_arguments)]
 async fn persist_stock_allocations(
     db: &mongodb::Database,
@@ -802,7 +419,9 @@ async fn persist_stock_allocations(
     for plan in plans {
         let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
         for requested in &plan.requested_lines {
-            let line = stock_line(latest, &requested.sales_order_line_id)?;
+            let line = latest
+                .line_for(&requested.sales_order_line_id)
+                .ok_or_else(procurement_quantity_changed)?;
             if !db
                 .stock_balances()
                 .reserve_quantity(&latest.balance.base.id, requested.quantity, session)
@@ -1146,72 +765,8 @@ fn sourcing_work_item_status(status: WorkItemStatus, legacy: bool) -> Result<Str
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::str::FromStr;
-
-    use entities::common::time::BusinessDate;
-    use rust_decimal::Decimal;
-
-    use super::{
-        exceeds_any_cap, find_assignment_group_index, normalize_assignment_pairs, sourcing_work_item_status,
-        DedupError, RequestedSourcingLine, SourcingReceipt, SupplySourceType,
-    };
+    use super::{sourcing_work_item_status, SourcingReceipt};
     use entities::work_item::WorkItemStatus;
-
-    /// 同一销售行可拆到不同履约方案。
-    #[test]
-    fn one_sales_line_can_use_different_bases() {
-        normalize_assignment_pairs(&[("line-1", "basis-a", "1"), ("line-1", "basis-b", "1")])
-            .expect("不同履约方案允许拆分");
-    }
-
-    /// 同一销售行不能重复使用同一履约方案。
-    #[test]
-    fn duplicate_line_and_basis_are_rejected() {
-        let error = normalize_assignment_pairs(&[("line-1", "basis-a", "1"), ("line-1", "basis-a", "1")])
-            .expect_err("重复履约分配必须失败");
-        assert!(matches!(error, DedupError::DuplicateAllocation));
-    }
-
-    /// 不同销售行指定同一精确依据时应归入同一分组下标。
-    #[test]
-    fn same_basis_lines_share_one_group() {
-        let groups = [
-            ("basis-a", &["line-1", "line-2"][..]),
-            ("basis-b", &["line-1"][..]),
-        ];
-        let assignments = [line("line-1", "basis-a"), line("line-2", "basis-a")];
-        let indexes = assignments
-            .iter()
-            .map(|assignment| find_assignment_group_index(&groups, assignment).expect("应命中供给"))
-            .collect::<Vec<_>>();
-        assert_eq!(indexes, vec![0, 0]);
-    }
-
-    /// 不同精确依据必须拆到不同分组。
-    #[test]
-    fn different_bases_split_groups() {
-        let groups = [("basis-a", &["line-1"][..]), ("basis-b", &["line-2"][..])];
-        let first = find_assignment_group_index(&groups, &line("line-1", "basis-a")).expect("A");
-        let second = find_assignment_group_index(&groups, &line("line-2", "basis-b")).expect("B");
-        assert_ne!(first, second);
-    }
-
-    /// 销售行不属于该精确依据时不能建单。
-    #[test]
-    fn missing_basis_option_is_rejected() {
-        let groups = [("basis-a", &["line-1"][..])];
-        assert!(find_assignment_group_index(&groups, &line("line-1", "basis-b")).is_none());
-    }
-
-    /// 拆分数量合计不得超过事务内最新上限。
-    #[test]
-    fn split_totals_must_stay_within_latest_cap() {
-        let totals = HashMap::from([("line-1".to_string(), Decimal::from_str("11").unwrap())]);
-        let caps = HashMap::from([("line-1".to_string(), Decimal::from_str("10").unwrap())]);
-
-        assert!(exceeds_any_cap(&totals, &caps));
-    }
 
     /// 幂等回放必须保留同步后的任务状态，不能把部分分配误报为任务完成。
     #[test]
@@ -1260,69 +815,4 @@ mod tests {
         assert!(production.contains("persist_basis_draft"));
         assert!(production.contains("sync_procurement_tasks_for_sales_order"));
     }
-
-    /// 构造测试用选源行。
-    fn line(sales_order_line_id: &str, basis_id: &str) -> RequestedSourcingLine {
-        RequestedSourcingLine {
-            sales_order_line_id: sales_order_line_id.to_string(),
-            basis_id: basis_id.to_string(),
-            source_type: SupplySourceType::Purchase,
-            target_warehouse_id: Some("warehouse-1".to_string()),
-            quantity: entities::money::Quantity::from_str("1").expect("测试数量合法"),
-            expected_delivery_date: BusinessDate::from_str("2026-09-01").expect("测试日期合法"),
-        }
-    }
-}
-
-/// 测试辅助：选源行去重错误。
-#[cfg(test)]
-#[derive(Debug)]
-enum DedupError {
-    /// 同一销售行与精确依据组合出现多次。
-    DuplicateAllocation,
-}
-
-/// 测试辅助：校验销售行与精确依据组合去重。
-///
-/// # 参数
-/// * `pairs` - `(销售行, 精确依据, 数量)` 三元组
-///
-/// # 返回
-/// 无重复时返回 `Ok(())`。
-///
-/// # 错误
-/// 销售行与依据组合重复时返回 `DedupError::DuplicateAllocation`。
-#[cfg(test)]
-fn normalize_assignment_pairs(pairs: &[(&str, &str, &str)]) -> std::result::Result<(), DedupError> {
-    let mut seen = HashSet::new();
-    for (line_id, basis_id, _) in pairs {
-        if !seen.insert((*line_id, *basis_id)) {
-            return Err(DedupError::DuplicateAllocation);
-        }
-    }
-    Ok(())
-}
-
-/// 测试辅助：按精确依据与销售行查找分组下标。
-///
-/// # 参数
-/// * `groups` - `(精确依据, 销售行列表)` 分组
-/// * `assignment` - 选源行
-///
-/// # 返回
-/// 命中时返回分组下标，否则返回 `None`。
-///
-/// # 错误
-/// 无。
-#[cfg(test)]
-fn find_assignment_group_index(
-    groups: &[(&str, &[&str])],
-    assignment: &RequestedSourcingLine,
-) -> Option<usize> {
-    groups.iter().position(|(basis_id, lines)| {
-        *basis_id == assignment.basis_id
-            && lines
-                .iter()
-                .any(|line_id| *line_id == assignment.sales_order_line_id)
-    })
 }

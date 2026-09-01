@@ -760,6 +760,61 @@ impl PurchaseOrderSubmissionLine {
             },
         )
     }
+
+    /// 校验客户端没有改写服务端冻结的销售与 SKU 来源引用。
+    ///
+    /// # 参数
+    /// * `requested` - 待保存请求行的草稿编辑请求
+    ///
+    /// # 返回
+    /// 所有来源引用一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一稳定身份或版本引用变化时返回
+    /// [`DraftLineEditViolation::RewrittenSourceReference`]。
+    pub fn ensure_source_references_unchanged(
+        &self,
+        requested: &super::draft_edit::DraftLineEdit,
+    ) -> std::result::Result<(), super::draft_edit::DraftLineEditViolation> {
+        let unchanged = [
+            (
+                requested.procurement_confirmation_line_id.as_deref(),
+                self.procurement_confirmation_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+            ),
+            (
+                requested.sku_id.as_deref(),
+                self.sku_id.as_ref().map(ToString::to_string),
+            ),
+            (
+                requested.sku_revision_id.as_deref(),
+                self.sku_revision_id.as_ref().map(ToString::to_string),
+            ),
+            (
+                requested.sales_order_line_id.as_deref(),
+                self.sales_order_line_id.as_ref().map(ToString::to_string),
+            ),
+            (
+                requested.sales_order_revision_line_id.as_deref(),
+                self.sales_order_revision_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+            ),
+            (
+                requested.sales_order_submission_line_id.as_deref(),
+                self.sales_order_submission_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+            ),
+        ]
+        .into_iter()
+        .all(|(requested, existing)| super::draft_edit::normalized_optional_id(requested) == existing);
+        if !unchanged {
+            return Err(super::draft_edit::DraftLineEditViolation::RewrittenSourceReference);
+        }
+        Ok(())
+    }
 }
 
 /// 解析带固定前缀的十进制序号。

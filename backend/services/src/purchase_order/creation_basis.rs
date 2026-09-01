@@ -3,35 +3,42 @@
 //! 创建依据由销售单当前版本的 `GOODS_SERVICE` 行、当前采购覆盖数量和供应商
 //! 当前合格供给共同形成。依据精确到销售当前版本、供应商、采购类型、付款条件与
 //! 履约责任；一次依据命令只创建一张采购单，并在同一事务内提交审批。
+//!
+//! 供给、当前修订、可供投影与供应商结算事实由
+//! `database::PurchaseOrderExt::load_creation_basis_facts` 一次批量加载；拆单
+//! 维度、稳定身份、产品类型映射、履约选项、成本选择、最大可创建数量与请求行
+//! 规范化由 `entities::purchase_order::creation_basis` 领域值对象承担。本模块
+//! 只负责当前指针解析、任务归属与 RBAC、合格性筛选（条款有效期、AVAILABLE、
+//! 零库存、每供应商稳定选一条）、事务编排与 View 映射。
 
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use chrono::{Datelike, FixedOffset};
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, InventoryExt, NoTransaction, PartyExt, PurchaseOrderExt,
-    SalesOrderExt, SupplierExt, SupplierOfferingExt, WarehouseExt, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, InventoryExt, NoTransaction, PurchaseOrderExt,
+    SalesOrderExt, SupplierExt, WarehouseExt, WorkItemExt,
 };
 use entities::catalog::ProductKind;
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::DocumentType;
 use entities::ids::{
-    PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
+    PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, SkuId,
     SupplierAccountId, WarehouseId,
 };
-use entities::inventory::StockBalance;
 use entities::money::{line_amounts, Amount, Quantity, UnitPrice};
 use entities::purchase_order::{
-    digest_parts, FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt,
-    PurchaseCommandReceiptError, PurchaseLineType, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseType,
-    SupplierSnapshot,
+    basis_id_for, basis_scope_key, fulfillment_options, maximum_create_quantity,
+    purchase_type_from_product_kind, stable_line_id, stock_basis_id_for, supply_cost, BasisGroup, BasisLine,
+    BasisScope, CreationBasisFacts, FulfillmentResponsibility, LegacyReceiptIdScheme, LineSupply,
+    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseLineType, PurchaseOrder, PurchaseOrderData,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+    PurchaseOrderSubmissionLineData, PurchaseType, RequestedLine, SalesProcurementCoverage,
+    SalesProcurementCoverageLine, StockBasisGroup, StockBasisLine, SupplierSnapshot,
 };
 use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
 use entities::supplier::SupplierPaymentTerm;
-use entities::supplier_offering::{
-    AvailabilityStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
-};
+use entities::supplier_offering::{AvailabilityStatus, SupplierOffering};
 use entities::warehouse::WarehouseFulfillmentOperation;
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -40,7 +47,7 @@ use validator::Validate;
 
 use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverageLine};
+use super::coverage::load_sales_procurement_coverage;
 use super::create_submit::submit_created_draft_in_session;
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
@@ -62,54 +69,6 @@ use crate::iam::SharedRbacService;
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
-
-/// 单条销售当前版本明细的合格供应商供给。
-#[derive(Debug, Clone)]
-pub(super) struct LineSupply {
-    /// 供给稳定身份。
-    pub(super) offering: SupplierOffering,
-    /// 当前有效商业条款修订。
-    pub(super) revision: SupplierOfferingRevision,
-    /// 当前可供投影。
-    pub(super) availability: SupplierOfferingAvailability,
-}
-
-/// 一条可进入精确创建依据的销售当前版本行。
-#[derive(Debug, Clone)]
-pub(super) struct BasisLine {
-    /// 当前销售版本行及采购覆盖摘要。
-    pub(super) coverage: SalesProcurementCoverageLine,
-    /// 本供应商被确定选用的供给。
-    pub(super) supply: LineSupply,
-    /// 本供应商本次最多可创建数量。
-    pub(super) max_create_quantity: Quantity,
-}
-
-/// 一张采购单的精确拆分维度。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct BasisScope {
-    /// 唯一供应商。
-    pub(super) supplier_id: SupplierAccountId,
-    /// 采购类型。
-    pub(super) purchase_type: PurchaseType,
-    /// 付款条件。
-    pub(super) payment_term_code: String,
-    /// 履约责任。
-    pub(super) fulfillment_responsibility: FulfillmentResponsibility,
-}
-
-/// 一条精确采购创建依据。
-#[derive(Debug, Clone)]
-pub(super) struct BasisGroup {
-    /// 销售当前版本。
-    pub(super) revision: SalesOrderRevision,
-    /// 精确拆分维度。
-    pub(super) scope: BasisScope,
-    /// 供应商经营类目（不参与拆单，仅随依据展示）。
-    pub(super) business_category: Option<String>,
-    /// 可采购明细。
-    pub(super) lines: Vec<BasisLine>,
-}
 
 /// 供应商当前商务资料中的付款条件与经营类目。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,39 +96,6 @@ impl SupplierSettlementTerms {
             business_category: None,
         }
     }
-}
-
-/// 一条可由现有库存直接满足的销售行。
-#[derive(Debug, Clone)]
-pub(super) struct StockBasisLine {
-    /// 当前销售版本行及统一供给覆盖摘要。
-    pub(super) coverage: SalesProcurementCoverageLine,
-    /// 本余额本次最多可分配数量。
-    pub(super) max_create_quantity: Quantity,
-}
-
-/// 一个仓库库存余额形成的现有库存供给依据。
-#[derive(Debug, Clone)]
-pub(super) struct StockBasisGroup {
-    /// 销售当前版本。
-    pub(super) revision: SalesOrderRevision,
-    /// 被分配的库存余额。
-    pub(super) balance: StockBalance,
-    /// 仓库当前名称；基础资料缺失时回退仓库 ID。
-    pub(super) warehouse_name: String,
-    /// 该余额可满足的销售行。
-    pub(super) lines: Vec<StockBasisLine>,
-}
-
-/// 已规范化的本次采购行请求。
-#[derive(Debug, Clone)]
-pub(super) struct RequestedLine {
-    /// 稳定销售行。
-    pub(super) sales_order_line_id: String,
-    /// 本次采购数量。
-    pub(super) quantity: Quantity,
-    /// 采购确认的预计交付日。
-    pub(super) expected_delivery_date: BusinessDate,
 }
 
 /// 已通过事务内最新剩余量校验的采购行。
@@ -239,6 +165,8 @@ impl PurchaseOrderService {
     ///
     /// # 关键业务约束
     /// 只展示当前账号拥有的开放任务冻结行；客户端不能看到或创建其他采购负责人的范围。
+    /// 供给、修订、可供投影与供应商结算事实按全部任务涉及 SKU 一次批量读取，
+    /// 查询次数不随任务数、销售行数或供给数线性增长。
     pub async fn creation_basis_list(
         &self,
         params: &CreationBasisListParams,
@@ -282,41 +210,86 @@ impl PurchaseOrderService {
             .into_iter()
             .map(|order| (order.base.id.clone(), order))
             .collect::<HashMap<_, _>>();
-        let mut views = Vec::new();
-        for task in tasks {
+        // 按销售单归组任务，使覆盖与供给事实按单一次批量读取。
+        let mut task_indexes_by_order: Vec<(String, Vec<usize>)> = Vec::new();
+        for (index, task) in tasks.iter().enumerate() {
             if task.responsibility_key().is_none() || task.responsibility_scope_ids().is_empty() {
                 return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
             }
-            let Some(order) = orders.get(&task.business_object_id) else {
+            if let Some(entry) = task_indexes_by_order
+                .iter_mut()
+                .find(|(order_id, _)| *order_id == task.business_object_id)
+            {
+                entry.1.push(index);
+            } else {
+                task_indexes_by_order.push((task.business_object_id.clone(), vec![index]));
+            }
+        }
+        // 每张销售单一次覆盖读取；全部任务共享同一批供给与结算事实。
+        let mut coverage_by_order: HashMap<String, SalesProcurementCoverage> = HashMap::new();
+        let mut all_sku_ids: Vec<SkuId> = Vec::new();
+        for (order_id, task_indexes) in &task_indexes_by_order {
+            let Some(order) = orders.get(order_id) else {
                 continue;
             };
-            let groups = basis_groups_for_order(
-                &self.db,
-                order,
-                task.responsibility_scope_ids(),
-                &mut NoTransaction,
-            )
-            .await?;
-            let owner_name = owner_names.get(&order.stable.created_by).cloned();
-            for group in groups {
-                views.push(
-                    build_basis_view(&self.db, order, &group, owner_name.clone(), &task.base.id).await?,
-                );
+            let coverage = load_sales_procurement_coverage(&self.db, order, &mut NoTransaction).await?;
+            for &task_index in task_indexes {
+                let scope = tasks[task_index]
+                    .responsibility_scope_ids()
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<HashSet<_>>();
+                for line in &coverage.lines {
+                    if scope.contains(line.revision_line.sales_order_line_id.as_ref())
+                        && line.summary.remaining_quantity > zero_quantity()
+                    {
+                        all_sku_ids.push(line.goods_line.sku_id.clone());
+                    }
+                }
             }
-            let stock_groups = stock_basis_groups_for_order(
-                &self.db,
-                order,
-                task.responsibility_scope_ids(),
-                &mut NoTransaction,
-            )
+            coverage_by_order.insert(order_id.clone(), coverage);
+        }
+        let facts = self
+            .db
+            .load_creation_basis_facts(&all_sku_ids, &mut NoTransaction)
             .await?;
-            for group in stock_groups {
-                views.push(build_stock_basis_view(
+        let mut views = Vec::new();
+        for (order_id, task_indexes) in task_indexes_by_order {
+            let Some(order) = orders.get(&order_id) else {
+                continue;
+            };
+            let coverage = coverage_by_order
+                .get(&order_id)
+                .expect("已加载的销售覆盖必须存在");
+            let owner_name = owner_names.get(&order.stable.created_by).cloned();
+            for task_index in task_indexes {
+                let task = &tasks[task_index];
+                let groups =
+                    basis_groups_from_facts(order, coverage, task.responsibility_scope_ids(), &facts)?;
+                for group in groups {
+                    views.push(build_basis_view(
+                        order,
+                        &group,
+                        &facts,
+                        owner_name.clone(),
+                        &task.base.id,
+                    )?);
+                }
+                let stock_groups = stock_basis_groups_for_order(
+                    &self.db,
                     order,
-                    &group,
-                    owner_name.clone(),
-                    &task.base.id,
-                )?);
+                    task.responsibility_scope_ids(),
+                    &mut NoTransaction,
+                )
+                .await?;
+                for group in stock_groups {
+                    views.push(build_stock_basis_view(
+                        order,
+                        &group,
+                        owner_name.clone(),
+                        &task.base.id,
+                    )?);
+                }
             }
         }
         Ok(views)
@@ -344,7 +317,7 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<CreatePurchaseOrderResult> {
         req.validate()?;
-        let requested_lines = normalize_requested_lines(&req)?;
+        let requested_lines = req.normalized_lines()?;
         let request_fingerprint = req.request_fingerprint(&requested_lines);
         let receipt_identity = PurchaseCommandReceipt::<CreationReceipt>::identity(
             CREATE_RECEIPT_PREFIX,
@@ -423,7 +396,7 @@ impl PurchaseOrderService {
 /// 依据、数量、并发 guard、审批绑定或持久化失败时返回错误。
 ///
 /// # 关键业务约束
-/// guard CAS 成功后必须再次按采购当前指针计算剩余量。
+/// guard CAS 成功后必须再次按采购当前指针计算剩余量，并复用同一事务事实。
 async fn create_from_basis_in_transaction(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -456,13 +429,20 @@ async fn create_from_basis_in_transaction(
     ensure_request_scope(command.req, &selected.scope)?;
     order.advance_procurement_guard(command.actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
-    let latest_groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    let (latest_groups, latest_facts) =
+        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), session).await?;
     let latest = latest_groups
         .into_iter()
         .find(|group| group.scope == selected.scope)
         .ok_or_else(procurement_quantity_changed)?;
     let selected_lines = validate_requested_quantities(command.requested_lines, &latest)?;
-    persist_basis_draft(db, rbac, &order, &latest, &selected_lines, command, session).await
+    let input = VerifiedBasisInput {
+        sales_order: &order,
+        group: &latest,
+        selected_lines: &selected_lines,
+        facts: &latest_facts,
+    };
+    persist_basis_draft(db, rbac, &input, command, session).await
 }
 
 /// 加载可作为采购来源的已生效销售单。
@@ -496,7 +476,7 @@ pub(super) async fn load_effective_sales_order(
     Ok(order)
 }
 
-/// 由销售当前版本、当前覆盖和当前供给形成精确依据集合。
+/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -511,12 +491,116 @@ pub(super) async fn load_effective_sales_order(
 /// 当前指针、覆盖、供给或付款条件查询失败时返回错误。
 ///
 /// # 关键业务约束
-/// 仅对任务冻结范围内的稳定销售行查询供应商供给；同一依据内供应商、采购类型、付款条件和履约责任完全一致。
+/// 仅对任务冻结范围内的稳定销售行查询供应商供给；同一依据内供应商、采购类型、
+/// 付款条件和履约责任完全一致。
 pub(super) async fn basis_groups_for_order(
     db: &mongodb::Database,
     order: &SalesOrder,
     responsibility_scope_ids: &[String],
     executor: &mut dyn Executor,
+) -> Result<Vec<BasisGroup>> {
+    Ok(
+        basis_groups_and_facts(db, order, responsibility_scope_ids, executor)
+            .await?
+            .0,
+    )
+}
+
+/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合，并返回本次事实。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `order` - 已生效销售单
+/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
+/// * `executor` - 数据访问执行器；事务内重验必须复用调用方 executor
+///
+/// # 返回
+/// 返回任务责任范围内的依据集合及本次批量加载的供给事实；事实用于事务内
+/// 名称快照，避免创建路径再次逐段读取。
+///
+/// # 错误
+/// 当前指针、覆盖、供给或付款条件查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 供给事实查询次数与销售行数、供给数无关；非生效销售单直接返回空集合与空事实。
+pub(super) async fn basis_groups_and_facts(
+    db: &mongodb::Database,
+    order: &SalesOrder,
+    responsibility_scope_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<(Vec<BasisGroup>, CreationBasisFacts)> {
+    if order.commercial_status != CommercialStatus::Effective {
+        return Ok((Vec::new(), CreationBasisFacts::default()));
+    }
+    let coverage = load_sales_procurement_coverage(db, order, executor).await?;
+    let facts = creation_basis_facts_for_order(db, &coverage, responsibility_scope_ids, executor).await?;
+    let groups = basis_groups_from_facts(order, &coverage, responsibility_scope_ids, &facts)?;
+    Ok((groups, facts))
+}
+
+/// 批量加载任务责任范围内销售目标行的供给与供应商结算事实。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `coverage` - 当前销售版本采购覆盖
+/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回涉及 SKU 的 ACTIVE 供给、当前修订、可供投影、供应商结算事实与法定名称。
+///
+/// # 错误
+/// 仓储批量读取失败时返回错误。
+///
+/// # 关键业务约束
+/// 只收集任务冻结范围内仍有剩余量的目标行 SKU；查询次数与任务数、销售行数及
+/// 供给数无关。
+async fn creation_basis_facts_for_order(
+    db: &mongodb::Database,
+    coverage: &SalesProcurementCoverage,
+    responsibility_scope_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<CreationBasisFacts> {
+    let scope = responsibility_scope_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let sku_ids = coverage
+        .lines
+        .iter()
+        .filter(|line| {
+            scope.contains(line.revision_line.sales_order_line_id.as_ref())
+                && line.summary.remaining_quantity > zero_quantity()
+        })
+        .map(|line| line.goods_line.sku_id.clone())
+        .collect::<Vec<_>>();
+    db.load_creation_basis_facts(&sku_ids, executor)
+        .await
+        .map_err(Into::into)
+}
+
+/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合（纯规则）。
+///
+/// # 参数
+/// * `order` - 已生效销售单
+/// * `coverage` - 当前销售版本采购覆盖
+/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
+/// * `facts` - 任务涉及 SKU 的批量供给事实
+///
+/// # 返回
+/// 返回任务责任范围内按精确拆分维度分组并稳定排序的依据。
+///
+/// # 错误
+/// 商品类型映射或可供数量非法时返回错误。
+///
+/// # 关键业务约束
+/// 同一依据内供应商、采购类型、付款条件和履约责任完全一致；非生效销售单返回
+/// 空集合；`min(remaining, available)` 为零时丢弃该供应商。
+fn basis_groups_from_facts(
+    order: &SalesOrder,
+    coverage: &SalesProcurementCoverage,
+    responsibility_scope_ids: &[String],
+    facts: &CreationBasisFacts,
 ) -> Result<Vec<BasisGroup>> {
     if order.commercial_status != CommercialStatus::Effective {
         return Ok(Vec::new());
@@ -525,26 +609,15 @@ pub(super) async fn basis_groups_for_order(
         .iter()
         .map(String::as_str)
         .collect::<HashSet<_>>();
-    let coverage = load_sales_procurement_coverage(db, order, executor).await?;
-    let mut settlement_terms = HashMap::new();
     let mut groups: Vec<BasisGroup> = Vec::new();
-    for line in coverage.lines {
+    for line in &coverage.lines {
         if !responsibility_scope_ids.contains(line.revision_line.sales_order_line_id.as_ref())
             || line.summary.remaining_quantity <= zero_quantity()
         {
             continue;
         }
-        let supplies = qualified_supplies_for_line(db, &line, executor).await?;
-        append_line_supplies(
-            db,
-            &coverage.revision,
-            line,
-            supplies,
-            &mut settlement_terms,
-            &mut groups,
-            executor,
-        )
-        .await?;
+        let supplies = qualified_supplies_for_line(facts, line)?;
+        append_line_supplies(&coverage.revision, line.clone(), supplies, facts, &mut groups)?;
     }
     for group in &mut groups {
         group
@@ -683,34 +756,31 @@ fn normalized_optional_filter(value: Option<&str>) -> Option<String> {
 /// 将一条销售目标行的合格供给加入精确依据分组。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `revision` - 销售当前版本
 /// * `line` - 当前销售版本目标行
 /// * `supplies` - 每供应商一条确定供给
-/// * `settlement_terms` - 供应商付款条件与经营类目缓存
+/// * `facts` - 批量供给与供应商结算事实
 /// * `groups` - 待追加依据集合
-/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 追加完成返回 `Ok(())`。
 ///
 /// # 错误
-/// 付款条件查询或数量计算失败时返回错误。
+/// 商品类型映射或可供数量计算失败时返回错误。
 ///
 /// # 关键业务约束
-/// 有限可供量使用 `min(remaining, available)`，不因不足全量而丢弃供应商。
-async fn append_line_supplies(
-    db: &mongodb::Database,
+/// 有限可供量使用 `min(remaining, available)`，不因不足全量而丢弃供应商；付款
+/// 条件与经营类目只从批量事实解释，不再逐供应商读取。
+fn append_line_supplies(
     revision: &SalesOrderRevision,
     line: SalesProcurementCoverageLine,
     supplies: Vec<LineSupply>,
-    settlement_terms: &mut HashMap<String, SupplierSettlementTerms>,
+    facts: &CreationBasisFacts,
     groups: &mut Vec<BasisGroup>,
-    executor: &mut dyn Executor,
 ) -> Result<()> {
     for supply in supplies {
         let supplier_id = supply.offering.supplier_id.clone();
-        let terms = cached_settlement_terms(db, &supplier_id, settlement_terms, executor).await?;
+        let terms = settlement_terms_for(facts, &supplier_id);
         let purchase_type = purchase_type_from_product_kind(line.product_kind)?;
         let max_create_quantity = maximum_create_quantity(
             line.summary.remaining_quantity,
@@ -746,65 +816,75 @@ async fn append_line_supplies(
     Ok(())
 }
 
-/// 读取并缓存供应商当前付款条件与经营类目。
+/// 从批量事实解释供应商当前付款条件与经营类目。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `facts` - 批量供应商结算事实
 /// * `supplier_id` - 供应商身份
-/// * `settlement_terms` - 按供应商缓存
-/// * `executor` - 数据访问执行器
 ///
 /// # 返回
-/// 返回该供应商已拆开的付款条件与经营类目。
+/// 返回该供应商已拆开的付款条件与经营类目；供应商、商务版本缺失或付款条件为
+/// 空时付款条件回退 `NET-30`。
 ///
 /// # 错误
-/// 仓储读取失败时返回错误。
-async fn cached_settlement_terms(
-    db: &mongodb::Database,
+/// 无。
+///
+/// # 关键业务约束
+/// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
+fn settlement_terms_for(
+    facts: &CreationBasisFacts,
     supplier_id: &SupplierAccountId,
-    settlement_terms: &mut HashMap<String, SupplierSettlementTerms>,
-    executor: &mut dyn Executor,
-) -> Result<SupplierSettlementTerms> {
-    let supplier_key = supplier_id.to_string();
-    if let Some(value) = settlement_terms.get(&supplier_key) {
-        return Ok(value.clone());
+) -> SupplierSettlementTerms {
+    let Some(supplier) = facts.suppliers.get(&supplier_id.to_string()) else {
+        return SupplierSettlementTerms::net30();
+    };
+    let Some(revision_id) = supplier.current_commercial_profile_revision_id.clone() else {
+        return SupplierSettlementTerms::net30();
+    };
+    let Some(revision) = facts.commercial_profiles.get(&revision_id.to_string()) else {
+        return SupplierSettlementTerms::net30();
+    };
+    let payment_term_code = revision.effective_payment_term_code();
+    SupplierSettlementTerms {
+        payment_term_code: if payment_term_code.is_empty() {
+            "NET-30".to_string()
+        } else {
+            payment_term_code
+        },
+        business_category: revision.effective_business_category(),
     }
-    let value = resolve_supplier_settlement_terms(db, supplier_id, executor).await?;
-    settlement_terms.insert(supplier_key, value.clone());
-    Ok(value)
 }
 
 /// 查询一条销售当前版本行的合格供给，并为每个供应商确定一条稳定供给。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `facts` - 批量 ACTIVE 供给、当前修订与可供投影
 /// * `line` - 销售当前版本目标行
-/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回按供应商和供给 ID 稳定排序、每供应商最多一条的供给。
 ///
 /// # 错误
-/// 供给修订或可供投影查询失败时返回错误。
+/// 可供数量为负时返回业务错误。
 ///
 /// # 关键业务约束
-/// 仅 ACTIVE、条款当前有效且 availability 为 AVAILABLE 的供给合格。
-async fn qualified_supplies_for_line(
-    db: &mongodb::Database,
+/// 仅 ACTIVE、条款当前有效且 availability 为 AVAILABLE 的供给合格；同一 SKU
+/// 的供给顺序由批量事实保证，与逐 SKU 查询完全一致。
+fn qualified_supplies_for_line(
+    facts: &CreationBasisFacts,
     line: &SalesProcurementCoverageLine,
-    executor: &mut dyn Executor,
 ) -> Result<Vec<LineSupply>> {
-    let offerings = db
-        .purchase_order()
-        .list_active_offerings_by_sku(&line.goods_line.sku_id, executor)
-        .await?;
     let mut seen_suppliers = HashSet::new();
     let mut supplies = Vec::new();
-    for offering in offerings {
+    for offering in facts
+        .offerings
+        .iter()
+        .filter(|offering| offering.sku_id == line.goods_line.sku_id)
+    {
         if seen_suppliers.contains(&offering.supplier_id.to_string()) {
             continue;
         }
-        let Some(supply) = qualified_supply(db, offering, executor).await? else {
+        let Some(supply) = qualified_supply(facts, offering)? else {
             continue;
         };
         seen_suppliers.insert(supply.offering.supplier_id.to_string());
@@ -816,42 +896,30 @@ async fn qualified_supplies_for_line(
 /// 复验单条供给当前修订与可供投影。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `facts` - 批量供给修订与可供投影
 /// * `offering` - ACTIVE 供给稳定身份
-/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 当前合格时返回供给；缺少当前修订、条款失效或不可供时返回 `None`。
 ///
 /// # 错误
-/// 仓储读取失败时返回错误。
+/// 可供数量为负时返回业务错误。
 ///
 /// # 关键业务约束
-/// 可供数量为空表示供应商未给出上限，不等于不可供。
-async fn qualified_supply(
-    db: &mongodb::Database,
-    offering: SupplierOffering,
-    executor: &mut dyn Executor,
-) -> Result<Option<LineSupply>> {
+/// 可供数量为空表示供应商未给出上限，不等于不可供；条款有效期按当前业务日期
+/// 判定，业务日期由 Service 注入。
+fn qualified_supply(facts: &CreationBasisFacts, offering: &SupplierOffering) -> Result<Option<LineSupply>> {
     let Some(revision_id) = offering.stable.current_revision_id.clone() else {
         return Ok(None);
     };
-    let Some(revision) = db
-        .supplier_offering_revisions()
-        .find_by_id(&revision_id, executor)
-        .await?
-    else {
+    let Some(revision) = facts.revisions.get(&revision_id) else {
         return Ok(None);
     };
     let today = BusinessDate::today();
     if revision.valid_from > today || revision.valid_to.is_some_and(|valid_to| valid_to < today) {
         return Ok(None);
     }
-    let Some(availability) = db
-        .supplier_offering_availabilities()
-        .find_by_offering_id(&offering.base.id.clone().into(), executor)
-        .await?
-    else {
+    let Some(availability) = facts.availabilities.get(&offering.base.id.to_string()) else {
         return Ok(None);
     };
     if availability.availability_status != AvailabilityStatus::Available {
@@ -870,18 +938,18 @@ async fn qualified_supply(
         return Ok(None);
     }
     Ok(Some(LineSupply {
-        offering,
-        revision,
-        availability,
+        offering: offering.clone(),
+        revision: revision.clone(),
+        availability: availability.clone(),
     }))
 }
 
 /// 构造一条精确创建依据视图。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `order` - 销售稳定单
 /// * `group` - 精确依据分组
+/// * `facts` - 批量供应商结算事实
 /// * `sales_owner_name` - 销售负责人展示名
 /// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
 ///
@@ -889,19 +957,21 @@ async fn qualified_supply(
 /// 返回前端可直接选择逐行数量的依据视图。
 ///
 /// # 错误
-/// 供应商名称或日期转换失败时返回错误。
+/// 履约期限无法转换为业务日期时返回错误。
 ///
 /// # 关键业务约束
-/// 预计金额按 `max_create_quantity` 逐行舍入后汇总。
-async fn build_basis_view(
-    db: &mongodb::Database,
+/// 预计金额按 `max_create_quantity` 逐行舍入后汇总；供应商名称只从批量事实读取。
+fn build_basis_view(
     order: &SalesOrder,
     group: &BasisGroup,
+    facts: &CreationBasisFacts,
     sales_owner_name: Option<String>,
     work_item_id: &str,
 ) -> Result<CreationBasisView> {
-    let supplier_name = resolve_supplier_name(db, &group.scope.supplier_id, &mut NoTransaction)
-        .await?
+    let supplier_name = facts
+        .supplier_names
+        .get(&group.scope.supplier_id.to_string())
+        .cloned()
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
@@ -1048,14 +1118,31 @@ fn basis_line_view(
     })
 }
 
+/// guard 重算后的事务内创建输入：已完成 CAS 的销售单、最新依据范围、
+/// 校验通过的本次采购行与批量加载的供给及供应商结算事实。
+///
+/// # 参数
+/// * `sales_order` - 已完成 guard CAS 的销售单
+/// * `group` - guard 后重算得到的最新依据范围
+/// * `selected_lines` - 事务内校验通过的本次采购行
+/// * `facts` - guard 后重算时批量加载的供给与供应商结算事实
+pub(super) struct VerifiedBasisInput<'a> {
+    /// 已完成 guard CAS 的销售单。
+    pub(super) sales_order: &'a SalesOrder,
+    /// guard 后重算得到的最新依据范围。
+    pub(super) group: &'a BasisGroup,
+    /// 事务内校验通过的本次采购行。
+    pub(super) selected_lines: &'a [SelectedLine],
+    /// guard 后重算时批量加载的供给与供应商结算事实。
+    pub(super) facts: &'a CreationBasisFacts,
+}
+
 /// 在事务内持久化一张精确依据采购单并提交审批。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
-/// * `sales_order` - 已完成 guard CAS 的销售单
-/// * `group` - guard 后重算得到的最新依据范围
-/// * `selected_lines` - 事务内校验通过的本次采购行
+/// * `input` - guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）
 /// * `command` - 原始请求、命令收据与审计操作人
 /// * `session` - MongoDB 事务会话
 ///
@@ -1067,15 +1154,18 @@ fn basis_line_view(
 ///
 /// # 关键业务约束
 /// `creation_basis_id` 唯一，且本函数只创建一个采购聚合；命令收据记录提交后正式号。
+/// 供应商名称快照只从同一事务内批量加载的事实读取，不得再次逐段查询。
 pub(super) async fn persist_basis_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
-    sales_order: &SalesOrder,
-    group: &BasisGroup,
-    selected_lines: &[SelectedLine],
+    input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrderResult> {
+    let sales_order = input.sales_order;
+    let group = input.group;
+    let selected_lines = input.selected_lines;
+    let facts = input.facts;
     let target_warehouse_id = resolve_target_warehouse(
         db,
         rbac,
@@ -1115,8 +1205,10 @@ pub(super) async fn persist_basis_draft(
         },
         command.actor.id(),
     )?;
-    let supplier_name = resolve_supplier_name(db, &group.scope.supplier_id, session)
-        .await?
+    let supplier_name = facts
+        .supplier_names
+        .get(&group.scope.supplier_id.to_string())
+        .cloned()
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
     let computed = compute_selected_lines(selected_lines, group.scope.fulfillment_responsibility);
     let submission = build_draft_submission(
@@ -1601,44 +1693,6 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
     }
 }
 
-/// 规范化并校验逐行本次采购数量。
-///
-/// # 参数
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回去除首尾空白、数量已类型化且稳定行不重复的请求行。
-///
-/// # 错误
-/// 稳定行重复、数量非法或数量不大于零时返回校验错误。
-///
-/// # 关键业务约束
-/// 同一稳定销售行在一次命令中只能出现一次。
-fn normalize_requested_lines(req: &CreatePurchaseOrderFromBasisRequest) -> Result<Vec<RequestedLine>> {
-    let mut seen = HashSet::new();
-    let mut lines = Vec::with_capacity(req.lines.len());
-    for line in &req.lines {
-        let sales_order_line_id = line.sales_order_line_id.trim().to_string();
-        if !seen.insert(sales_order_line_id.clone()) {
-            return Err(Error::ValidationError("本次采购明细包含重复销售行".to_string()));
-        }
-        let quantity = Quantity::from_str(line.quantity.trim())
-            .map_err(|error| Error::ValidationError(format!("本次数量非法: {error}")))?;
-        let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
-            .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
-        if quantity <= zero_quantity() {
-            return Err(Error::ValidationError("本次数量必须大于 0".to_string()));
-        }
-        lines.push(RequestedLine {
-            sales_order_line_id,
-            quantity,
-            expected_delivery_date,
-        });
-    }
-    lines.sort_by(|left, right| left.sales_order_line_id.cmp(&right.sales_order_line_id));
-    Ok(lines)
-}
-
 /// 按事务内最新依据校验逐行本次数量。
 ///
 /// # 参数
@@ -1730,172 +1784,6 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
     Ok(SalesOrderId::new(sales_order_id.to_string()))
 }
 
-/// 形成包含 guard、当前版本、精确范围和逐行供给事实的依据 ID。
-///
-/// # 参数
-/// * `order` - 销售稳定单
-/// * `group` - 精确依据分组
-/// * `work_item_id` - 冻结本依据责任范围的开放任务
-/// * `target_warehouse_id` - 本张采购计划选择的目标仓库；可选择依据阶段为空
-///
-/// # 返回
-/// 返回 `{sales_order_id}:{sha256}` 稳定依据 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；同一范围拆向不同目标仓时身份不同。
-pub(super) fn basis_id_for(
-    order: &SalesOrder,
-    group: &BasisGroup,
-    work_item_id: &str,
-    target_warehouse_id: Option<&WarehouseId>,
-) -> String {
-    let mut parts = vec![
-        order.base.id.clone(),
-        work_item_id.to_string(),
-        order.procurement_guard_version.to_string(),
-        group.revision.base.id.clone(),
-        basis_scope_key(&group.scope),
-    ];
-    parts.extend(group.lines.iter().map(basis_line_fingerprint));
-    compose_basis_id(&order.base.id, parts, target_warehouse_id)
-}
-
-/// 以规范化依据片段和可选目标仓形成固定长度创建依据 ID。
-///
-/// 目标仓只在已经完成仓库选择的采购计划中加入；可选择依据保持原有无仓库身份。
-fn compose_basis_id(
-    sales_order_id: &str,
-    mut parts: Vec<String>,
-    target_warehouse_id: Option<&WarehouseId>,
-) -> String {
-    if let Some(target_warehouse_id) = target_warehouse_id {
-        parts.push(format!("target_warehouse:{target_warehouse_id}"));
-    }
-    format!("{sales_order_id}:{}", digest_parts(parts))
-}
-
-/// 形成绑定销售 guard、库存余额版本与逐行剩余量的现有库存依据 ID。
-pub(super) fn stock_basis_id_for(order: &SalesOrder, group: &StockBasisGroup, work_item_id: &str) -> String {
-    let mut parts = vec![
-        order.base.id.clone(),
-        work_item_id.to_string(),
-        order.procurement_guard_version.to_string(),
-        group.revision.base.id.clone(),
-        group.balance.base.id.clone(),
-        group.balance.base.version.to_string(),
-        group.balance.available_quantity.to_string(),
-    ];
-    parts.extend(group.lines.iter().map(|line| {
-        format!(
-            "{}|{}|{}|{}",
-            line.coverage.revision_line.sales_order_line_id,
-            line.coverage.revision_line.base.id,
-            line.coverage.summary.remaining_quantity,
-            line.max_create_quantity,
-        )
-    }));
-    format!("{}:{}", order.base.id, digest_parts(parts))
-}
-
-/// 形成单条依据行的供给与剩余量指纹。
-///
-/// # 参数
-/// * `line` - 精确依据行
-///
-/// # 返回
-/// 返回稳定行、当前版本行、数量与供给版本组成的规范化字符串。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 可供投影版本变化会使旧依据失效。
-fn basis_line_fingerprint(line: &BasisLine) -> String {
-    format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        stable_line_id(line),
-        line.coverage.revision_line.base.id,
-        line.coverage.summary.remaining_quantity,
-        line.max_create_quantity,
-        line.supply.offering.base.id,
-        line.supply.revision.base.id,
-        line.supply.availability.base.id,
-        line.supply.availability.base.version,
-        line.supply
-            .availability
-            .source_revision_token
-            .as_deref()
-            .unwrap_or("-"),
-    )
-}
-
-/// 形成精确拆分范围规范化键。
-///
-/// # 参数
-/// * `scope` - 精确拆分范围
-///
-/// # 返回
-/// 返回供应商、采购类型、付款条件和履约责任拼接键。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 该键只用于分组和指纹，不作为数据库自然键。
-pub(super) fn basis_scope_key(scope: &BasisScope) -> String {
-    format!(
-        "{}|{}|{}|{}",
-        scope.supplier_id,
-        scope.purchase_type.as_str(),
-        scope.payment_term_code,
-        scope.fulfillment_responsibility.as_str(),
-    )
-}
-
-/// 计算供应商本次最大可创建数量。
-///
-/// # 参数
-/// * `remaining` - 销售当前版本剩余量
-/// * `available` - 供应商当前可供上限；空表示无限制
-///
-/// # 返回
-/// 返回 `min(remaining, available)` 或无上限时的 `remaining`。
-///
-/// # 错误
-/// 可供数量为负时返回一致性错误。
-///
-/// # 关键业务约束
-/// 供应不足允许形成部分数量依据。
-fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>) -> Result<Quantity> {
-    let Some(available) = available else {
-        return Ok(remaining);
-    };
-    if available < zero_quantity() {
-        return Err(Error::BusinessLogicError("供应商可供数量不能为负".to_string()));
-    }
-    Ok(remaining.min(available))
-}
-
-/// 返回依据行的稳定销售行 ID。
-///
-/// # 参数
-/// * `line` - 精确依据行
-///
-/// # 返回
-/// 返回跨销售版本稳定的销售行 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 所有覆盖与请求匹配均使用稳定销售行，不按 SKU 猜测。
-pub(super) fn stable_line_id(line: &BasisLine) -> &str {
-    line.coverage.revision_line.sales_order_line_id.as_ref()
-}
-
 /// 查询并校验采购创建幂等收据。
 ///
 /// # 参数
@@ -1981,157 +1869,6 @@ impl CreationReceipt {
     }
 }
 
-/// 读取供应商主体当前法定名称。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `supplier_id` - 供应商身份
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回当前主体修订法定名称；关联缺失时返回 `None`。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
-///
-/// # 关键业务约束
-/// 名称只用于展示和创建快照，不参与供应商稳定关联。
-async fn resolve_supplier_name(
-    db: &mongodb::Database,
-    supplier_id: &SupplierAccountId,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    let Some(supplier) = db.supplier_accounts().find_by_id(supplier_id, executor).await? else {
-        return Ok(None);
-    };
-    let Some(party) = db.parties().find_by_id(&supplier.party_id, executor).await? else {
-        return Ok(None);
-    };
-    let Some(revision_id) = party.stable.current_revision_id.clone() else {
-        return Ok(None);
-    };
-    let revision = db.party_revisions().find_by_id(&revision_id, executor).await?;
-    Ok(revision.map(|revision| revision.legal_name))
-}
-
-/// 读取供应商当前付款条件与经营类目，并去掉历史编码。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `supplier_id` - 供应商身份
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回当前付款条件与经营类目；供应商或商务版本缺失时付款条件为 `NET-30`。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
-///
-/// # 关键业务约束
-/// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
-async fn resolve_supplier_settlement_terms(
-    db: &mongodb::Database,
-    supplier_id: &SupplierAccountId,
-    executor: &mut dyn Executor,
-) -> Result<SupplierSettlementTerms> {
-    let Some(supplier) = db.supplier_accounts().find_by_id(supplier_id, executor).await? else {
-        return Ok(SupplierSettlementTerms::net30());
-    };
-    let Some(revision_id) = supplier.current_commercial_profile_revision_id.clone() else {
-        return Ok(SupplierSettlementTerms::net30());
-    };
-    let revision = db
-        .supplier_commercial_profile_revisions()
-        .find_by_id(&revision_id, executor)
-        .await?;
-    let Some(revision) = revision else {
-        return Ok(SupplierSettlementTerms::net30());
-    };
-    let payment_term_code = revision.effective_payment_term_code();
-    Ok(SupplierSettlementTerms {
-        payment_term_code: if payment_term_code.is_empty() {
-            "NET-30".to_string()
-        } else {
-            payment_term_code
-        },
-        business_category: revision.effective_business_category(),
-    })
-}
-
-/// 取供给含税成本。
-///
-/// # 参数
-/// * `revision` - 当前有效供给条款
-/// * `responsibility` - 本采购依据选择的履约责任
-///
-/// # 返回
-/// 入仓返回集采价，其他方式返回一件代发价。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 成本只从依据确定的当前供给修订读取。
-fn supply_cost(revision: &SupplierOfferingRevision, responsibility: FulfillmentResponsibility) -> UnitPrice {
-    match responsibility {
-        FulfillmentResponsibility::Warehouse => revision.bulk_supply_price_gross,
-        FulfillmentResponsibility::SupplierDirect
-        | FulfillmentResponsibility::Electronic
-        | FulfillmentResponsibility::Service => revision.dropship_supply_price_gross,
-    }
-}
-
-/// 由商品稳定业务类型确定采购类型。
-///
-/// # 参数
-/// * `kind` - 商品稳定业务类型
-///
-/// # 返回
-/// 返回采购类型；卡券不得进入商品/服务采购路径。
-///
-/// # 错误
-/// 卡券进入商品/服务采购路径时返回业务错误。
-///
-/// # 关键业务约束
-/// 销售不得提交或覆盖采购类型。
-fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType> {
-    match kind {
-        ProductKind::Physical => Ok(PurchaseType::Physical),
-        ProductKind::Virtual => Ok(PurchaseType::Virtual),
-        ProductKind::OfflineService => Ok(PurchaseType::Service),
-        ProductKind::Voucher => Err(Error::BusinessLogicError(
-            "卡券商品不能进入商品/服务采购建单路径".to_string(),
-        )),
-    }
-}
-
-/// 返回商品类型允许采购选择的履约责任。
-///
-/// # 参数
-/// * `kind` - 商品稳定业务类型
-///
-/// # 返回
-/// 返回稳定顺序的履约责任集合。
-///
-/// # 错误
-/// 卡券进入商品/服务采购路径时返回业务错误。
-///
-/// # 关键业务约束
-/// 实物允许采购在入仓与供应商直发之间选择；其他类型由商品事实唯一限定。
-fn fulfillment_options(kind: ProductKind) -> Result<&'static [FulfillmentResponsibility]> {
-    match kind {
-        ProductKind::Physical => Ok(&[
-            FulfillmentResponsibility::Warehouse,
-            FulfillmentResponsibility::SupplierDirect,
-        ]),
-        ProductKind::Virtual => Ok(&[FulfillmentResponsibility::Electronic]),
-        ProductKind::OfflineService => Ok(&[FulfillmentResponsibility::Service]),
-        ProductKind::Voucher => Err(Error::BusinessLogicError(
-            "卡券商品不能进入商品/服务采购建单路径".to_string(),
-        )),
-    }
-}
-
 /// 将精确时间转换为上海业务自然日。
 ///
 /// # 参数
@@ -2188,16 +1925,9 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use entities::catalog::ProductKind;
     use entities::common::time::Instant;
-    use entities::ids::WarehouseId;
-    use entities::money::Quantity;
-    use entities::purchase_order::{digest_parts, FulfillmentResponsibility, PurchaseType};
 
-    use super::{
-        business_date_of, compose_basis_id, ensure_expected_delivery_within_sales_due, fulfillment_options,
-        maximum_create_quantity, parse_basis_sales_order_id, purchase_type_from_product_kind, BasisScope,
-    };
+    use super::{business_date_of, ensure_expected_delivery_within_sales_due, parse_basis_sales_order_id};
 
     /// 上海零点对应前一日 UTC 时仍还原业务自然日。
     #[test]
@@ -2211,23 +1941,10 @@ mod tests {
         assert_eq!(date.to_string(), "2026-08-23");
     }
 
-    /// 有限可供量不足销售剩余时允许形成部分数量。
-    #[test]
-    fn limited_availability_uses_partial_quantity() {
-        let remaining = Quantity::from_str("10").unwrap();
-        let available = Quantity::from_str("3.5").unwrap();
-
-        assert_eq!(
-            maximum_create_quantity(remaining, Some(available)).unwrap(),
-            available
-        );
-        assert_eq!(maximum_create_quantity(remaining, None).unwrap(), remaining);
-    }
-
     /// 新依据 ID 只接受销售单加 SHA-256，不兼容旧供应商拼接形式。
     #[test]
     fn basis_id_parser_rejects_legacy_shape() {
-        let digest = digest_parts(["scope".to_string()]);
+        let digest = entities::purchase_order::digest_parts(["scope".to_string()]);
         assert_eq!(
             parse_basis_sales_order_id(&format!("so-1:{digest}"))
                 .unwrap()
@@ -2235,79 +1952,6 @@ mod tests {
             "so-1"
         );
         assert!(parse_basis_sales_order_id("so-1:supplier-1").is_err());
-    }
-
-    /// 同一采购范围拆向不同目标仓时必须形成不同的数据库唯一身份。
-    #[test]
-    fn target_warehouse_scopes_creation_basis_identity() {
-        let common_parts = vec!["guard-1".to_string(), "scope-1".to_string()];
-        let first = compose_basis_id(
-            "so-1",
-            common_parts.clone(),
-            Some(&WarehouseId::new("warehouse-1")),
-        );
-        let second = compose_basis_id(
-            "so-1",
-            common_parts.clone(),
-            Some(&WarehouseId::new("warehouse-2")),
-        );
-        let selectable = compose_basis_id("so-1", common_parts, None);
-
-        assert_ne!(first, second);
-        assert_ne!(first, selectable);
-        assert_ne!(second, selectable);
-    }
-
-    /// 精确范围同时区分供应商、类型、付款条件和履约责任。
-    #[test]
-    fn basis_scope_key_contains_exact_split_dimensions() {
-        let scope = BasisScope {
-            supplier_id: entities::ids::SupplierAccountId::new("sup-1"),
-            purchase_type: PurchaseType::Physical,
-            payment_term_code: "NET-30".to_string(),
-            fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
-        };
-
-        assert_eq!(super::basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE");
-    }
-
-    /// 商品稳定类型决定采购类型，销售字段不得参与。
-    #[test]
-    fn product_kind_determines_purchase_type() {
-        assert_eq!(
-            purchase_type_from_product_kind(ProductKind::Physical).unwrap(),
-            PurchaseType::Physical
-        );
-        assert_eq!(
-            purchase_type_from_product_kind(ProductKind::Virtual).unwrap(),
-            PurchaseType::Virtual
-        );
-        assert_eq!(
-            purchase_type_from_product_kind(ProductKind::OfflineService).unwrap(),
-            PurchaseType::Service
-        );
-        assert!(purchase_type_from_product_kind(ProductKind::Voucher).is_err());
-    }
-
-    /// 实物由采购选择入仓或直发，其他商品类型只允许其固有路线。
-    #[test]
-    fn product_kind_limits_fulfillment_options() {
-        assert_eq!(
-            fulfillment_options(ProductKind::Physical).unwrap(),
-            &[
-                FulfillmentResponsibility::Warehouse,
-                FulfillmentResponsibility::SupplierDirect,
-            ]
-        );
-        assert_eq!(
-            fulfillment_options(ProductKind::Virtual).unwrap(),
-            &[FulfillmentResponsibility::Electronic]
-        );
-        assert_eq!(
-            fulfillment_options(ProductKind::OfflineService).unwrap(),
-            &[FulfillmentResponsibility::Service]
-        );
-        assert!(fulfillment_options(ProductKind::Voucher).is_err());
     }
 
     /// 采购预计交付日可以早于或等于销售承诺期限，但不得晚于该期限。
@@ -2338,5 +1982,43 @@ mod tests {
         assert!(production.contains("ensure_initial_purchase_order_owner"));
         assert!(production.contains("ensure_fulfillment_owner_eligible"));
         assert!(production.contains("submit_created_draft_in_session"));
+    }
+
+    /// 创建依据路径必须使用批量事实加载，旧逐行供给与名称查询已删除。
+    #[test]
+    fn creation_basis_uses_batch_facts_loader() {
+        let production = include_str!("creation_basis.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+
+        assert!(
+            production.contains("load_creation_basis_facts"),
+            "必须使用批量事实加载"
+        );
+        assert!(
+            production.contains("basis_groups_and_facts"),
+            "事务内必须复用同一批事实"
+        );
+        assert!(
+            !production.contains("list_active_offerings_by_sku("),
+            "逐 SKU 供给查询已删除"
+        );
+        assert!(
+            !production.contains("cached_settlement_terms"),
+            "逐供应商付款条件缓存已删除"
+        );
+        assert!(
+            !production.contains("resolve_supplier_name"),
+            "逐供应商名称查询已删除"
+        );
+        assert!(
+            !production.contains("fn normalize_requested_lines"),
+            "请求行规范化已下沉实体"
+        );
+        assert!(
+            !production.contains("fn basis_id_for") && !production.contains("fn basis_scope_key"),
+            "依据身份规则已下沉实体"
+        );
     }
 }

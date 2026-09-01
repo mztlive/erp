@@ -5,6 +5,8 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS` 等值。
 
+use entities::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
+use entities::purchase_order::{CreationBasisFacts, ProcurementCoverageFacts};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseLineSalesAllocation,
     PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmission,
@@ -15,9 +17,12 @@ use mongodb::Database;
 use super::super::purchase_order::{
     PurchaseOrderFilter, PurchaseOrderRepository, PurchaseOrderSubmissionFilter,
 };
+use crate::executor::Executor;
 use crate::Repository;
+use crate::Result;
 
 /// 域 D15 仓储访问器。
+#[allow(async_fn_in_trait)]
 pub trait PurchaseOrderExt: Sized {
     /// `purchase_order` 集合名。
     const PURCHASE_ORDERS: &'static str = "purchase_orders";
@@ -103,6 +108,56 @@ pub trait PurchaseOrderExt: Sized {
     /// # 返回
     /// 返回 `PurchaseOrderRepository` 实例。
     fn purchase_order(&self) -> PurchaseOrderRepository<'_>;
+
+    /// 批量加载采购覆盖计算所需的最小持久化事实。
+    ///
+    /// # 参数
+    /// * `revision_id` - 销售单当前版本身份（Service 已校验指针存在）
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回包含当前销售目标行与全部当前覆盖来源的事实集合；当前版本文档缺失时
+    /// 返回空事实集合，由 Entity 层校验。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误；不负责缺失校验，软删除与作废采购单
+    /// 已通过 Repository 查询过滤。
+    ///
+    /// # 约束
+    /// 查询次数与输入规模无关：销售版本行、商品子类型行、SKU、商品、覆盖采购单、
+    /// 当前提交行、当前版本行、正式分配与现有库存预占各一次批量读取，不得出现
+    /// 逐行 N+1。草稿类状态只沿当前提交指针、正式状态只沿当前版本指针读取。
+    async fn load_procurement_coverage_facts(
+        &self,
+        revision_id: &SalesOrderRevisionId,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<ProcurementCoverageFacts>;
+
+    /// 批量加载采购创建依据计算所需的最小持久化事实。
+    ///
+    /// # 参数
+    /// * `sku_ids` - 任务责任范围内仍有剩余量的销售目标行 SKU 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回 ACTIVE 供给、供给当前修订、实时可供投影、供应商角色、当前商务资料
+    /// 修订与当前法定名称；SKU 集合为空时返回空事实集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误；修订、可供投影或供应商关联缺失
+    /// 以缺键形式表达，由 Service 按合格性语义解释。
+    ///
+    /// # 约束
+    /// 查询次数与输入规模无关：供给、修订、可供投影、供应商、商务资料修订与
+    /// 法定名称各一次批量读取，不得出现逐行 N+1；供给只读取 ACTIVE 且未删除行，
+    /// 并按 SKU、供应商与供给 ID 稳定排序。
+    async fn load_creation_basis_facts(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<CreationBasisFacts>;
 }
 
 impl PurchaseOrderExt for Database {
@@ -147,5 +202,64 @@ impl PurchaseOrderExt for Database {
 
     fn purchase_order(&self) -> PurchaseOrderRepository<'_> {
         PurchaseOrderRepository::new(self)
+    }
+
+    /// 批量加载采购覆盖计算所需的最小持久化事实。
+    ///
+    /// # 参数
+    /// * `revision_id` - 销售单当前版本身份（Service 已校验指针存在）
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回包含当前销售目标行与全部当前覆盖来源的事实集合；当前版本文档缺失时
+    /// 返回空事实集合，由 Entity 层校验。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误；不负责缺失校验，软删除与作废采购单
+    /// 已通过 Repository 查询过滤。
+    ///
+    /// # 约束
+    /// 查询次数与输入规模无关：销售版本行、商品子类型行、SKU、商品、覆盖采购单、
+    /// 当前提交行、当前版本行、正式分配与现有库存预占各一次批量读取，不得出现
+    /// 逐行 N+1。草稿类状态只沿当前提交指针、正式状态只沿当前版本指针读取。
+    async fn load_procurement_coverage_facts(
+        &self,
+        revision_id: &SalesOrderRevisionId,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<ProcurementCoverageFacts> {
+        super::super::purchase_order::load_procurement_coverage_facts(
+            self,
+            revision_id,
+            sales_order_id,
+            executor,
+        )
+        .await
+    }
+
+    /// 批量加载采购创建依据计算所需的最小持久化事实。
+    ///
+    /// # 参数
+    /// * `sku_ids` - 任务责任范围内仍有剩余量的销售目标行 SKU 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回 ACTIVE 供给、供给当前修订、实时可供投影、供应商角色、当前商务资料
+    /// 修订与当前法定名称；SKU 集合为空时返回空事实集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误；修订、可供投影或供应商关联缺失
+    /// 以缺键形式表达，由 Service 按合格性语义解释。
+    ///
+    /// # 约束
+    /// 查询次数与输入规模无关：供给、修订、可供投影、供应商、商务资料修订与
+    /// 法定名称各一次批量读取，不得出现逐行 N+1。
+    async fn load_creation_basis_facts(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<CreationBasisFacts> {
+        super::super::purchase_order::load_creation_basis_facts(self, sku_ids, executor).await
     }
 }

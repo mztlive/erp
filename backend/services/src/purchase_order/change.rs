@@ -38,6 +38,7 @@ use super::dto::{
     SavePurchaseOrderLine, StartPurchaseChangeRequest, StartPurchaseChangeResult,
     SubmitPurchaseChangeRequest,
 };
+use super::line_input::{build_change_submission_lines, compute_request_totals, to_line_inputs};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
 use crate::approval::binding::{
@@ -549,9 +550,8 @@ impl PurchaseOrderService {
         let enriched_lines = self
             .enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines)
             .await?;
-        let lines = self
-            .build_change_submission_lines(&submission.base.id.clone(), &enriched_lines)
-            .await?;
+        let inputs = to_line_inputs(&enriched_lines)?;
+        let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;
         Ok(FrozenChangeSubmission {
@@ -1088,7 +1088,8 @@ impl PurchaseOrderService {
         _supplier_name: &str,
         req: &SubmitPurchaseChangeRequest,
     ) -> Result<PurchaseChangeSubmission> {
-        let (gross, net, tax) = self.compute_request_totals(&req.lines).await?;
+        let inputs = to_line_inputs(&req.lines)?;
+        let (gross, net, tax) = compute_request_totals(&inputs)?;
         let payment_term_code = req
             .payment_term_code
             .clone()

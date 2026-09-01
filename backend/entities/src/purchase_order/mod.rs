@@ -19,11 +19,16 @@
 mod allocation;
 mod change_order;
 mod command_receipt;
+mod coverage;
+mod creation_basis;
+mod draft_edit;
+mod line_amounts;
 mod line_common;
 mod order;
 mod purchase_revision;
 mod purchase_submission;
 mod snapshot;
+mod sourcing_plan;
 mod types;
 
 pub use allocation::{
@@ -39,6 +44,17 @@ pub use command_receipt::{
     digest_parts, payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt,
     PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseReceiptWire,
 };
+pub use coverage::{
+    build_procurement_coverage, ProcurementCoverageFacts, SalesProcurementCoverage,
+    SalesProcurementCoverageLine,
+};
+pub use creation_basis::{
+    basis_id_for, basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
+    normalize_requested_lines, purchase_type_from_product_kind, stable_line_id, supply_cost, BasisGroup,
+    BasisLine, BasisScope, CreationBasisFacts, LineSupply, RequestedLine,
+};
+pub use draft_edit::{validate_draft_line_edits, DraftLineEdit, DraftLineEditViolation};
+pub use line_amounts::{compute_header_totals, LineAmountViolation, PurchaseLineInput};
 pub use order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
     PurchaseReviewStatus,
@@ -53,4 +69,8 @@ pub use purchase_submission::{
     SubmissionStatus,
 };
 pub use snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+pub use sourcing_plan::{
+    stock_basis_id_for, RequestedStockLine, SourcingAssignment, SourcingAssignmentSet, SourcingDraftPlan,
+    SourcingPlan, SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,
+};
 pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};

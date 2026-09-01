@@ -37,6 +37,7 @@ mod creation_basis;
 mod draft_edit;
 mod dto;
 mod formalization;
+mod line_input;
 mod procurement_task_sync;
 mod query;
 mod review;

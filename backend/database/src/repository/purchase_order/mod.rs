@@ -18,10 +18,14 @@
 mod allocation;
 mod change;
 mod common;
+mod coverage;
+mod creation_basis;
 mod order;
 mod revision;
 mod submission;
 
+pub use coverage::load_procurement_coverage_facts;
+pub use creation_basis::load_creation_basis_facts;
 pub use order::PurchaseOrderFilter;
 pub use submission::PurchaseOrderSubmissionFilter;
 

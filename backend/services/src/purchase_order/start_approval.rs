@@ -16,7 +16,8 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::purchase_order::{
-    PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    validate_draft_line_edits, PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission,
+    PurchaseOrderSubmissionLine,
 };
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
@@ -487,11 +488,13 @@ pub(super) async fn persist_purchase_order_start_with_session(
     if let Some(guard) = procurement_guard {
         let coverage =
             super::draft_edit::advance_guard_and_load_coverage(db, &order, &guard.actor_id, session).await?;
-        super::draft_edit::validate_procurement_line_edit(
-            &guard.requested_lines,
-            &guard.existing_lines,
-            &coverage,
-        )?;
+        let requested_edits = guard
+            .requested_lines
+            .iter()
+            .map(SavePurchaseOrderLine::to_draft_edit)
+            .collect::<Vec<_>>();
+        validate_draft_line_edits(&requested_edits, &guard.existing_lines, &coverage.lines)
+            .map_err(super::draft_edit::map_draft_edit_violation)?;
     }
     db.purchase_order()
         .create_purchase_submission(&mut order, &submission, &submission_lines, session)

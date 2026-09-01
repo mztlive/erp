@@ -570,6 +570,27 @@ impl PurchaseOrder {
         Ok(())
     }
 
+    /// 禁止草稿编辑修改创建依据冻结的付款条件。
+    ///
+    /// # 参数
+    /// * `requested` - 客户端可选付款条件
+    ///
+    /// # 返回
+    /// 未提供或与当前值一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 请求试图修改付款条件时返回
+    /// [`DraftLineEditViolation::PaymentTermChanged`]。
+    pub fn ensure_payment_term_unchanged(
+        &self,
+        requested: Option<&str>,
+    ) -> std::result::Result<(), super::draft_edit::DraftLineEditViolation> {
+        if requested.is_some_and(|value| value.trim() != self.payment_term_code) {
+            return Err(super::draft_edit::DraftLineEditViolation::PaymentTermChanged);
+        }
+        Ok(())
+    }
+
     /// 旧财务审核提交入口。审批改造后不可达。
     ///
     /// # 错误
@@ -1132,5 +1153,20 @@ mod tests {
         assert_eq!(PurchaseOrderStatus::Voided.label(), "已作废");
         assert_eq!(PurchaseReviewStatus::Pending.label(), "待审核");
         assert_eq!(ProgressStatus::None.label(), "未开始");
+    }
+
+    /// 付款条件在依据创建后保持不可变：缺省或同值放行，改写拒绝。
+    #[test]
+    fn payment_term_stays_immutable_after_basis_creation() {
+        let order = new_order();
+        assert_eq!(order.payment_term_code, "POSTPAY_NET30");
+        assert!(order.ensure_payment_term_unchanged(None).is_ok());
+        assert!(order
+            .ensure_payment_term_unchanged(Some(" POSTPAY_NET30 "))
+            .is_ok());
+        assert_eq!(
+            order.ensure_payment_term_unchanged(Some("PREPAY")),
+            Err(crate::purchase_order::draft_edit::DraftLineEditViolation::PaymentTermChanged)
+        );
     }
 }

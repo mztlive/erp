@@ -14,16 +14,17 @@
 //!   `FormalActionResponse` 信封（由 HTTP 统一信封承载）。
 
 use entities::money::Amount;
+pub use entities::purchase_order::SupplySourceType;
 use entities::purchase_order::{
-    digest_parts, payload_fingerprint, FulfillmentResponsibility, ProgressStatus, PurchaseLineType,
-    PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
+    digest_parts, normalize_requested_lines, payload_fingerprint, DraftLineEdit, FulfillmentResponsibility,
+    ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseOrderSubmissionLine, PurchaseReviewStatus,
+    PurchaseType, RequestedLine, SourcingAssignment, SourcingAssignmentSet,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use validator::Validate;
 
-use super::creation_basis::RequestedLine;
-use super::sourcing_create::RequestedSourcingLine;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 /// 作废草稿命令的服务端固定审计动作（同时参与请求指纹）。
@@ -507,17 +508,6 @@ pub struct CreationBasisListParams {
     pub work_item_id: Option<String>,
 }
 
-/// 销售供给来源。
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SupplySourceType {
-    /// 供应商采购。
-    #[default]
-    Purchase,
-    /// 公司现有库存。
-    ExistingStock,
-}
-
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
@@ -647,6 +637,35 @@ pub struct CreatePurchaseOrderFromBasisRequest {
 }
 
 impl CreatePurchaseOrderFromBasisRequest {
+    /// 规范化并校验逐行本次采购数量。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回去除首尾空白、数量已类型化且稳定行不重复的请求行。
+    ///
+    /// # 错误
+    /// 稳定行重复、数量非法或数量不大于零时返回参数验证错误。
+    ///
+    /// # 关键业务约束
+    /// 同一稳定销售行在一次命令中只能出现一次；字符串类型化与集合规则由
+    /// `entities::purchase_order::creation_basis` 承担，本方法只负责协议错误映射。
+    pub(super) fn normalized_lines(&self) -> Result<Vec<RequestedLine>> {
+        let mut parsed = Vec::with_capacity(self.lines.len());
+        for line in &self.lines {
+            parsed.push(
+                RequestedLine::parse(
+                    &line.sales_order_line_id,
+                    &line.quantity,
+                    &line.expected_delivery_date,
+                )
+                .map_err(|error| Error::ValidationError(error.to_string()))?,
+            );
+        }
+        normalize_requested_lines(&parsed).map_err(|error| Error::ValidationError(error.to_string()))
+    }
+
     /// 计算创建命令请求指纹（不含原始幂等键）。
     ///
     /// # 参数
@@ -745,6 +764,39 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
 }
 
 impl CreatePurchaseOrdersFromSourcingRequest {
+    /// 规范化并校验逐行选源分配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字符串已类型化、同销售行同依据不重复且稳定排序的选源集合。
+    ///
+    /// # 错误
+    /// 销售行或依据空白、数量或预计交付日非法、现有库存另行指定目标仓、
+    /// 数量不大于零或同一销售行重复使用同一依据时返回参数验证错误。
+    ///
+    /// # 关键业务约束
+    /// 字符串类型化与集合规则由 `entities::purchase_order::sourcing_plan`
+    /// 承担，本方法只负责协议错误映射；同一销售行允许按库存与采购依据拆分。
+    pub(super) fn sourcing_assignments(&self) -> Result<SourcingAssignmentSet> {
+        let mut parsed = Vec::with_capacity(self.lines.len());
+        for line in &self.lines {
+            parsed.push(
+                SourcingAssignment::parse(
+                    &line.sales_order_line_id,
+                    &line.basis_id,
+                    line.source_type,
+                    line.target_warehouse_id.as_deref(),
+                    &line.quantity,
+                    &line.expected_delivery_date,
+                )
+                .map_err(|error| Error::ValidationError(error.to_string()))?,
+            );
+        }
+        SourcingAssignmentSet::normalize(&parsed).map_err(|error| Error::ValidationError(error.to_string()))
+    }
+
     /// 计算整批选源创建命令请求指纹（不含原始幂等键）。
     ///
     /// # 参数
@@ -759,7 +811,7 @@ impl CreatePurchaseOrdersFromSourcingRequest {
     /// # 关键业务约束
     /// 同一幂等键用于不同任务、销售单、供应商或数量时必须冲突；摘要形态与
     /// 存量收据一致，修改会破坏幂等兼容。
-    pub(super) fn request_fingerprint(&self, assignments: &[RequestedSourcingLine]) -> Result<String> {
+    pub(super) fn request_fingerprint(&self, assignments: &[SourcingAssignment]) -> Result<String> {
         let payload = assignments
             .iter()
             .map(|line| {
@@ -833,6 +885,50 @@ pub struct SavePurchaseOrderDraftRequest {
 }
 
 impl SavePurchaseOrderDraftRequest {
+    /// 校验保存请求只使用一种行载荷。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 完整行与行补丁恰好提供一种时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 两种都提供或都缺失，或任一补丁字段非法时返回校验错误。
+    pub(crate) fn ensure_shape(&self) -> Result<()> {
+        if self.lines.is_empty() == self.line_patches.is_empty() {
+            return Err(Error::ValidationError(
+                "完整采购行与草稿行补丁必须且只能提供一种".to_string(),
+            ));
+        }
+        for patch in &self.line_patches {
+            patch.validate()?;
+        }
+        Ok(())
+    }
+
+    /// 生成已规范化草稿行：完整行原样保留顺序返回；补丁路径把客户端可编辑
+    /// 字段合并到服务端冻结的草稿来源行。
+    ///
+    /// # 参数
+    /// * `existing` - 服务端当前草稿行
+    ///
+    /// # 返回
+    /// 返回可进入领域校验与写入的完整行集合。
+    ///
+    /// # 错误
+    /// 补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时
+    /// 返回校验或冲突错误。
+    pub(crate) fn resolve_lines(
+        &self,
+        existing: &[PurchaseOrderSubmissionLine],
+    ) -> Result<Vec<SavePurchaseOrderLine>> {
+        if !self.lines.is_empty() {
+            return Ok(self.lines.clone());
+        }
+        SavePurchaseOrderLinePatch::resolve_all(&self.line_patches, existing)
+    }
+
     /// 计算保存草稿请求指纹（不含原始幂等键）。
     ///
     /// # 参数
@@ -887,6 +983,113 @@ pub struct SavePurchaseOrderLinePatch {
     pub input_tax_rate: Option<String>,
 }
 
+impl SavePurchaseOrderLinePatch {
+    /// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得。
+    ///
+    /// # 参数
+    /// * `patches` - 客户端可编辑字段快照
+    /// * `existing` - 服务端当前草稿行
+    ///
+    /// # 返回
+    /// 返回合并后的完整行集合。
+    ///
+    /// # 错误
+    /// 补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时
+    /// 返回校验或冲突错误。
+    pub(crate) fn resolve_all(
+        patches: &[Self],
+        existing: &[PurchaseOrderSubmissionLine],
+    ) -> Result<Vec<SavePurchaseOrderLine>> {
+        if patches.len() != existing.len() {
+            return Err(Error::ValidationError(
+                "采购草稿行补丁必须覆盖全部当前草稿行".to_string(),
+            ));
+        }
+        let mut patch_map = HashMap::with_capacity(patches.len());
+        for patch in patches {
+            if patch_map
+                .insert(patch.line_id.trim().to_string(), patch)
+                .is_some()
+            {
+                return Err(Error::ValidationError("采购草稿包含重复行补丁".to_string()));
+            }
+        }
+
+        existing
+            .iter()
+            .map(|line| {
+                let patch = patch_map
+                    .remove(&line.base.id)
+                    .ok_or_else(|| Error::ConflictError("采购草稿行已变化，请刷新后重试".to_string()))?;
+                if patch.line_type != line.line_type {
+                    return Err(Error::ValidationError("采购草稿行类型不可修改".to_string()));
+                }
+                let is_item = line.line_type == PurchaseLineType::ItemService;
+                let quantity = if is_item {
+                    patch
+                        .quantity
+                        .clone()
+                        .or_else(|| line.quantity.map(|value| value.to_string()))
+                } else {
+                    None
+                };
+                Ok(SavePurchaseOrderLine {
+                    line_type: line.line_type,
+                    procurement_confirmation_line_id: line
+                        .procurement_confirmation_line_id
+                        .as_ref()
+                        .map(ToString::to_string),
+                    sku_id: line.sku_id.as_ref().map(ToString::to_string),
+                    sku_revision_id: line.sku_revision_id.as_ref().map(ToString::to_string),
+                    product_name: line.product_name_snapshot.clone(),
+                    specification: line.specification_snapshot.clone(),
+                    quantity: quantity.clone(),
+                    base_unit_code: if is_item {
+                        line.base_unit_code.clone()
+                    } else {
+                        None
+                    },
+                    unit_cost_gross: if is_item {
+                        patch
+                            .unit_cost_gross
+                            .clone()
+                            .or_else(|| line.unit_cost_gross.map(|value| value.to_string()))
+                    } else {
+                        None
+                    },
+                    input_tax_rate: patch
+                        .input_tax_rate
+                        .clone()
+                        .or_else(|| line.input_tax_rate.map(|value| value.to_string())),
+                    expected_delivery_date: if is_item {
+                        line.expected_delivery_date.map(|value| value.to_string())
+                    } else {
+                        None
+                    },
+                    sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
+                    sales_order_revision_line_id: line
+                        .sales_order_revision_line_id
+                        .as_ref()
+                        .map(ToString::to_string),
+                    sales_order_submission_line_id: line
+                        .sales_order_submission_line_id
+                        .as_ref()
+                        .map(ToString::to_string),
+                    allocated_quantity: if is_item { quantity } else { None },
+                    gross_amount: if is_item {
+                        None
+                    } else {
+                        patch
+                            .unit_cost_gross
+                            .clone()
+                            .or_else(|| Some(line.gross_amount.to_string()))
+                    },
+                })
+            })
+            .collect()
+    }
+}
+
 /// 草稿行写入项。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SavePurchaseOrderLine {
@@ -922,6 +1125,35 @@ pub struct SavePurchaseOrderLine {
     pub allocated_quantity: Option<String>,
     /// 物流费用行含税金额（物流行为必填；商品行忽略）。
     pub gross_amount: Option<String>,
+}
+
+impl SavePurchaseOrderLine {
+    /// 转换为领域草稿行编辑请求。
+    ///
+    /// 字符串字段原样传递；空白、数量与引用校验由
+    /// `entities::purchase_order::validate_draft_line_edits` 统一完成。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与自身字段一致的草稿行编辑请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn to_draft_edit(&self) -> DraftLineEdit {
+        DraftLineEdit {
+            line_type: self.line_type,
+            quantity: self.quantity.clone(),
+            allocated_quantity: self.allocated_quantity.clone(),
+            procurement_confirmation_line_id: self.procurement_confirmation_line_id.clone(),
+            sku_id: self.sku_id.clone(),
+            sku_revision_id: self.sku_revision_id.clone(),
+            sales_order_line_id: self.sales_order_line_id.clone(),
+            sales_order_revision_line_id: self.sales_order_revision_line_id.clone(),
+            sales_order_submission_line_id: self.sales_order_submission_line_id.clone(),
+        }
+    }
 }
 
 /// 保存草稿结果。
@@ -1281,8 +1513,6 @@ mod tests {
     use serde_json::json;
     use validator::Validate;
 
-    use super::super::creation_basis::RequestedLine;
-    use super::super::sourcing_create::RequestedSourcingLine;
     use super::{
         normalize_sort, submit_request_shape, CreatePurchaseOrderFromBasisRequest,
         CreatePurchaseOrderLineRequest, CreatePurchaseOrdersFromSourcingRequest, PurchaseLineType,
@@ -1290,6 +1520,8 @@ mod tests {
         SavePurchaseOrderLinePatch, SortDir, SourcingLineAssignment, SubmitPurchaseOrderRequest,
         SupplySourceType, VoidPurchaseOrderRequest,
     };
+    use crate::errors::Error;
+    use entities::purchase_order::{PurchaseOrderSubmissionLine, RequestedLine, SourcingAssignment};
 
     /// 作废路径指纹金值：锁定历史算法绝对摘要。
     ///
@@ -1428,7 +1660,7 @@ mod tests {
             idempotency_key: "sourcing-key-1".to_string(),
         };
         let assignments = vec![
-            RequestedSourcingLine {
+            SourcingAssignment {
                 sales_order_line_id: "sol-1".to_string(),
                 basis_id: "basis-1".to_string(),
                 source_type: SupplySourceType::Purchase,
@@ -1436,7 +1668,7 @@ mod tests {
                 quantity: Quantity::from_str("10").unwrap(),
                 expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
             },
-            RequestedSourcingLine {
+            SourcingAssignment {
                 sales_order_line_id: "sol-2".to_string(),
                 basis_id: "basis-2".to_string(),
                 source_type: SupplySourceType::ExistingStock,
@@ -1610,5 +1842,214 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(line.source_type, SupplySourceType::Purchase);
+    }
+
+    /// 构造当前草稿商品行。
+    fn draft_line(id: &str, stable_line_id: &str, quantity: &str) -> PurchaseOrderSubmissionLine {
+        use entities::ids::{
+            ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
+            SalesOrderLineId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
+        };
+        use entities::money::{Rate, UnitPrice};
+        use entities::purchase_order::PurchaseOrderSubmissionLineData;
+        let quantity = Quantity::from_str(quantity).unwrap();
+        let (gross, net, tax) = entities::money::line_amounts(
+            UnitPrice::from_str("5").unwrap(),
+            quantity,
+            Rate::from_str("0").unwrap(),
+        );
+        PurchaseOrderSubmissionLine::new(
+            PurchaseOrderSubmissionLineId::new(id),
+            PurchaseOrderSubmissionLineData {
+                purchase_order_submission_id: PurchaseOrderSubmissionId::new("sub-1"),
+                line_no: 1,
+                line_type: PurchaseLineType::ItemService,
+                procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
+                sku_id: Some(SkuId::new("sku-1")),
+                sku_revision_id: Some(SkuRevisionId::new("skur-1")),
+                product_name_snapshot: Some("商品".to_string()),
+                specification_snapshot: Some("规格".to_string()),
+                quantity: Some(quantity),
+                base_unit_code: Some("件".to_string()),
+                unit_cost_gross: Some(UnitPrice::from_str("5").unwrap()),
+                gross_amount: gross,
+                net_amount: net,
+                tax_amount: tax,
+                input_tax_rate: Some(Rate::from_str("0").unwrap()),
+                expected_delivery_date: None,
+                sales_order_line_id: Some(SalesOrderLineId::new(stable_line_id)),
+                sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
+                sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
+                allocated_quantity: Some(quantity),
+            },
+        )
+        .unwrap()
+    }
+
+    /// 构造空行载荷的保存请求。
+    fn draft_request(line_patches: Vec<SavePurchaseOrderLinePatch>) -> SavePurchaseOrderDraftRequest {
+        SavePurchaseOrderDraftRequest {
+            expected_lock_version: 1,
+            payment_term_code: None,
+            lines: vec![],
+            line_patches,
+            idempotency_key: "save-key-1".to_string(),
+        }
+    }
+
+    /// 完整行与行补丁必须且只能提供一种。
+    #[test]
+    fn save_request_shape_requires_exactly_one_line_payload() {
+        let empty = draft_request(vec![]);
+        assert!(empty.ensure_shape().is_err());
+
+        let mut both = empty.clone();
+        both.lines = vec![SavePurchaseOrderLine {
+            line_type: PurchaseLineType::ItemService,
+            procurement_confirmation_line_id: None,
+            sku_id: None,
+            sku_revision_id: None,
+            product_name: None,
+            specification: None,
+            quantity: Some("1".to_string()),
+            base_unit_code: None,
+            unit_cost_gross: None,
+            input_tax_rate: None,
+            expected_delivery_date: None,
+            sales_order_line_id: None,
+            sales_order_revision_line_id: None,
+            sales_order_submission_line_id: None,
+            allocated_quantity: Some("1".to_string()),
+            gross_amount: None,
+        }];
+        both.line_patches = vec![SavePurchaseOrderLinePatch {
+            line_id: "subl-1".to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: None,
+            unit_cost_gross: None,
+            input_tax_rate: None,
+        }];
+        assert!(both.ensure_shape().is_err());
+
+        let mut lines_only = both.clone();
+        lines_only.line_patches = vec![];
+        assert!(lines_only.ensure_shape().is_ok());
+
+        let mut patches_only = both.clone();
+        patches_only.lines = vec![];
+        assert!(patches_only.ensure_shape().is_ok());
+
+        let mut blank_patch = patches_only.clone();
+        blank_patch.line_patches[0].line_id = "  ".to_string();
+        assert!(blank_patch.ensure_shape().is_err());
+    }
+
+    /// 完整行路径原样返回，补丁路径合并冻结字段与可编辑字段。
+    #[test]
+    fn resolve_lines_merges_patches_with_frozen_draft_fields() {
+        let existing = vec![draft_line("subl-1", "sol-1", "2")];
+        let mut request = draft_request(vec![SavePurchaseOrderLinePatch {
+            line_id: " subl-1 ".to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: Some(" 5 ".to_string()),
+            unit_cost_gross: Some("8".to_string()),
+            input_tax_rate: Some("0.13".to_string()),
+        }]);
+        let merged = request.resolve_lines(&existing).unwrap();
+        assert_eq!(merged.len(), 1);
+        let line = &merged[0];
+        // 补丁字段原样合并；空白由领域校验统一规范化。
+        assert_eq!(line.quantity.as_deref(), Some(" 5 "));
+        assert_eq!(line.allocated_quantity.as_deref(), Some(" 5 "));
+        assert_eq!(line.unit_cost_gross.as_deref(), Some("8"));
+        assert_eq!(line.input_tax_rate.as_deref(), Some("0.13"));
+        assert_eq!(line.sku_id.as_deref(), Some("sku-1"));
+        assert_eq!(line.sales_order_line_id.as_deref(), Some("sol-1"));
+        assert_eq!(line.sales_order_submission_line_id.as_deref(), Some("sosl-1"));
+        assert_eq!(line.product_name.as_deref(), Some("商品"));
+
+        request.line_patches[0].line_id = "subl-1".to_string();
+        request.lines = vec![SavePurchaseOrderLine {
+            line_type: PurchaseLineType::ItemService,
+            procurement_confirmation_line_id: None,
+            sku_id: Some("sku-9".to_string()),
+            sku_revision_id: None,
+            product_name: None,
+            specification: None,
+            quantity: Some("9".to_string()),
+            base_unit_code: None,
+            unit_cost_gross: None,
+            input_tax_rate: None,
+            expected_delivery_date: None,
+            sales_order_line_id: Some("sol-9".to_string()),
+            sales_order_revision_line_id: None,
+            sales_order_submission_line_id: None,
+            allocated_quantity: Some("9".to_string()),
+            gross_amount: None,
+        }];
+        let full = request.resolve_lines(&existing).unwrap();
+        assert_eq!(full[0].quantity.as_deref(), Some("9"));
+        assert_eq!(full[0].sales_order_line_id.as_deref(), Some("sol-9"));
+    }
+
+    /// 补丁必须覆盖全部当前草稿行且不得重复。
+    #[test]
+    fn resolve_line_patches_rejects_partial_and_duplicate_patches() {
+        let existing = vec![
+            draft_line("subl-1", "sol-1", "2"),
+            draft_line("subl-2", "sol-2", "1"),
+        ];
+        let patch = |line_id: &str| SavePurchaseOrderLinePatch {
+            line_id: line_id.to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: None,
+            unit_cost_gross: None,
+            input_tax_rate: None,
+        };
+        let partial = draft_request(vec![patch("subl-1")]);
+        assert!(SavePurchaseOrderLinePatch::resolve_all(&partial.line_patches, &existing).is_err());
+
+        let duplicate = draft_request(vec![patch("subl-1"), patch("subl-1")]);
+        assert!(SavePurchaseOrderLinePatch::resolve_all(&duplicate.line_patches, &existing).is_err());
+
+        let unknown = draft_request(vec![patch("subl-9"), patch("subl-2")]);
+        assert!(matches!(
+            SavePurchaseOrderLinePatch::resolve_all(&unknown.line_patches, &existing),
+            Err(Error::ConflictError(_))
+        ));
+
+        let mut changed_type = draft_request(vec![patch("subl-1"), patch("subl-2")]);
+        changed_type.line_patches[0].line_type = PurchaseLineType::LogisticsFee;
+        assert!(SavePurchaseOrderLinePatch::resolve_all(&changed_type.line_patches, &existing).is_err());
+    }
+
+    /// 草稿行编辑请求保留全部字段供领域校验。
+    #[test]
+    fn to_draft_edit_carries_all_line_fields() {
+        let line = SavePurchaseOrderLine {
+            line_type: PurchaseLineType::ItemService,
+            procurement_confirmation_line_id: Some("pcl-1".to_string()),
+            sku_id: Some("sku-1".to_string()),
+            sku_revision_id: Some("skur-1".to_string()),
+            product_name: Some("商品".to_string()),
+            specification: Some("规格".to_string()),
+            quantity: Some("5".to_string()),
+            base_unit_code: Some("件".to_string()),
+            unit_cost_gross: Some("8".to_string()),
+            input_tax_rate: Some("0.13".to_string()),
+            expected_delivery_date: Some("2026-09-01".to_string()),
+            sales_order_line_id: Some("sol-1".to_string()),
+            sales_order_revision_line_id: Some("sorl-1".to_string()),
+            sales_order_submission_line_id: Some("sosl-1".to_string()),
+            allocated_quantity: Some("5".to_string()),
+            gross_amount: None,
+        };
+        let edit = line.to_draft_edit();
+        assert_eq!(edit.line_type, PurchaseLineType::ItemService);
+        assert_eq!(edit.quantity.as_deref(), Some("5"));
+        assert_eq!(edit.allocated_quantity.as_deref(), Some("5"));
+        assert_eq!(edit.sku_id.as_deref(), Some("sku-1"));
+        assert_eq!(edit.sales_order_line_id.as_deref(), Some("sol-1"));
+        assert_eq!(edit.sales_order_submission_line_id.as_deref(), Some("sosl-1"));
     }
 }
