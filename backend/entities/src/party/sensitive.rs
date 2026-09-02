@@ -111,10 +111,12 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     padded.extend_from_slice(&bit_len.to_be_bytes());
 
     let mut hash = H_INIT;
-    for chunk in padded.chunks_exact(64) {
+    let (blocks, _) = padded.as_chunks::<64>();
+    for chunk in blocks {
         let mut schedule = [0u32; 64];
-        for (word, bytes) in schedule.iter_mut().zip(chunk.chunks_exact(4)) {
-            *word = u32::from_be_bytes(bytes.try_into().expect("4 字节块"));
+        let (words, _) = chunk.as_chunks::<4>();
+        for (word, bytes) in schedule.iter_mut().zip(words.iter()) {
+            *word = u32::from_be_bytes(*bytes);
         }
         for t in 16..64 {
             let sigma0 = schedule[t - 15].rotate_right(7)
@@ -165,8 +167,9 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     }
 
     let mut digest = [0u8; 32];
-    for (bytes, word) in digest.chunks_exact_mut(4).zip(hash) {
-        bytes.copy_from_slice(&word.to_be_bytes());
+    let (digest_words, _) = digest.as_chunks_mut::<4>();
+    for (bytes, word) in digest_words.iter_mut().zip(hash) {
+        *bytes = word.to_be_bytes();
     }
     digest
 }

@@ -21,6 +21,7 @@ mod dto;
 mod payment_plan;
 mod query;
 mod receive;
+mod validated_fact_payload;
 
 pub use self::dto::{
     ConservationResultRow, ConservationView, ConsumptionEntryView, CostAssessmentView,

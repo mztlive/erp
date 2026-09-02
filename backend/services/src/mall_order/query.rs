@@ -176,7 +176,9 @@ impl MallOrderService {
             .list_by_items(&item_ids, &mut NoTransaction)
             .await?;
         let facts = self
-            .load_facts_for_order(&order.mall_id, &order.external_order_no)
+            .db
+            .mall_order_facts()
+            .list_by_mall_and_external_order_no(&order.mall_id, &order.external_order_no, &mut NoTransaction)
             .await?;
         let entries = self.load_entries_for_sources(&sources).await?;
         let assessments = self.load_current_assessments(&entries).await?;

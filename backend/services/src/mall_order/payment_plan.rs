@@ -282,7 +282,7 @@ impl MallOrderService {
             &entries,
             occurred,
             actor.id().to_string(),
-        );
+        )?;
 
         let processing = if all_attributed {
             ProcessingStatus::Attributed

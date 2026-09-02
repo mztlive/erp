@@ -15,7 +15,9 @@
 
 pub mod after_sales_request;
 pub mod balance_restoration;
+pub mod consumption_refund_limit;
 pub mod refund;
+pub mod restoration_limit;
 pub mod types;
 
 pub use crate::ids::{
@@ -24,5 +26,7 @@ pub use crate::ids::{
 };
 pub use after_sales_request::*;
 pub use balance_restoration::*;
+pub use consumption_refund_limit::*;
 pub use refund::*;
+pub use restoration_limit::*;
 pub use types::*;

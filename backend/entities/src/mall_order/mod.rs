@@ -18,6 +18,7 @@
 
 pub mod consumption_entry;
 pub mod cost_assessment;
+pub mod cost_share_plan;
 pub mod funding_allocation;
 pub mod funding_conservation;
 pub mod order;
@@ -33,6 +34,7 @@ pub use crate::ids::{
 };
 pub use consumption_entry::*;
 pub use cost_assessment::*;
+pub use cost_share_plan::*;
 pub use funding_allocation::*;
 pub use funding_conservation::*;
 pub use order::*;

@@ -6,17 +6,17 @@ use entities::ids::{
     InboxMessageId, MallOrderCancelFactId, MallOrderCompletionFactId, MallOrderFactId, MallOrderId,
 };
 use entities::mall_order::{
-    FactType, MallOrderCancelFact, MallOrderCancelFactData, MallOrderCompletionFact,
-    MallOrderCompletionFactData, MallOrderFact, MallOrderFactData, ProcessingStatus,
+    MallOrderCancelFact, MallOrderCancelFactData, MallOrderCompletionFact, MallOrderCompletionFactData,
+    MallOrderFact, MallOrderFactData, ProcessingStatus,
 };
 use entities::money::{Amount, Quantity};
 use id_generator::next_id;
 use std::str::FromStr;
-use validator::Validate;
 
 use super::dto;
 use super::dto::{ReceiveMallOrderFactRequest, ReceivedFactView};
 use super::query::fact_view;
+use super::validated_fact_payload::ValidatedMallOrderFactPayload;
 use super::MallOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -46,12 +46,7 @@ impl MallOrderService {
         req: ReceiveMallOrderFactRequest,
         actor: &AuditActor,
     ) -> Result<ReceivedFactView> {
-        req.validate()?;
-        if req.fact_type.is_after_sales_result() {
-            return Err(Error::BusinessLogicError(
-                "退款与余额恢复事实由售后域接口接收".to_string(),
-            ));
-        }
+        let payload = ValidatedMallOrderFactPayload::try_from_request(&req)?;
         if let Some(existing) = self
             .db
             .mall_order_facts()
@@ -92,30 +87,17 @@ impl MallOrderService {
             },
         )?;
 
-        let view = match req.fact_type {
-            FactType::PaymentSucceeded => {
-                let payment = req
-                    .payment
-                    .clone()
-                    .ok_or_else(|| Error::BusinessLogicError("支付事实必须携带付款载荷".to_string()))?;
+        let view = match payload {
+            ValidatedMallOrderFactPayload::Payment(payment) => {
                 self.receive_payment(&req, payment, fact, fact_id, actor).await?
             }
-            FactType::OrderCanceled => {
-                let cancel = req
-                    .cancel
-                    .clone()
-                    .ok_or_else(|| Error::BusinessLogicError("取消事实必须携带取消载荷".to_string()))?;
+            ValidatedMallOrderFactPayload::Cancel(cancel) => {
                 self.receive_cancel(&req, cancel, fact, fact_id, actor).await?
             }
-            FactType::OrderCompleted => {
-                let completion = req
-                    .completion
-                    .clone()
-                    .ok_or_else(|| Error::BusinessLogicError("完成事实必须携带完成载荷".to_string()))?;
+            ValidatedMallOrderFactPayload::Completion(completion) => {
                 self.receive_completion(&req, completion, fact, fact_id, actor)
                     .await?
             }
-            FactType::RefundSucceeded | FactType::CardBalanceRestored => unreachable!(),
         };
         Ok(view)
     }

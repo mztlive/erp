@@ -19,24 +19,16 @@
 //! `BaseModel.created_at` 重名，头表暂不可持久化；售后请求只走投影查询，
 //! 状态推进待地基修订后补齐（见 PR「需要协调人处理的事项」）。
 
-use database::{
-    AccessControlExt, CardInstanceExt, MallAfterSalesExt, MallOrderExt, NoTransaction, Transactional,
-};
+use database::{AccessControlExt, MallAfterSalesExt, MallOrderExt, NoTransaction, Transactional};
 use entities::common::time::Instant;
 use entities::ids::{
-    InboxMessageId, MallAfterSalesRequestId, MallBalanceRestorationAllocationId, MallBalanceRestorationId,
-    MallConsumptionEntryId, MallOrderFactId, MallOrderId, MallRefundAllocationId, MallRefundId,
-    MallRefundLineId,
+    InboxMessageId, MallAfterSalesRequestId, MallBalanceRestorationId, MallOrderFactId, MallOrderId,
+    MallRefundId,
 };
 use entities::mall_after_sales::{
-    AllocationAction, MallBalanceRestoration, MallBalanceRestorationAllocation,
-    MallBalanceRestorationAllocationData, MallBalanceRestorationData, MallRefund, MallRefundAllocation,
-    MallRefundAllocationData, MallRefundData, MallRefundLine, MallRefundLineData,
+    MallBalanceRestoration, MallBalanceRestorationData, MallRefund, MallRefundData,
 };
-use entities::mall_order::{
-    AttributionStatus, ConsumptionDirection, FactType, MallConsumptionEntry, MallConsumptionEntryData,
-    MallOrderFact, MallOrderFactData, MallPaymentSource, ProcessingStatus,
-};
+use entities::mall_order::{FactType, MallOrderFact, MallOrderFactData, ProcessingStatus};
 use entities::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
@@ -47,6 +39,8 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 mod dto;
+mod refund_plan;
+mod restoration_plan;
 
 use self::dto::SortDir;
 pub use self::dto::{
@@ -77,9 +71,9 @@ impl MallAfterSalesService {
 
     /// 接收商城退款成功事实（§8.4 第 3 条，幂等）。
     ///
-    /// 一个事务内写入：`REFUND_SUCCEEDED` 事实 + 退款头 + 商品退款行 + 初始
-    /// `APPLY` 分配 + 逐分配消费反向事实 + 审计；累计数量/金额上限按原消费
-    /// 净额校验（§6.18）。
+    /// 一个事务内：先对商城订单做版本 CAS 串行化额度占用，再重读原消费历史
+    /// 净额并校验，然后写入 `REFUND_SUCCEEDED` 事实 + 退款头 + 商品退款行 +
+    /// 初始 `APPLY` 分配 + 逐分配消费反向事实 + 审计（§6.18）。
     ///
     /// # 参数
     /// * `req` - 退款事实接收请求
@@ -91,7 +85,7 @@ impl MallAfterSalesService {
     /// # 错误
     /// * `BusinessLogicError` - 原支付缺失/未归集、行金额守恒不成立、
     ///   累计退款超限、分配与行/消费不匹配
-    /// * `ConflictError` - 唯一键冲突
+    /// * `ConflictError` - 唯一键冲突或商城订单 CAS 冲突
     /// * `ValidationError` - 请求体校验失败
     pub async fn receive_refund(
         &self,
@@ -215,11 +209,16 @@ impl MallAfterSalesService {
         let lines_for_tx = lines.clone();
         let allocations_for_tx = allocations.clone();
         let entries_for_tx = reversal_entries.clone();
+        let mut order_for_tx = order;
+        let req_for_tx = req.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    // 商城订单版本 CAS：串行化同一订单上的退款额度占用，失败则整事务回滚。
+                    db.mall_orders().update(&mut order_for_tx, session).await?;
+                    refund_plan::revalidate_consumption_refund_limits(&db, &req_for_tx, session).await?;
                     db.mall_order_facts().create(&fact_for_tx, session).await?;
                     db.mall_after_sales()
                         .create_refund_with_lines_and_allocations(
@@ -306,8 +305,11 @@ impl MallAfterSalesService {
     /// # 错误
     /// * `BusinessLogicError` - 原支付缺失/未归集、分配与退款/卡实例不匹配、
     ///   累计恢复超限、分配合计与恢复金额不一致
-    /// * `ConflictError` - 唯一键冲突
+    /// * `ConflictError` - 唯一键冲突或商城订单 CAS 冲突
     /// * `ValidationError` - 请求体校验失败
+    ///
+    /// # 约束
+    /// 事务内先对商城订单做版本 CAS，再重读恢复历史净额并校验后写入，关闭并发写偏斜。
     pub async fn receive_balance_restoration(
         &self,
         req: ReceiveBalanceRestorationRequest,
@@ -360,13 +362,22 @@ impl MallAfterSalesService {
             });
         }
 
-        let _original = self
+        let original = self
             .load_original_payment(
                 &req.mall_id,
                 &req.external_order_no,
                 &req.original_payment_fact_id,
             )
             .await?;
+        let order = self
+            .db
+            .mall_orders()
+            .find_by_payment_fact(
+                &MallOrderFactId::new(original.base.id.clone()),
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(|| Error::BusinessLogicError("原支付未形成商城订单".to_string()))?;
         let fact_id = MallOrderFactId::new(next_id());
         let restoration_id = MallBalanceRestorationId::new(next_id());
         let mut fact = MallOrderFact::new(
@@ -413,11 +424,16 @@ impl MallAfterSalesService {
         let fact_for_tx = fact.clone();
         let restoration_for_tx = restoration.clone();
         let allocations_for_tx = allocations.clone();
+        let mut order_for_tx = order;
+        let req_for_tx = req.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    // 商城订单版本 CAS：串行化同一订单上的恢复额度占用，失败则整事务回滚。
+                    db.mall_orders().update(&mut order_for_tx, session).await?;
+                    restoration_plan::revalidate_restoration_limits(&db, &req_for_tx, session).await?;
                     db.mall_order_facts().create(&fact_for_tx, session).await?;
                     db.mall_after_sales()
                         .create_balance_restoration_with_allocations(
@@ -572,325 +588,6 @@ impl MallAfterSalesService {
             .ok_or_else(|| Error::BusinessLogicError("原支付事实不存在".to_string()))?;
         original.ensure_attributed_payment_for(mall_id, external_order_no)?;
         Ok(original)
-    }
-
-    /// 构建退款写入计划（行/分配/消费反向事实），并做守恒与累计上限校验。
-    ///
-    /// # 参数
-    /// * `req` - 退款事实接收请求
-    /// * `order_items` - 原订单商品明细
-    /// * `refund` - 已构造的退款头
-    /// * `fact_id` - 事实 ID
-    ///
-    /// # 返回
-    /// 返回 `(退款行, 退款分配, 消费反向事实)` 三元组。
-    ///
-    /// # 错误
-    /// 行金额守恒、明细归属或累计退款上限不满足时返回 `BusinessLogicError`。
-    async fn build_refund_plan(
-        &self,
-        req: &ReceiveRefundFactRequest,
-        order_items: &[entities::mall_order::MallOrderItem],
-        refund: &MallRefund,
-        fact_id: &MallOrderFactId,
-    ) -> Result<(
-        Vec<MallRefundLine>,
-        Vec<MallRefundAllocation>,
-        Vec<MallConsumptionEntry>,
-    )> {
-        let occurred = Instant::from_unix_secs(req.occurred_at as i64);
-        let refund_id = MallRefundId::new(refund.base.id.clone());
-        let mut lines = Vec::with_capacity(req.lines.len());
-        for line in &req.lines {
-            let item_belongs_to_order = order_items.iter().any(|item| {
-                item.base.id == line.mall_order_item_id.as_ref()
-                    && item.belongs_to_order(&refund.mall_order_id)
-            });
-            if !item_belongs_to_order {
-                return Err(Error::BusinessLogicError(format!(
-                    "退款明细不属于原订单: {}",
-                    line.mall_order_item_id
-                )));
-            }
-            lines.push(MallRefundLine::new(
-                MallRefundLineId::new(next_id()),
-                MallRefundLineData {
-                    mall_refund_id: refund_id.clone(),
-                    line_no: line.line_no,
-                    mall_order_item_id: line.mall_order_item_id.clone(),
-                    refunded_quantity: entities::money::Quantity::from_str(&line.refunded_quantity)?,
-                    line_refund_amount: Amount::from_str(&line.line_refund_amount)?,
-                },
-            )?);
-        }
-        refund.ensure_line_total(&lines)?;
-
-        let previous_refunds = self
-            .db
-            .mall_refunds()
-            .list_by_order(&refund.mall_order_id, &mut NoTransaction)
-            .await?;
-        let previous_ids: Vec<entities::ids::MallRefundId> = previous_refunds
-            .iter()
-            .map(|refund| refund.base.id.clone().into())
-            .collect();
-        let previous_lines = self
-            .db
-            .mall_refund_lines()
-            .list_by_refunds(&previous_ids, &mut NoTransaction)
-            .await?;
-        for line in &lines {
-            let item = order_items
-                .iter()
-                .find(|item| {
-                    line.targets_item(&entities::ids::MallOrderItemId::new(item.base.id.clone()))
-                        && item.belongs_to_order(&refund.mall_order_id)
-                })
-                .expect("退款行实体已确认明细属于原订单");
-            let refunded_amount = previous_lines
-                .iter()
-                .filter(|previous| previous.targets_item(&line.mall_order_item_id))
-                .fold(line.line_refund_amount, |acc, previous| {
-                    acc.checked_add(previous.line_refund_amount)
-                });
-            let refunded_quantity = previous_lines
-                .iter()
-                .filter(|previous| previous.targets_item(&line.mall_order_item_id))
-                .fold(line.refunded_quantity.to_decimal(), |acc, previous| {
-                    acc + previous.refunded_quantity.to_decimal()
-                });
-            let refunded_quantity = entities::money::Quantity::try_from(refunded_quantity)?;
-            if !item.allows_cumulative_refund(refunded_quantity, refunded_amount) {
-                return Err(Error::BusinessLogicError(format!(
-                    "商品 {} 累计退款超过原支付数量或金额",
-                    line.mall_order_item_id
-                )));
-            }
-        }
-
-        let mut allocations = Vec::with_capacity(req.allocations.len());
-        let mut reversal_entries = Vec::with_capacity(req.allocations.len());
-        for allocation in &req.allocations {
-            let line = lines
-                .iter()
-                .find(|line| line.line_no == allocation.line_no)
-                .ok_or_else(|| {
-                    Error::BusinessLogicError(format!("分配引用的退款行不存在: {}", allocation.line_no))
-                })?;
-            let original_entry = self
-                .db
-                .mall_consumption_entries()
-                .find_by_id(&allocation.original_consumption_entry_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("原消费事实不存在".to_string()))?;
-            if !original_entry
-                .matches_refund_source(&line.mall_order_item_id, &allocation.original_payment_source_id)
-            {
-                return Err(Error::BusinessLogicError(
-                    "退款分配必须引用原商品与原支付来源的消费事实".to_string(),
-                ));
-            }
-            let amount = Amount::from_str(&allocation.allocated_refund_amount)?;
-            let accrued = self
-                .refunded_net_for_entry(&allocation.original_consumption_entry_id)
-                .await?
-                .checked_add(amount);
-            if !original_entry.allows_cumulative_refund(accrued) {
-                return Err(Error::BusinessLogicError(format!(
-                    "原消费累计退款不得超过原消费金额: {}",
-                    original_entry.base.id
-                )));
-            }
-            let reversal = MallConsumptionEntry::new(
-                MallConsumptionEntryId::new(next_id()),
-                MallConsumptionEntryData {
-                    mall_order_fact_id: fact_id.clone(),
-                    mall_order_item_id: original_entry.mall_order_item_id.clone(),
-                    mall_payment_source_id: original_entry.mall_payment_source_id.clone(),
-                    direction: ConsumptionDirection::ConsumptionReversal,
-                    amount,
-                    customer_id: original_entry.customer_id.clone(),
-                    origin_sales_order_id: original_entry.origin_sales_order_id.clone(),
-                    sales_order_line_id: original_entry.sales_order_line_id.clone(),
-                    occurred_at: occurred,
-                    attribution_status: AttributionStatus::Attributed,
-                    reverses_consumption_entry_id: Some(original_entry.base.id.clone().into()),
-                },
-            )?;
-            allocations.push(MallRefundAllocation::new(
-                MallRefundAllocationId::new(next_id()),
-                MallRefundAllocationData {
-                    mall_refund_line_id: line.base.id.clone().into(),
-                    allocation_no: allocation.allocation_no,
-                    original_consumption_entry_id: allocation.original_consumption_entry_id.clone(),
-                    original_payment_source_id: allocation.original_payment_source_id.clone(),
-                    allocated_refund_amount: amount,
-                    allocation_action: AllocationAction::Apply,
-                    reverses_allocation_id: None,
-                    reversal_consumption_entry_id: Some(reversal.base.id.clone().into()),
-                },
-            )?);
-            reversal_entries.push(reversal);
-        }
-        for line in &lines {
-            line.ensure_allocation_total(&allocations)?;
-        }
-        Ok((lines, allocations, reversal_entries))
-    }
-
-    /// 构建余额恢复分配（解析关联退款头，校验卡实例与累计恢复上限）。
-    ///
-    /// # 参数
-    /// * `req` - 余额恢复事实接收请求
-    /// * `restoration_id` - 恢复头 ID
-    /// * `after_sales_request_id` - 同一售后案件
-    ///
-    /// # 返回
-    /// 返回 `(恢复分配, 关联退款头 ID)`。
-    ///
-    /// # 错误
-    /// 分配与退款/卡实例不匹配或累计恢复超限时返回 `BusinessLogicError`。
-    async fn build_restoration_allocations(
-        &self,
-        req: &ReceiveBalanceRestorationRequest,
-        restoration_id: &MallBalanceRestorationId,
-        after_sales_request_id: &MallAfterSalesRequestId,
-    ) -> Result<(Vec<MallBalanceRestorationAllocation>, MallRefundId)> {
-        let mut allocations = Vec::with_capacity(req.allocations.len());
-        let mut refund_id: Option<MallRefundId> = None;
-        for allocation in &req.allocations {
-            let refund_allocation = self
-                .db
-                .mall_refund_allocations()
-                .find_by_id(&allocation.mall_refund_allocation_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("原退款分配不存在".to_string()))?;
-            if !refund_allocation.is_restorable_apply() {
-                return Err(Error::BusinessLogicError(
-                    "余额恢复只能引用净有效的 APPLY 退款分配".to_string(),
-                ));
-            }
-            let line = self
-                .db
-                .mall_refund_lines()
-                .find_by_id(&refund_allocation.mall_refund_line_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("退款行不存在".to_string()))?;
-            if !refund_allocation.belongs_to_line(&MallRefundLineId::new(line.base.id.clone())) {
-                return Err(Error::BusinessLogicError(
-                    "退款分配与退款行关系不一致".to_string(),
-                ));
-            }
-            let refund = self
-                .db
-                .mall_refunds()
-                .find_by_id(&line.mall_refund_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("退款头不存在".to_string()))?;
-            if !refund.belongs_to_after_sales_request(after_sales_request_id) {
-                return Err(Error::BusinessLogicError(
-                    "退款分配不属于同一售后案件".to_string(),
-                ));
-            }
-            if let Some(expected_refund_id) = &refund_id {
-                if !line.belongs_to_refund(expected_refund_id) {
-                    return Err(Error::BusinessLogicError(
-                        "同一余额恢复不得跨多个退款头分配".to_string(),
-                    ));
-                }
-            } else {
-                refund_id = Some(line.mall_refund_id.clone());
-            }
-            let payment_source: Option<MallPaymentSource> = self
-                .db
-                .mall_payment_sources()
-                .find_by_id(&refund_allocation.original_payment_source_id, &mut NoTransaction)
-                .await?;
-            let source =
-                payment_source.ok_or_else(|| Error::BusinessLogicError("原支付来源不存在".to_string()))?;
-            self.db
-                .mall_card_instances()
-                .find_by_id(&allocation.mall_card_instance_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("恢复卡实例不存在".to_string()))?;
-            if !source.uses_card_instance(&allocation.mall_card_instance_id) {
-                return Err(Error::BusinessLogicError(
-                    "恢复卡实例必须等于原支付来源的卡实例".to_string(),
-                ));
-            }
-            let amount = Amount::from_str(&allocation.restored_amount)?;
-            let restored = self
-                .restored_for_refund_allocation(&allocation.mall_refund_allocation_id)
-                .await?
-                .checked_add(amount);
-            if !refund_allocation.allows_cumulative_restoration(restored) {
-                return Err(Error::BusinessLogicError(
-                    "累计恢复金额不得超过对应 CARD 退款净额".to_string(),
-                ));
-            }
-            allocations.push(MallBalanceRestorationAllocation::new(
-                MallBalanceRestorationAllocationId::new(next_id()),
-                MallBalanceRestorationAllocationData {
-                    mall_balance_restoration_id: restoration_id.clone(),
-                    allocation_no: allocation.allocation_no,
-                    mall_refund_allocation_id: allocation.mall_refund_allocation_id.clone(),
-                    mall_card_instance_id: allocation.mall_card_instance_id.clone(),
-                    restored_amount: amount,
-                },
-            )?);
-        }
-        let refund_id =
-            refund_id.ok_or_else(|| Error::BusinessLogicError("余额恢复必须包含至少一条分配".to_string()))?;
-        Ok((allocations, refund_id))
-    }
-
-    /// 计算原消费已被成功退款覆盖的净额（历史 `APPLY − REVERSE` 合计）。
-    ///
-    /// # 参数
-    /// * `entry_id` - 原消费事实 ID
-    ///
-    /// # 返回
-    /// 返回净退款金额。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    async fn refunded_net_for_entry(&self, entry_id: &MallConsumptionEntryId) -> Result<Amount> {
-        let allocations = self
-            .db
-            .mall_refund_allocations()
-            .list_by_consumption(entry_id, &mut NoTransaction)
-            .await?;
-        let mut net = Amount::from_str("0.00")?;
-        for allocation in allocations {
-            net = allocation.apply_to_net(net);
-        }
-        Ok(net)
-    }
-
-    /// 计算指定退款分配已被余额恢复覆盖的金额。
-    ///
-    /// # 参数
-    /// * `refund_allocation_id` - 原 CARD 退款分配 ID
-    ///
-    /// # 返回
-    /// 返回已恢复金额。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    async fn restored_for_refund_allocation(
-        &self,
-        refund_allocation_id: &MallRefundAllocationId,
-    ) -> Result<Amount> {
-        let allocations = self
-            .db
-            .mall_balance_restoration_allocations()
-            .list_by_refund_allocation(refund_allocation_id, &mut NoTransaction)
-            .await?;
-        let mut total = Amount::from_str("0.00")?;
-        for allocation in allocations {
-            total = allocation.add_to_total(total);
-        }
-        Ok(total)
     }
 }
 

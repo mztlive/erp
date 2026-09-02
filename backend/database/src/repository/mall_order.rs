@@ -493,6 +493,43 @@ impl<'a> MallOrderFactRepository<'a> {
         .await
     }
 
+    /// 按精确 `(mall_id, external_order_no)` 读取全部关键事实实体。
+    ///
+    /// 一次返回该商城订单的全部未删除事实，避免按商城分页后再由 Service
+    /// 过滤订单号导致前页零命中时提前中断、后续页事实永久遗漏（INT-R02）。
+    ///
+    /// # 参数
+    /// * `mall_id` - 来源商城
+    /// * `external_order_no` - 商城订单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该订单全部未删除关键事实；排序合同为 `occurred_at` 升序，同秒按稳定
+    /// `id` 升序。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 精确过滤，不做分页截断；软删除事实排除；调用方事务可见性由 `executor`
+    /// 决定。本方法不开事务、不返回 Service DTO。
+    pub async fn list_by_mall_and_external_order_no(
+        &self,
+        mall_id: &str,
+        external_order_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallOrderFact>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            facts_by_mall_and_external_order_filter(mall_id, external_order_no),
+            FindOptions::builder()
+                .sort(facts_by_mall_and_external_order_sort())
+                .build(),
+            executor,
+        )
+        .await
+    }
+
     /// 按商城售后请求取全部关键事实。
     ///
     /// 取消、退款、余额恢复必须携带售后请求 ID（§6.17）；本方法一次取回
@@ -528,6 +565,36 @@ impl<'a> MallOrderFactRepository<'a> {
     fn collection(&self) -> mongodb::Collection<MallOrderFact> {
         self.db.collection::<MallOrderFact>(MALL_ORDER_FACTS)
     }
+}
+
+/// 构造精确 `(mall_id, external_order_no)` 事实过滤（含软删除排除）。
+///
+/// # 参数
+/// * `mall_id` - 来源商城
+/// * `external_order_no` - 商城订单号
+///
+/// # 返回
+/// 返回 MongoDB 过滤文档。
+///
+/// # 错误
+/// 不返回错误。
+fn facts_by_mall_and_external_order_filter(mall_id: &str, external_order_no: &str) -> Document {
+    doc! {
+        "mall_id": mall_id,
+        "external_order_no": external_order_no,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 返回精确订单事实查询的稳定排序合同。
+///
+/// # 返回
+/// 返回 `occurred_at` 升序、同秒按 `id` 升序的排序文档。
+///
+/// # 错误
+/// 不返回错误。
+fn facts_by_mall_and_external_order_sort() -> Document {
+    doc! { "occurred_at": 1, "id": 1 }
 }
 
 /// `mall_order_cancel_fact` 只读追加仓储（取消事实是不可变正式事实，§4.5 不设软删除）。
@@ -1177,6 +1244,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
+        facts_by_mall_and_external_order_filter, facts_by_mall_and_external_order_sort,
         order_fact_projection, sort_doc, MallConsumptionEntryFilter, MallOrderFactFilter, MallOrderFilter,
         Pagination, QueryFilter,
     };
@@ -1219,6 +1287,24 @@ mod tests {
             assert_eq!(projection.get_i32(field).unwrap(), 1, "列表字段 {field} 必须投影");
         }
         assert!(!projection.contains_key("raw_payload_reference"));
+    }
+
+    #[test]
+    fn facts_by_mall_and_external_order_filter_is_exact_and_excludes_deleted() {
+        let filter = facts_by_mall_and_external_order_filter("mall-a", "SO-TARGET");
+        assert_eq!(filter.get_str("mall_id").unwrap(), "mall-a");
+        assert_eq!(filter.get_str("external_order_no").unwrap(), "SO-TARGET");
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+        assert!(!filter.contains_key("fact_type"));
+        assert!(!filter.contains_key("page"));
+    }
+
+    #[test]
+    fn facts_by_mall_and_external_order_sort_is_occurred_at_then_stable_id() {
+        assert_eq!(
+            facts_by_mall_and_external_order_sort(),
+            doc! { "occurred_at": 1, "id": 1 }
+        );
     }
 
     #[test]

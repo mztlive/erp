@@ -87,10 +87,12 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     }
     padded.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in padded.chunks_exact(64) {
+    let (blocks, _) = padded.as_chunks::<64>();
+    for chunk in blocks {
         let mut w = [0u32; 64];
-        for (i, bytes) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let (words, _) = chunk.as_chunks::<4>();
+        for (i, bytes) in words.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*bytes);
         }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);

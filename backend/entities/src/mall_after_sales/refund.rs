@@ -318,6 +318,7 @@ pub struct MallRefundAllocationData {
     /// `APPLY` 或 `REVERSE`。
     pub allocation_action: AllocationAction,
     /// `REVERSE` 必填的原 `APPLY` 分配。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverses_allocation_id: Option<MallRefundAllocationId>,
     /// 与本分配同事务追加的消费反向或反向纠错事实。
     pub reversal_consumption_entry_id: Option<MallConsumptionEntryId>,
@@ -328,6 +329,9 @@ pub struct MallRefundAllocationData {
 /// `(mall_refund_line_id, allocation_no)` 唯一与 `REVERSE` 引用唯一由 P2 唯一索引
 /// 落实；等额引用、净额上限依赖聚合查询，由 P3 落实（P3 条目：§6.18 分配净额）。
 /// 不可变，只提供 `new()`。
+///
+/// `reverses_allocation_id` 在 `None` 时不落库字段，以配合稀疏唯一索引
+/// `uk_mall_refund_allocations_reverses`（仅对存在的反向引用唯一；`null` 会撞键）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct MallRefundAllocation {
     #[serde(flatten)]
@@ -345,6 +349,7 @@ pub struct MallRefundAllocation {
     /// `APPLY` 或 `REVERSE`。
     pub allocation_action: AllocationAction,
     /// `REVERSE` 必填的原 `APPLY` 分配。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverses_allocation_id: Option<MallRefundAllocationId>,
     /// 与本分配同事务追加的消费反向或反向纠错事实。
     pub reversal_consumption_entry_id: Option<MallConsumptionEntryId>,

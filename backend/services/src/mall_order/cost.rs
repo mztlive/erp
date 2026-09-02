@@ -1,4 +1,7 @@
-//! 消费成本分摊计算与事实/分录/评估加载器。
+//! 消费成本评估编排与事实/分录/评估加载器。
+//!
+//! 比例分摊、尾差归尾、含税拆分与金额守恒由 [`CostSharePlan`] 拥有；本模块只
+//! 将跨域事实转换为评估/`CostEntry`/`CostAllocation` 并加载查询所需实体。
 
 use database::{MallOrderExt, NoTransaction};
 use entities::common::time::Instant;
@@ -8,10 +11,10 @@ use entities::cost::{
 };
 use entities::ids::{CostAllocationId, CostEntryId, MallConsumptionCostAssessmentId};
 use entities::mall_order::{
-    CostBasis, MallConsumptionCostAssessment, MallConsumptionCostAssessmentData, MallConsumptionEntry,
-    MallItemFundingAllocation, MallOrderFact, MallOrderItem, MallPaymentSource, PaymentSourceType,
+    CostBasis, CostSharePlan, MallConsumptionCostAssessment, MallConsumptionCostAssessmentData,
+    MallConsumptionEntry, MallItemFundingAllocation, MallOrderItem, MallPaymentSource, PaymentSourceType,
 };
-use entities::money::{round_to_cent, Amount, Rate};
+use entities::money::{Amount, Rate};
 use id_generator::next_id;
 use std::str::FromStr;
 
@@ -55,9 +58,9 @@ struct ActualAssessmentInput<'a> {
 impl MallOrderService {
     /// 构建消费成本评估（§8.4 第 7 条，P3 只落 `ACTUAL`/`NONE` 两级）。
     ///
-    /// `ACTUAL`：明细商城成本快照含完整税额标识与进项税率；按支付来源金额
-    /// 比例分摊，尾差计入最后一个来源。`NONE`：成本数据不全（`STANDARD`
-    /// 依赖 D24 供给版本查询，未授予 D29，属闭环缺口）。
+    /// `ACTUAL`：明细商城成本快照完整时，由 [`CostSharePlan`] 完成比例分摊与
+    /// 含税拆分；Service 仅注入 ID、成本范围并组装持久化实体。`NONE`：成本
+    /// 数据不全（`STANDARD` 依赖 D24 供给版本查询，未授予 D29）。
     ///
     /// # 参数
     /// * `items` - 商品明细
@@ -69,6 +72,9 @@ impl MallOrderService {
     ///
     /// # 返回
     /// 返回 `(评估, 成本事实, 成本分配)` 三元组。
+    ///
+    /// # 错误
+    /// 分摊计划或成本实体构造失败时返回领域/业务错误。
     pub(super) fn build_cost_assessments(
         &self,
         items: &[MallOrderItem],
@@ -77,16 +83,15 @@ impl MallOrderService {
         entries: &[MallConsumptionEntry],
         occurred: Instant,
         assessed_by: String,
-    ) -> (
+    ) -> Result<(
         Vec<MallConsumptionCostAssessment>,
         Vec<CostEntry>,
         Vec<CostAllocation>,
-    ) {
+    )> {
         let mut assessments = Vec::new();
         let mut cost_entries = Vec::new();
         let mut cost_allocations = Vec::new();
         for item in items {
-            // 同明细的分摊按来源序号稳定排序，成本尾差计入最后一个来源。
             let mut item_allocations: Vec<&MallItemFundingAllocation> = allocations
                 .iter()
                 .filter(|allocation| allocation.mall_order_item_id.as_ref() == item.base.id)
@@ -98,7 +103,7 @@ impl MallOrderService {
                     .map(|source| source.source_no)
                     .unwrap_or_default()
             });
-            let entry_of = |allocation: &MallItemFundingAllocation| -> &MallConsumptionEntry {
+            let entry_of = |allocation: &MallItemFundingAllocation| -> Result<&MallConsumptionEntry> {
                 entries
                     .iter()
                     .find(|entry| {
@@ -106,80 +111,78 @@ impl MallOrderService {
                             && entry.mall_payment_source_id.as_ref()
                                 == allocation.mall_payment_source_id.as_ref()
                     })
-                    .expect("分摊与消费事实一一对应")
+                    .ok_or_else(|| {
+                        crate::errors::Error::BusinessLogicError("分摊与消费事实必须一一对应".to_string())
+                    })
             };
-            let source_of = |allocation: &MallItemFundingAllocation| -> &MallPaymentSource {
+            let source_of = |allocation: &MallItemFundingAllocation| -> Result<&MallPaymentSource> {
                 sources
                     .iter()
                     .find(|source| source.base.id == allocation.mall_payment_source_id.as_ref())
-                    .expect("分摊来源已校验存在")
+                    .ok_or_else(|| crate::errors::Error::BusinessLogicError("分摊来源不存在".to_string()))
             };
-            let has_actual = item.cost_snapshot_total.is_some()
-                && item.cost_tax_inclusion.is_some()
-                && (!item.cost_tax_inclusion.unwrap_or(false) || item.cost_input_tax_rate.is_some());
-            if !has_actual {
+            if !CostSharePlan::has_actual_cost(
+                item.cost_snapshot_total,
+                item.cost_tax_inclusion,
+                item.cost_input_tax_rate,
+            ) {
                 for allocation in &item_allocations {
-                    assessments.push(self.none_assessment(entry_of(allocation), occurred, &assessed_by));
+                    assessments.push(self.none_assessment(entry_of(allocation)?, occurred, &assessed_by)?);
                 }
                 continue;
             }
-            let cost_total = item.cost_snapshot_total.expect("已校验存在");
-            let paid = item.paid_amount;
-            let mut accrued = Amount::from_str("0.00").expect("零常量可解析");
-            let count = item_allocations.len();
-            for (index, allocation) in item_allocations.iter().enumerate() {
-                let entry = entry_of(allocation);
-                let is_last = index + 1 == count;
-                let gross = if is_last {
-                    cost_total.checked_sub(accrued)
-                } else {
-                    let share = round_to_cent(
-                        cost_total.to_decimal() * allocation.allocated_payment_amount.to_decimal()
-                            / paid.to_decimal(),
-                    );
-                    Amount::try_from(share).expect("舍入后金额合法")
-                };
-                accrued = accrued.checked_add(gross);
-                let (net, tax, input_rate) = match item.cost_tax_inclusion {
-                    Some(true) => {
-                        let rate = item.cost_input_tax_rate.expect("含税成本已校验税率");
-                        let tax = Amount::try_from(round_to_cent(gross.to_decimal() * rate.to_decimal()))
-                            .expect("舍入后金额合法");
-                        (gross.checked_sub(tax), tax, Some(rate))
-                    }
-                    _ => (gross, Amount::from_str("0.00").expect("零常量可解析"), None),
-                };
+            let cost_total = item.cost_snapshot_total.ok_or_else(|| {
+                crate::errors::Error::BusinessLogicError("ACTUAL 成本缺少成本合计".to_string())
+            })?;
+            let tax_inclusion = item.cost_tax_inclusion.unwrap_or(false);
+            let payment_amounts: Vec<Amount> = item_allocations
+                .iter()
+                .map(|allocation| allocation.allocated_payment_amount)
+                .collect();
+            let plan = CostSharePlan::share(
+                cost_total,
+                item.paid_amount,
+                &payment_amounts,
+                tax_inclusion,
+                item.cost_input_tax_rate,
+            )?;
+            for (allocation, leg) in item_allocations.iter().zip(plan.legs()) {
+                let entry = entry_of(allocation)?;
                 let assessment = self.actual_assessment(
                     ActualAssessmentInput {
                         entry,
-                        gross,
-                        net,
-                        tax,
-                        input_rate,
+                        gross: leg.gross_amount,
+                        net: leg.net_amount,
+                        tax: leg.tax_amount,
+                        input_rate: leg.input_tax_rate,
                         item,
                         allocation,
                     },
                     occurred,
                     &assessed_by,
-                );
+                )?;
+                let input_tax_rate = match leg.input_tax_rate {
+                    Some(rate) => rate,
+                    None => Rate::from_str("0")
+                        .map_err(|error| crate::errors::Error::BusinessLogicError(error.to_string()))?,
+                };
                 let cost_entry = CostEntry::new(
                     CostEntryId::new(next_id()),
                     CostEntryData {
                         cost_type: CostType::Product,
                         cost_stage: CostStage::Actual,
-                        cost_scope: if source_of(allocation).source_type == PaymentSourceType::Card {
+                        cost_scope: if source_of(allocation)?.source_type == PaymentSourceType::Card {
                             CostScope::MallConsumption
                         } else {
                             CostScope::WechatCost
                         },
                         cost_basis: Some(CostBasisEntry::Actual),
                         supplier_id: None,
-                        gross_amount: gross,
-                        net_amount: net,
-                        tax_amount: tax,
-                        tax_inclusion: item.cost_tax_inclusion.unwrap_or(false),
-                        input_tax_rate: input_rate
-                            .unwrap_or_else(|| Rate::from_str("0").expect("税率可解析")),
+                        gross_amount: leg.gross_amount,
+                        net_amount: leg.net_amount,
+                        tax_amount: leg.tax_amount,
+                        tax_inclusion,
+                        input_tax_rate,
                         occurred_at: occurred,
                         source_fact_type: "mall_consumption_entry".to_string(),
                         source_document_id: entry.base.id.clone(),
@@ -188,8 +191,7 @@ impl MallOrderService {
                         adjusts_cost_entry_id: None,
                         evidence_attachment_id: None,
                     },
-                )
-                .expect("成本事实内容已校验");
+                )?;
                 let cost_allocation = CostAllocation::new(
                     CostAllocationId::new(next_id()),
                     CostAllocationData {
@@ -198,18 +200,17 @@ impl MallOrderService {
                         sales_order_line_id: None,
                         mall_consumption_entry_id: Some(entry.base.id.clone().into()),
                         mall_payment_source_id: Some(allocation.mall_payment_source_id.clone()),
-                        allocated_gross_amount: gross,
-                        allocated_net_amount: net,
-                        rounding_residual_flag: is_last,
+                        allocated_gross_amount: leg.gross_amount,
+                        allocated_net_amount: leg.net_amount,
+                        rounding_residual_flag: leg.rounding_residual_flag,
                     },
-                )
-                .expect("成本分配内容已校验");
+                )?;
                 assessments.push(assessment);
                 cost_entries.push(cost_entry);
                 cost_allocations.push(cost_allocation);
             }
         }
-        (assessments, cost_entries, cost_allocations)
+        Ok((assessments, cost_entries, cost_allocations))
     }
 
     /// 构造 `NONE` 成本评估（无来源依据、金额与税字段）。
@@ -221,13 +222,16 @@ impl MallOrderService {
     ///
     /// # 返回
     /// 返回链首 `NONE` 评估。
+    ///
+    /// # 错误
+    /// 评估实体构造失败时返回领域错误。
     fn none_assessment(
         &self,
         entry: &MallConsumptionEntry,
         occurred: Instant,
         assessed_by: &str,
-    ) -> MallConsumptionCostAssessment {
-        MallConsumptionCostAssessment::new(
+    ) -> Result<MallConsumptionCostAssessment> {
+        Ok(MallConsumptionCostAssessment::new(
             MallConsumptionCostAssessmentId::new(next_id()),
             MallConsumptionCostAssessmentData {
                 mall_consumption_entry_id: entry.base.id.clone().into(),
@@ -248,8 +252,7 @@ impl MallOrderService {
                 assessed_at: occurred,
                 assessed_by: assessed_by.to_string(),
             },
-        )
-        .expect("NONE 评估内容已校验")
+        )?)
     }
 
     /// 构造 `ACTUAL` 成本评估（商城成本快照来源，§12.1 第 5 项）。
@@ -266,7 +269,7 @@ impl MallOrderService {
     /// 返回链首 `ACTUAL` 评估。
     ///
     /// # 错误
-    /// 无；金额与来源已由调用方校验。
+    /// 评估实体构造失败时返回领域错误。
     ///
     /// # 关键业务约束
     /// 来源固定为商城成本快照；不含税成本不写进项税率。
@@ -275,7 +278,7 @@ impl MallOrderService {
         input: ActualAssessmentInput<'_>,
         occurred: Instant,
         assessed_by: &str,
-    ) -> MallConsumptionCostAssessment {
+    ) -> Result<MallConsumptionCostAssessment> {
         let ActualAssessmentInput {
             entry,
             gross,
@@ -285,7 +288,7 @@ impl MallOrderService {
             item,
             allocation,
         } = input;
-        MallConsumptionCostAssessment::new(
+        Ok(MallConsumptionCostAssessment::new(
             MallConsumptionCostAssessmentId::new(next_id()),
             MallConsumptionCostAssessmentData {
                 mall_consumption_entry_id: entry.base.id.clone().into(),
@@ -312,8 +315,7 @@ impl MallOrderService {
                 assessed_at: occurred,
                 assessed_by: assessed_by.to_string(),
             },
-        )
-        .expect("ACTUAL 评估内容已校验")
+        )?)
     }
 
     /// 分页加载指定商城的关键事实并按（商城, 订单号）分组。
@@ -366,64 +368,6 @@ impl MallOrderService {
             page += 1;
         }
         Ok(grouped)
-    }
-
-    /// 加载指定（商城, 订单号）的全部关键事实实体（按发生时间升序）。
-    ///
-    /// # 参数
-    /// * `mall_id` - 商城
-    /// * `external_order_no` - 商城订单号
-    ///
-    /// # 返回
-    /// 返回按发生时间升序的事实实体。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    pub(super) async fn load_facts_for_order(
-        &self,
-        mall_id: &str,
-        external_order_no: &str,
-    ) -> Result<Vec<MallOrderFact>> {
-        let mut facts = Vec::new();
-        let mut page = 1u64;
-        loop {
-            let filter = MallOrderFactFilter {
-                mall_id: Some(mall_id.to_string()),
-                fact_type: None,
-                processing_status: None,
-                after_sales_request_id: None,
-                page,
-                page_size: 100,
-                sort_by: Some("occurred_at".to_string()),
-                sort_ascending: true,
-            };
-            let result = self
-                .db
-                .mall_order_facts()
-                .search_facts(&filter, &mut NoTransaction)
-                .await?;
-            let mut hit = false;
-            for row in result.items {
-                if row.external_order_no != external_order_no {
-                    continue;
-                }
-                hit = true;
-                if let Some(fact) = self
-                    .db
-                    .mall_order_facts()
-                    .find_by_id(&row.id, &mut NoTransaction)
-                    .await?
-                {
-                    facts.push(fact);
-                }
-            }
-            if !hit || (result.total as u64) <= page * 100 {
-                break;
-            }
-            page += 1;
-        }
-        facts.sort_by_key(|fact| (fact.occurred_at, fact.base.id.clone()));
-        Ok(facts)
     }
 
     /// 沿支付来源加载消费事实（去重后按发生时间升序）。

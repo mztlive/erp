@@ -12,7 +12,9 @@
 //!   「`inbox_message_id` 非空且唯一」→ `uk_mall_order_facts_inbox_message`；
 //!   「`(mall_id, source_event_id)` 消息层唯一」→ `uk_mall_order_facts_source_event`；
 //!   归集调度按状态扫描 → `idx_mall_order_facts_status`；按售后请求回溯 →
-//!   `idx_mall_order_facts_after_sales_request`；
+//!   `idx_mall_order_facts_after_sales_request`；按商城订单精确取事实 →
+//!   `idx_mall_order_facts_mall_external_order_occurred`（`occurred_at`+`id` 排序；
+//!   前向随 `ensure_indexes` 创建，回滚删除本索引后查询退化为全表扫描）；
 //! - 两张扩展表：「`mall_order_fact_id` 各自唯一」→
 //!   `uk_mall_order_cancel_facts_fact`、`uk_mall_order_completion_facts_fact`；
 //! - `mall_order`：「`(mall_id, external_order_no)` 唯一」→ `uk_mall_orders_identity`；
@@ -123,6 +125,14 @@ fn order_fact_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_mall_order_facts_after_sales_request",
             doc! { "after_sales_request_id": 1 },
+        ),
+        // INT-R02 精确 `(mall_id, external_order_no)` 取事实并按 `occurred_at`+`id`
+        // 排序的有界查询索引；前向路径为本函数随 `ensure_indexes` 创建，回滚方式为
+        // 删除 `idx_mall_order_facts_mall_external_order_occurred` 后查询退化为全表
+        // 扫描（合同 §7.3.5）。非唯一索引，重复值门禁 N/A。
+        named_index(
+            "idx_mall_order_facts_mall_external_order_occurred",
+            doc! { "mall_id": 1, "external_order_no": 1, "occurred_at": 1, "id": 1 },
         ),
     ]
 }
@@ -309,6 +319,11 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| { index.keys == doc! { "after_sales_request_id": 1 } }));
+        assert!(indexes.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("idx_mall_order_facts_mall_external_order_occurred")
+                && index.keys == doc! { "mall_id": 1, "external_order_no": 1, "occurred_at": 1, "id": 1 }
+        }));
     }
 
     #[test]

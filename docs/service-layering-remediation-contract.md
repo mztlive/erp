@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **127 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、95 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **122 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、100 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -62,17 +62,17 @@
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 10 | 0 | 17 |
 | Finance | 11 | 10 | 0 | 21 |
-| Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **73** | **93** | **1** | **167** |
+| Integrations / Mall / Import | 29 | 28 | 0 | 57 |
+| **合计** | **70** | **91** | **1** | **162** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **10 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 35 | 0 | 48 |
+| P0 | 10 | 33 | 0 | 43 |
 | P1 | 55 | 46 | 1 | 102 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **73** | **93** | **1** | **167** |
+| **合计** | **70** | **91** | **1** | **162** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -643,7 +643,7 @@ git diff --check
 | ID | P | 状态 | 当前证据与问题 | 强制调整 | 关闭验收与风险 | 执行登记 |
 | --- | --- | --- | --- | --- | --- | --- |
 | INT-R01 | P1 | OPEN | backend/services/src/mall_order/cost.rs:335-369 facts_grouped_by_order：Service 按每页 100 条扫描 mall 或全部 mall 的事实，再按订单内存分组；查询范围未约束到当前订单页。 | Repository 必须按当前订单业务键集合批量返回事实摘要或精确投影，并保留 mall 过滤和稳定顺序。 | 验收：事实超过 100 条、目标事实仅在后续页、跨 mall、重复事实及同时间事实均正确，且不得全量翻页。风险：中，涉及查询模型和索引；摘要与 response view 规则仍留 Service。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| INT-R02 | P0 | OPEN | backend/services/src/mall_order/cost.rs:382-426 load_facts_for_order：先按 mall 分页，再由 Service 过滤订单；某页无目标订单时提前 break，导致后续页事实永久遗漏，命中后还逐项 find_by_id。 | Repository 必须提供精确 (mall_id, external_order_no) 全实体查询，并定义 occurred_at 加稳定 ID 的排序合同。 | 验收：目标事实只位于后续页且前页零命中时不得遗漏；覆盖混合订单和同时间事实。风险：高，属于现存正确性缺陷，可能要求组合索引。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| INT-R02 | P0 | DONE | backend/services/src/mall_order/cost.rs:382-426 load_facts_for_order：先按 mall 分页，再由 Service 过滤订单；某页无目标订单时提前 break，导致后续页事实永久遗漏，命中后还逐项 find_by_id。 | Repository 必须提供精确 (mall_id, external_order_no) 全实体查询，并定义 occurred_at 加稳定 ID 的排序合同。 | 验收：目标事实只位于后续页且前页零命中时不得遗漏；覆盖混合订单和同时间事实。风险：高，属于现存正确性缺陷，可能要求组合索引。 | 批次：WAVE-p0-int-mall-as；责任人：Grok；依赖：无；关闭证据：`MallOrderRepository::list_by_mall_and_external_order_no` 按精确 `(mall_id, external_order_no)` 一次返回全实体，排序合同为 `occurred_at ASC, id ASC`；新增复合索引 `idx_mall_order_facts_mall_external_order_occurred`；旧 mall 分页 + 提前 break + 逐项 `find_by_id` 已删除。P6 Mongo：`mall_order_fact_order_query` 2/2 ignored（前缀无关事实后目标不遗漏；缺失订单为空且 explain 命中复合索引）。波次收口复跑通过并置 DONE（见 6.8.4 批次验收登记）。 |
 | INT-R03 | P1 | OPEN | backend/services/src/mall_order/query.rs:277-285 build_list_row：订单列表逐行 list_by_order 查询支付来源，形成当前页 N+1。 | Repository 必须按订单 ID 集合一次批量返回支付来源。 | 验收：100 行页面只允许一次批量读取；覆盖无来源、多来源、关联归属和稳定顺序。风险：低。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R04 | P1 | OPEN | backend/services/src/mall_order/cost.rs:439-459 load_entries_for_sources：逐来源读取 consumption entries，再由 Service 去重、合并、排序。 | Repository 必须提供 source-ID 集合批量查询并固定排序合同。 | 验收：重复 source、空集合、多来源共享结果及顺序均与现行为一致。风险：低至中，排序变化会影响后续评估输入。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R05 | P1 | OPEN | backend/services/src/mall_order/cost.rs:471-489 load_current_assessments：逐 entry 读取完整评估链，再由 Service 取最大 assessment_no。 | Repository 必须按 entry IDs 批量返回最新评估投影。 | 验收：无评估、多版本和边界序号均与 max assessment_no 等价。风险：中，必须固定最新项的聚合排序语义。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -652,8 +652,8 @@ git diff --check
 | INT-R08 | P1 | OPEN | backend/services/src/mall_after_sales/mod.rs:266-291 mall_refund_list、backend/services/src/mall_after_sales/mod.rs:989 sort_refunds、backend/services/src/mall_after_sales/mod.rs:1029 slice_page：完整退款集合在 Service 内存排序和分页。 | Repository 必须接收 Service 已判定的 scope、排序和分页条件，返回页面及总数。 | 验收：空页、尾页、越界页、全部排序字段、order/request scope 和总数准确。风险：中，可能需要排序索引；scope 决策不进入 Repository。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R09 | P1 | OPEN | backend/services/src/mall_after_sales/mod.rs:454-488 mall_balance_restoration_list、backend/services/src/mall_after_sales/mod.rs:1005 sort_restorations、backend/services/src/mall_after_sales/mod.rs:1029 slice_page：余额恢复记录全量加载后内存排序、切页。 | Repository 必须实现数据库端 count、page、sort。 | 验收：全部排序、分页边界、scope 组合及稳定次序。风险：中，涉及查询和索引。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R10 | P1 | OPEN | backend/services/src/mall_after_sales/mod.rs:590-641 build_refund_plan：先读取历史 refund headers 仅为取得 ID，再查询 refund lines。 | Repository 必须提供按订单直接查询历史退款行的接口。 | 验收：多次退款、无历史、历史头无行和逻辑删除数据。风险：低至中，可能需要 order-to-line 索引。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| INT-R11 | P0 | OPEN | backend/services/src/mall_after_sales/mod.rs:671-703 build_refund_plan、backend/services/src/mall_after_sales/mod.rs:857-868 refunded_net_for_entry：逐 allocation 读取原 entry，再逐 entry 获取历史并折叠净退款额；同一请求内重复原 entry 未相互累计，可分别通过校验后合计超额。 | Repository 批量读取原 entries 与历史净额；Entity/VO 先按原消费 entry 聚合本请求 APPLY/REVERSE，再验证“历史净额 + 本请求净额”不超过原额。Service 必须使用额度占用、CAS 或等价串行化约束关闭不同请求间写偏斜。 | 验收：请求内重复 entry、APPLY/REVERSE 顺序、多次历史、累计等于/超过上限、缺失 entry，以及两个并发请求争用同一 entry；任一失败零写入。风险：高，批量查询不得冒充并发额度保证，跨聚合决定仍留 Service。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| INT-R12 | P0 | OPEN | backend/services/src/mall_after_sales/mod.rs:753-844 build_restoration_allocations、backend/services/src/mall_after_sales/mod.rs:880-894 restored_for_refund_allocation：每个 allocation 依次读取退款关联图和恢复历史；同一请求内重复原退款 allocation 未相互累计，可形成超额恢复。 | Repository 批量加载关联事实图与历史净额；Entity/VO 先按原退款 allocation 聚合本请求恢复净额，再验证历史加本次不超过可恢复额。Service 必须使用额度占用、CAS 或等价串行化约束关闭并发写偏斜，并继续负责 same-case 与 card 归属。 | 验收：请求内重复 allocation、多 allocation、跨 refund、card 不匹配、累计等于/超过上限、缺失关联及两个并发恢复请求；失败零写入。风险：高，资金恢复守恒不得仅依赖预查。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| INT-R11 | P0 | DONE | backend/services/src/mall_after_sales/mod.rs:671-703 build_refund_plan、backend/services/src/mall_after_sales/mod.rs:857-868 refunded_net_for_entry：逐 allocation 读取原 entry，再逐 entry 获取历史并折叠净退款额；同一请求内重复原 entry 未相互累计，可分别通过校验后合计超额。 | Repository 批量读取原 entries 与历史净额；Entity/VO 先按原消费 entry 聚合本请求 APPLY/REVERSE，再验证“历史净额 + 本请求净额”不超过原额。Service 必须使用额度占用、CAS 或等价串行化约束关闭不同请求间写偏斜。 | 验收：请求内重复 entry、APPLY/REVERSE 顺序、多次历史、累计等于/超过上限、缺失 entry，以及两个并发请求争用同一 entry；任一失败零写入。风险：高，批量查询不得冒充并发额度保证，跨聚合决定仍留 Service。 | 批次：WAVE-p0-int-mall-as；责任人：Grok；依赖：见本项（额度规则由 `ConsumptionRefundLimit` VO 独占，与 INT-R12 同批）；关闭证据：`consumption_refund_limit_scope` 批量返回 entries 与历史净额（空集/去重/缺项）；`ConsumptionRefundLimit` 先按原消费 entry 聚合本请求 APPLY/REVERSE 再校验历史+本次≤原额；Service 在写事务内先 CAS 更新商城订单版本，再 `revalidate_consumption_refund_limits`，旧逐 allocation/entry 折叠已删除。实体 3 项 + Mongo `mall_after_sales_limit_scope` 批读与并发退款 CAS 恰好一胜零半写通过。波次收口复跑通过并置 DONE（见 6.8.4）。 |
+| INT-R12 | P0 | DONE | backend/services/src/mall_after_sales/mod.rs:753-844 build_restoration_allocations、backend/services/src/mall_after_sales/mod.rs:880-894 restored_for_refund_allocation：每个 allocation 依次读取退款关联图和恢复历史；同一请求内重复原退款 allocation 未相互累计，可形成超额恢复。 | Repository 批量加载关联事实图与历史净额；Entity/VO 先按原退款 allocation 聚合本请求恢复净额，再验证历史加本次不超过可恢复额。Service 必须使用额度占用、CAS 或等价串行化约束关闭并发写偏斜，并继续负责 same-case 与 card 归属。 | 验收：请求内重复 allocation、多 allocation、跨 refund、card 不匹配、累计等于/超过上限、缺失关联及两个并发恢复请求；失败零写入。风险：高，资金恢复守恒不得仅依赖预查。 | 批次：WAVE-p0-int-mall-as；责任人：Grok；依赖：见本项（额度规则由 `RestorationLimit` VO 独占，与 INT-R11 同批）；关闭证据：`restoration_limit_scope` 批量加载退款分配/行/头/支付来源与历史恢复净额；`RestorationLimit` 按原退款 allocation 聚合本请求再校验历史+本次≤可恢复额；Service 写事务内订单版本 CAS + `revalidate_restoration_limits`，并保留 after-sales request / card / 跨 refund 归属拒绝；旧逐 allocation 关联图读取已删除。实体 2 项 + Service 3 项 fail-closed Mongo + 并发恢复 CAS 恰好一胜通过。波次收口复跑通过并置 DONE（见 6.8.4）。 |
 | INT-R13 | P1 | OPEN | backend/services/src/mall_after_sales/mod.rs:220-235 receive_refund：冲销 consumption entries 逐条插入。 | Repository 必须提供事务内 create_many 或扩展既有持久化 primitive。 | 验收：0、1、多条、重复键和任一失败整体回滚。风险：中，必须保持 append-only 错误传播及确定性写入顺序。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R14 | P2 | OPEN | backend/services/src/mall_backfill/mod.rs:214-237 backfill_job_detail：通过查询第一页一条记录仅取得 total。 | Repository 必须提供 count_by_job。 | 验收：0 条、多条和逻辑删除数据计数。风险：低。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-R15 | P1 | OPEN | backend/services/src/mall_backfill/mod.rs:405-468 submit_backfill_command：完整读取 fact 列表后，对每项逐一按业务键查重并逐条创建。 | Repository 必须批量读取已有业务键并批量创建新增 facts；Service 保留分类、进度和事务。 | 验收：数据库重复、请求内重复、大批量、并发唯一键竞态及任一失败回滚。风险：高，涉及幂等与唯一索引冲突，批量预查不得替代最终唯一约束。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -679,11 +679,11 @@ git diff --check
 
 | ID | P | 状态 | 当前证据与问题 | 强制调整 | 关闭验收与风险 | 执行登记 |
 | --- | --- | --- | --- | --- | --- | --- |
-| INT-E01 | P0 | OPEN | backend/services/src/mall_order/dto.rs:603-787 PaymentFactData/ReceiveMallOrderFactRequest、backend/services/src/mall_order/receive.rs:44-119 receive_fact：外层 Validate 未递归验证子对象；运行时仅要求选中 fact type 的 payload 存在，不拒绝额外 payload。 | 必须建立 ValidatedMallOrderFactPayload 或自定义 Validate，执行 exact-one-of，并递归验证 items、sources、allocations。 | 验收：三种合法事实；payload 缺失、多个或额外；子项非法金额、编号和引用。风险：高，将收紧 API 错误语义。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| INT-E01 | P0 | DONE | backend/services/src/mall_order/dto.rs:603-787 PaymentFactData/ReceiveMallOrderFactRequest、backend/services/src/mall_order/receive.rs:44-119 receive_fact：外层 Validate 未递归验证子对象；运行时仅要求选中 fact type 的 payload 存在，不拒绝额外 payload。 | 必须建立 ValidatedMallOrderFactPayload 或自定义 Validate，执行 exact-one-of，并递归验证 items、sources、allocations。 | 验收：三种合法事实；payload 缺失、多个或额外；子项非法金额、编号和引用。风险：高，将收紧 API 错误语义。 | 批次：WAVE-p0-int-mall-as；责任人：Grok；依赖：无；关闭证据：`ValidatedMallOrderFactPayload::try_from_request` 独占 exact-one-of 与 items/sources/allocations 递归校验；`receive_fact` 仅编排已校验 payload；4 项单测覆盖三种合法事实、缺失/额外/多 payload、非法金额/数量/单价/税率与空白引用。波次收口复跑通过并置 DONE（见 6.8.4）。 |
 | INT-E02 | P1 | OPEN | backend/services/src/mall_order/payment_plan.rs:91-140 build_payment_plan：Service 解析数量、单价并派生 line gross/paid。 | Entity/VO 必须提供从 primitives 建立规范化 MallOrderItem 的 factory，并固定 `line_gross=round_half_even(quantity×unit_price_gross, 2)`、`paid=line_gross-discount+freight`；只对乘积舍入一次，paid 不二次舍入。 | 验收：Amount/UnitPrice/Quantity/Rate 分别最多 2/4/6/6 位，超精度拒绝；覆盖 `.005/.015/.025` 及负数 half-even、折扣、运费、负值、零值、逐行舍入后表头精确汇总和资金守恒；禁止容差或汇总后二次舍入。风险：中，wire 精度和现有 golden 必须兼容。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-E03 | P1 | OPEN | backend/services/src/mall_order/payment_plan.rs:143-169,209-216,287-292 build_payment_plan、backend/services/src/mall_order/query.rs:724-733 attribution_for：CARD/WECHAT 归属及 all-sources 汇总规则分散在 Service。 | 必须增加 source attribution 方法和 AttributionRollup VO。 | 验收：CARD 已映射、未映射、WECHAT、混合来源和全部同归属。风险：中，不得改变状态码和 unknown 语义。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-E04 | P1 | OPEN | backend/services/src/mall_order/payment_plan.rs:173-207,241-275 build_payment_plan：外部 item/source 编号匹配、funding/entry 构造及守恒留在 Service，并使用 expect。 | 必须建立 FundingPlan aggregate/VO builder，拥有唯一性、引用匹配、确定性连接和守恒；Service 仅注入已解析 card facts。 | 验收：重复 item/source 编号、缺失引用、确定性链接、总额守恒且无 panic。风险：中至高，涉及聚合 factory API。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| INT-E05 | P0 | OPEN | backend/services/src/mall_order/cost.rs:72-212 build_cost_assessments：比例分摊、尾差归尾、含税拆分和资金守恒均在 Service，并包含多个 expect。 | 必须建立 CostSharePlan VO/Entity 规则；Service 仅将跨域事实转换为 CostEntry/Allocation 并持久化。 | 验收：0、1、多行、分币尾差、含税/不含税、输入顺序、总额及税额守恒且无 panic。风险：高，财务计算必须以 golden/unit tests 固化。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| INT-E05 | P0 | DONE | backend/services/src/mall_order/cost.rs:72-212 build_cost_assessments：比例分摊、尾差归尾、含税拆分和资金守恒均在 Service，并包含多个 expect。 | 必须建立 CostSharePlan VO/Entity 规则；Service 仅将跨域事实转换为 CostEntry/Allocation 并持久化。 | 验收：0、1、多行、分币尾差、含税/不含税、输入顺序、总额及税额守恒且无 panic。风险：高，财务计算必须以 golden/unit tests 固化。 | 批次：WAVE-p0-int-mall-as；责任人：Grok；依赖：无；关闭证据：`CostSharePlan::share`/`split_tax`/`has_actual_cost` 独占比例分摊、尾差归尾、含税拆分与守恒，算术溢出返回 `Result` 不 panic；Service `build_cost_assessments` 只装载跨域事实并持久化。11 项实体单测覆盖 0/1/多行、零 paid、尾差、含税守恒、输入顺序、溢出无 panic。波次收口复跑通过并置 DONE（见 6.8.4）。 |
 | INT-E06 | P2 | OPEN | backend/services/src/mall_after_sales/mod.rs:897-925 MallRefundScope/refund_scope：order 优先于 request 的纯查询范围规则位于 Service。 | 必须移入 MallRefundListQuery::scope 并返回 typed scope。 | 验收：仅 order、仅 request、同时存在时 order 优先和两者均无。风险：低。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-E07 | P1 | OPEN | backend/services/src/mall_after_sales/dto.rs:71-230 ReceiveRefundFactRequest/ReceiveBalanceRestorationRequest：集合只校验长度，内部金额和编号验证未递归执行。 | 必须增加 nested validation 或 validated collection VO。 | 验收：非法内部金额、line/allocation 编号、空和超长集合、合法 payload。风险：中，改变请求拒绝时点和错误路径。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | INT-E08 | P1 | OPEN | backend/services/src/mall_backfill/mod.rs:425-483 submit_backfill_command：五类计数器和重复 progress 折叠由 Service 手工维护。 | 必须建立 BackfillProgress VO accumulator/classification fold，并由其产出 job update。 | 验收：全部 classification、重复项、总数一致和计数溢出。风险：中，必须保持既有进度字段语义。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -722,6 +722,15 @@ git diff --check
 | Mall 资金与售后 | Service 持有 cutover 数据读取、原支付/订单跨聚合校验、累计退款与恢复决策。 | 资金分摊和单聚合守恒移 Entity/VO；持久化批量细节移 Repository，但跨聚合批准不得迁移。 |
 | Mall sync / Integration ops | Service 持有 mapping target access、lineage/reapply 编排、evidence IO、正式责任同步和所有事务。 | 批量事实查询移 Repository；ERP error/evidence/action/WorkItem/job 矩阵移 `entities::integration_ops`、`entities::work_item`、`entities::bulk_job` 的 typed policy；BPM 仅拥有 ERP 无关流程图、状态和中性命令计划；authority 不随规则下沉。 |
 | Legacy import / Supplier | Service 持有 batch/job/WorkItem 跨聚合校验、confirmation、版本决策、gateway 和进程编排。 | 行状态和终态不变量移 Entity/BPM；批量写入移 Repository；外部执行不得迁移。 |
+
+#### 6.8.4 批次验收登记
+
+1. 批次编号：`WAVE-p0-int-mall-as`。交付范围：`INT-E01`、`INT-R02`、`INT-E05`、`INT-R11`、`INT-R12`。责任人：Grok。`INT-R11`/`INT-R12` 额度 VO 与批量 scope 同批；`INT-E01`/`INT-E05`/`INT-R02` 同波交付、同批回滚。
+2. 分层结果：`INT-E01` 由 `ValidatedMallOrderFactPayload` 独占 exact-one-of 与嵌套校验；`INT-E05` 由 `CostSharePlan` 独占分摊/尾差/含税守恒且无 panic；`INT-R02` 由 `list_by_mall_and_external_order_no` + `idx_mall_order_facts_mall_external_order_occurred` 精确取事实；`INT-R11`/`INT-R12` 由 `consumption_refund_limit_scope`/`restoration_limit_scope` + `ConsumptionRefundLimit`/`RestorationLimit` 批量事实与请求内聚合上限，Service 写路径订单版本 CAS + 事务内重验，跨 refund/card/after-sales 归属仍留 Service。旧分页漏读、逐条折叠与 Service expect 算术已删除。`MallRefundAllocation.reverses_allocation_id` 对 `None` 跳过序列化以兼容稀疏唯一索引。
+3. 定向测试：`validated_fact_payload` 4 项；`cost_share_plan` 11 项；`consumption_refund_limit` 3 项；`restoration_limit` 2 项；`restoration_plan` Service fail-closed 3 项（after-sales/card/跨 refund，零写入）。
+4. Mongo 验收（隔离 `erp-dev-mongo`，`ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0'`）：`mall_order_fact_order_query` 2/2；`mall_after_sales_limit_scope` 4/4（批读历史净额、恢复关联图、并发退款 CAS、并发恢复 CAS）。
+5. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-service-boundaries.sh`、`./scripts/check-permissions-drift.sh`、`git diff --check` 全部 exit 0。收口另修：`owned_task` JoinError 映射测试改为 abort 路径（本地 Cranelift 下 panic `catch_unwind` 不可靠）；`mall_after_sales_limit_scope` clippy（`too_many_arguments`/`cloned_ref_to_slice_refs`/`dead_code`）；`fingerprint`/`sensitive` 的 `as_chunks` 以通过 `-D warnings`。
+6. 兼容与回滚：新增查询索引 `idx_mall_order_facts_mall_external_order_occurred`（前向 `ensure_indexes`，回滚删索引后退化为扫描）；无路由/权限键/集合迁移；旧 Service helper 已删，禁止部分回滚。未执行：分片集群、主从切换、高并发压测、浏览器 E2E、生产代表数据全量 explain。
 
 ## 7. 强制执行顺序
 

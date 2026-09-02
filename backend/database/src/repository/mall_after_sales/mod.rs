@@ -11,6 +11,18 @@
 //! `search_after_sales_requests` 仅可服务于既有数据，头表写入入口待修订后生效）。
 //!
 //! 筛选/行类型定义在本文件，经 `MallAfterSalesExt` 的关联类型对外暴露。
+//!
+//! - [`consumption_refund_limit_scope`]：原消费退款额度批量事实与历史净额（INT-R11）；
+//! - [`restoration_limit_scope`]：余额恢复关联事实图与历史恢复净额（INT-R12）。
+
+mod consumption_refund_limit_scope;
+mod restoration_limit_scope;
+
+// 供公共方法返回类型命名；当前调用方以类型推断消费，故允许未直接 use。
+#[allow(unused_imports)]
+pub use consumption_refund_limit_scope::ConsumptionRefundLimitScope;
+#[allow(unused_imports)]
+pub use restoration_limit_scope::RestorationLimitScope;
 
 use entities::common::time::Instant;
 use entities::mall_after_sales::{
@@ -31,15 +43,17 @@ use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
 /// `mall_refund` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
-const MALL_REFUNDS: &str = <mongodb::Database as MallAfterSalesExt>::MALL_REFUNDS;
+pub(crate) const MALL_REFUNDS: &str = <mongodb::Database as MallAfterSalesExt>::MALL_REFUNDS;
 /// `mall_refund_line` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
-const MALL_REFUND_LINES: &str = <mongodb::Database as MallAfterSalesExt>::MALL_REFUND_LINES;
+pub(crate) const MALL_REFUND_LINES: &str = <mongodb::Database as MallAfterSalesExt>::MALL_REFUND_LINES;
 /// `mall_refund_allocation` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
-const MALL_REFUND_ALLOCATIONS: &str = <mongodb::Database as MallAfterSalesExt>::MALL_REFUND_ALLOCATIONS;
+pub(crate) const MALL_REFUND_ALLOCATIONS: &str =
+    <mongodb::Database as MallAfterSalesExt>::MALL_REFUND_ALLOCATIONS;
 /// `mall_balance_restoration` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
-const MALL_BALANCE_RESTORATIONS: &str = <mongodb::Database as MallAfterSalesExt>::MALL_BALANCE_RESTORATIONS;
+pub(crate) const MALL_BALANCE_RESTORATIONS: &str =
+    <mongodb::Database as MallAfterSalesExt>::MALL_BALANCE_RESTORATIONS;
 /// `mall_balance_restoration_allocation` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
-const MALL_BALANCE_RESTORATION_ALLOCATIONS: &str =
+pub(crate) const MALL_BALANCE_RESTORATION_ALLOCATIONS: &str =
     <mongodb::Database as MallAfterSalesExt>::MALL_BALANCE_RESTORATION_ALLOCATIONS;
 
 /// 售后请求列表投影行。

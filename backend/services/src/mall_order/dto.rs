@@ -7,7 +7,7 @@
 
 use entities::ids::{MallAfterSalesRequestId, MallOrderFactId};
 use entities::mall_order::{AttributionStatus, DataSource, FactType, FulfillmentChain, ProcessingStatus};
-use entities::money::Amount;
+use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use validator::Validate;
@@ -61,6 +61,34 @@ fn valid_amount(value: &str) -> std::result::Result<(), validator::ValidationErr
     let amount = Amount::from_str(value).map_err(|_| validator::ValidationError::new("不是合法定点数值"))?;
     if amount.to_decimal().is_sign_negative() {
         return Err(validator::ValidationError::new("金额不能为负"));
+    }
+    Ok(())
+}
+
+/// 校验数量字符串为合法非负定点数值（小数位 ≤ 6）。
+fn valid_quantity(value: &str) -> std::result::Result<(), validator::ValidationError> {
+    let quantity = Quantity::from_str(value).map_err(|_| validator::ValidationError::new("不是合法数量"))?;
+    if quantity.to_decimal().is_sign_negative() {
+        return Err(validator::ValidationError::new("数量不能为负"));
+    }
+    Ok(())
+}
+
+/// 校验含税单价字符串为合法非负定点数值（小数位 ≤ 4）。
+fn valid_unit_price(value: &str) -> std::result::Result<(), validator::ValidationError> {
+    let price = UnitPrice::from_str(value).map_err(|_| validator::ValidationError::new("不是合法单价"))?;
+    if price.to_decimal().is_sign_negative() {
+        return Err(validator::ValidationError::new("单价不能为负"));
+    }
+    Ok(())
+}
+
+/// 校验税率字符串为合法 `[0, 1]` 定点数值（小数位 ≤ 6）。
+fn valid_rate(value: &str) -> std::result::Result<(), validator::ValidationError> {
+    let rate = Rate::from_str(value).map_err(|_| validator::ValidationError::new("不是合法税率"))?;
+    let decimal = rate.to_decimal();
+    if decimal.is_sign_negative() || decimal > rust_decimal::Decimal::ONE {
+        return Err(validator::ValidationError::new("税率必须在0到1之间"));
     }
     Ok(())
 }
@@ -618,8 +646,10 @@ pub struct PaymentItemData {
     /// 规格快照。
     pub spec_snapshot: Option<String>,
     /// 数量（字符串，6 位小数）。
+    #[validate(custom(function = "valid_quantity", message = "数量非法"))]
     pub quantity: String,
     /// 含税售价（字符串，4 位小数）。
+    #[validate(custom(function = "valid_unit_price", message = "含税售价非法"))]
     pub unit_price_gross: String,
     /// 分摊优惠（字符串）。
     #[validate(custom(function = "valid_amount", message = "优惠金额非法"))]
@@ -628,6 +658,7 @@ pub struct PaymentItemData {
     #[validate(custom(function = "valid_amount", message = "运费金额非法"))]
     pub allocated_freight_amount: String,
     /// 销项税率（字符串，6 位小数）。
+    #[validate(custom(function = "valid_rate", message = "销项税率非法"))]
     pub sales_tax_rate: String,
     /// 商城记录的单位供货成本（可空）。
     pub unit_cost_snapshot: Option<String>,
@@ -699,12 +730,15 @@ pub struct PaymentFactData {
     pub address_snapshot_encrypted: Option<String>,
     /// 商品明细。
     #[validate(length(min = 1, message = "商品明细不能为空"))]
+    #[validate(nested)]
     pub items: Vec<PaymentItemData>,
     /// 支付来源。
     #[validate(length(min = 1, message = "支付来源不能为空"))]
+    #[validate(nested)]
     pub payment_sources: Vec<PaymentSourceData>,
     /// 分摊矩阵。
     #[validate(length(min = 1, message = "分摊矩阵不能为空"))]
+    #[validate(nested)]
     pub funding_allocations: Vec<FundingAllocationData>,
 }
 
@@ -717,6 +751,7 @@ pub struct CancelFactData {
     /// 整单或明细。
     pub cancel_scope: entities::mall_order::CancelScope,
     /// 实际取消数量（字符串）。
+    #[validate(custom(function = "valid_quantity", message = "取消数量非法"))]
     pub actual_canceled_quantity: String,
     /// 实际取消金额（字符串）。
     #[validate(custom(function = "valid_amount", message = "取消金额非法"))]
@@ -779,10 +814,13 @@ pub struct ReceiveMallOrderFactRequest {
     /// 可选的加密原文引用。
     pub raw_payload_reference: Option<String>,
     /// 付款载荷（`PAYMENT_SUCCEEDED` 必填）。
+    #[validate(nested)]
     pub payment: Option<PaymentFactData>,
     /// 取消载荷（`ORDER_CANCELED` 必填）。
+    #[validate(nested)]
     pub cancel: Option<CancelFactData>,
     /// 完成载荷（`ORDER_COMPLETED` 必填）。
+    #[validate(nested)]
     pub completion: Option<CompletionFactData>,
 }
 
