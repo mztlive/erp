@@ -19,7 +19,7 @@ use mongodb::Database;
 
 use crate::errors::{Error, Result};
 
-use super::business_adapter::{document_type_of_sales_business, subject_ref_for, BindingRevalidationContext};
+use super::business_adapter::BindingRevalidationContext;
 use super::policy::require_process_required;
 
 /// 审批绑定升级使用的强业务对象事实。
@@ -638,12 +638,13 @@ fn ensure_exact_document_id(document_type: DocumentType, document_id: &str) -> R
     if document_id.is_empty() || document_id.trim() != document_id {
         return Err(Error::ValidationError("单据 ID 必须是非空精确主键".to_string()));
     }
-    subject_ref_for(document_type, document_id)?;
+    entities::approval_integration::subject_ref_for(document_type, document_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(())
 }
 
 fn ensure_sales_document_type(requested: DocumentType, actual: BusinessType) -> Result<()> {
-    let actual = document_type_of_sales_business(actual);
+    let actual = entities::approval_integration::document_type_of_sales_business(actual);
     if actual != requested {
         return Err(Error::ValidationError(format!(
             "请求单据类型 {} 与销售单业务性质对应类型 {} 不一致",
@@ -655,7 +656,7 @@ fn ensure_sales_document_type(requested: DocumentType, actual: BusinessType) -> 
 }
 
 fn ensure_known_sales_business_type(actual: BusinessType) -> Result<()> {
-    match document_type_of_sales_business(actual) {
+    match entities::approval_integration::document_type_of_sales_business(actual) {
         DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Ok(()),
         _ => Err(Error::Internal("销售单业务性质映射不完整".to_string())),
     }
@@ -677,9 +678,9 @@ fn ensure_initial_sales_order_state(order: &entities::sales_order::SalesOrder) -
         || order.stable.status != CommercialStatus::Draft
         || order.stable.current_revision_id.is_some()
     {
-        return Err(already_submitted(document_type_of_sales_business(
-            order.business_type,
-        )));
+        return Err(already_submitted(
+            entities::approval_integration::document_type_of_sales_business(order.business_type),
+        ));
     }
     Ok(())
 }

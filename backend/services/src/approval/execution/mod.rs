@@ -13,9 +13,12 @@ pub mod notification_worker;
 pub mod observability;
 pub mod resume;
 pub mod runtime_history;
+#[cfg(test)]
+mod runtime_persistence_contract;
 pub mod runtime_query;
 pub mod runtime_service;
 pub mod start;
+#[cfg(test)]
 pub mod store;
 pub mod view;
 
@@ -53,6 +56,7 @@ pub use runtime_service::{
     RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
 pub use start::{prepare_start, prepare_start_with_identity, StartExecutionInput};
+#[cfg(test)]
 pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};
 
@@ -122,6 +126,16 @@ mod tests {
         ApprovalTransitionDefinition, NewNodeDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
     use entities::approval_integration::ApprovalNotificationEventKind;
+
+    /// 内存运行时适配器不得进入非测试构建。
+    #[test]
+    fn memory_runtime_store_is_test_only() {
+        let source = include_str!("mod.rs");
+        let store_mod = source.find("pub mod store").expect("store 模块");
+        let store_use = source.find("pub use store::").expect("store 重导出");
+        assert!(source[..store_mod].contains("#[cfg(test)]"));
+        assert!(source[..store_use].contains("#[cfg(test)]"));
+    }
 
     /// 运行编排占位必须失败关闭，并钉死稳定文案。
     #[test]

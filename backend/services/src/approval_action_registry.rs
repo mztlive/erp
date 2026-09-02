@@ -42,7 +42,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                     let session = require_transaction(executor)?;
                     crate::sales_order::SalesOrderService::with_rbac(self.db.clone(), self.rbac.clone())
                         .formalize_approved_submission_in_transaction(
-                            &context.business_object_id,
+                            context.business_object_id(),
                             actor,
                             session,
                         )
@@ -51,19 +51,19 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange => {
                     let session = require_transaction(executor)?;
                     crate::sales_review::SalesReviewService::new(self.db.clone())
-                        .apply_effective_change_in_transaction(&context.business_object_id, actor, session)
+                        .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                         .await
                 }
                 ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
                     let session = require_transaction(executor)?;
                     crate::purchase_order::PurchaseOrderService::new(self.db.clone())
-                        .formalize_approved_order_in_transaction(&context.business_object_id, actor, session)
+                        .formalize_approved_order_in_transaction(context.business_object_id(), actor, session)
                         .await
                 }
                 ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
                     let session = require_transaction(executor)?;
                     crate::purchase_order::PurchaseOrderService::new(self.db.clone())
-                        .apply_effective_change_in_transaction(&context.business_object_id, actor, session)
+                        .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                         .await
                 }
                 ApprovalDomainAction::StockAdjustmentPost => {
@@ -76,7 +76,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                     let session = require_transaction(executor)?;
                     crate::receivable::post_customer_receipt_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         actor,
                         session,
                     )
@@ -90,7 +90,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                     crate::returns::finalize_approved_return_in_transaction(
                         &self.db,
                         action.document_type(),
-                        &context.business_object_id,
+                        context.business_object_id(),
                         actor,
                         session,
                     )
@@ -100,7 +100,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
                     crate::sales_order::cancel_approval_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -110,7 +110,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 ApprovalDomainAction::SalesChangeOrderCancelApproval => {
                     crate::sales_review::cancel_approval_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -120,7 +120,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 ApprovalDomainAction::PurchaseOrderCancelApproval => {
                     crate::purchase_order::cancel_order_approval_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -130,7 +130,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
                     crate::purchase_order::cancel_change_approval_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -146,7 +146,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 ApprovalDomainAction::CustomerReceiptCancelApproval => {
                     crate::receivable::cancel_customer_receipt_approval_in_transaction(
                         &self.db,
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -160,7 +160,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                     crate::returns::cancel_approval_in_transaction(
                         &self.db,
                         action.document_type(),
-                        &context.business_object_id,
+                        context.business_object_id(),
                         action,
                         actor,
                         executor,
@@ -188,12 +188,12 @@ fn validate_context(
     actor: &AuditActor,
 ) -> Result<()> {
     let expected = action.document_type();
-    if context.business_object_type != expected.as_str() {
+    if context.business_object_type() != expected.as_str() {
         return Err(Error::ConflictError(
             "审批领域动作与冻结单据类型不一致".to_string(),
         ));
     }
-    if context.actor_id != actor.id() {
+    if context.actor_id() != actor.id() {
         return Err(Error::Forbidden("审批领域动作操作人与认证身份不一致".to_string()));
     }
     Ok(())

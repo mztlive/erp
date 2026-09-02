@@ -13,7 +13,7 @@ use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentS
 use entities::money::Quantity;
 
 use crate::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
+    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
 use crate::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
@@ -114,7 +114,8 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::StockAdjustment, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::StockAdjustment, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 按合同 §4.4.5 冻结库存调整快照。

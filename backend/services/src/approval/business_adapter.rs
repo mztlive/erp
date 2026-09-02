@@ -3,12 +3,10 @@
 //! 11 个 `PROCESS_REQUIRED` 类型必须登记完整规格；9 个 `NO_APPROVAL` 类型
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
-use bpm::model::types::ApprovalDefinitionStatus;
-use bpm::{ProcessKind, SubjectRef};
+use bpm::ProcessKind;
 use database::repository::bpm::DefinitionGraph;
 use entities::access_control::{DataScope, DataScopeType};
 use entities::document_registry::DocumentType;
-use entities::sales_order::BusinessType;
 
 use crate::errors::{Error, Result};
 
@@ -119,64 +117,6 @@ pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
         OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId => {}
     }
     Ok(())
-}
-
-/// 将销售单 `BusinessType` 穷尽分派到独立 `DocumentType`。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-///
-/// # 返回
-/// 实物及服务映射 `SalesOrder`，卡券映射 `VoucherSalesOrder`。
-pub fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType {
-    match business_type {
-        BusinessType::GoodsService => DocumentType::SalesOrder,
-        BusinessType::Voucher => DocumentType::VoucherSalesOrder,
-    }
-}
-
-/// 为单据类型构造唯一 `bpm::SubjectRef`。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-/// * `business_object_id` - 业务对象主键
-///
-/// # 返回
-/// `subject_kind` 取流程种类稳定码，`subject_id` 取业务主键。
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
-pub fn subject_ref_for(document_type: DocumentType, business_object_id: &str) -> Result<SubjectRef> {
-    SubjectRef::new(process_kind_of(document_type).as_str(), business_object_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))
-}
-
-/// 按销售业务性质构造唯一主体引用。
-///
-/// # 错误
-/// 业务主键非法时返回校验错误。
-pub fn subject_ref_for_sales_business(
-    business_type: BusinessType,
-    business_object_id: &str,
-) -> Result<SubjectRef> {
-    subject_ref_for(document_type_of_sales_business(business_type), business_object_id)
-}
-
-/// 由 BPM 主体种类解析已登记单据类型。
-///
-/// # 参数
-/// * `kind` - BPM 主体持有的稳定种类代码
-///
-/// # 返回
-/// 精确命中登记代码时返回对应单据类型。
-///
-/// # 错误
-/// 未登记种类返回原有校验错误，不得回落默认类型。
-///
-/// # 关键业务约束
-/// 精确代码规则由 `DocumentType` 统一拥有；Service 仅保留错误分类与文本。
-pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
-    DocumentType::try_from_code(kind).map_err(|_| Error::ValidationError(format!("未登记单据类型: {kind}")))
 }
 
 /// 全部固定单据类型均已切入目标运行时。
@@ -424,17 +364,6 @@ pub fn revalidate_assignee_binding_access(
     ensure_binding_scope(spec, user_scopes, role_scopes, &context.organization_id, can_read)
 }
 
-/// 重验已发布图状态，禁止绑定草稿或退役定义。
-///
-/// # 错误
-/// 状态不是 `PUBLISHED` 时返回未配置。
-pub fn ensure_published_status(status: ApprovalDefinitionStatus) -> Result<()> {
-    if status == ApprovalDefinitionStatus::Published {
-        return Ok(());
-    }
-    Err(super::binding::process_not_configured())
-}
-
 /// 从定义图提取去重后的指定审批人。
 ///
 /// # 参数
@@ -483,44 +412,13 @@ mod tests {
         assert_eq!(no_approval, 9);
     }
 
-    /// 每个 DocumentType 都能构造唯一 SubjectRef。
-    #[test]
-    fn every_document_type_builds_unique_subject_ref() {
-        let mut kinds = std::collections::BTreeSet::new();
-        for document_type in ALL_DOCUMENT_TYPES {
-            let subject = subject_ref_for(document_type, "doc-1").expect("主体引用必须可构造");
-            assert_eq!(subject.subject_id(), "doc-1");
-            assert_eq!(subject.subject_kind(), process_kind_of(document_type).as_str());
-            assert!(kinds.insert(subject.subject_kind().to_string()));
-        }
-        assert_eq!(kinds.len(), 20);
-    }
-
-    /// 销售单按 BusinessType 穷尽分派到不同 DocumentType 与 ProcessKind。
-    #[test]
-    fn sales_business_type_dispatches_to_distinct_kinds() {
-        assert_eq!(
-            document_type_of_sales_business(BusinessType::GoodsService),
-            DocumentType::SalesOrder
-        );
-        assert_eq!(
-            document_type_of_sales_business(BusinessType::Voucher),
-            DocumentType::VoucherSalesOrder
-        );
-        let sales = subject_ref_for_sales_business(BusinessType::GoodsService, "so-1").unwrap();
-        let voucher = subject_ref_for_sales_business(BusinessType::Voucher, "so-1").unwrap();
-        assert_ne!(sales.subject_kind(), voucher.subject_kind());
-        assert_eq!(sales.subject_kind(), "sales_order");
-        assert_eq!(voucher.subject_kind(), "voucher_sales_order");
-    }
-
     /// 全部固定类型均进入目标运行时，未知种类失败关闭。
     #[test]
     fn all_fixed_types_enter_target_runtime() {
         assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
         assert!(ensure_runtime_cut_over(DocumentType::SalesOrder).is_ok());
         assert!(ensure_runtime_cut_over(DocumentType::Delivery).is_ok());
-        assert!(document_type_from_subject_kind("unknown").is_err());
+        assert!(entities::approval_integration::document_type_from_subject_kind("unknown").is_err());
         let sales = execute_policy_domain_action(
             DocumentType::SalesOrder,
             ApprovalDomainAction::SalesOrderStartApprovalSubmission,

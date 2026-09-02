@@ -9,9 +9,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use mongodb::Database;
 
-use super::adapter::{
-    document_approval_view_with_history, subject_ref_for_sales_business, RECENT_HISTORY_LIMIT,
-};
+use super::adapter::{document_approval_view_with_history, RECENT_HISTORY_LIMIT};
 use super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
@@ -56,7 +54,9 @@ pub async fn load_document_approval(
     commercial: CommercialStatus,
     review: ReviewStatus,
 ) -> Result<DocumentApprovalView> {
-    let subject = subject_ref_for_sales_business(business_type, sales_order_id)?;
+    let subject =
+        entities::approval_integration::subject_ref_for_sales_business(business_type, sales_order_id)
+            .map_err(|error| crate::errors::Error::ValidationError(error.to_string()))?;
     let runtime = load_runtime(db, &subject).await?;
     Ok(document_approval_view_with_history(
         binding,

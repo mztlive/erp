@@ -4,7 +4,6 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式，
 //! 运行时不得按采购确认或卡券运营节点用途分支。
 
-use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
@@ -15,7 +14,7 @@ use entities::sales_order::{
 };
 
 use crate::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
+    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
 use crate::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
@@ -236,75 +235,6 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesOrderAdapter> {
         owner_organization_snapshot: spec.owner_organization_source,
         read_scope: spec.read_scope,
     })
-}
-
-/// 为实物及服务销售单构造唯一 `bpm::SubjectRef`。
-///
-/// # 参数
-/// * `business_object_id` - 销售单主键
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
-pub fn sales_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::SalesOrder, business_object_id)
-}
-
-/// 为卡券销售单构造唯一 `bpm::SubjectRef`。
-///
-/// # 参数
-/// * `business_object_id` - 销售单主键
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
-pub fn voucher_sales_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::VoucherSalesOrder, business_object_id)
-}
-
-/// 按业务性质构造对应独立 `DocumentType` 的主体引用。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-/// * `business_object_id` - 销售单主键
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
-pub fn subject_ref_for_sales_business(
-    business_type: BusinessType,
-    business_object_id: &str,
-) -> Result<SubjectRef> {
-    if is_goods_service_sales_order(business_type) {
-        sales_order_subject_ref(business_object_id)
-    } else {
-        voucher_sales_order_subject_ref(business_object_id)
-    }
-}
-
-/// 按 `BusinessType` 穷尽分派创建时应绑定的单据类型。
-///
-/// `GoodsService` 绑定 `SalesOrder`，`Voucher` 绑定 `VoucherSalesOrder`。
-/// 不得在同一 `ProcessKind` 内按业务性质二次分流。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-///
-/// # 返回
-/// 返回创建事务应写入的 `DocumentType`。
-pub fn document_type_for_sales_create(business_type: BusinessType) -> DocumentType {
-    match business_type {
-        BusinessType::GoodsService => DocumentType::SalesOrder,
-        BusinessType::Voucher => DocumentType::VoucherSalesOrder,
-    }
-}
-
-/// 是否为本阶段应绑定并启动统一审批的实物及服务销售单。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-///
-/// # 返回
-/// 实物及服务为 `true`。
-pub fn is_goods_service_sales_order(business_type: BusinessType) -> bool {
-    matches!(business_type, BusinessType::GoodsService)
 }
 
 /// 是否为卡券销售单。
@@ -845,7 +775,7 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::SalesOrder);
         assert_eq!(adapter.process_kind.as_str(), "sales_order");
         assert_eq!(
-            sales_order_subject_ref("so-1")
+            entities::approval_integration::subject_ref_for(DocumentType::SalesOrder, "so-1")
                 .expect("主体引用必须可构造")
                 .subject_kind(),
             "sales_order"
@@ -880,15 +810,13 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
         assert_eq!(
-            document_type_for_sales_create(BusinessType::GoodsService),
+            entities::approval_integration::document_type_of_sales_business(BusinessType::GoodsService),
             DocumentType::SalesOrder
         );
         assert_eq!(
-            document_type_for_sales_create(BusinessType::Voucher),
+            entities::approval_integration::document_type_of_sales_business(BusinessType::Voucher),
             DocumentType::VoucherSalesOrder
         );
-        assert!(is_goods_service_sales_order(BusinessType::GoodsService));
-        assert!(!is_goods_service_sales_order(BusinessType::Voucher));
         assert!(is_voucher_sales_order(BusinessType::Voucher));
     }
 
@@ -899,7 +827,7 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::VoucherSalesOrder);
         assert_eq!(adapter.process_kind.as_str(), "voucher_sales_order");
         assert_eq!(
-            voucher_sales_order_subject_ref("so-1")
+            entities::approval_integration::subject_ref_for(DocumentType::VoucherSalesOrder, "so-1")
                 .expect("主体引用必须可构造")
                 .subject_kind(),
             "voucher_sales_order"

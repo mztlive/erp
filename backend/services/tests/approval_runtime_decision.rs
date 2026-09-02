@@ -114,8 +114,8 @@ impl ApprovalDomainActionPort for MarkerActionPort {
                 action,
                 ApprovalDomainAction::StockAdjustmentPost
                     | ApprovalDomainAction::StockAdjustmentCancelApproval
-            ) || context.business_object_type != DocumentType::StockAdjustment.as_str()
-                || context.actor_id != actor.id()
+            ) || context.business_object_type() != DocumentType::StockAdjustment.as_str()
+                || context.actor_id() != actor.id()
             {
                 return Err(Error::ConflictError("最终动作上下文不匹配".to_string()));
             }
@@ -135,12 +135,12 @@ impl ApprovalDomainActionPort for MarkerActionPort {
             self.db
                 .collection::<Document>(ACTION_MARKERS)
                 .insert_one(doc! {
-                    "_id": &context.approval_process_instance_id,
-                    "instance_id": &context.approval_process_instance_id,
-                    "execution_id": &context.approval_node_execution_id,
-                    "work_item_id": &context.work_item_id,
+                    "_id": context.approval_process_instance_id(),
+                    "instance_id": context.approval_process_instance_id(),
+                    "execution_id": context.approval_node_execution_id(),
+                    "work_item_id": context.work_item_id(),
                     "actor_id": actor.id(),
-                    "idempotency_key": &context.idempotency_key,
+                    "idempotency_key": context.idempotency_key(),
                 })
                 .session(session)
                 .await

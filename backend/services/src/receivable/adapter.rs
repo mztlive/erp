@@ -17,7 +17,7 @@ use super::dto::{
     DocumentApprovalView,
 };
 use crate::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
+    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
 use crate::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
@@ -112,7 +112,8 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn customer_receipt_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::CustomerReceipt, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::CustomerReceipt, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。

@@ -18,7 +18,9 @@ use bpm::model::{
 };
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
-use database::repository::bpm::{CasWriteOutcome, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX};
+use database::repository::bpm::{
+    CasWriteOutcome, DefinitionCatalogStatusFact, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
+};
 use database::{AccessControlExt, BpmExt, Executor, NoTransaction, Transactional};
 use entities::document_registry::DocumentType;
 use entities::{AccountCore, Permission};
@@ -143,11 +145,25 @@ impl ApprovalDefinitionService {
         visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionCatalogItem>> {
         let visibility = enforce_visibility(&self.db, &self.rbac, actor, visibility).await?;
-        let mut items = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
+        let mut required_kinds = Vec::new();
+        let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
-            items.push(self.catalog_item(document_type, &visibility).await?);
+            let policy = policy_of(document_type)?;
+            if matches!(policy, DocumentApprovalPolicy::ProcessRequired(_)) {
+                required_kinds.push(policy.process_kind());
+            }
+            policies.push((document_type, policy));
         }
-        Ok(items)
+        let facts = self
+            .db
+            .bpm_workflow()
+            .definition_catalog_facts(&required_kinds, &mut NoTransaction)
+            .await?;
+        let by_kind = catalog_facts_by_kind(facts);
+        Ok(policies
+            .into_iter()
+            .map(|(document_type, policy)| catalog_item(document_type, &policy, &visibility, &by_kind))
+            .collect())
     }
 
     /// 创建定义草稿。
@@ -381,61 +397,6 @@ impl ApprovalDefinitionService {
         policy: &ProcessRequiredApprovalPolicy,
     ) -> Result<()> {
         ensure_definition_admin_permission(&self.db, &self.rbac, actor, policy, &mut NoTransaction).await
-    }
-
-    /// 组装单行目录。
-    ///
-    /// # 错误
-    /// 政策或仓储读取失败时返回错误。
-    async fn catalog_item(
-        &self,
-        document_type: DocumentType,
-        visibility: &DefinitionManagementVisibility,
-    ) -> Result<DefinitionCatalogItem> {
-        let policy = policy_of(document_type)?;
-        let (published_version, draft_version) = self.catalog_versions(&policy).await?;
-        Ok(DefinitionCatalogItem {
-            document_type,
-            document_type_label: document_type.label().to_string(),
-            approval_requirement: requirement_view(policy.requirement()),
-            published_version,
-            draft_version,
-            configuration_status: configuration_status(
-                policy.requirement(),
-                published_version,
-                draft_version,
-            ),
-            allowed_actions: allowed_actions(
-                policy.requirement(),
-                visibility.can_define(document_type),
-                published_version,
-                draft_version,
-            ),
-        })
-    }
-
-    /// 读取目录所需的发布与草稿版本。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
-    async fn catalog_versions(&self, policy: &DocumentApprovalPolicy) -> Result<(Option<u32>, Option<u32>)> {
-        if !matches!(policy, DocumentApprovalPolicy::ProcessRequired(_)) {
-            return Ok((None, None));
-        }
-        let published = self
-            .db
-            .bpm_workflow()
-            .find_published_by_process_kind(policy.process_kind(), &mut NoTransaction)
-            .await?;
-        let draft = self
-            .db
-            .bpm_workflow()
-            .find_active_draft(policy.process_kind(), &mut NoTransaction)
-            .await?;
-        Ok((
-            published.map(|item| item.definition_version),
-            draft.map(|item| item.definition_version),
-        ))
     }
 
     /// 读取定义图，缺失时失败关闭。
@@ -1106,19 +1067,12 @@ async fn copy_published_draft(
     actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let published = require_current_published(
+    let source = require_current_published(
         db.bpm_workflow()
-            .find_published_by_process_kind(policy.process_kind, session)
+            .load_published_definition_graph(policy.process_kind, session)
             .await?,
     )?;
-    let source = db
-        .bpm_workflow()
-        .load_definition_graph(
-            &ApprovalProcessDefinitionId::new(published.base.id.clone()),
-            session,
-        )
-        .await?
-        .ok_or_else(definition_not_found)?;
+    source.validate_published_linear().map_err(map_model_error)?;
     let definition_id = ApprovalProcessDefinitionId::new(next_id());
     let at = now()?;
     let identities = next_copied_node_identities(source.nodes.len());
@@ -1307,21 +1261,16 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
     requests
         .iter()
         .map(|request| {
-            let existing_node_id = request
-                .node_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|id| !id.is_empty())
-                .map(ApprovalNodeDefinitionId::new);
-            Ok(NodeReplacementDraft {
+            let existing_node_id = request.node_id.as_deref().map(ApprovalNodeDefinitionId::new);
+            NodeReplacementDraft::new(
                 existing_node_id,
-                new_node_id: ApprovalNodeDefinitionId::new(next_id()),
-                new_node_key: next_id(),
-                node_name: request.node_name.clone(),
-                display_order: request.display_order,
-                assignee_participant_id: ParticipantId::new(request.assignee_user_id.trim())
-                    .map_err(map_bpm_error)?,
-            })
+                ApprovalNodeDefinitionId::new(next_id()),
+                next_id(),
+                request.node_name.clone(),
+                request.display_order,
+                ParticipantId::new(request.assignee_user_id.clone()).map_err(map_bpm_error)?,
+            )
+            .map_err(map_model_error)
         })
         .collect()
 }
@@ -1780,19 +1729,11 @@ fn parse_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     })
 }
 
-/// 使用 BPM 实体的名称规则准备完整有序节点载荷。
+/// 使用 DTO 清洗规则准备完整有序节点载荷。
 fn prepare_definition_nodes(nodes: Vec<DefinitionNodeRequest>) -> Result<Vec<DefinitionNodeRequest>> {
     let mut prepared = Vec::with_capacity(nodes.len());
-    for mut node in nodes {
-        node.node_id = node
-            .node_id
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
-        node.node_name = ApprovalNodeDefinition::normalize_name(node.node_name).map_err(map_model_error)?;
-        let assignee = node.assignee_user_id.trim().to_string();
-        ParticipantId::new(assignee.clone()).map_err(map_bpm_error)?;
-        node.assignee_user_id = assignee;
-        prepared.push(node);
+    for node in nodes {
+        prepared.push(node.prepare().map_err(map_model_error)?);
     }
     prepared.sort_by_key(|node| node.display_order);
     Ok(prepared)
@@ -2006,14 +1947,99 @@ fn configuration_status(
     published: Option<u32>,
     draft: Option<u32>,
 ) -> DefinitionConfigurationStatus {
-    let _ = draft;
     match requirement {
         ApprovalRequirement::NoApproval => DefinitionConfigurationStatus::NotApplicable,
         ApprovalRequirement::ProcessRequired if published.is_some() => {
             DefinitionConfigurationStatus::Published
         }
+        ApprovalRequirement::ProcessRequired if draft.is_some() => DefinitionConfigurationStatus::Draft,
         ApprovalRequirement::ProcessRequired => DefinitionConfigurationStatus::MissingConfiguration,
     }
+}
+
+/// 组装单行目录。
+///
+/// # 参数
+/// * `document_type` - 固定单据类型
+/// * `policy` - 该类型审批政策
+/// * `visibility` - 当前用户类型级可见范围
+/// * `by_kind` - 批量目录查询返回的发布/草稿版本
+///
+/// # 返回
+/// 返回非敏感目录行，含正确的草稿/发布配置状态。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 必须同时消费 published 与 draft 事实；仅有草稿时不得报缺失配置。
+fn catalog_item(
+    document_type: DocumentType,
+    policy: &DocumentApprovalPolicy,
+    visibility: &DefinitionManagementVisibility,
+    by_kind: &HashMap<bpm::ProcessKind, DefinitionCatalogStatusFact>,
+) -> DefinitionCatalogItem {
+    let (published_version, draft_version) = catalog_versions_from_facts(policy, by_kind);
+    DefinitionCatalogItem {
+        document_type,
+        document_type_label: document_type.label().to_string(),
+        approval_requirement: requirement_view(policy.requirement()),
+        published_version,
+        draft_version,
+        configuration_status: configuration_status(policy.requirement(), published_version, draft_version),
+        allowed_actions: allowed_actions(
+            policy.requirement(),
+            visibility.can_define(document_type),
+            published_version,
+            draft_version,
+        ),
+    }
+}
+
+/// 从批量目录事实读取某政策的发布与草稿版本。
+///
+/// # 参数
+/// * `policy` - 单据审批政策
+/// * `by_kind` - 按流程种类索引的目录事实
+///
+/// # 返回
+/// 无审批类型两个版本均为空；必须审批类型取对应事实，缺失种类视为双空。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不得再按类型逐次查询仓储。
+fn catalog_versions_from_facts(
+    policy: &DocumentApprovalPolicy,
+    by_kind: &HashMap<bpm::ProcessKind, DefinitionCatalogStatusFact>,
+) -> (Option<u32>, Option<u32>) {
+    if !matches!(policy, DocumentApprovalPolicy::ProcessRequired(_)) {
+        return (None, None);
+    }
+    match by_kind.get(&policy.process_kind()) {
+        Some(fact) => (fact.published_version, fact.draft_version),
+        None => (None, None),
+    }
+}
+
+/// 按流程种类索引目录事实。
+///
+/// # 参数
+/// * `facts` - 仓储一次查询返回的目录投影
+///
+/// # 返回
+/// 返回以流程种类为键的映射。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 仓储已对重复状态失败关闭，本函数不再挑选版本。
+fn catalog_facts_by_kind(
+    facts: Vec<DefinitionCatalogStatusFact>,
+) -> HashMap<bpm::ProcessKind, DefinitionCatalogStatusFact> {
+    facts.into_iter().map(|fact| (fact.process_kind, fact)).collect()
 }
 
 /// 类型级允许动作。
@@ -2729,12 +2755,16 @@ mod tests {
         assert!(allowed_actions(ApprovalRequirement::NoApproval, true, None, None).is_empty());
     }
 
-    /// 无已发布定义一律配置缺失，含从未发布仅有草稿、退役后仍留草稿。
+    /// 目录状态必须同时消费 published/draft：仅草稿为 Draft，退役且无草稿为缺失。
     #[test]
-    fn retired_catalog_status_is_missing_configuration() {
+    fn catalog_status_consumes_published_and_draft_facts() {
         assert_eq!(
             configuration_status(ApprovalRequirement::ProcessRequired, None, None),
             DefinitionConfigurationStatus::MissingConfiguration
+        );
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, Some(1), None),
+            DefinitionConfigurationStatus::Published
         );
         assert_eq!(
             configuration_status(ApprovalRequirement::ProcessRequired, Some(1), Some(2)),
@@ -2742,12 +2772,44 @@ mod tests {
         );
         assert_eq!(
             configuration_status(ApprovalRequirement::ProcessRequired, None, Some(1)),
-            DefinitionConfigurationStatus::MissingConfiguration
+            DefinitionConfigurationStatus::Draft
         );
         assert_eq!(
             configuration_status(ApprovalRequirement::NoApproval, None, None),
             DefinitionConfigurationStatus::NotApplicable
         );
+        let production = production_source();
+        let catalog = source_fn(
+            production,
+            "pub async fn definition_catalog",
+            "pub async fn create_definition_draft",
+        );
+        assert!(catalog.contains("definition_catalog_facts"));
+        assert!(!catalog.contains("find_published_by_process_kind"));
+        assert!(!catalog.contains("find_active_draft"));
+        let catalog_item_src = source_fn(production, "fn catalog_item(", "fn catalog_versions_from_facts");
+        assert!(catalog_item_src.contains("catalog_versions_from_facts"));
+        assert!(!production_source().contains("async fn catalog_versions"));
+        assert!(production_source().contains("NodeReplacementDraft::new"));
+        let facts = vec![
+            DefinitionCatalogStatusFact {
+                process_kind: ProcessKind::SalesOrder,
+                published_version: Some(2),
+                draft_version: Some(3),
+            },
+            DefinitionCatalogStatusFact {
+                process_kind: ProcessKind::StockAdjustment,
+                published_version: None,
+                draft_version: Some(1),
+            },
+        ];
+        let by_kind = catalog_facts_by_kind(facts);
+        let sales = policy_of(DocumentType::SalesOrder).unwrap();
+        let stock = policy_of(DocumentType::StockAdjustment).unwrap();
+        assert_eq!(catalog_versions_from_facts(&sales, &by_kind), (Some(2), Some(3)));
+        assert_eq!(catalog_versions_from_facts(&stock, &by_kind), (None, Some(1)));
+        let purchase = policy_of(DocumentType::PurchaseOrder).unwrap();
+        assert_eq!(catalog_versions_from_facts(&purchase, &by_kind), (None, None));
     }
 
     /// 四条定义命令固定 v3 golden，Create/Replace domain 隔离且完整载荷可区分。
@@ -3179,6 +3241,10 @@ mod tests {
             configuration_status(ApprovalRequirement::ProcessRequired, None, None),
             DefinitionConfigurationStatus::MissingConfiguration
         );
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, None, Some(1)),
+            DefinitionConfigurationStatus::Draft
+        );
         let retire_tx = source_fn(
             production_source(),
             "async fn retire_tx",
@@ -3201,6 +3267,9 @@ mod tests {
             "async fn persist_new_draft",
         );
         assert!(copy_src.contains("require_current_published"));
+        assert!(copy_src.contains("load_published_definition_graph"));
+        assert!(!copy_src.contains("load_definition_graph"));
+        assert!(copy_src.contains("validate_published_linear"));
     }
     /// 详情按 display_order 排序；版本摘要带状态、名称和锁。
     #[test]

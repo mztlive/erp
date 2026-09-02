@@ -159,6 +159,23 @@ impl ApprovalProcessDefinition {
         Err(ModelError::InvalidStatus("只有草稿定义可以修改"))
     }
 
+    /// 判断定义是否为当前可绑定的已发布状态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态为已发布时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 草稿与退役均不可绑定；本判断不读取仓储过滤结果。
+    pub fn is_published(&self) -> bool {
+        self.status.is_published()
+    }
+
     /// 重命名草稿。
     ///
     /// # 参数
@@ -353,6 +370,7 @@ mod tests {
         let at = Timestamp::from_unix_secs(2).unwrap();
         definition.publish(actor.clone(), at).unwrap();
         assert_eq!(definition.status, ApprovalDefinitionStatus::Published);
+        assert!(definition.is_published());
         assert!(definition.rename_draft("x", at).is_err());
         assert!(definition.ensure_mutable().is_err());
 
@@ -374,6 +392,8 @@ mod tests {
             .retire(actor, Timestamp::from_unix_secs(3).unwrap())
             .unwrap();
         assert_eq!(definition.status, ApprovalDefinitionStatus::Retired);
+        assert!(!definition.is_published());
+        assert!(!draft().is_published());
         assert!(definition
             .retire(
                 ParticipantId::new("admin").unwrap(),

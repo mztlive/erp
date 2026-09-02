@@ -26,11 +26,10 @@ use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::adapter::{
-    build_sales_order_snapshot, document_type_for_sales_create, execute_sales_order_domain_action,
-    reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item, require_frozen_binding,
-    sales_approval_ports, sales_order_object_readable, sales_order_responsible_org_id,
-    sales_order_start_command, start_approval_command_kind, subject_ref_for_sales_business,
-    RECENT_HISTORY_LIMIT,
+    build_sales_order_snapshot, execute_sales_order_domain_action, reject_legacy_card_sales_decision,
+    reject_legacy_card_sales_work_item, require_frozen_binding, sales_approval_ports,
+    sales_order_object_readable, sales_order_responsible_org_id, sales_order_start_command,
+    start_approval_command_kind, RECENT_HISTORY_LIMIT,
 };
 use super::cancel_approval::{
     build_sales_order_cancel_input, load_cancel_runtime, persist_sales_order_cancel,
@@ -139,7 +138,7 @@ fn sales_create_bind_command(
     actor: &AuditActor,
 ) -> Result<BindPublishedDefinitionCommand> {
     Ok(BindPublishedDefinitionCommand {
-        document_type: document_type_for_sales_create(order.business_type),
+        document_type: entities::approval_integration::document_type_of_sales_business(order.business_type),
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
         context: BindingRevalidationContext {
@@ -368,7 +367,8 @@ impl SalesOrderService {
             actor.id(),
         )?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let document_type = document_type_for_sales_create(req.business_type);
+        let document_type =
+            entities::approval_integration::document_type_of_sales_business(req.business_type);
         let document = BusinessDocument::new(
             BusinessDocumentId::new(order.base.id.clone()),
             BusinessDocumentData {
@@ -381,7 +381,11 @@ impl SalesOrderService {
 
         if req.intent == SalesOrderCreateIntent::Submit {
             let ports = sales_approval_ports(order.business_type)?;
-            let subject = subject_ref_for_sales_business(order.business_type, &order.base.id)?;
+            let subject = entities::approval_integration::subject_ref_for_sales_business(
+                order.business_type,
+                &order.base.id,
+            )
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
             let organization_id = sales_order_responsible_org_id(&order)?;
             let _ = sales_order_object_readable(&organization_id, actor.id())?;
             self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines)
@@ -1007,7 +1011,8 @@ impl SalesOrderService {
             working_copy_plan,
         } = start;
         let ports = sales_approval_ports(order.business_type)?;
-        let subject = subject_ref_for_sales_business(order.business_type, id)?;
+        let subject = entities::approval_integration::subject_ref_for_sales_business(order.business_type, id)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
@@ -1158,7 +1163,8 @@ impl SalesOrderService {
         let ports = sales_approval_ports(order.business_type)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let subject = subject_ref_for_sales_business(order.business_type, id)?;
+        let subject = entities::approval_integration::subject_ref_for_sales_business(order.business_type, id)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let subject_version = latest_submission_no(&self.db, id).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;
         let now = Instant::now();
@@ -1267,8 +1273,11 @@ impl SalesOrderService {
                         let _ = sales_order_object_readable(&organization_id, &actor_id)?;
                         let binding = find_approval_binding(&db, &sales_order_id_owned, session).await?;
                         let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject =
-                            subject_ref_for_sales_business(order.business_type, &sales_order_id_owned)?;
+                        let subject = entities::approval_integration::subject_ref_for_sales_business(
+                            order.business_type,
+                            &sales_order_id_owned,
+                        )
+                        .map_err(|error| Error::ValidationError(error.to_string()))?;
                         replay_sales_order_start_with_executor(
                             &db,
                             document_type,
@@ -1713,7 +1722,7 @@ mod goods_service_cutover_tests {
     fn voucher_create_binds_and_submit_starts_unified_approval() {
         let source = include_str!("command.rs");
         assert!(source.contains("sales_create_bind_command"));
-        assert!(source.contains("document_type_for_sales_create"));
+        assert!(source.contains("entities::approval_integration::document_type_of_sales_business"));
         let submit = source
             .split("pub async fn submit_sales_order")
             .nth(1)
@@ -1728,7 +1737,7 @@ mod goods_service_cutover_tests {
             .nth(1)
             .and_then(|body| body.split("async fn persist_bound_sales_document").next())
             .expect("绑定命令");
-        assert!(create.contains("document_type_for_sales_create"));
+        assert!(create.contains("entities::approval_integration::document_type_of_sales_business"));
         assert!(!create.contains("DocumentType::SalesOrder"));
     }
 

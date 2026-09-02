@@ -20,7 +20,7 @@ use super::dto::{
     DocumentApprovalView,
 };
 use crate::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
+    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
 use crate::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
@@ -115,7 +115,8 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter>
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn customer_refund_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::CustomerRefund, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::CustomerRefund, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
@@ -451,7 +452,8 @@ fn supplier_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SupplierRefun
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn supplier_refund_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::SupplierRefund, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::SupplierRefund, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
@@ -777,7 +779,8 @@ fn receipt_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Recei
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn receipt_reversal_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::ReceiptReversal, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::ReceiptReversal, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
@@ -1107,7 +1110,8 @@ fn payment_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Payme
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn payment_reversal_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    subject_ref_for(DocumentType::PaymentReversal, business_object_id)
+    entities::approval_integration::subject_ref_for(DocumentType::PaymentReversal, business_object_id)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。

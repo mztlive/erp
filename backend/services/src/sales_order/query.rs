@@ -15,7 +15,6 @@ use entities::sales_order::{
 use entities::Permission;
 use validator::Validate;
 
-use super::adapter::document_type_for_sales_create;
 use super::approval_query::load_document_approval;
 use super::dto;
 use super::dto::{
@@ -773,7 +772,9 @@ impl SalesOrderService {
         if !review_status.has_active_review_task() {
             return Ok((None, None, None));
         }
-        let object_type = document_type_for_sales_create(business_type).as_str().to_string();
+        let object_type = entities::approval_integration::document_type_of_sales_business(business_type)
+            .as_str()
+            .to_string();
         let tasks = self
             .db
             .work_items()
@@ -809,7 +810,7 @@ impl SalesOrderService {
             .filter(|(_, _, review_status)| review_status.has_active_review_task())
             .map(|(id, business_type, _)| {
                 (
-                    document_type_for_sales_create(*business_type)
+                    entities::approval_integration::document_type_of_sales_business(*business_type)
                         .as_str()
                         .to_string(),
                     id.clone(),

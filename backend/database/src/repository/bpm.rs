@@ -2,6 +2,8 @@
 //!
 //! 本模块只读写 `bpm` 模型，不接收 ERP 实体，也不调用 BPM 决策函数。
 
+use std::collections::{HashMap, HashSet};
+
 pub use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use bpm::model::types::{
@@ -38,6 +40,7 @@ const MAX_DEFINITION_GRAPH_DOCS: i64 = 20;
 const MAX_DEFINITION_VERSIONS: i64 = 100;
 const MAX_EXECUTION_HISTORY: i64 = 50;
 const MAX_INSTANCE_PAGE: i64 = 101;
+const MAX_CATALOG_STATUS_ROWS: i64 = 80;
 
 /// CAS 写入结果。未命中必须区分为不存在、版本冲突或状态变化。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +197,25 @@ pub struct ApprovalInstanceSummary {
 #[derive(Debug, Deserialize)]
 struct LatestDefinitionVersionProjection {
     /// 已持久化的定义业务版本。
+    definition_version: u32,
+}
+
+/// 目录查询返回的流程种类发布/草稿版本事实。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefinitionCatalogStatusFact {
+    /// 流程种类。
+    pub process_kind: ProcessKind,
+    /// 当前已发布业务版本；无发布时为空。
+    pub published_version: Option<u32>,
+    /// 当前活动草稿业务版本；无草稿时为空。
+    pub draft_version: Option<u32>,
+}
+
+/// 目录批量查询使用的最小持久化投影。
+#[derive(Debug, Deserialize)]
+struct DefinitionCatalogRow {
+    process_kind: ProcessKind,
+    status: ApprovalDefinitionStatus,
     definition_version: u32,
 }
 
@@ -458,6 +480,84 @@ impl<'a> BpmWorkflowRepository<'a> {
         };
         let nodes = self.load_definition_nodes(definition_id, executor).await?;
         let transitions = self.load_definition_transitions(definition_id, executor).await?;
+        Ok(Some(DefinitionGraph {
+            definition,
+            nodes,
+            transitions,
+        }))
+    }
+
+    /// 按流程种类列表一次读取发布与草稿版本目录投影。
+    ///
+    /// # 参数
+    /// * `process_kinds` - 调用方已去权后的流程种类；可含重复
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 按去重后的输入顺序返回每种流程的发布/草稿版本；缺失种类两个版本均为空。
+    ///
+    /// # 错误
+    /// 同一流程同一状态出现多条未删除定义，或 MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 查询次数固定为 0（空输入）或 1，不随种类数量线性增长；退役定义不进入投影；
+    /// 历史重复发布/草稿状态必须失败关闭，不得取第一条。
+    pub async fn definition_catalog_facts(
+        &self,
+        process_kinds: &[ProcessKind],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DefinitionCatalogStatusFact>> {
+        let unique_kinds = unique_process_kinds(process_kinds);
+        if unique_kinds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let options = definition_catalog_options(unique_kinds.len());
+        let rows = mongo_ops::find_many(
+            &self.db.collection::<DefinitionCatalogRow>(DEFINITIONS),
+            definition_catalog_filter(&unique_kinds),
+            options,
+            executor,
+        )
+        .await?;
+        group_definition_catalog_rows(&unique_kinds, rows)
+    }
+
+    /// 读取某流程种类当前唯一已发布定义及其节点、连线，定义文档只读一次。
+    ///
+    /// # 参数
+    /// * `process_kind` - 需要绑定或复制的流程种类
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 存在唯一已发布定义时返回完整图；无发布时返回 `None`。
+    ///
+    /// # 错误
+    /// 同一流程出现多条已发布定义，或 MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 草稿与退役不得命中；重复已发布必须失败关闭；本方法不把状态解释为可绑定结论。
+    pub async fn load_published_definition_graph(
+        &self,
+        process_kind: ProcessKind,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<DefinitionGraph>> {
+        let options = FindOptions::builder()
+            .limit(2)
+            .sort(doc! { "definition_version": -1, "id": 1 })
+            .build();
+        let rows = mongo_ops::find_many(
+            &self.db.collection::<ApprovalProcessDefinition>(DEFINITIONS),
+            published_kind_docs_filter(process_kind),
+            options,
+            executor,
+        )
+        .await?;
+        let Some(definition) = unique_published_definition(rows)? else {
+            return Ok(None);
+        };
+        let definition_id = ApprovalProcessDefinitionId::new(definition.base.id.clone());
+        let nodes = self.load_definition_nodes(&definition_id, executor).await?;
+        let transitions = self.load_definition_transitions(&definition_id, executor).await?;
         Ok(Some(DefinitionGraph {
             definition,
             nodes,
@@ -1257,6 +1357,25 @@ fn published_kind_filter(process_kind: ProcessKind) -> Document {
     }
 }
 
+/// 构造直接 `find_many` 使用的已发布定义过滤，含软删除约束。
+///
+/// # 参数
+/// * `process_kind` - 流程种类
+///
+/// # 返回
+/// 返回 `PUBLISHED`、流程种类与 `deleted_at` 条件。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// `Repository::find_one` 会自行补软删除条件；`mongo_ops::find_many` 必须显式带上。
+fn published_kind_docs_filter(process_kind: ProcessKind) -> Document {
+    let mut filter = published_kind_filter(process_kind);
+    filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    filter
+}
+
 fn active_draft_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -1329,6 +1448,170 @@ fn latest_definition_version_options() -> FindOptions {
 /// 不在内存重新排序或选择最大值，保持 Repository 查询契约单一。
 fn latest_definition_version_from_rows(rows: Vec<LatestDefinitionVersionProjection>) -> Option<u32> {
     rows.into_iter().next().map(|row| row.definition_version)
+}
+
+/// 去除重复流程种类并保持首次出现顺序。
+///
+/// # 参数
+/// * `process_kinds` - 调用方提供的流程种类，可为空或含重复
+///
+/// # 返回
+/// 返回去重后的种类列表。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 空输入必须得到空列表，查询次数不得因此变为按种类循环。
+fn unique_process_kinds(process_kinds: &[ProcessKind]) -> Vec<ProcessKind> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::new();
+    for kind in process_kinds {
+        if seen.insert(*kind) {
+            unique.push(*kind);
+        }
+    }
+    unique
+}
+
+/// 构造目录批量查询过滤：指定种类的未删除草稿或已发布定义。
+///
+/// # 参数
+/// * `process_kinds` - 已去重的流程种类
+///
+/// # 返回
+/// 返回含 `$in`、状态集合与软删除约束的查询文档。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 退役定义不得命中；软删除过滤必须保留。
+fn definition_catalog_filter(process_kinds: &[ProcessKind]) -> Document {
+    doc! {
+        "process_kind": {
+            "$in": process_kinds.iter().map(|kind| kind.as_str()).collect::<Vec<_>>()
+        },
+        "status": {
+            "$in": [
+                ApprovalDefinitionStatus::Draft.as_str(),
+                ApprovalDefinitionStatus::Published.as_str(),
+            ]
+        },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构造目录批量查询选项：最小投影、稳定排序与固定上限。
+///
+/// # 参数
+/// * `kind_count` - 去重后的种类数
+///
+/// # 返回
+/// 返回只读取种类/状态/版本的查询选项。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 上限必须能发现重复状态，不得用 `limit=种类数` 掩盖脏数据。
+fn definition_catalog_options(kind_count: usize) -> FindOptions {
+    let limit = i64::try_from(kind_count.saturating_mul(4))
+        .unwrap_or(MAX_CATALOG_STATUS_ROWS)
+        .clamp(1, MAX_CATALOG_STATUS_ROWS);
+    FindOptions::builder()
+        .sort(doc! { "process_kind": 1, "status": 1, "id": 1 })
+        .limit(limit)
+        .projection(doc! {
+            "process_kind": 1,
+            "status": 1,
+            "definition_version": 1,
+            "_id": 0,
+        })
+        .build()
+}
+
+/// 把目录投影行归组为每种流程至多一条发布与一条草稿事实。
+///
+/// # 参数
+/// * `process_kinds` - 已去重的请求种类，决定输出顺序
+/// * `rows` - 仓储一次查询返回的草稿/发布投影
+///
+/// # 返回
+/// 返回与请求种类等长的事实列表；缺失种类两个版本均为空。
+///
+/// # 错误
+/// 同一流程同一状态重复，或投影含退役状态时返回元数据越界。
+///
+/// # 关键业务约束
+/// 不得取第一条掩盖重复；退役不得被解释为发布或草稿。
+fn group_definition_catalog_rows(
+    process_kinds: &[ProcessKind],
+    rows: Vec<DefinitionCatalogRow>,
+) -> Result<Vec<DefinitionCatalogStatusFact>> {
+    let requested: HashSet<ProcessKind> = process_kinds.iter().copied().collect();
+    let mut by_kind: HashMap<ProcessKind, (Option<u32>, Option<u32>)> = HashMap::new();
+    for row in rows {
+        if !requested.contains(&row.process_kind) {
+            continue;
+        }
+        let slot = by_kind.entry(row.process_kind).or_insert((None, None));
+        match row.status {
+            ApprovalDefinitionStatus::Published => {
+                if slot.0.replace(row.definition_version).is_some() {
+                    return Err(Error::EntityMetadataOutOfRange(
+                        "duplicate published definition catalog status",
+                    ));
+                }
+            }
+            ApprovalDefinitionStatus::Draft => {
+                if slot.1.replace(row.definition_version).is_some() {
+                    return Err(Error::EntityMetadataOutOfRange(
+                        "duplicate draft definition catalog status",
+                    ));
+                }
+            }
+            ApprovalDefinitionStatus::Retired => {
+                return Err(Error::EntityMetadataOutOfRange(
+                    "retired definition in catalog projection",
+                ));
+            }
+        }
+    }
+    Ok(process_kinds
+        .iter()
+        .map(|process_kind| {
+            let (published_version, draft_version) = by_kind.remove(process_kind).unwrap_or((None, None));
+            DefinitionCatalogStatusFact {
+                process_kind: *process_kind,
+                published_version,
+                draft_version,
+            }
+        })
+        .collect())
+}
+
+/// 从已发布查询结果取出唯一发布定义。
+///
+/// # 参数
+/// * `rows` - 按发布过滤返回的定义
+///
+/// # 返回
+/// 无命中返回 `None`；恰好一条已发布定义时返回该定义。
+///
+/// # 错误
+/// 命中多于一条时返回元数据越界。
+///
+/// # 关键业务约束
+/// 不得取第一条掩盖历史重复发布。
+fn unique_published_definition(
+    rows: Vec<ApprovalProcessDefinition>,
+) -> Result<Option<ApprovalProcessDefinition>> {
+    match rows.len() {
+        0 => Ok(None),
+        1 => Ok(rows.into_iter().next()),
+        _ => Err(Error::EntityMetadataOutOfRange("duplicate published definition")),
+    }
 }
 
 /// 将定义历史请求页大小夹紧到 `[1, MAX_DEFINITION_VERSIONS]`。
@@ -1890,20 +2173,23 @@ mod tests {
         approval_task_cas_filter, assign_document_no_filter, cancellable_execution_end_filter,
         cancellation_subject_filter, cancelled_instance_projection, clamp_limit,
         classify_assign_document_no_miss, classify_cas_miss, current_execution_filter,
-        definition_child_filter, definition_graph_transition_limit, definition_versions_filter,
-        execution_end_filter, execution_history_filter, execution_history_limit, instance_advance_filter,
-        instance_insert_document, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
-        instance_summary_projection, instance_text_query_or, latest_definition_version_from_rows,
-        latest_definition_version_options, latest_subject_filter, merge_documents,
-        non_terminal_subject_filter, previous_version, receipt_key_filter, require_cas_applied,
+        definition_catalog_filter, definition_catalog_options, definition_child_filter,
+        definition_graph_transition_limit, definition_versions_filter, execution_end_filter,
+        execution_history_filter, execution_history_limit, group_definition_catalog_rows,
+        instance_advance_filter, instance_insert_document, instance_list_filter_doc,
+        instance_list_scope_empty, instance_list_sort, instance_summary_projection, instance_text_query_or,
+        latest_definition_version_from_rows, latest_definition_version_options, latest_subject_filter,
+        merge_documents, non_terminal_subject_filter, previous_version, published_kind_docs_filter,
+        receipt_key_filter, require_cas_applied, unique_process_kinds, unique_published_definition,
         ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
         ApprovalInstanceListView, ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome,
-        LatestDefinitionVersionProjection, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY,
-        MAX_INSTANCE_PAGE,
+        DefinitionCatalogRow, DefinitionCatalogStatusFact, LatestDefinitionVersionProjection,
+        MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
-        ApprovalCommandKind, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
+        ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalNodeExecutionStatus,
+        ApprovalProcessInstanceStatus,
     };
     use bpm::model::{ApprovalProcessInstance, IdempotencyKey, NewProcessInstance, ParticipantId, Timestamp};
     use bpm::{ProcessKind, SubjectRef};
@@ -1951,6 +2237,194 @@ mod tests {
             options.projection,
             Some(doc! { "definition_version": 1, "_id": 0 })
         );
+    }
+
+    /// 目录批量查询保留软删除、草稿/发布状态、种类 `$in` 与固定上限。
+    #[test]
+    fn definition_catalog_query_is_bounded_and_filters_retired() {
+        assert!(unique_process_kinds(&[]).is_empty());
+        assert_eq!(
+            unique_process_kinds(&[
+                ProcessKind::SalesOrder,
+                ProcessKind::StockAdjustment,
+                ProcessKind::SalesOrder
+            ]),
+            vec![ProcessKind::SalesOrder, ProcessKind::StockAdjustment]
+        );
+        let filter = definition_catalog_filter(&[ProcessKind::SalesOrder, ProcessKind::StockAdjustment]);
+        assert_eq!(
+            filter
+                .get_document("process_kind")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &vec![
+                Bson::String("sales_order".into()),
+                Bson::String("stock_adjustment".into())
+            ]
+        );
+        assert_eq!(
+            filter.get_document("status").unwrap().get_array("$in").unwrap(),
+            &vec![Bson::String("DRAFT".into()), Bson::String("PUBLISHED".into())]
+        );
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+        let options = definition_catalog_options(20);
+        assert_eq!(options.limit, Some(80));
+        assert_eq!(options.limit.unwrap(), MAX_CATALOG_STATUS_ROWS);
+        assert_eq!(
+            options.projection,
+            Some(doc! { "process_kind": 1, "status": 1, "definition_version": 1, "_id": 0 })
+        );
+        let published_filter = published_kind_docs_filter(ProcessKind::StockAdjustment);
+        assert_eq!(published_filter.get_str("status").unwrap(), "PUBLISHED");
+        assert_eq!(published_filter.get_i64("deleted_at").unwrap(), 0);
+    }
+
+    /// 目录归组覆盖 published-only、draft-only、并存、缺失，并拒绝重复状态与退役投影。
+    #[test]
+    fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() {
+        let kinds = [
+            ProcessKind::SalesOrder,
+            ProcessKind::VoucherSalesOrder,
+            ProcessKind::StockAdjustment,
+            ProcessKind::Delivery,
+            ProcessKind::Invoice,
+        ];
+        let facts = group_definition_catalog_rows(
+            &kinds,
+            vec![
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::SalesOrder,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 3,
+                },
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::VoucherSalesOrder,
+                    status: ApprovalDefinitionStatus::Draft,
+                    definition_version: 1,
+                },
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::StockAdjustment,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 2,
+                },
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::StockAdjustment,
+                    status: ApprovalDefinitionStatus::Draft,
+                    definition_version: 4,
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            facts,
+            vec![
+                DefinitionCatalogStatusFact {
+                    process_kind: ProcessKind::SalesOrder,
+                    published_version: Some(3),
+                    draft_version: None,
+                },
+                DefinitionCatalogStatusFact {
+                    process_kind: ProcessKind::VoucherSalesOrder,
+                    published_version: None,
+                    draft_version: Some(1),
+                },
+                DefinitionCatalogStatusFact {
+                    process_kind: ProcessKind::StockAdjustment,
+                    published_version: Some(2),
+                    draft_version: Some(4),
+                },
+                DefinitionCatalogStatusFact {
+                    process_kind: ProcessKind::Delivery,
+                    published_version: None,
+                    draft_version: None,
+                },
+                DefinitionCatalogStatusFact {
+                    process_kind: ProcessKind::Invoice,
+                    published_version: None,
+                    draft_version: None,
+                },
+            ]
+        );
+        assert!(group_definition_catalog_rows(
+            &[ProcessKind::SalesOrder],
+            vec![
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::SalesOrder,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 1,
+                },
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::SalesOrder,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 2,
+                },
+            ],
+        )
+        .is_err());
+        assert!(group_definition_catalog_rows(
+            &[ProcessKind::SalesOrder],
+            vec![DefinitionCatalogRow {
+                process_kind: ProcessKind::SalesOrder,
+                status: ApprovalDefinitionStatus::Retired,
+                definition_version: 1,
+            }],
+        )
+        .is_err());
+        assert!(unique_published_definition(Vec::new()).unwrap().is_none());
+        let mut published_a = dummy_definition("a");
+        published_a
+            .publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(2).unwrap(),
+            )
+            .unwrap();
+        let mut published_b = dummy_definition("b");
+        published_b
+            .publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(2).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            unique_published_definition(vec![published_a.clone()])
+                .unwrap()
+                .unwrap()
+                .base
+                .id,
+            "a"
+        );
+        assert!(unique_published_definition(vec![published_a, published_b]).is_err());
+        let catalog_src = include_str!("bpm.rs")
+            .split("pub async fn definition_catalog_facts")
+            .nth(1)
+            .and_then(|body| body.split("pub async fn load_published_definition_graph").next())
+            .expect("目录查询");
+        assert_eq!(catalog_src.matches("find_many").count(), 1);
+        assert!(catalog_src.contains("unique_kinds.is_empty()"));
+        let published_src = include_str!("bpm.rs")
+            .split("pub async fn load_published_definition_graph")
+            .nth(1)
+            .and_then(|body| body.split("pub async fn update_draft_definition").next())
+            .expect("发布图加载");
+        assert!(published_src.contains("unique_published_definition"));
+        assert!(published_src.contains("load_definition_nodes"));
+        assert!(published_src.contains("load_definition_transitions"));
+        assert!(!published_src.contains("find_by_id"));
+        assert!(!published_src.contains("load_definition_graph("));
+    }
+
+    fn dummy_definition(id: &str) -> bpm::model::ApprovalProcessDefinition {
+        bpm::model::ApprovalProcessDefinition::new_draft(
+            ApprovalProcessDefinitionId::new(id),
+            ProcessKind::StockAdjustment,
+            1,
+            "库存调整",
+            "n1",
+            ParticipantId::new("admin").unwrap(),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
     }
 
     /// 验证最高版本投影读取首条记录，并在没有历史定义时返回空边界。
@@ -2541,5 +3015,388 @@ mod tests {
                 "idempotency_key": "key-1",
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod mongo_catalog_and_published {
+    use super::DefinitionCatalogStatusFact;
+    use crate::repository::extensions::BpmExt;
+    use crate::{ensure_indexes, NoTransaction, Transactional};
+    use bpm::graph::DefinitionGraph;
+    use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
+    use bpm::model::types::ApprovalDefinitionStatus;
+    use bpm::model::{
+        ApprovalNodeDefinition, ApprovalProcessDefinition, NewNodeDefinition, ParticipantId, Timestamp,
+    };
+    use bpm::ProcessKind;
+    use test_support::{require_mongo, TestDb};
+
+    fn draft(id: &str, kind: ProcessKind, version: u32) -> ApprovalProcessDefinition {
+        ApprovalProcessDefinition::new_draft(
+            ApprovalProcessDefinitionId::new(id),
+            kind,
+            version,
+            "测试定义",
+            "n1",
+            ParticipantId::new("admin").unwrap(),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn one_node_graph(id: &str, kind: ProcessKind, version: u32) -> DefinitionGraph {
+        let nodes = vec![ApprovalNodeDefinition::new(NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(format!("{id}-n1")),
+            process_definition_id: ApprovalProcessDefinitionId::new(id),
+            node_key: "n1".into(),
+            node_name: "仓储".into(),
+            node_purpose: None,
+            display_order: 1,
+            assignee_participant_id: ParticipantId::new("u1").unwrap(),
+            assignee_label_snapshot: "仓储".into(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
+        .unwrap()];
+        DefinitionGraph::new_populated_draft(
+            ApprovalProcessDefinitionId::new(id),
+            kind,
+            version,
+            "测试定义",
+            ParticipantId::new("admin").unwrap(),
+            nodes,
+            (1..=2)
+                .map(|index| ApprovalTransitionDefinitionId::new(format!("{id}-t{index}")))
+                .collect(),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// 批量目录覆盖 published-only、draft-only、并存、缺失、退役、软删、空输入、去重与重复状态失败关闭。
+    #[tokio::test]
+    #[ignore = "requires MongoDB replica set"]
+    async fn definition_catalog_facts_covers_batch_matrix_on_mongo() {
+        require_mongo!(async {
+            let fixture = TestDb::new("app-r03-catalog").await.expect("测试库");
+            ensure_indexes(fixture.db()).await.expect("索引");
+            let repo = fixture.db().bpm_workflow();
+
+            let empty = repo
+                .definition_catalog_facts(&[], &mut NoTransaction)
+                .await
+                .expect("空输入");
+            assert!(empty.is_empty());
+
+            let mut published_only = draft("pub-only", ProcessKind::SalesOrder, 1);
+            published_only
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&published_only, &mut NoTransaction)
+                .await
+                .expect("写入发布");
+
+            let draft_only = draft("draft-only", ProcessKind::VoucherSalesOrder, 1);
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&draft_only, &mut NoTransaction)
+                .await
+                .expect("写入草稿");
+
+            let mut coexist_published = draft("coexist-p", ProcessKind::StockAdjustment, 1);
+            coexist_published
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            let coexist_draft = draft("coexist-d", ProcessKind::StockAdjustment, 2);
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&coexist_published, &mut NoTransaction)
+                .await
+                .expect("并存发布");
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&coexist_draft, &mut NoTransaction)
+                .await
+                .expect("并存草稿");
+
+            let mut retired = draft("retired", ProcessKind::Delivery, 1);
+            retired
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            retired
+                .retire(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(3).unwrap(),
+                )
+                .unwrap();
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&retired, &mut NoTransaction)
+                .await
+                .expect("写入退役");
+
+            let mut soft = draft("soft", ProcessKind::Invoice, 1);
+            soft.publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(2).unwrap(),
+            )
+            .unwrap();
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&soft, &mut NoTransaction)
+                .await
+                .expect("写入待软删");
+            let mut loaded = fixture
+                .db()
+                .approval_process_definitions()
+                .find_by_id("soft", &mut NoTransaction)
+                .await
+                .expect("读取待软删")
+                .expect("存在");
+            fixture
+                .db()
+                .approval_process_definitions()
+                .soft_delete(&mut loaded, &mut NoTransaction)
+                .await
+                .expect("软删");
+
+            let kinds = [
+                ProcessKind::SalesOrder,
+                ProcessKind::VoucherSalesOrder,
+                ProcessKind::StockAdjustment,
+                ProcessKind::Delivery,
+                ProcessKind::Invoice,
+                ProcessKind::PurchaseOrder,
+                ProcessKind::SalesOrder,
+            ];
+            let facts = repo
+                .definition_catalog_facts(&kinds, &mut NoTransaction)
+                .await
+                .expect("批量目录");
+            assert_eq!(
+                facts,
+                vec![
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::SalesOrder,
+                        published_version: Some(1),
+                        draft_version: None,
+                    },
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::VoucherSalesOrder,
+                        published_version: None,
+                        draft_version: Some(1),
+                    },
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::StockAdjustment,
+                        published_version: Some(1),
+                        draft_version: Some(2),
+                    },
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::Delivery,
+                        published_version: None,
+                        draft_version: None,
+                    },
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::Invoice,
+                        published_version: None,
+                        draft_version: None,
+                    },
+                    DefinitionCatalogStatusFact {
+                        process_kind: ProcessKind::PurchaseOrder,
+                        published_version: None,
+                        draft_version: None,
+                    },
+                ]
+            );
+
+            let dirty = TestDb::new("app-r03-dup").await.expect("脏数据库");
+            let mut first = draft("dup-1", ProcessKind::SalesOrder, 1);
+            first
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            let mut second = draft("dup-2", ProcessKind::SalesOrder, 2);
+            second
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(3).unwrap(),
+                )
+                .unwrap();
+            dirty
+                .db()
+                .approval_process_definitions()
+                .create(&first, &mut NoTransaction)
+                .await
+                .expect("脏发布1");
+            dirty
+                .db()
+                .approval_process_definitions()
+                .create(&second, &mut NoTransaction)
+                .await
+                .expect("脏发布2");
+            assert!(dirty
+                .db()
+                .bpm_workflow()
+                .definition_catalog_facts(&[ProcessKind::SalesOrder], &mut NoTransaction)
+                .await
+                .is_err());
+        });
+    }
+
+    /// 发布图加载覆盖无发布、草稿、退役、完整图、同 session 与重复发布失败关闭。
+    #[tokio::test]
+    #[ignore = "requires MongoDB replica set"]
+    async fn load_published_definition_graph_covers_row_cases_on_mongo() {
+        require_mongo!(async {
+            let fixture = TestDb::new("app-r04-graph").await.expect("测试库");
+            ensure_indexes(fixture.db()).await.expect("索引");
+            let repo = fixture.db().bpm_workflow();
+            assert!(repo
+                .load_published_definition_graph(ProcessKind::StockAdjustment, &mut NoTransaction)
+                .await
+                .expect("无发布")
+                .is_none());
+
+            let draft_only = draft("draft-g", ProcessKind::StockAdjustment, 1);
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&draft_only, &mut NoTransaction)
+                .await
+                .expect("草稿");
+            assert!(repo
+                .load_published_definition_graph(ProcessKind::StockAdjustment, &mut NoTransaction)
+                .await
+                .expect("草稿不命中")
+                .is_none());
+
+            let mut graph = one_node_graph("pub-g", ProcessKind::PurchaseOrder, 1);
+            graph
+                .definition
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&graph.definition, &mut NoTransaction)
+                .await
+                .expect("发布定义");
+            for node in &graph.nodes {
+                fixture
+                    .db()
+                    .approval_node_definitions()
+                    .create(node, &mut NoTransaction)
+                    .await
+                    .expect("节点");
+            }
+            for transition in &graph.transitions {
+                fixture
+                    .db()
+                    .approval_transition_definitions()
+                    .create(transition, &mut NoTransaction)
+                    .await
+                    .expect("连线");
+            }
+
+            let client = fixture.client().clone();
+            let db = fixture.db().clone();
+            let loaded = client
+                .with_transaction(|session| {
+                    let db = db.clone();
+                    Box::pin(async move {
+                        db.bpm_workflow()
+                            .load_published_definition_graph(ProcessKind::PurchaseOrder, session)
+                            .await
+                    })
+                })
+                .await
+                .expect("同会话加载")
+                .expect("完整图");
+            assert_eq!(loaded.definition.status, ApprovalDefinitionStatus::Published);
+            assert_eq!(loaded.nodes.len(), 1);
+            assert_eq!(loaded.transitions.len(), 2);
+            assert_eq!(loaded.definition.base.id, "pub-g");
+
+            let mut retired = draft("ret-g", ProcessKind::Delivery, 1);
+            retired
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            retired
+                .retire(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(3).unwrap(),
+                )
+                .unwrap();
+            fixture
+                .db()
+                .approval_process_definitions()
+                .create(&retired, &mut NoTransaction)
+                .await
+                .expect("退役");
+            assert!(repo
+                .load_published_definition_graph(ProcessKind::Delivery, &mut NoTransaction)
+                .await
+                .expect("退役不命中")
+                .is_none());
+
+            let dirty = TestDb::new("app-r04-dup").await.expect("脏数据库");
+            let mut first = draft("dup-g1", ProcessKind::SalesOrder, 1);
+            first
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            let mut second = draft("dup-g2", ProcessKind::SalesOrder, 2);
+            second
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(3).unwrap(),
+                )
+                .unwrap();
+            dirty
+                .db()
+                .approval_process_definitions()
+                .create(&first, &mut NoTransaction)
+                .await
+                .expect("脏发布1");
+            dirty
+                .db()
+                .approval_process_definitions()
+                .create(&second, &mut NoTransaction)
+                .await
+                .expect("脏发布2");
+            assert!(dirty
+                .db()
+                .bpm_workflow()
+                .load_published_definition_graph(ProcessKind::SalesOrder, &mut NoTransaction)
+                .await
+                .is_err());
+        });
     }
 }

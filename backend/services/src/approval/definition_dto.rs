@@ -57,6 +57,36 @@ pub struct DefinitionNodeRequest {
     pub assignee_user_id: String,
 }
 
+impl DefinitionNodeRequest {
+    /// 清洗客户端提交的节点文本，供命令摘要与 BPM 草稿构造共用。
+    ///
+    /// # 参数
+    /// 无；就地规范化当前请求。
+    ///
+    /// # 返回
+    /// 空白节点 ID 视为新建，名称与审批人已去除首尾空白。
+    ///
+    /// # 错误
+    /// 名称为空/超长或审批人引用非法时返回模型错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法只清洗外部文本，不生成节点 ID，也不判断已有节点归属。
+    pub fn prepare(mut self) -> bpm::model::types::ModelResult<Self> {
+        self.node_id = self
+            .node_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        self.node_name = bpm::model::ApprovalNodeDefinition::normalize_name(self.node_name)?;
+        let assignee = self.assignee_user_id.trim().to_string();
+        bpm::ParticipantId::new(assignee.clone()).map_err(|error| match error {
+            bpm::Error::InvalidParticipantId(message) => bpm::model::types::ModelError::InvalidField(message),
+            _ => bpm::model::types::ModelError::InvalidField("处理人引用不能为空"),
+        })?;
+        self.assignee_user_id = assignee;
+        Ok(self)
+    }
+}
+
 /// 整组替换草稿节点请求。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -322,5 +352,48 @@ mod tests {
         )
         .expect("编辑节点可带 node_id");
         assert_eq!(existing.node_id.as_deref(), Some("n1"));
+    }
+
+    /// DTO prepare 清洗外部文本：空白 ID 视为新建，名称与审批人去空白。
+    #[test]
+    fn node_request_prepare_trims_external_text() {
+        let prepared = DefinitionNodeRequest {
+            node_id: Some("  node-1  ".to_string()),
+            node_name: " 仓储复核 ".to_string(),
+            display_order: 1,
+            assignee_user_id: " u1 ".to_string(),
+        }
+        .prepare()
+        .expect("合法节点应可清洗");
+        assert_eq!(prepared.node_id.as_deref(), Some("node-1"));
+        assert_eq!(prepared.node_name, "仓储复核");
+        assert_eq!(prepared.assignee_user_id, "u1");
+
+        let blank_id = DefinitionNodeRequest {
+            node_id: Some("   ".to_string()),
+            node_name: "财务".to_string(),
+            display_order: 2,
+            assignee_user_id: "u2".to_string(),
+        }
+        .prepare()
+        .expect("空白节点 ID 视为新建");
+        assert!(blank_id.node_id.is_none());
+
+        assert!(DefinitionNodeRequest {
+            node_id: None,
+            node_name: "   ".to_string(),
+            display_order: 1,
+            assignee_user_id: "u1".to_string(),
+        }
+        .prepare()
+        .is_err());
+        assert!(DefinitionNodeRequest {
+            node_id: None,
+            node_name: "仓储".to_string(),
+            display_order: 1,
+            assignee_user_id: "  ".to_string(),
+        }
+        .prepare()
+        .is_err());
     }
 }

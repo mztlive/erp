@@ -13,7 +13,7 @@ use entities::approval_integration::{ApprovalNotificationOutbox, ApprovalNotific
 use entities::common::time::Instant;
 use entities::ids::{ApprovalNotificationOutboxId, WorkItemId};
 use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemPriority};
+use entities::work_item::{ApprovalRuntimeTaskEnding, WorkItem, WorkItemPriority};
 
 use super::apply_plan::{DomainActionKind, PlannedWrites};
 use super::notification_outbox::NotificationIntent;
@@ -198,6 +198,23 @@ impl MemoryRuntimeStore {
     pub fn outbox_items(&self) -> impl Iterator<Item = &ApprovalNotificationOutbox> {
         self.outbox.values()
     }
+
+    /// 向内存适配器注入已有任务，供重复开放任务契约测试使用。
+    ///
+    /// # 参数
+    /// * `item` - 已构造的待办
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 仅测试适配器可预置脏数据；生产仓储不得提供绕过 CAS 的注入入口。
+    pub fn insert_work_item(&mut self, item: WorkItem) {
+        self.work_items.insert(item.base.id.clone(), item);
+    }
 }
 
 /// 在同一事务快照内应用计划。任一失败回滚。
@@ -279,7 +296,7 @@ fn apply_all(
     Ok(())
 }
 
-fn insert_receipt(
+pub(super) fn insert_receipt(
     store: &mut MemoryRuntimeStore,
     receipt: &ApprovalCommandReceipt,
 ) -> std::result::Result<(), ApplyError> {
@@ -291,10 +308,34 @@ fn insert_receipt(
     Ok(())
 }
 
+/// 按引擎自增后的版本对实例做 CAS 写入。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `instance` - 引擎变更后的实例
+///
+/// # 返回
+/// 新建或版本恰好前进 1 时写入成功。
+///
+/// # 错误
+/// 已存在实例的版本不是 `instance.version - 1` 时返回版本冲突。
+///
+/// # 关键业务约束
+/// 冲突不得覆盖已提交快照，调用方必须回滚。
 fn persist_instance(
     store: &mut MemoryRuntimeStore,
     instance: &ApprovalProcessInstance,
 ) -> std::result::Result<(), ApplyError> {
+    if let Some(existing) = store.instances.get(&instance.base.id) {
+        let expected = instance
+            .base
+            .version
+            .checked_sub(1)
+            .ok_or(ApplyError::VersionConflict)?;
+        if existing.base.version != expected {
+            return Err(ApplyError::VersionConflict);
+        }
+    }
     store.instances.insert(instance.base.id.clone(), instance.clone());
     Ok(())
 }
@@ -312,11 +353,33 @@ fn insert_execution(
     Ok(())
 }
 
+/// 按引擎自增后的版本替换已有节点执行。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `execution` - 引擎变更后的执行
+///
+/// # 返回
+/// 版本恰好前进 1 时替换成功。
+///
+/// # 错误
+/// 执行不存在或版本不匹配时返回版本冲突。
+///
+/// # 关键业务约束
+/// 不得插入新执行或覆盖并发写入。
 fn replace_execution(
     store: &mut MemoryRuntimeStore,
     execution: &ApprovalNodeExecution,
 ) -> std::result::Result<(), ApplyError> {
-    if !store.executions.contains_key(&execution.base.id) {
+    let Some(existing) = store.executions.get(&execution.base.id) else {
+        return Err(ApplyError::VersionConflict);
+    };
+    let expected = execution
+        .base
+        .version
+        .checked_sub(1)
+        .ok_or(ApplyError::VersionConflict)?;
+    if existing.base.version != expected {
         return Err(ApplyError::VersionConflict);
     }
     store
@@ -369,55 +432,141 @@ fn apply_task_intents(
     Ok(())
 }
 
+/// 完成指定执行下全部开放审批任务。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `execution_id` - 当前结束的节点执行
+/// * `actor_id` - 操作人
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 全部开放任务已完成时返回 `Ok(())`。
+///
+/// # 错误
+/// 实体状态变更失败时返回不变量错误。
+///
+/// # 关键业务约束
+/// 重复开放任务必须全部完成。
 fn complete_open_task(
     store: &mut MemoryRuntimeStore,
     execution_id: &ApprovalNodeExecutionId,
     actor_id: &str,
     now: Instant,
 ) -> std::result::Result<(), ApplyError> {
-    let ids: Vec<String> = store
-        .work_items
-        .values()
-        .filter(|item| {
-            item.status == entities::work_item::WorkItemStatus::Open
-                && item.approval_node_execution_id.as_ref() == Some(execution_id)
-        })
-        .map(|item| item.base.id.clone())
-        .collect();
-    for id in ids {
-        let item = store.work_items.get_mut(&id).ok_or(ApplyError::VersionConflict)?;
-        item.complete_by_approval_runtime(actor_id, now)
-            .map_err(|error| ApplyError::Invariant(error.to_string()))?;
-    }
-    Ok(())
+    end_open_tasks(
+        store,
+        execution_id,
+        actor_id,
+        &ApprovalRuntimeTaskEnding::Complete,
+        now,
+    )
 }
 
-fn close_open_tasks(
+/// 关闭指定执行下全部开放审批任务。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `execution_id` - 当前结束的节点执行
+/// * `reason` - 关闭原因
+/// * `actor_id` - 操作人
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 全部开放任务已关闭时返回 `Ok(())`。
+///
+/// # 错误
+/// 实体状态变更失败时返回不变量错误。
+///
+/// # 关键业务约束
+/// 重复开放任务必须全部关闭，语义与生产 Mongo CAS 路径一致。
+pub(super) fn close_open_tasks(
     store: &mut MemoryRuntimeStore,
     execution_id: &ApprovalNodeExecutionId,
     reason: &TaskCloseReason,
     actor_id: &str,
     now: Instant,
 ) -> std::result::Result<(), ApplyError> {
-    let ids: Vec<String> = store
+    end_open_tasks(
+        store,
+        execution_id,
+        actor_id,
+        &ApprovalRuntimeTaskEnding::Close {
+            reason: reason.as_str().to_string(),
+        },
+        now,
+    )
+}
+
+/// 结束指定执行下全部开放审批任务，语义与生产 Mongo CAS 路径一致。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `execution_id` - 当前结束的节点执行
+/// * `actor_id` - 操作人
+/// * `ending` - 完成或关闭
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 全部开放任务已终结时返回 `Ok(())`。
+///
+/// # 错误
+/// 实体状态变更失败时返回不变量错误。
+///
+/// # 关键业务约束
+/// 同一执行的重复开放任务必须全部关闭；不得只处理第一条。
+fn end_open_tasks(
+    store: &mut MemoryRuntimeStore,
+    execution_id: &ApprovalNodeExecutionId,
+    actor_id: &str,
+    ending: &ApprovalRuntimeTaskEnding,
+    now: Instant,
+) -> std::result::Result<(), ApplyError> {
+    let open: Vec<WorkItem> = store
         .work_items
         .values()
         .filter(|item| {
             item.status == entities::work_item::WorkItemStatus::Open
                 && item.approval_node_execution_id.as_ref() == Some(execution_id)
         })
-        .map(|item| item.base.id.clone())
+        .cloned()
         .collect();
-    for id in ids {
-        let item = store.work_items.get_mut(&id).ok_or(ApplyError::VersionConflict)?;
-        item.close_by_approval_runtime(
-            actor_id,
-            WorkItemCloseData {
-                close_reason: reason.as_str().to_string(),
-            },
-            now,
-        )
+    let ended = WorkItem::end_all_for_approval_execution(open, execution_id, actor_id, ending, now)
         .map_err(|error| ApplyError::Invariant(error.to_string()))?;
+    persist_ended_tasks(store, &ended)
+}
+
+/// 按加载版本 CAS 写回已终结任务，语义对齐生产 `persist_ended_approval_tasks`。
+///
+/// # 参数
+/// * `store` - 内存事务会话
+/// * `items` - 已由实体方法终结、仍持有加载版本的任务
+///
+/// # 返回
+/// 全部任务仍为开放且版本匹配时写入终结快照。
+///
+/// # 错误
+/// 任一任务缺失、非开放或版本不匹配时返回版本冲突，不写入任何任务。
+///
+/// # 关键业务约束
+/// 先校验再写入，避免只关闭第一条；调用方失败时必须 rollback。
+pub(super) fn persist_ended_tasks(
+    store: &mut MemoryRuntimeStore,
+    items: &[WorkItem],
+) -> std::result::Result<(), ApplyError> {
+    for item in items {
+        let stored = store
+            .work_items
+            .get(&item.base.id)
+            .ok_or(ApplyError::VersionConflict)?;
+        if stored.base.version != item.base.version
+            || stored.status != entities::work_item::WorkItemStatus::Open
+        {
+            return Err(ApplyError::VersionConflict);
+        }
+    }
+    for item in items {
+        store.work_items.insert(item.base.id.clone(), item.clone());
     }
     Ok(())
 }
@@ -466,4 +615,139 @@ fn receipt_key(
 
 fn assignee_key(assignee: &ApprovalInstanceAssignee) -> String {
     format!("{}:{}", assignee.process_instance_id.as_ref(), assignee.node_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bpm::engine::TaskCloseReason;
+    use bpm::ids::ApprovalNodeExecutionId;
+    use entities::ids::WorkItemId;
+    use entities::work_item::WorkItemStatus;
+
+    fn open_task(id: &str, execution_id: &str) -> WorkItem {
+        WorkItem::new_document_approval(
+            WorkItemId::new(id),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: ApprovalNodeExecutionId::new(execution_id),
+                business_object_type: "stock_adjustment".into(),
+                business_object_id: "adj-1".into(),
+                subject_version: "1".into(),
+                owner_role: "stock_adjustment_approver".into(),
+                owner_organization_id: "org-1".into(),
+                owner_user_id: "u1".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(10),
+        )
+        .expect("开放任务")
+    }
+
+    /// 同一执行两个 OPEN 任务必须全部关闭，OPEN 数为 0。
+    #[test]
+    fn memory_store_closes_duplicate_open_tasks() {
+        let mut store = MemoryRuntimeStore::default();
+        let execution_id = ApprovalNodeExecutionId::new("e1");
+        store.insert_work_item(open_task("wi-1", "e1"));
+        store.insert_work_item(open_task("wi-2", "e1"));
+        assert_eq!(store.open_task_count(&execution_id), 2);
+        close_open_tasks(
+            &mut store,
+            &execution_id,
+            &TaskCloseReason::ApprovalRuntimeBlocked,
+            "u1",
+            Instant::from_unix_secs(11),
+        )
+        .expect("重复开放任务必须全部关闭");
+        assert_eq!(store.open_task_count(&execution_id), 0);
+        assert!(store
+            .work_items()
+            .all(|item| item.status == WorkItemStatus::Closed));
+    }
+
+    /// 实例版本跳跃必须 CAS 失败且不覆盖已提交快照。
+    #[test]
+    fn memory_store_instance_cas_rejects_version_gap() {
+        use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
+        use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
+
+        let instance = bpm::model::ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("starter").unwrap(),
+            at: Timestamp::from_unix_secs(10).unwrap(),
+        })
+        .unwrap();
+        let mut store = MemoryRuntimeStore::default();
+        persist_instance(&mut store, &instance).unwrap();
+        let mut drifted = instance.clone();
+        drifted.base.version = 3;
+        assert_eq!(
+            persist_instance(&mut store, &drifted),
+            Err(ApplyError::VersionConflict)
+        );
+        assert_eq!(
+            store.instance("inst").unwrap().base.version,
+            instance.base.version
+        );
+    }
+
+    /// 同载荷收据回放、异载荷冲突。
+    #[test]
+    fn memory_store_receipt_replay_matches_duplicate_semantics() {
+        use bpm::model::types::ApprovalCommandKind;
+        use bpm::model::{ApprovalCommandIdentity, CanonicalCommandPayload, CommandPayloadField, Timestamp};
+
+        let mut store = MemoryRuntimeStore::default();
+        let kind = ApprovalCommandKind::StartApproval;
+        let key = IdempotencyKey::parse("key-1").unwrap();
+        let identity = ApprovalCommandIdentity::new(
+            kind,
+            "approval.runtime.start",
+            key.clone(),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("stock_adjustment")),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("start")),
+        )
+        .unwrap();
+        let receipt = ApprovalCommandReceipt::new(
+            bpm::ids::ApprovalCommandReceiptId::new("r1"),
+            &identity,
+            "result-1",
+            Timestamp::from_unix_secs(10).unwrap(),
+        )
+        .unwrap();
+        insert_receipt(&mut store, &receipt).unwrap();
+        assert_eq!(
+            insert_receipt(&mut store, &receipt),
+            Err(ApplyError::DuplicateReceipt)
+        );
+        let same = replay_after_duplicate(
+            &store,
+            kind,
+            receipt.scope_id.as_str(),
+            &key,
+            receipt.payload_digest.as_str(),
+        )
+        .unwrap();
+        assert_eq!(same.payload_digest, receipt.payload_digest);
+        let conflict =
+            replay_after_duplicate(&store, kind, receipt.scope_id.as_str(), &key, "other").unwrap_err();
+        assert!(conflict
+            .to_string()
+            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+    }
+
+    /// Mongo 契约已上收到 `runtime_persistence_contract`；本文件只保留内存原语。
+    #[test]
+    fn memory_close_is_covered_by_shared_persistence_contract() {
+        assert!(include_str!("runtime_persistence_contract.rs")
+            .contains("run_memory_runtime_persistence_contract"));
+        assert!(include_str!("runtime_persistence_contract.rs")
+            .contains("mongo_adapter_satisfies_runtime_persistence_contract"));
+    }
 }

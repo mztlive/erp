@@ -27,8 +27,8 @@ use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::{subject, SharedRbacService};
 
 use super::business_adapter::{
-    adapter_spec_of, assignment_scope_covers_organization, ensure_published_status,
-    ensure_separation_of_duties, revalidate_assignee_binding_access, BindingRevalidationContext,
+    adapter_spec_of, assignment_scope_covers_organization, ensure_separation_of_duties,
+    revalidate_assignee_binding_access, BindingRevalidationContext,
 };
 use super::execution::idempotency::{payload_conflict_error, ReceiptBranch};
 use super::execution::{map_receipt_first_write_error, upgrade_binding_identity, PreparedCommandIdentity};
@@ -344,20 +344,11 @@ async fn load_published_graph(
     document_type: DocumentType,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let published = published_definition_or_not_configured(
+    let graph = published_definition_or_not_configured(
         db.bpm_workflow()
-            .find_published_by_process_kind(process_kind_of(document_type), executor)
+            .load_published_definition_graph(process_kind_of(document_type), executor)
             .await?,
     )?;
-    ensure_published_status(published.status)?;
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(
-            &ApprovalProcessDefinitionId::new(published.base.id.clone()),
-            executor,
-        )
-        .await?
-        .ok_or_else(process_not_configured)?;
     revalidate_published_graph(&graph)?;
     Ok(graph)
 }
@@ -371,13 +362,15 @@ async fn load_published_graph(
 /// 状态为已发布且线性图完整时返回 `Ok(())`。
 ///
 /// # 错误
-/// 状态或 BPM 图结构损坏时返回稳定校验错误。
+/// 状态不是已发布时映射为未配置；图结构损坏时返回稳定校验错误。
 ///
 /// # 关键业务约束
-/// Service 不得复制节点顺序、入口或连线算法。
+/// Service 不得复制节点顺序、入口或连线算法；仓储过滤不能替代 BPM 确认。
 fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> {
-    ensure_published_status(graph.definition.status)?;
-    graph.validate_linear().map_err(map_model_error)
+    graph.validate_published_linear().map_err(|error| match error {
+        ModelError::InvalidStatus(_) => process_not_configured(),
+        other => map_model_error(other),
+    })
 }
 
 /// Adapter 重验指定用户、权限、DataScope、读取权与岗位分离。
@@ -1308,15 +1301,12 @@ fn map_model_error(error: ModelError) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::business_adapter::{
-        document_type_of_sales_business, ensure_runtime_cut_over, subject_ref_for,
-    };
+    use crate::approval::business_adapter::ensure_runtime_cut_over;
     use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
     use crate::document_registry::new_registered_document;
     use bpm::model::IdempotencyKey;
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::ids::DataScopeId;
-    use entities::sales_order::BusinessType;
     use entities::{AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
 
     /// 构造审批人账号快照。
@@ -1571,31 +1561,60 @@ mod tests {
         assert!(published_definition_or_not_configured(Some(1)).is_ok());
     }
 
+    /// BPM 确认已发布线性图；草稿/退役映射为未配置，损坏发布图不得被仓储过滤放过。
+    #[test]
+    fn published_graph_revalidation_uses_bpm_and_maps_configuration_errors() {
+        let at = bpm::Timestamp::from_unix_secs(1).unwrap();
+        let mut definition = bpm::model::ApprovalProcessDefinition::new_draft(
+            bpm::ids::ApprovalProcessDefinitionId::new("def"),
+            bpm::ProcessKind::StockAdjustment,
+            1,
+            "库存调整",
+            "n1",
+            bpm::ParticipantId::new("admin").unwrap(),
+            at,
+        )
+        .unwrap();
+        let graph = DefinitionGraph {
+            definition: definition.clone(),
+            nodes: Vec::new(),
+            transitions: Vec::new(),
+        };
+        let draft_error = revalidate_published_graph(&graph).unwrap_err();
+        assert_eq!(
+            draft_error.to_string(),
+            ErrorCode::ApprovalProcessNotConfigured.as_str()
+        );
+
+        definition
+            .publish(bpm::ParticipantId::new("admin").unwrap(), at)
+            .unwrap();
+        let published_corrupt = DefinitionGraph {
+            definition,
+            nodes: Vec::new(),
+            transitions: Vec::new(),
+        };
+        let corrupt = revalidate_published_graph(&published_corrupt).unwrap_err();
+        assert_ne!(
+            corrupt.to_string(),
+            ErrorCode::ApprovalProcessNotConfigured.as_str()
+        );
+
+        let loader = include_str!("binding.rs")
+            .split("async fn load_published_graph")
+            .nth(1)
+            .and_then(|body| body.split("fn revalidate_published_graph").next())
+            .expect("加载函数");
+        assert!(loader.contains("load_published_definition_graph"));
+        assert!(!loader.contains("load_definition_graph"));
+        assert!(!loader.contains("find_published_by_process_kind"));
+    }
+
     /// 全部必须审批类型进入目标运行时。
     #[test]
     fn process_required_types_are_cut_over() {
         assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
         assert!(ensure_runtime_cut_over(DocumentType::PurchaseOrder).is_ok());
-    }
-
-    /// 20 个类型均可构造唯一 SubjectRef；销售按 BusinessType 分派。
-    #[test]
-    fn subject_refs_are_unique_and_sales_dispatch_is_exhaustive() {
-        let sales = subject_ref_for(DocumentType::SalesOrder, "so-1").unwrap();
-        let voucher = subject_ref_for(DocumentType::VoucherSalesOrder, "so-1").unwrap();
-        assert_ne!(sales.subject_kind(), voucher.subject_kind());
-        assert_eq!(
-            document_type_of_sales_business(BusinessType::GoodsService),
-            DocumentType::SalesOrder
-        );
-        assert_eq!(
-            document_type_of_sales_business(BusinessType::Voucher),
-            DocumentType::VoucherSalesOrder
-        );
-        for document_type in ALL_DOCUMENT_TYPES {
-            let subject = subject_ref_for(document_type, "id-1").unwrap();
-            assert_eq!(subject.subject_kind(), process_kind_of(document_type).as_str());
-        }
     }
 
     /// 20 个 DocumentType 的 BusinessDocument 注册清点。

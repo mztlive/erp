@@ -1222,7 +1222,7 @@ async fn post_stock_adjustment_write(
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<StockAdjustment> {
-    let adjustment_id = StockAdjustmentId::new(context.business_object_id.clone());
+    let adjustment_id = StockAdjustmentId::new(context.business_object_id());
     let mut adjustment = db
         .inventory()
         .stock_adjustment(adjustment_id.as_ref(), session)
@@ -1267,29 +1267,27 @@ async fn validate_post_runtime_context(
     adjustment: &StockAdjustment,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    if context.business_object_type != DocumentType::StockAdjustment.as_str()
-        || context.actor_id != actor.id()
+    if context.business_object_type() != DocumentType::StockAdjustment.as_str()
+        || context.actor_id() != actor.id()
     {
         return Err(Error::ConflictError("库存调整最终动作上下文不匹配".to_string()));
     }
     let subject_version = context
-        .subject_version
+        .subject_version()
         .parse::<u32>()
         .map_err(|_| Error::ConflictError("库存调整审批主题版本无效".to_string()))?;
     if subject_version != adjustment.approval_subject_version {
         return Err(Error::ConflictError("库存调整审批主题版本已变化".to_string()));
     }
     let execution_id = context
-        .approval_node_execution_id
-        .as_deref()
+        .approval_node_execution_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整最终动作缺少审批执行".to_string()))?;
     let work_item_id = context
-        .work_item_id
-        .as_deref()
+        .work_item_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整最终动作缺少审批任务".to_string()))?;
-    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(&context.approval_process_instance_id);
+    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(context.approval_process_instance_id());
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&instance_id, session)
@@ -1355,7 +1353,7 @@ async fn validate_post_runtime_context(
             != Some(execution_id)
         || task.business_object_type != DocumentType::StockAdjustment.as_str()
         || task.business_object_id != adjustment.base.id
-        || task.subject_version != context.subject_version
+        || task.subject_version != context.subject_version()
         || task.owner_user_id.as_deref() != Some(actor.id())
         || task.owner_role != adapter.owner_role
         || task.owner_organization_id != snapshot.payload.responsible_org_id
@@ -1379,17 +1377,17 @@ pub(crate) async fn cancel_stock_adjustment_approval_in_transaction(
     let _ = executor
         .session()
         .ok_or_else(|| Error::Internal("库存调整受阻取消缺少运行时事务会话".to_string()))?;
-    if context.business_object_type != DocumentType::StockAdjustment.as_str()
-        || context.actor_id != actor.id()
-        || context.work_item_id.is_some()
+    if context.business_object_type() != DocumentType::StockAdjustment.as_str()
+        || context.actor_id() != actor.id()
+        || context.work_item_id().is_some()
     {
         return Err(Error::ConflictError("库存调整受阻取消上下文不匹配".to_string()));
     }
     let subject_version = context
-        .subject_version
+        .subject_version()
         .parse::<u32>()
         .map_err(|_| Error::ConflictError("库存调整审批主题版本无效".to_string()))?;
-    let adjustment_id = StockAdjustmentId::new(&context.business_object_id);
+    let adjustment_id = StockAdjustmentId::new(context.business_object_id());
     let mut adjustment = db
         .inventory()
         .stock_adjustment(adjustment_id.as_ref(), executor)
@@ -1419,17 +1417,16 @@ async fn validate_blocked_cancel_runtime_context(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let execution_id = context
-        .approval_node_execution_id
-        .as_deref()
+        .approval_node_execution_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整受阻取消缺少审批执行".to_string()))?;
-    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(&context.approval_process_instance_id);
+    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(context.approval_process_instance_id());
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&instance_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
-    let binding = load_approval_binding(db, &context.business_object_id, executor).await?;
+    let binding = load_approval_binding(db, context.business_object_id(), executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
     let snapshot = db
         .approval_subject_snapshots()
@@ -1439,7 +1436,7 @@ async fn validate_blocked_cancel_runtime_context(
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
-            &context.business_object_id,
+            context.business_object_id(),
             subject_version,
         )
         .map_err(|_| Error::ConflictError("库存调整受阻实例冻结快照已变化".to_string()))?;
@@ -1449,7 +1446,7 @@ async fn validate_blocked_cancel_runtime_context(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
-        || instance.subject.subject_id() != context.business_object_id
+        || instance.subject.subject_id() != context.business_object_id()
         || instance.subject_version != subject_version
         || instance.current_node_execution_id.as_ref().map(AsRef::as_ref) != Some(execution_id)
     {
@@ -1466,7 +1463,7 @@ async fn validate_blocked_cancel_runtime_context(
         || execution.round_no != instance.current_round_no
         || execution.blocker_code.is_none()
         || execution.blocker_code != instance.blocker_code
-        || context.actor_id != actor.id()
+        || context.actor_id() != actor.id()
     {
         return Err(Error::ConflictError("库存调整受阻执行上下文已变化".to_string()));
     }

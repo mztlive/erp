@@ -65,8 +65,7 @@ use crate::approval::binding::{
     UpgradeBindingResultView, UpgradeUnsubmittedDefinitionCommand,
 };
 use crate::approval::business_adapter::{
-    adapter_object_read_decision, adapter_spec_of, document_type_from_subject_kind,
-    ensure_separation_of_duties, BindingRevalidationContext,
+    adapter_object_read_decision, adapter_spec_of, ensure_separation_of_duties, BindingRevalidationContext,
 };
 use crate::approval::policy::{
     policy_of, DocumentApprovalPolicy, SeparationOfDutiesPolicy, ALL_DOCUMENT_TYPES,
@@ -1025,7 +1024,9 @@ impl ApprovalRuntimeService {
             .find_by_process_instance_id(&instance_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
-        let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
+        let document_type =
+            entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
         snapshot
             .ensure_matches_runtime_subject(
                 document_type,
@@ -1469,8 +1470,9 @@ impl ApprovalRuntimeService {
             .find_by_process_instance_id(instance_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
-        let document_type = document_type_from_subject_kind(instance.subject.subject_kind())
-            .map_err(|_| hidden_not_found())?;
+        let document_type =
+            entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+                .map_err(|_| hidden_not_found())?;
         adapter_spec_of(document_type)?;
         if instance.process_kind != process_kind_of(document_type)
             || snapshot
@@ -2242,17 +2244,17 @@ async fn cancel_blocked_in_transaction(
         return Err(Error::Internal("新受阻取消命令不得进入幂等回放分支".to_string()));
     };
     let writes = *writes;
-    let action_context = ApprovalActionContext {
-        approval_process_instance_id: command.approval_process_instance_id.clone(),
-        approval_node_execution_id: Some(current.base.id.clone()),
-        work_item_id: None,
-        business_object_type: document_type.as_str().to_string(),
-        business_object_id: snapshot.business_object_id.clone(),
-        subject_version: snapshot.subject_version.to_string(),
-        actor_id: actor.id().to_string(),
-        reason: Some(command.reason.clone()),
-        idempotency_key: command.idempotency_key.clone(),
-    };
+    let action_context = ApprovalActionContext::for_blocked_cancel(
+        command.approval_process_instance_id.clone(),
+        current.base.id.clone(),
+        None,
+        document_type.as_str(),
+        snapshot.business_object_id.clone(),
+        snapshot.subject_version.to_string(),
+        actor.id(),
+        command.reason.clone(),
+        command.idempotency_key.clone(),
+    )?;
     let audit = actor.clone().resource_log_with_message(
         "approval.cancel_blocked",
         "approval_process_instance",
@@ -2310,7 +2312,8 @@ async fn load_exact_runtime_snapshot(
         }
     };
     let document_type =
-        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| mismatch())?;
+        entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+            .map_err(|_| mismatch())?;
     if instance.process_kind != process_kind_of(document_type) {
         return Err(mismatch());
     }
@@ -2510,7 +2513,9 @@ async fn submit_decision_in_transaction(
         .await?
         .ok_or_else(hidden_not_found)?;
     let expected_instance_version = instance.base.version;
-    let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
+    let document_type =
+        entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
     if instance.process_kind != process_kind_of(document_type) {
         return Err(Error::ConflictError(
             "审批实例流程种类与单据类型不一致".to_string(),
@@ -2643,17 +2648,17 @@ async fn submit_decision_in_transaction(
         Vec::new()
     };
     let should_finalize = writes.commit == CommitRequired::TerminalApproved;
-    let action_context = ApprovalActionContext {
-        approval_process_instance_id: instance_id.to_string(),
-        approval_node_execution_id: Some(execution_id.to_string()),
-        work_item_id: Some(command.work_item_id.clone()),
-        business_object_type: document_type.as_str().to_string(),
-        business_object_id: business_object_id.clone(),
-        subject_version: subject_version.clone(),
-        actor_id: actor_id.clone(),
-        reason: command.reason.clone(),
-        idempotency_key: command.idempotency_key.as_str().to_string(),
-    };
+    let action_context = ApprovalActionContext::for_decision(
+        instance_id.to_string(),
+        execution_id.to_string(),
+        command.work_item_id.clone(),
+        document_type.as_str(),
+        business_object_id.clone(),
+        subject_version.clone(),
+        actor_id.clone(),
+        command.reason.clone(),
+        command.idempotency_key.as_str(),
+    )?;
     let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
     let list_projection =
         list_projection_from_writes(&writes, execution_id.as_ref(), command.reason.clone(), now);
@@ -2743,7 +2748,8 @@ async fn verify_decision_receipt_runtime_identity(
         return Err(hidden_not_found());
     }
     let document_type =
-        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+        entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
     if instance.process_kind != process_kind_of(document_type) {
         return Err(hidden_not_found());
     }
@@ -2848,7 +2854,8 @@ async fn authorize_decision_terminal_replay(
         return Err(hidden_not_found());
     }
     let document_type =
-        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+        entities::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
     if instance.process_kind != process_kind_of(document_type) {
         return Err(hidden_not_found());
     }
@@ -3199,7 +3206,8 @@ fn mine_runtime_chain_matches(
     actor_id: &str,
 ) -> Result<bool> {
     let document_type =
-        document_type_from_subject_kind(summary.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+        entities::approval_integration::document_type_from_subject_kind(summary.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
     let spec = adapter_spec_of(document_type)?;
     let canonical_subject_version = summary.subject_version.to_string();
     let runtime_chain_matches = task.work_item_type == WorkItemType::DocumentApproval
@@ -3458,7 +3466,8 @@ fn item_from_summary(
     snapshot: Option<&ApprovalSubjectSnapshot>,
 ) -> Result<RuntimeInstanceListItem> {
     let document_type =
-        document_type_from_subject_kind(row.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+        entities::approval_integration::document_type_from_subject_kind(row.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
     let document_id = row.subject.subject_id().to_string();
     if row.process_kind != process_kind_of(document_type) {
         return Err(hidden_not_found());
@@ -3495,8 +3504,9 @@ fn item_from_runtime_read_row(
     view: RuntimeInstanceListView,
     type_scopes: &[ApprovalRuntimeReadTypeScope],
 ) -> Result<RuntimeInstanceListItem> {
-    let document_type = document_type_from_subject_kind(row.instance.subject.subject_kind())
-        .map_err(|_| hidden_not_found())?;
+    let document_type =
+        entities::approval_integration::document_type_from_subject_kind(row.instance.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
     let type_allowed = type_scopes
         .iter()
         .any(|scope| scope.process_kind == row.instance.process_kind);

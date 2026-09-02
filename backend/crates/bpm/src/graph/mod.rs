@@ -46,6 +46,62 @@ pub struct NodeReplacementDraft {
     pub assignee_participant_id: ParticipantId,
 }
 
+impl NodeReplacementDraft {
+    /// 由调用方注入的身份构造节点替换输入，并校验节点/参与人不变量。
+    ///
+    /// # 参数
+    /// * `existing_node_id` - 保留已有节点时的主键；新建时为空
+    /// * `new_node_id` - 调用方为新节点生成的主键；保留已有节点时忽略
+    /// * `new_node_key` - 调用方为新节点生成的稳定键；保留已有节点时忽略
+    /// * `node_name` - 节点显示名称
+    /// * `display_order` - 从 1 开始的展示顺序
+    /// * `assignee_participant_id` - 已由调用方构造的指定审批人
+    ///
+    /// # 返回
+    /// 名称已规范化、顺序合法且身份非空时返回替换输入。
+    ///
+    /// # 错误
+    /// 名称为空/超长、顺序为 0、已有主键为空、新建稳定键为空或超长时返回模型错误。
+    ///
+    /// # 关键业务约束
+    /// 本构造不生成 ID、不读取时钟，也不依赖 services DTO；跨定义引用与重复 ID
+    /// 由 [`DefinitionGraph::plan_replacement_nodes`] 判定。
+    pub fn new(
+        existing_node_id: Option<ApprovalNodeDefinitionId>,
+        new_node_id: ApprovalNodeDefinitionId,
+        new_node_key: impl Into<String>,
+        node_name: impl Into<String>,
+        display_order: u32,
+        assignee_participant_id: ParticipantId,
+    ) -> ModelResult<Self> {
+        if display_order == 0 {
+            return Err(ModelError::InvalidField("节点顺序必须从 1 开始"));
+        }
+        if let Some(existing) = existing_node_id.as_ref() {
+            if existing.as_ref().trim().is_empty() {
+                return Err(ModelError::InvalidField("已有节点ID不能为空"));
+            }
+        }
+        if new_node_id.as_ref().trim().is_empty() {
+            return Err(ModelError::InvalidField("新节点ID不能为空"));
+        }
+        let new_node_key = crate::model::types::normalize_required(
+            new_node_key,
+            "节点键不能为空",
+            crate::model::types::NODE_KEY_MAX_LEN,
+            "节点键过长",
+        )?;
+        Ok(Self {
+            existing_node_id,
+            new_node_id,
+            new_node_key,
+            node_name: ApprovalNodeDefinition::normalize_name(node_name)?,
+            display_order,
+            assignee_participant_id,
+        })
+    }
+}
+
 /// 复制节点时由调用方提供的新身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CopiedNodeIdentity {
@@ -163,6 +219,26 @@ impl DefinitionGraph {
     /// 每个节点必须恰有通过与驳回连线，驳回回入口，末节点通过进入已批准终态。
     pub fn validate_linear(&self) -> ModelResult<()> {
         validate_linear_graph(&self.definition, &self.nodes, &self.transitions)
+    }
+
+    /// 确认定义已发布且线性图完整，供绑定前 BPM 校验。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态为已发布且线性图完整时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 草稿、退役返回状态错误；图结构损坏返回字段或连线错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储按 `PUBLISHED` 过滤不能替代本确认；损坏的已发布图必须失败关闭。
+    pub fn validate_published_linear(&self) -> ModelResult<()> {
+        if !self.definition.is_published() {
+            return Err(ModelError::InvalidStatus("只有已发布定义可以绑定"));
+        }
+        self.validate_linear()
     }
 
     /// 解析当前节点决定连线的目标节点。
@@ -567,22 +643,24 @@ mod tests {
         let planned = graph
             .plan_replacement_nodes(
                 &[
-                    NodeReplacementDraft {
-                        existing_node_id: None,
-                        new_node_id: ApprovalNodeDefinitionId::new("id2"),
-                        new_node_key: "n2".to_string(),
-                        node_name: "财务".to_string(),
-                        display_order: 2,
-                        assignee_participant_id: ParticipantId::new("u2").unwrap(),
-                    },
-                    NodeReplacementDraft {
-                        existing_node_id: Some(ApprovalNodeDefinitionId::new("id1")),
-                        new_node_id: ApprovalNodeDefinitionId::new("ignored"),
-                        new_node_key: "ignored".to_string(),
-                        node_name: "仓储".to_string(),
-                        display_order: 1,
-                        assignee_participant_id: ParticipantId::new("u1").unwrap(),
-                    },
+                    NodeReplacementDraft::new(
+                        None,
+                        ApprovalNodeDefinitionId::new("id2"),
+                        "n2",
+                        "财务",
+                        2,
+                        ParticipantId::new("u2").unwrap(),
+                    )
+                    .unwrap(),
+                    NodeReplacementDraft::new(
+                        Some(ApprovalNodeDefinitionId::new("id1")),
+                        ApprovalNodeDefinitionId::new("ignored"),
+                        "ignored",
+                        "仓储",
+                        1,
+                        ParticipantId::new("u1").unwrap(),
+                    )
+                    .unwrap(),
                 ],
                 Timestamp::from_unix_secs(2).unwrap(),
             )
@@ -593,14 +671,15 @@ mod tests {
         assert_eq!(planned[1].base.id, "id2");
         assert_eq!(planned[1].node_key, "n2");
 
-        let duplicate = NodeReplacementDraft {
-            existing_node_id: Some(ApprovalNodeDefinitionId::new("id1")),
-            new_node_id: ApprovalNodeDefinitionId::new("ignored"),
-            new_node_key: "ignored".to_string(),
-            node_name: "仓储".to_string(),
-            display_order: 1,
-            assignee_participant_id: ParticipantId::new("u1").unwrap(),
-        };
+        let duplicate = NodeReplacementDraft::new(
+            Some(ApprovalNodeDefinitionId::new("id1")),
+            ApprovalNodeDefinitionId::new("ignored"),
+            "ignored",
+            "仓储",
+            1,
+            ParticipantId::new("u1").unwrap(),
+        )
+        .unwrap();
         let mut second = duplicate.clone();
         second.display_order = 2;
         assert!(graph
@@ -608,20 +687,84 @@ mod tests {
             .is_err());
         assert!(graph
             .plan_replacement_nodes(
-                &[NodeReplacementDraft {
-                    existing_node_id: Some(ApprovalNodeDefinitionId::new("foreign")),
-                    new_node_id: ApprovalNodeDefinitionId::new("ignored"),
-                    new_node_key: "ignored".to_string(),
-                    node_name: "仓储".to_string(),
-                    display_order: 1,
-                    assignee_participant_id: ParticipantId::new("u1").unwrap(),
-                }],
+                &[NodeReplacementDraft::new(
+                    Some(ApprovalNodeDefinitionId::new("foreign")),
+                    ApprovalNodeDefinitionId::new("ignored"),
+                    "ignored",
+                    "仓储",
+                    1,
+                    ParticipantId::new("u1").unwrap(),
+                )
+                .unwrap()],
                 Timestamp::from_unix_secs(2).unwrap(),
             )
             .is_err());
         assert!(graph
             .plan_replacement_nodes(&[], Timestamp::from_unix_secs(2).unwrap())
             .is_err());
+    }
+
+    /// 节点替换草稿拒绝空白身份、空名称、零顺序，且不生成 ID。
+    #[test]
+    fn replacement_draft_constructor_owns_node_invariants() {
+        let assignee = ParticipantId::new("u1").unwrap();
+        assert!(NodeReplacementDraft::new(
+            None,
+            ApprovalNodeDefinitionId::new("id2"),
+            "n2",
+            "  ",
+            1,
+            assignee.clone(),
+        )
+        .is_err());
+        assert!(NodeReplacementDraft::new(
+            None,
+            ApprovalNodeDefinitionId::new("id2"),
+            "n2",
+            "仓储",
+            0,
+            assignee.clone(),
+        )
+        .is_err());
+        assert!(NodeReplacementDraft::new(
+            Some(ApprovalNodeDefinitionId::new("   ")),
+            ApprovalNodeDefinitionId::new("id2"),
+            "n2",
+            "仓储",
+            1,
+            assignee.clone(),
+        )
+        .is_err());
+        assert!(NodeReplacementDraft::new(
+            None,
+            ApprovalNodeDefinitionId::new(""),
+            "n2",
+            "仓储",
+            1,
+            assignee.clone(),
+        )
+        .is_err());
+        assert!(NodeReplacementDraft::new(
+            None,
+            ApprovalNodeDefinitionId::new("id2"),
+            "  ",
+            "仓储",
+            1,
+            assignee.clone(),
+        )
+        .is_err());
+        let draft = NodeReplacementDraft::new(
+            None,
+            ApprovalNodeDefinitionId::new("id2"),
+            " n2 ",
+            " 仓储 ",
+            1,
+            assignee,
+        )
+        .unwrap();
+        assert_eq!(draft.new_node_key, "n2");
+        assert_eq!(draft.node_name, "仓储");
+        assert_eq!(draft.new_node_id.as_ref(), "id2");
     }
 
     /// 节点复制替换全部身份并清除用途，结果可直接重建为合法线性图。
@@ -683,5 +826,47 @@ mod tests {
         assert!(graph
             .decision_target_node_key("missing", ApprovalDecision::Approve)
             .is_err());
+    }
+
+    /// 只有已发布且线性完整的图可通过绑定校验；草稿、退役和损坏发布图失败关闭。
+    #[test]
+    fn published_linear_validation_rejects_draft_retired_and_corrupt_graphs() {
+        let mut graph = DefinitionGraph::new_populated_draft(
+            ApprovalProcessDefinitionId::new("def"),
+            ProcessKind::StockAdjustment,
+            1,
+            "库存调整",
+            ParticipantId::new("admin").unwrap(),
+            vec![node("id1", "n1", 1, None)],
+            (1..=2)
+                .map(|index| ApprovalTransitionDefinitionId::new(format!("t{index}")))
+                .collect(),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap();
+        graph.validate_linear().unwrap();
+        assert!(graph.validate_published_linear().is_err());
+
+        graph
+            .definition
+            .publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(2).unwrap(),
+            )
+            .unwrap();
+        graph.validate_published_linear().unwrap();
+
+        let mut corrupt = graph.clone();
+        corrupt.transitions.clear();
+        assert!(corrupt.validate_published_linear().is_err());
+
+        graph
+            .definition
+            .retire(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(3).unwrap(),
+            )
+            .unwrap();
+        assert!(graph.validate_published_linear().is_err());
     }
 }

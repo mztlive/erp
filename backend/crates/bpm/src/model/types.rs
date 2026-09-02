@@ -69,6 +69,23 @@ impl ApprovalDefinitionStatus {
     pub fn is_draft(self) -> bool {
         matches!(self, Self::Draft)
     }
+
+    /// 判断定义是否为当前可绑定的已发布状态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 仅已发布返回 `true`；草稿与退役均返回 `false`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 仓储按状态过滤不能替代本判断；绑定前必须由 BPM 再次确认。
+    pub fn is_published(self) -> bool {
+        matches!(self, Self::Published)
+    }
 }
 
 /// 第一阶段仅允许的人工审批节点类型。
@@ -601,6 +618,10 @@ mod tests {
     #[test]
     fn fixed_enum_codes_match_contract() {
         assert_eq!(ApprovalDefinitionStatus::Draft.as_str(), "DRAFT");
+        assert!(ApprovalDefinitionStatus::Draft.is_draft());
+        assert!(!ApprovalDefinitionStatus::Draft.is_published());
+        assert!(ApprovalDefinitionStatus::Published.is_published());
+        assert!(!ApprovalDefinitionStatus::Retired.is_published());
         assert_eq!(ApprovalTransitionEvent::Reject.as_str(), "REJECT");
         assert_eq!(ApprovalTerminalResult::Approved.as_str(), "APPROVED");
         assert_eq!(ApprovalDecision::Approve.as_str(), "APPROVE");

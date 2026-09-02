@@ -66,6 +66,32 @@ impl TestDb {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// 删除指定集合上的命名索引，用于模拟索引建立前的遗留脏数据。
+    ///
+    /// # 参数
+    /// * `collection` - 集合名
+    /// * `index_names` - 必须先删除才能写入重复行的索引名
+    ///
+    /// # 返回
+    /// 全部索引删除成功时返回 `()`。
+    ///
+    /// # 错误
+    /// 任一索引不存在或删除失败时返回 MongoDB 错误。
+    ///
+    /// # 关键业务约束
+    /// 仅测试夹具可调用；不得替代生产唯一索引。生产路径必须继续依赖这些索引。
+    pub async fn drop_named_indexes(
+        &self,
+        collection: &str,
+        index_names: &[&str],
+    ) -> mongodb::error::Result<()> {
+        let target = self.db.collection::<mongodb::bson::Document>(collection);
+        for name in index_names {
+            target.drop_index(*name).await?;
+        }
+        Ok(())
+    }
 }
 
 impl Drop for TestDb {
