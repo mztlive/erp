@@ -445,7 +445,10 @@ struct SalesOrderIdRow {
 /// 无。
 fn dedupe_sales_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
-    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
+    ids.iter()
+        .filter(|&id| seen.insert(id.clone()))
+        .cloned()
+        .collect()
 }
 
 /// 销售单列表投影字段。

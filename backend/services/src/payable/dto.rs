@@ -9,7 +9,7 @@ use entities::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccou
 use entities::money::Amount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType,
-    PaymentAllocation, SupplierPaymentStatus,
+    PaymentAllocation, PendingPaymentAllocation, SupplierPaymentStatus,
 };
 use entities::returns::PaymentReversalStatus;
 use serde::{Deserialize, Serialize};
@@ -335,6 +335,28 @@ pub struct PaymentAllocationLineRequest {
     pub allocated_amount: Amount,
 }
 
+impl PaymentAllocationLineRequest {
+    /// 将请求行转换为领域待过账核销行。
+    ///
+    /// # 参数
+    /// * `&self` - 请求分配行（分录 ID + 核销金额）
+    ///
+    /// # 返回
+    /// 金额为正时返回 [`PendingPaymentAllocation`]，顺序与调用方输入一致。
+    ///
+    /// # 错误
+    /// 金额非正时返回实体层 [`crate::errors::Error::Logic`]（文案保持
+    /// `付款金额必须为正数`）。
+    ///
+    /// # 约束
+    /// 纯转换，不触及 I/O、时钟或 ID 生成；正数校验由
+    /// [`PendingPaymentAllocation::new`] 唯一承担，本方法不复制规则。
+    pub fn to_pending(&self) -> Result<PendingPaymentAllocation> {
+        PendingPaymentAllocation::new(self.payable_entry_id.clone(), self.allocated_amount)
+            .map_err(Into::into)
+    }
+}
+
 /// 供应商付款原子登记并过账请求。
 ///
 /// 服务端在一个事务内完成任务责任校验、收款账户冻结、付款、核销与审计。
@@ -362,6 +384,30 @@ pub struct CommitSupplierPaymentRequest {
     /// 业务请求幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+impl CommitSupplierPaymentRequest {
+    /// 将全部请求分配行转换为领域待过账集合。
+    ///
+    /// # 参数
+    /// * `&self` - 原子付款提交请求
+    ///
+    /// # 返回
+    /// 全部行合法时返回与输入顺序一致的 [`PendingPaymentAllocation`] 集合。
+    ///
+    /// # 错误
+    /// 任一行金额非正时返回 [`crate::errors::Error::Logic`]，首个失败即短路。
+    ///
+    /// # 约束
+    /// 纯转换；净额、分录余额、序号与分配实体构造由
+    /// [`entities::payable::PaymentAllocationLedger`] 承担，本方法不下沉
+    /// 那些规则，也不读取数据库。
+    pub fn pending_allocations(&self) -> Result<Vec<PendingPaymentAllocation>> {
+        self.allocations
+            .iter()
+            .map(PaymentAllocationLineRequest::to_pending)
+            .collect()
+    }
 }
 
 /// 付款核销分配视图。
@@ -848,5 +894,61 @@ mod tests {
             sort_dir: None,
         };
         assert!(params.validate().is_err());
+    }
+
+    /// 请求分配行转换为领域 pending 时保持输入顺序，且正数校验由实体承担。
+    #[test]
+    fn payment_allocation_line_converts_to_pending_in_input_order() {
+        use std::str::FromStr;
+
+        use entities::ids::PayableEntryId;
+        use entities::money::Amount;
+
+        use super::{PaymentAllocationLineRequest, PendingPaymentAllocation};
+
+        let lines = [
+            PaymentAllocationLineRequest {
+                payable_entry_id: PayableEntryId::new("pe-2"),
+                allocated_amount: Amount::from_str("20.00").unwrap(),
+            },
+            PaymentAllocationLineRequest {
+                payable_entry_id: PayableEntryId::new("pe-1"),
+                allocated_amount: Amount::from_str("10.00").unwrap(),
+            },
+        ];
+        let pending: Vec<PendingPaymentAllocation> = lines
+            .iter()
+            .map(PaymentAllocationLineRequest::to_pending)
+            .collect::<Result<_, _>>()
+            .expect("正数分配必须通过");
+        assert_eq!(pending[0].payable_entry_id, PayableEntryId::new("pe-2"));
+        assert_eq!(pending[0].allocated_amount, Amount::from_str("20.00").unwrap());
+        assert_eq!(pending[1].payable_entry_id, PayableEntryId::new("pe-1"));
+        assert_eq!(pending[1].allocated_amount, Amount::from_str("10.00").unwrap());
+    }
+
+    /// 零/负金额不得通过请求行转换，错误文案保持实体合同。
+    #[test]
+    fn payment_allocation_line_rejects_zero_or_negative_amount() {
+        use std::str::FromStr;
+
+        use entities::ids::PayableEntryId;
+        use entities::money::Amount;
+
+        use super::PaymentAllocationLineRequest;
+
+        let zero = PaymentAllocationLineRequest {
+            payable_entry_id: PayableEntryId::new("pe-1"),
+            allocated_amount: Amount::from_str("0.00").unwrap(),
+        };
+        let zero_err = zero.to_pending().unwrap_err();
+        assert!(zero_err.to_string().contains("付款金额必须为正数"));
+
+        let negative = PaymentAllocationLineRequest {
+            payable_entry_id: PayableEntryId::new("pe-1"),
+            allocated_amount: Amount::from_str("-1.00").unwrap(),
+        };
+        let negative_err = negative.to_pending().unwrap_err();
+        assert!(negative_err.to_string().contains("付款金额必须为正数"));
     }
 }

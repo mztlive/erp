@@ -616,6 +616,7 @@ impl PayableService {
             PartyBankAccountId::new(req.expected_payee_bank_account_id.trim());
         let expected_payee_bank_account_version = req.expected_payee_bank_account_version;
         req.payment.validate()?;
+        let allocations = req.pending_allocations()?;
         let payment = SupplierPayment::new(
             SupplierPaymentId::new(next_id()),
             SupplierPaymentData {
@@ -628,7 +629,6 @@ impl PayableService {
                 bank_receipt_asset_id: req.payment.bank_receipt_asset_id,
             },
         )?;
-        let allocations = pending_allocations_from_request(&req.allocations)?;
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -1272,22 +1272,6 @@ async fn post_supplier_payment_in_transaction(
     Ok(())
 }
 
-/// 把付款核销请求行转换为强类型分配行。
-///
-/// # 错误
-/// 任一金额非正时返回校验错误。
-fn pending_allocations_from_request(
-    lines: &[PaymentAllocationLineRequest],
-) -> Result<Vec<PendingPaymentAllocation>> {
-    lines
-        .iter()
-        .map(|line| {
-            PendingPaymentAllocation::new(line.payable_entry_id.clone(), line.allocated_amount)
-                .map_err(Into::into)
-        })
-        .collect()
-}
-
 /// 解析供应商在当前业务日唯一生效的默认收款账户。
 ///
 /// # 错误
@@ -1861,6 +1845,27 @@ mod supplier_payment_execution_tests {
     fn recipient_mask_only_contains_last_four() {
         assert_eq!(masked_bank_account_number("1234"), "********1234");
         assert_eq!(masked_bank_account_number(""), "********");
+    }
+
+    /// FIN-E02：付款核销 pending 转换、净额、分录余额、序号与实体构造必须由
+    /// `PaymentAllocationLedger` 承担；旧 Service 求和/转换 helper 已删除。
+    #[test]
+    fn payment_allocation_ledger_is_the_only_posting_rule_source() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("PaymentAllocationLedger::new"));
+        assert!(production.contains("ledger.apply("));
+        assert!(production.contains("req.pending_allocations()?"));
+        assert!(!production.contains("fn pending_allocations_from_request"));
+        assert!(!production.contains("fn pending_allocated_total"));
+        assert!(!production.contains("fn net_payment_allocated"));
+        let dto = include_str!("dto.rs");
+        assert!(dto.contains("pub fn pending_allocations("));
+        assert!(dto.contains("PaymentAllocationLineRequest::to_pending"));
+        assert!(!dto.contains("fn pending_allocated_total"));
+        assert!(!dto.contains("fn net_payment_allocated"));
     }
 
     /// 收款账户唯一默认解析与 expected 身份匹配必须由

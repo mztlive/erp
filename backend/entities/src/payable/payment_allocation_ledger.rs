@@ -23,17 +23,20 @@ use crate::payable::{
 ///
 /// 构造规则（与 `PayableService::post_supplier_payment_in_transaction`
 /// 原实现一致，责任归位后 Service 不再手工求和）：
-/// - `new` 先按既有分配计算净已核销合计并与待过账合计比对付款金额上限；
-/// - `apply` 按待过账行顺序逐行校验分录开放余额、分配连续序号并构造
-///   `PaymentAllocation`；
+/// - `new` 先按既有分配计算净已核销合计（`APPLY` 加、`REVERSE` 减）并与
+///   待过账合计比对付款金额上限，同时冻结待过账行顺序；
+/// - `apply` 必须按冻结顺序传入 `pending[applied_count]`，校验分录开放
+///   余额、分配连续序号并构造 `PaymentAllocation`；乱序或改写行失败关闭；
 /// - 同分录多行共享开放余额进度，重复分录/子账只聚合一次，不重复推进；
-/// - 全部金额运算为精确定点运算，任一步溢出即失败，不产生部分计划。
+/// - 全部金额运算为精确定点运算，任一步溢出即失败，失败行不写入账本。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentAllocationLedger {
     /// 付款单。
     payment_id: SupplierPaymentId,
     /// 净已核销合计（既有净额 + 本次待过账合计）。
     net_allocated_total: Amount,
+    /// 构造时冻结的待过账行（顺序即 `apply` 顺序）。
+    pending: Vec<PendingPaymentAllocation>,
     /// 本次构造的核销分配（顺序与待过账行一致）。
     allocations: Vec<PaymentAllocation>,
     /// 按子账聚合的本次核销增量（首次出现顺序，确定性）。
@@ -106,6 +109,7 @@ impl PaymentAllocationLedger {
         Ok(Self {
             payment_id,
             net_allocated_total,
+            pending: pending.to_vec(),
             allocations: Vec::with_capacity(pending.len()),
             account_deltas: Vec::new(),
             account_delta_index: HashMap::new(),
@@ -117,13 +121,13 @@ impl PaymentAllocationLedger {
 
     /// 按待过账行顺序逐行核销一条分录。
     ///
-    /// 校验分录事实与行身份一致、开放余额充足（既有占用 + 本次已过账行 +
-    /// 本行不超过分录含税金额），随后构造核销分配并按分录所属子账聚合增量。
-    /// 调用方必须按 `pending` 顺序逐行调用，且先完成分录/子账存在性与跨
-    /// 供应商一致性校验。
+    /// 校验传入行即冻结的 `pending[applied_count]`、分录事实与行身份一致、
+    /// 开放余额充足（既有占用 + 本次已过账行 + 本行不超过分录含税金额），
+    /// 随后构造核销分配并按分录所属子账聚合增量。调用方必须按 `new` 时的
+    /// `pending` 顺序逐行调用，且先完成分录/子账存在性与跨供应商一致性校验。
     ///
     /// # 参数
-    /// * `line` - 待过账核销行
+    /// * `line` - 待过账核销行，必须等于 `pending[applied_count]`
     /// * `entry` - 该行已装载的应付分录事实
     /// * `allocation_id` - 本行核销分配 ID（由 Service 生成后注入）
     /// * `allocated_at` - 核销发生时间（由 Service 注入）
@@ -132,8 +136,9 @@ impl PaymentAllocationLedger {
     /// 本行核销构造成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 分录事实与行不一致、超出待过账行数、开放余额不足或金额运算溢出时
-    /// 返回 [`Error::LogicError`]；账本保持失败前状态，不产生部分计划。
+    /// 传入行与冻结顺序不一致、分录事实与行不一致、超出待过账行数、开放
+    /// 余额不足或金额运算溢出时返回 [`Error::LogicError`]；本行写入全部
+    /// 在校验通过后提交，失败保持调用前状态。
     ///
     /// # 约束
     /// 纯内存计算，不依赖数据库自然顺序；并发正确性由 Service 的条件更新
@@ -145,18 +150,16 @@ impl PaymentAllocationLedger {
         allocation_id: PaymentAllocationId,
         allocated_at: Instant,
     ) -> Result<()> {
+        let seq = self.expected_seq(line)?;
         if entry.base.id != line.payable_entry_id.to_string() {
             return Err(Error::from("核销分录事实与付款行不一致"));
         }
-        let seq = *self
-            .seqs
-            .get(self.applied_count)
-            .ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;
-        let balance = self
+        let current = self
             .entry_allocated
-            .entry(entry.base.id.clone())
-            .or_insert_with(zero_amount);
-        let next_balance = checked_add_amount(*balance, line.allocated_amount)?;
+            .get(entry.base.id.as_str())
+            .copied()
+            .unwrap_or_else(zero_amount);
+        let next_balance = checked_add_amount(current, line.allocated_amount)?;
         if next_balance > entry.amount {
             return Err(Error::from("核销金额超过应付分录开放余额"));
         }
@@ -172,17 +175,22 @@ impl PaymentAllocationLedger {
                 reverses_allocation_id: None,
             },
         )?;
-        *balance = next_balance;
-        match self.account_delta_index.get(entry.payable_account_id.as_ref()) {
-            Some(&index) => {
-                let (_, total) = &mut self.account_deltas[index];
-                *total = checked_add_amount(*total, line.allocated_amount)?;
-            }
+        let account_index = self
+            .account_delta_index
+            .get(entry.payable_account_id.as_ref())
+            .copied();
+        let next_account_total = match account_index {
+            Some(index) => checked_add_amount(self.account_deltas[index].1, line.allocated_amount)?,
+            None => line.allocated_amount,
+        };
+        self.entry_allocated.insert(entry.base.id.clone(), next_balance);
+        match account_index {
+            Some(index) => self.account_deltas[index].1 = next_account_total,
             None => {
                 self.account_delta_index
                     .insert(entry.payable_account_id.to_string(), self.account_deltas.len());
                 self.account_deltas
-                    .push((entry.payable_account_id.clone(), line.allocated_amount));
+                    .push((entry.payable_account_id.clone(), next_account_total));
             }
         }
         self.allocations.push(allocation);
@@ -223,6 +231,31 @@ impl PaymentAllocationLedger {
     /// 聚合只保证金额守恒；子账存在性与供应商一致性由 Service 校验。
     pub fn account_settlement_deltas(&self) -> &[(PayableAccountId, Amount)] {
         &self.account_deltas
+    }
+
+    /// 校验传入行即冻结的下一待过账行，并返回该行预分配序号。
+    ///
+    /// # 参数
+    /// * `line` - 调用方传入的待过账行
+    ///
+    /// # 返回
+    /// 行身份与顺序匹配时返回该行连续序号。
+    ///
+    /// # 错误
+    /// 已用尽待过账行或传入行不是 `pending[applied_count]` 时返回
+    /// [`Error::LogicError`]。
+    ///
+    /// # 约束
+    /// 不修改账本；序号在 [`Self::new`] 时已预分配。
+    fn expected_seq(&self, line: &PendingPaymentAllocation) -> Result<u32> {
+        let expected = self
+            .pending
+            .get(self.applied_count)
+            .ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;
+        if expected != line {
+            return Err(Error::from("核销行与待过账顺序不一致"));
+        }
+        Ok(self.seqs[self.applied_count])
     }
 
     /// 返回净已核销合计（既有净额 + 本次待过账合计）。
@@ -441,6 +474,19 @@ mod tests {
             allocations[0].allocated_amount,
             Amount::from_str("200.00").unwrap()
         );
+        // 三方守恒：付款净额 = 既有净额 + 新分配合计；分录占用 = 付款净额
+        let existing_net = Amount::from_str("700.00").unwrap();
+        let new_total = allocations[0].allocated_amount;
+        assert_eq!(ledger.net_allocated_total(), existing_net.checked_add(new_total));
+        assert_eq!(
+            ledger.account_settlement_deltas(),
+            &[(
+                PayableAccountId::new("acct-1"),
+                Amount::from_str("200.00").unwrap()
+            )]
+        );
+        let remaining = e1.amount.checked_sub(ledger.net_allocated_total());
+        assert_eq!(remaining, Amount::from_str("100.00").unwrap());
     }
 
     #[test]
@@ -707,5 +753,116 @@ mod tests {
         assert!(ledger.new_allocations().is_empty());
         assert!(ledger.account_settlement_deltas().is_empty());
         assert_eq!(ledger.net_allocated_total(), zero_amount());
+    }
+
+    #[test]
+    fn apply_rejects_out_of_order_or_rewritten_line_without_partial_plan() {
+        let e1 = entry("pe-1", "acct-1", "1000.00");
+        let e2 = entry("pe-2", "acct-1", "1000.00");
+        let pending = [pending_line("pe-1", "100.00"), pending_line("pe-2", "200.00")];
+        let mut ledger = build_ledger("1000.00", &[], &pending);
+        let err = ledger
+            .apply(
+                &pending[1],
+                &e2,
+                PaymentAllocationId::new("pa-2"),
+                Instant::from_unix_secs(1),
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("待过账顺序不一致"));
+        assert!(ledger.new_allocations().is_empty());
+        assert!(ledger.account_settlement_deltas().is_empty());
+
+        ledger
+            .apply(
+                &pending[0],
+                &e1,
+                PaymentAllocationId::new("pa-1"),
+                Instant::from_unix_secs(1),
+            )
+            .unwrap();
+        let mut rewritten = pending[1].clone();
+        rewritten.allocated_amount = Amount::from_str("50.00").unwrap();
+        let err = ledger
+            .apply(
+                &rewritten,
+                &e2,
+                PaymentAllocationId::new("pa-2"),
+                Instant::from_unix_secs(2),
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("待过账顺序不一致"));
+        assert_eq!(ledger.new_allocations().len(), 1);
+        assert_eq!(
+            ledger.new_allocations()[0].allocated_amount,
+            Amount::from_str("100.00").unwrap()
+        );
+    }
+
+    #[test]
+    fn apply_arithmetic_overflow_rejected_without_partial_plan() {
+        let max = Amount::try_from(Decimal::MAX).unwrap();
+        let e1 = entry("pe-1", "acct-1", "1000.00");
+        let mut existing = vec![
+            allocation("pa-a1", "pe-1", 1, AllocationAction::Apply, "1.00", None),
+            allocation(
+                "pa-r1",
+                "pe-2",
+                2,
+                AllocationAction::Reverse,
+                "1.00",
+                Some("pa-a1"),
+            ),
+        ];
+        existing[0].allocated_amount = max;
+        existing[1].allocated_amount = max;
+        let pending = [pending_line("pe-1", "1.00")];
+        let mut ledger = PaymentAllocationLedger::new(
+            SupplierPaymentId::new("sp-1"),
+            Amount::from_str("1.00").unwrap(),
+            &existing,
+            &pending,
+        )
+        .expect("全局净额被冲销抵消后构造必须成功");
+        let err = ledger
+            .apply(
+                &pending[0],
+                &e1,
+                PaymentAllocationId::new("pa-n1"),
+                Instant::from_unix_secs(1),
+            )
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("溢出"),
+            "apply 路径分录占用溢出必须失败，实际错误：{}",
+            err
+        );
+        assert!(ledger.new_allocations().is_empty());
+        assert!(ledger.account_settlement_deltas().is_empty());
+    }
+
+    #[test]
+    fn sequence_integer_overflow_rejected() {
+        let existing = [allocation(
+            "pa-a1",
+            "pe-1",
+            u32::MAX,
+            AllocationAction::Apply,
+            "1.00",
+            None,
+        )];
+        let pending = [pending_line("pe-1", "1.00")];
+        let err = PaymentAllocationLedger::new(
+            SupplierPaymentId::new("sp-1"),
+            Amount::from_str("2.00").unwrap(),
+            &existing,
+            &pending,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("序号"),
+            "序号整数溢出必须失败，实际错误：{}",
+            err
+        );
     }
 }
