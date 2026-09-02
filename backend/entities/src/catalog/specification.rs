@@ -158,6 +158,73 @@ pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result
     Ok(signature)
 }
 
+/// 已持久化规格签名的读取形态。
+///
+/// 严格解析见 [`parse_specification_signature`]。公司商品池列表在签名审计清零前
+/// 对历史非法签名使用 [`SpecificationSignatureRead::LegacyNonCanonical`]，不失败整页。
+/// 审计入口是 catalog 仓储 `noncanonical_specification_signature_sku_ids`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpecificationSignatureRead {
+    /// 与写入合同一致的规范签名。
+    Canonical(Vec<SpecSignatureEntry>),
+    /// 历史非法签名：列表读取兼容为空属性，待审计清零后可改回失败关闭。
+    LegacyNonCanonical,
+}
+
+/// 读取已持久化规格签名；非法历史行标为兼容形态而不是抛出领域错误。
+///
+/// # 参数
+/// * `signature` - 已持久化的规格签名
+///
+/// # 返回
+/// 规范签名返回条目；非法签名返回 [`SpecificationSignatureRead::LegacyNonCanonical`]。
+///
+/// # 错误
+/// 无。严格失败关闭请调用 [`parse_specification_signature`]。
+pub fn read_specification_signature(signature: &str) -> SpecificationSignatureRead {
+    match parse_specification_signature(signature) {
+        Ok(entries) => SpecificationSignatureRead::Canonical(entries),
+        Err(_) => SpecificationSignatureRead::LegacyNonCanonical,
+    }
+}
+
+/// 解析已持久化的规范化规格签名。
+///
+/// 与 [`compute_specification_signature`] 共用 `规格名=规格值` 并以 `|` 连接的
+/// 格式合同：空签名返回空列表；非空签名必须等于对其条目再编码的规范结果。
+/// 写入路径已保证规范形态。历史非法签名由 [`read_specification_signature`]
+/// 标记为兼容读取，审计清零前不得在列表接口失败关闭整页。
+///
+/// # 参数
+/// * `signature` - 已持久化的规格签名
+///
+/// # 返回
+/// 返回按签名既有顺序排列的规格名-值对；空签名返回空集合。
+///
+/// # 错误
+/// 缺失 `=`、空名称、空值、重复属性、超长或非规范形态时返回领域错误。
+pub fn parse_specification_signature(signature: &str) -> Result<Vec<SpecSignatureEntry>> {
+    if signature == EMPTY_SPEC_SIGNATURE {
+        return Ok(Vec::new());
+    }
+    validate_specification_signature(signature)?;
+    let mut entries = Vec::new();
+    for fragment in signature.split('|') {
+        let Some((name, value)) = fragment.split_once('=') else {
+            return Err(Error::from("规格签名格式非法"));
+        };
+        entries.push(SpecSignatureEntry {
+            attribute_code: name.to_string(),
+            value_code: value.to_string(),
+        });
+    }
+    let canonical = compute_specification_signature(&entries)?;
+    if canonical != signature {
+        return Err(Error::from("规格签名不是规范形态"));
+    }
+    Ok(entries)
+}
+
 /// 校验规格签名是否可写入 `sku`。
 ///
 /// 规则（数据模型 §6.3）：空签名只允许使用固定空规格签名
@@ -316,5 +383,61 @@ mod tests {
 
         let overlong_code = vec![entry(&"a".repeat(65), "L")];
         assert!(compute_specification_signature(&overlong_code).is_err());
+    }
+
+    /// 空签名解析为空集合；合法多项保持规范顺序。
+    #[test]
+    fn parse_signature_accepts_empty_and_canonical_entries() {
+        assert!(parse_specification_signature(EMPTY_SPEC_SIGNATURE)
+            .unwrap()
+            .is_empty());
+        let entries = parse_specification_signature("尺码=L|颜色=红色").unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].attribute_code, "尺码");
+        assert_eq!(entries[0].value_code, "L");
+        assert_eq!(entries[1].attribute_code, "颜色");
+        assert_eq!(entries[1].value_code, "红色");
+    }
+
+    /// 编码后再解析必须得到规范内容，且与输入顺序无关的编码结果稳定。
+    #[test]
+    fn parse_signature_round_trips_canonical_encoding() {
+        let encoded = compute_specification_signature(&[entry("颜色", "红色"), entry("尺码", "L")]).unwrap();
+        let parsed = parse_specification_signature(&encoded).unwrap();
+
+        assert_eq!(encoded, "尺码=L|颜色=红色");
+        assert_eq!(parsed, vec![entry("尺码", "L"), entry("颜色", "红色")]);
+    }
+
+    /// 缺失 `=`、空名称、空值、重复属性和超长签名均失败关闭。
+    #[test]
+    fn parse_signature_rejects_illegal_persisted_shapes() {
+        assert!(parse_specification_signature("尺码L").is_err());
+        assert!(parse_specification_signature("=L").is_err());
+        assert!(parse_specification_signature("尺码=").is_err());
+        assert!(parse_specification_signature("尺码=L|尺码=S").is_err());
+        assert!(parse_specification_signature(&"a=b|".repeat(200)).is_err());
+        assert!(parse_specification_signature("颜色=红色|尺码=L").is_err());
+    }
+
+    /// 列表读取把非法历史签名标为兼容形态，不把整页变成解析错误。
+    #[test]
+    fn read_signature_versions_illegal_history_as_legacy() {
+        assert!(matches!(
+            read_specification_signature(EMPTY_SPEC_SIGNATURE),
+            SpecificationSignatureRead::Canonical(entries) if entries.is_empty()
+        ));
+        assert!(matches!(
+            read_specification_signature("尺码=L|颜色=红色"),
+            SpecificationSignatureRead::Canonical(entries) if entries.len() == 2
+        ));
+        assert!(matches!(
+            read_specification_signature("尺码L"),
+            SpecificationSignatureRead::LegacyNonCanonical
+        ));
+        assert!(matches!(
+            read_specification_signature("颜色=红色|尺码=L"),
+            SpecificationSignatureRead::LegacyNonCanonical
+        ));
     }
 }

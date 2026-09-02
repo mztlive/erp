@@ -11,6 +11,8 @@
 //!
 //! 筛选/行类型定义在本文件，经 `PublicationExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
+//!
+//! - [`processable_delivery_batch`]：待处理投递批次上下文（MASTER-R04）。
 
 use entities::catalog::SkuRevision;
 use entities::common::time::Instant;
@@ -36,6 +38,12 @@ use super::extensions::PublicationExt;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
+
+mod processable_delivery_batch;
+
+use processable_delivery_batch::{
+    processable_publication_delivery_filter, processable_publication_delivery_find_options,
+};
 
 /// `product_publication_revision` 集合名（单一来源：`PublicationExt` 关联常量）。
 const PRODUCT_PUBLICATION_REVISIONS: &str =
@@ -683,29 +691,33 @@ impl<'a> Repository<'a, ProductPublicationDelivery> {
     }
 
     /// 列出待发送与已到期重试的投递；发送中和结果未知不得被盲目重放。
+    ///
+    /// 查询条件、稳定排序与 `limit` 由批次上下文查询复用；关联修订/发布读取
+    /// 走 `PublicationRepository::list_processable_publication_delivery_contexts`。
+    ///
+    /// # 参数
+    /// * `at` - 到期判定时刻
+    /// * `limit` - 本批最多返回条数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按 `created_at,id` 升序的待处理投递。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 发送中、结果未知、未到期重试不得入选；排序必须稳定为 `created_at,id`。
     pub async fn list_processable_publication_deliveries(
         &self,
         at: Instant,
         limit: u32,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductPublicationDelivery>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "created_at": 1, "id": 1 })
-            .limit(i64::from(limit))
-            .build();
         mongo_ops::find_many(
             &self.collection(),
-            doc! {
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                "$or": [
-                    { "delivery_status": PublicationDeliveryStatus::PendingSend.as_str() },
-                    {
-                        "delivery_status": PublicationDeliveryStatus::Retrying.as_str(),
-                        "next_attempt_at": { "$lte": at.unix_secs() },
-                    },
-                ],
-            },
-            options,
+            processable_publication_delivery_filter(at),
+            processable_publication_delivery_find_options(limit),
             executor,
         )
         .await

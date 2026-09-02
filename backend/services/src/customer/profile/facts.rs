@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use database::{NoTransaction, PartyExt};
 use entities::{
     common::time::BusinessDate,
-    field_update::FieldUpdate,
     ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId},
     party::{
-        EffectiveRecordStatus, PartyAddress, PartyAddressData, PartyAddressUpdate, PartyBankAccount,
-        PartyBankAccountData, PartyBankAccountUpdate, PartyContact, PartyContactData, PartyContactUpdate,
+        EffectiveRecordStatus, PartyAddress, PartyAddressContentMatch, PartyAddressData, PartyAddressUpdate,
+        PartyBankAccount, PartyBankAccountContentMatch, PartyBankAccountData, PartyBankAccountUpdate,
+        PartyContact, PartyContactContentMatch, PartyContactData, PartyContactUpdate, SensitiveFactReuse,
     },
 };
 use id_generator::next_id;
@@ -202,7 +202,7 @@ impl CustomerProfileService {
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "联系人")?;
-            if contact_matches(&entity, input, self.sensitive_data.fingerprint_key()) {
+            if entity.matches_content(&self.contact_content_match(input)) {
                 update_contact_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
                 continue;
             }
@@ -214,7 +214,7 @@ impl CustomerProfileService {
             {
                 replacement.mobile = Some(self.sensitive_data.decrypt(&entity.mobile_ciphertext)?);
             }
-            close_contact(&mut entity, effective_from, actor)?;
+            entity.close_at(effective_from, actor)?;
             changes.updated.push(entity);
             changes
                 .created
@@ -222,6 +222,63 @@ impl CustomerProfileService {
         }
         close_remaining_contacts(current, effective_from, actor, &mut changes.updated)?;
         Ok(changes)
+    }
+
+    /// 由请求构造联系人比较输入，并预计算手机号指纹。
+    ///
+    /// # 参数
+    /// * `input` - 客户资料联系人输入
+    ///
+    /// # 返回
+    /// 返回不含密钥与明文的比较值对象。
+    fn contact_content_match(&self, input: &CustomerProfileContactInput) -> PartyContactContentMatch {
+        PartyContactContentMatch::new(
+            &input.contact_name,
+            input.title.clone(),
+            input.telephone.clone(),
+            input.email.clone(),
+            SensitiveFactReuse::from_optional_plaintext(input.mobile.as_deref(), |plain| {
+                self.sensitive_data.contact_mobile_fingerprint(plain)
+            }),
+        )
+    }
+
+    /// 由请求构造地址比较输入，并预计算地址指纹。
+    ///
+    /// # 参数
+    /// * `input` - 客户资料地址输入
+    ///
+    /// # 返回
+    /// 返回不含密钥与明文的比较值对象。
+    fn address_content_match(&self, input: &CustomerProfileAddressInput) -> PartyAddressContentMatch {
+        PartyAddressContentMatch::new(
+            input.address_type,
+            input.contact_name.clone(),
+            SensitiveFactReuse::from_optional_plaintext(input.address.as_deref(), |plain| {
+                self.sensitive_data.address_fingerprint(plain)
+            }),
+        )
+    }
+
+    /// 由请求构造银行账户比较输入，并预计算账号指纹。
+    ///
+    /// # 参数
+    /// * `input` - 客户资料银行账户输入
+    ///
+    /// # 返回
+    /// 返回不含密钥与明文的比较值对象。
+    fn bank_account_content_match(
+        &self,
+        input: &CustomerProfileBankAccountInput,
+    ) -> PartyBankAccountContentMatch {
+        PartyBankAccountContentMatch::new(
+            &input.account_name,
+            &input.bank_name,
+            input.bank_branch_name.clone(),
+            SensitiveFactReuse::from_optional_plaintext(input.account_number.as_deref(), |plain| {
+                self.sensitive_data.bank_account_number_fingerprint(plain)
+            }),
+        )
     }
 
     /// 计算地址集合差异；既有行未携带明文且元数据未变化时原样保留。
@@ -243,7 +300,7 @@ impl CustomerProfileService {
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "地址")?;
-            if address_matches(&entity, input, self.sensitive_data.fingerprint_key()) {
+            if entity.matches_content(&self.address_content_match(input)) {
                 update_address_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
                 continue;
             }
@@ -255,7 +312,7 @@ impl CustomerProfileService {
             {
                 replacement.address = Some(self.sensitive_data.decrypt(&entity.address_ciphertext)?);
             }
-            close_address(&mut entity, effective_from, actor)?;
+            entity.close_at(effective_from, actor)?;
             changes.updated.push(entity);
             changes
                 .created
@@ -284,11 +341,9 @@ impl CustomerProfileService {
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "银行账户")?;
-            if !bank_account_matches(&entity, input, self.sensitive_data.fingerprint_key()) {
-                return Err(Error::ValidationError(
-                    "既有银行账户内容不可原地修改，请结束旧账户后新增账户".to_string(),
-                ));
-            }
+            entity
+                .ensure_unmodified(&self.bank_account_content_match(input))
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
             update_bank_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
         }
         close_remaining_banks(current, effective_from, actor, &mut changes.updated)?;
@@ -380,44 +435,6 @@ fn take_existing<T>(current: &mut HashMap<String, T>, id: &str, label: &str) -> 
         .ok_or_else(|| Error::ConflictError(format!("{label}已变化，请刷新后重试")))
 }
 
-/// 判断联系人输入是否与当前事实内容一致。
-fn contact_matches(contact: &PartyContact, input: &CustomerProfileContactInput, key: &[u8]) -> bool {
-    let mobile_matches = input.mobile.as_deref().is_none_or(|mobile| {
-        mobile.trim().is_empty() || PartyContact::mobile_fingerprint(mobile, key) == contact.mobile_query_hmac
-    });
-    mobile_matches
-        && contact.contact_name == input.contact_name.trim()
-        && normalized_optional(&contact.title) == normalized_optional(&input.title)
-        && normalized_optional(&contact.telephone) == normalized_optional(&input.telephone)
-        && normalized_optional(&contact.email) == normalized_optional(&input.email)
-}
-
-/// 判断地址输入是否与当前事实内容一致。
-fn address_matches(address: &PartyAddress, input: &CustomerProfileAddressInput, key: &[u8]) -> bool {
-    let content_matches = input.address.as_deref().is_none_or(|value| {
-        value.trim().is_empty() || PartyAddress::address_fingerprint(value, key) == address.address_query_hmac
-    });
-    content_matches
-        && address.address_type == input.address_type
-        && normalized_optional(&address.contact_name) == normalized_optional(&input.contact_name)
-}
-
-/// 判断既有银行账户稳定内容是否未被修改。
-fn bank_account_matches(
-    account: &PartyBankAccount,
-    input: &CustomerProfileBankAccountInput,
-    key: &[u8],
-) -> bool {
-    let number_matches = input.account_number.as_deref().is_none_or(|value| {
-        value.trim().is_empty()
-            || PartyBankAccount::account_number_fingerprint(value, key) == account.account_number_query_hmac
-    });
-    number_matches
-        && account.account_name == input.account_name.trim()
-        && account.bank_name == input.bank_name.trim()
-        && normalized_optional(&account.bank_branch_name) == normalized_optional(&input.bank_branch_name)
-}
-
 /// 仅在默认标记变化时更新联系人事实。
 fn update_contact_default(
     contact: &mut PartyContact,
@@ -481,42 +498,6 @@ fn update_bank_default(
     Ok(())
 }
 
-/// 结束联系人当前事实。
-fn close_contact(contact: &mut PartyContact, effective_from: BusinessDate, actor: &str) -> Result<()> {
-    Ok(contact.update(
-        PartyContactUpdate {
-            status: Some(EffectiveRecordStatus::Disabled),
-            valid_to: close_date(contact.valid_from, effective_from),
-            is_default: Some(false),
-        },
-        actor,
-    )?)
-}
-
-/// 结束地址当前事实。
-fn close_address(address: &mut PartyAddress, effective_from: BusinessDate, actor: &str) -> Result<()> {
-    Ok(address.update(
-        PartyAddressUpdate {
-            status: Some(EffectiveRecordStatus::Disabled),
-            valid_to: close_date(address.valid_from, effective_from),
-            is_default: Some(false),
-        },
-        actor,
-    )?)
-}
-
-/// 结束银行账户当前事实。
-fn close_bank(account: &mut PartyBankAccount, effective_from: BusinessDate, actor: &str) -> Result<()> {
-    Ok(account.update(
-        PartyBankAccountUpdate {
-            status: Some(EffectiveRecordStatus::Disabled),
-            valid_to: close_date(account.valid_from, effective_from),
-            is_default: Some(false),
-        },
-        actor,
-    )?)
-}
-
 /// 结束未在目标集合中保留的联系人。
 fn close_remaining_contacts(
     current: HashMap<String, PartyContact>,
@@ -525,7 +506,7 @@ fn close_remaining_contacts(
     updated: &mut Vec<PartyContact>,
 ) -> Result<()> {
     for mut item in current.into_values() {
-        close_contact(&mut item, effective_from, actor)?;
+        item.close_at(effective_from, actor)?;
         updated.push(item);
     }
     Ok(())
@@ -539,7 +520,7 @@ fn close_remaining_addresses(
     updated: &mut Vec<PartyAddress>,
 ) -> Result<()> {
     for mut item in current.into_values() {
-        close_address(&mut item, effective_from, actor)?;
+        item.close_at(effective_from, actor)?;
         updated.push(item);
     }
     Ok(())
@@ -553,19 +534,10 @@ fn close_remaining_banks(
     updated: &mut Vec<PartyBankAccount>,
 ) -> Result<()> {
     for mut item in current.into_values() {
-        close_bank(&mut item, effective_from, actor)?;
+        item.close_at(effective_from, actor)?;
         updated.push(item);
     }
     Ok(())
-}
-
-/// 只有新生效日晚于旧事实开始日时才写结束日期；同日创建后修订仅停用。
-fn close_date(valid_from: BusinessDate, effective_from: BusinessDate) -> FieldUpdate<BusinessDate> {
-    if effective_from > valid_from {
-        FieldUpdate::Set(effective_from)
-    } else {
-        FieldUpdate::Unchanged
-    }
 }
 
 fn required_text(value: Option<&str>, label: &str) -> Result<String> {
@@ -574,9 +546,4 @@ fn required_text(value: Option<&str>, label: &str) -> Result<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| Error::ValidationError(format!("{label}不能为空")))
-}
-
-/// 规范化可选文本供内容比较。
-fn normalized_optional(value: &Option<String>) -> Option<&str> {
-    value.as_deref().map(str::trim).filter(|value| !value.is_empty())
 }

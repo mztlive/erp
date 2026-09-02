@@ -365,7 +365,7 @@ impl CustomerService {
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         account.update(
             CustomerAccountUpdate {
-                default_payment_term_id: payment_term_update(req.default_payment_term_id),
+                default_payment_term_id: FieldUpdate::from_optional_text(req.default_payment_term_id),
                 status: req.status,
             },
             actor.id(),
@@ -616,19 +616,4 @@ fn page_or_default(page: Option<u64>) -> u64 {
 /// 分页大小默认值辅助（与 `crate::query` 对齐，供子模块复用）。
 fn page_size_or_default(page_size: Option<u32>) -> u32 {
     page_size.unwrap_or(20).clamp(1, 100)
-}
-
-/// 将可选付款条件入参映射为 `FieldUpdate`：`None` 表示不修改，空字符串表示清除。
-///
-/// # 参数
-/// * `value` - 请求携带的付款条件引用
-///
-/// # 返回
-/// 返回实体更新意图。
-fn payment_term_update(value: Option<String>) -> FieldUpdate<String> {
-    match value {
-        Some(term) if term.trim().is_empty() => FieldUpdate::Clear,
-        Some(term) => FieldUpdate::Set(term),
-        None => FieldUpdate::Unchanged,
-    }
 }

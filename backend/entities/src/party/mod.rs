@@ -13,6 +13,8 @@
 //!   `*_ciphertext`（P3 加密填充）+ `*_query_hmac`（带密钥 HMAC 查询指纹）
 //!   双字段，明文字段永远不进入 `Debug` 输出。
 
+mod close;
+mod content_match;
 mod entity;
 pub mod party_address;
 pub mod party_bank_account;
@@ -24,6 +26,10 @@ pub mod status;
 
 pub use crate::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
+};
+pub use content_match::{
+    PartyAddressContentMatch, PartyBankAccountContentMatch, PartyContactContentMatch, QueryFingerprint,
+    SensitiveFactReuse,
 };
 pub use entity::{Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
 pub use party_address::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};

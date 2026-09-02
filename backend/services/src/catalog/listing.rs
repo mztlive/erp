@@ -18,6 +18,9 @@ use crate::catalog::dto::{
 };
 use crate::errors::{Error, Result};
 
+/// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
+type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;
+
 /// 整组上/下架在事务外完成校验后形成的待写集合。
 struct ProductListingChange {
     product_id: ProductId,
@@ -203,35 +206,12 @@ impl CatalogService {
         &self,
         product_ids: &[ProductId],
     ) -> Result<HashMap<String, ProductListingView>> {
-        let skus = self
+        let summaries = self
             .db
-            .skus()
-            .find_by_product_ids(product_ids, &mut NoTransaction)
+            .catalog()
+            .listing_summaries(product_ids, &mut NoTransaction)
             .await?;
-        let mut counts = HashMap::<String, (u32, u32)>::new();
-        for sku in skus.into_iter().filter(Sku::is_active) {
-            let entry = counts.entry(sku.product_id.to_string()).or_default();
-            entry.1 = entry.1.saturating_add(1);
-            if sku.listing_status.is_listed() {
-                entry.0 = entry.0.saturating_add(1);
-            }
-        }
-        Ok(product_ids
-            .iter()
-            .map(|product_id| {
-                let (listed_sku_count, sku_count) =
-                    counts.get(product_id.as_ref()).copied().unwrap_or_default();
-                (
-                    product_id.to_string(),
-                    ProductListingView {
-                        product_id: product_id.to_string(),
-                        listing_status: ProductListingStatus::inherited(listed_sku_count, sku_count),
-                        listed_sku_count,
-                        sku_count,
-                    },
-                )
-            })
-            .collect())
+        Ok(product_listing_views_from_summaries(product_ids, &summaries))
     }
 
     /// 将商品实体映射为包含实时 SKU 上架汇总的响应。
@@ -286,6 +266,22 @@ fn changed_skus(skus: Vec<Sku>, target: ListingStatus, actor_id: &str) -> Result
 fn product_listing_view(product_id: &str, sku_count: usize, target: ListingStatus) -> ProductListingView {
     let sku_count = u32::try_from(sku_count).unwrap_or(u32::MAX);
     let listed_sku_count = if target.is_listed() { sku_count } else { 0 };
+    listing_view_from_counts(product_id, listed_sku_count, sku_count)
+}
+
+/// 把仓储上架计数映射为 SPU 继承状态视图。
+///
+/// # 参数
+/// * `product_id` - 商品稳定主键
+/// * `listed_sku_count` - 当前启用且已上架的 SKU 数
+/// * `sku_count` - 当前启用 SKU 总数
+///
+/// # 返回
+/// 返回 `ProductListingStatus::inherited` 计算后的响应视图。
+///
+/// # 错误
+/// 无。
+fn listing_view_from_counts(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingView {
     ProductListingView {
         product_id: product_id.to_string(),
         listing_status: ProductListingStatus::inherited(listed_sku_count, sku_count),
@@ -294,11 +290,46 @@ fn product_listing_view(product_id: &str, sku_count: usize, target: ListingStatu
     }
 }
 
+/// 把批量上架汇总投影映射为按商品 ID 索引的响应视图。
+///
+/// # 参数
+/// * `product_ids` - 请求的商品稳定 ID
+/// * `summaries` - Repository 按首次出现顺序返回的上架计数
+///
+/// # 返回
+/// 返回每个请求商品的继承上架视图；仓储已对缺项补零。
+///
+/// # 错误
+/// 无。
+fn product_listing_views_from_summaries(
+    product_ids: &[ProductId],
+    summaries: &[ProductListingSummary],
+) -> HashMap<String, ProductListingView> {
+    let mut views = HashMap::with_capacity(summaries.len());
+    for summary in summaries {
+        views.insert(
+            summary.product_id.clone(),
+            listing_view_from_counts(&summary.product_id, summary.listed_sku_count, summary.sku_count),
+        );
+    }
+    for product_id in product_ids {
+        views
+            .entry(product_id.to_string())
+            .or_insert_with(|| listing_view_from_counts(product_id.as_ref(), 0, 0));
+    }
+    views
+}
+
 #[cfg(test)]
 mod tests {
     use entities::catalog::ProductListingStatus;
+    use entities::ids::ProductId;
 
     use super::*;
+
+    fn summary(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingSummary {
+        ProductListingSummary::new(product_id, listed_sku_count, sku_count)
+    }
 
     #[test]
     fn product_listing_view_reports_batch_target() {
@@ -309,5 +340,37 @@ mod tests {
         assert_eq!(listed.listed_sku_count, 3);
         assert_eq!(unlisted.listing_status, ProductListingStatus::Unlisted);
         assert_eq!(unlisted.listed_sku_count, 0);
+    }
+
+    /// 零 SKU、全部停用、全部上架、部分上架、全部未上架及多商品批量共用 inherited 口径。
+    #[test]
+    fn listing_views_cover_zero_disabled_listed_partial_and_batch() {
+        let product_ids = [
+            ProductId::new("zero"),
+            ProductId::new("all-listed"),
+            ProductId::new("partial"),
+            ProductId::new("all-unlisted"),
+        ];
+        let views = product_listing_views_from_summaries(
+            &product_ids,
+            &[
+                summary("all-listed", 2, 2),
+                summary("partial", 1, 2),
+                summary("all-unlisted", 0, 2),
+            ],
+        );
+
+        assert_eq!(views["zero"].listing_status, ProductListingStatus::Unlisted);
+        assert_eq!(views["zero"].sku_count, 0);
+        assert_eq!(views["all-listed"].listing_status, ProductListingStatus::Listed);
+        assert_eq!(
+            views["partial"].listing_status,
+            ProductListingStatus::PartiallyListed
+        );
+        assert_eq!(
+            views["all-unlisted"].listing_status,
+            ProductListingStatus::Unlisted
+        );
+        assert_eq!(views["all-unlisted"].sku_count, 2);
     }
 }

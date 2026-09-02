@@ -7,7 +7,10 @@
 //! - 同一客户、用户、角色的有效期不得重叠。
 
 use database::{AccessControlExt, CustomerExt, NoTransaction, Transactional};
-use entities::customer::{CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId};
+use entities::customer::{
+    AssignCustomerAssignment, CustomerAssignment, CustomerAssignmentCommand, CustomerAssignmentId,
+    EndCustomerAssignment,
+};
 use entities::ids::CustomerAccountId;
 use id_generator::next_id;
 use mongodb::Database;
@@ -17,8 +20,8 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::dto::{
-    normalize_sort, AssignmentAction, CustomerAssignmentListParams, CustomerAssignmentRequest,
-    CustomerAssignmentView, PageView, SortDir, CUSTOMER_ASSIGNMENT_SORT_FIELDS,
+    normalize_sort, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
+    PageView, SortDir, CUSTOMER_ASSIGNMENT_SORT_FIELDS,
 };
 use super::{page_or_default, page_size_or_default};
 
@@ -130,9 +133,9 @@ impl CustomerAssignmentService {
         actor: &AuditActor,
     ) -> Result<Vec<CustomerAssignmentView>> {
         req.validate()?;
-        match req.action {
-            AssignmentAction::Assign => self.assign(customer_id, req, actor).await,
-            AssignmentAction::End => self.end(customer_id, req, actor).await,
+        match req.into_command()? {
+            CustomerAssignmentCommand::Assign(command) => self.assign(customer_id, command, actor).await,
+            CustomerAssignmentCommand::End(command) => self.end(customer_id, command, actor).await,
         }
     }
 
@@ -140,7 +143,7 @@ impl CustomerAssignmentService {
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
-    /// * `req` - 归属变更请求（`Assign` 分支）
+    /// * `command` - 已校验的建立归属命令
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -152,28 +155,12 @@ impl CustomerAssignmentService {
     async fn assign(
         &self,
         customer_id: &str,
-        req: CustomerAssignmentRequest,
+        command: AssignCustomerAssignment,
         actor: &AuditActor,
     ) -> Result<Vec<CustomerAssignmentView>> {
-        let user_id = req
-            .user_id
-            .ok_or_else(|| Error::ValidationError("Assign 必须携带销售人员".to_string()))?;
-        let assignment_role = req
-            .assignment_role
-            .ok_or_else(|| Error::ValidationError("Assign 必须携带归属角色".to_string()))?;
-        let valid_from = req
-            .valid_from
-            .ok_or_else(|| Error::ValidationError("Assign 必须携带生效开始日期".to_string()))?;
-        let new_assignment = CustomerAssignment::new(
+        let new_assignment = command.into_assignment(
             CustomerAssignmentId::new(next_id()),
-            CustomerAssignmentData {
-                customer_id: CustomerAccountId::new(customer_id),
-                user_id,
-                assignment_role,
-                valid_from,
-                valid_to: req.valid_to,
-                change_reason: req.change_reason,
-            },
+            CustomerAccountId::new(customer_id),
         )?;
         self.db
             .customer_accounts()
@@ -218,7 +205,7 @@ impl CustomerAssignmentService {
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
-    /// * `req` - 归属变更请求（`End` 分支）
+    /// * `command` - 已校验的结束归属命令
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -230,32 +217,23 @@ impl CustomerAssignmentService {
     async fn end(
         &self,
         customer_id: &str,
-        req: CustomerAssignmentRequest,
+        command: EndCustomerAssignment,
         actor: &AuditActor,
     ) -> Result<Vec<CustomerAssignmentView>> {
-        let assignment_id = req
-            .assignment_id
-            .ok_or_else(|| Error::ValidationError("End 必须携带目标归属 ID".to_string()))?;
-        let valid_to = req
-            .valid_to
-            .ok_or_else(|| Error::ValidationError("End 必须携带生效结束日期".to_string()))?;
         let mut assignment = self
             .db
             .customer_assignments()
-            .find_assignment(&assignment_id, &mut NoTransaction)
+            .find_assignment(command.assignment_id(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("归属不存在".to_string()))?;
         assignment
             .ensure_customer(&CustomerAccountId::new(customer_id))
             .map_err(|error| Error::NotFound(error.to_string()))?;
-        let version = req
-            .version
-            .ok_or_else(|| Error::ValidationError("End 必须携带乐观锁版本".to_string()))?;
         assignment
-            .ensure_version(version)
+            .ensure_version(command.version())
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         assignment
-            .end_directly(valid_to)
+            .end_directly(command.valid_to())
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let audit = actor.clone().resource_log(
             "customer_assignment.end",

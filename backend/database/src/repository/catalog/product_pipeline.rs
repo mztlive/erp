@@ -1,11 +1,12 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 
-use entities::catalog::{EnableStatus, ListingStatus, ProductListingStatus, SkuCoverageStatus};
+use entities::catalog::{EnableStatus, ProductListingStatus, SkuCoverageStatus};
 use entities::money::Amount;
 use entities::supplier_offering::OfferingStatus;
 
 use super::super::{Pagination, QueryFilter};
+use super::listing::sku_is_listed_expr;
 use super::shared::{sort_doc, PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
 use super::ProductFilter;
 
@@ -152,12 +153,7 @@ fn product_sku_lookup(not_deleted: i64) -> Document {
                         "revision": 1,
                         "sales_price": "$revision.sales_visible_price_gross",
                         "supplier_ids": { "$setUnion": ["$offerings.supplier_id", []] },
-                        "is_listed": {
-                            "$eq": [
-                                { "$ifNull": ["$listing_status", ListingStatus::Listed.as_str()] },
-                                ListingStatus::Listed.as_str(),
-                            ]
-                        },
+                        "is_listed": sku_is_listed_expr(),
                         "is_supplied": { "$gt": [{ "$size": "$offerings" }, 0] },
                         "is_priced": {
                             "$ne": [
@@ -355,6 +351,8 @@ mod tests {
         };
         assert_eq!(minimum.to_string(), "100.00");
         assert!(json.contains("partially_listed"));
+        assert!(json.contains("$ifNull"));
+        assert!(json.contains("listing_status"));
         assert!(json.contains("category-1"));
         assert!(json.contains("brand-1"));
         assert!(json.contains("supplier_ids"));

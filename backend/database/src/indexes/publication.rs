@@ -81,9 +81,13 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     Ok(())
 }
 
-/// 返回 `product_publication` 的稳定发布唯一约束与列表查询索引。
+/// 返回 `product_publication` 的稳定发布唯一约束、主键与列表查询索引。
+///
+/// `uk_product_publications_id` 支撑批次上下文按发布 ID `$in` 读取；前向随
+/// `ensure` 幂等创建，回滚为删除该索引后主键查询退化为集合扫描。
 fn product_publication_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_product_publications_id", doc! { "id": 1 }),
         unique_index(
             "uk_product_publications_sku_mall",
             doc! { "sku_id": 1, "target_mall_id": 1 },
@@ -92,12 +96,18 @@ fn product_publication_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product_publication_revision` 的修订唯一约束索引。
+/// 返回 `product_publication_revision` 的主键与修订唯一约束索引。
+///
+/// `uk_product_publication_revisions_id` 支撑批次上下文按修订 ID `$in` 读取；
+/// 前向随 `ensure` 幂等创建，回滚为删除该索引后主键查询退化为集合扫描。
 fn product_publication_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_product_publication_revisions_publication_revision",
-        doc! { "product_publication_id": 1, "revision_no": 1 },
-    )]
+    vec![
+        unique_index("uk_product_publication_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_product_publication_revisions_publication_revision",
+            doc! { "product_publication_id": 1, "revision_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `product_publication_revision_media` 的媒体行唯一约束索引。
@@ -113,6 +123,9 @@ fn product_publication_revision_media_indexes() -> Vec<IndexModel> {
 }
 
 /// 返回 `product_publication_delivery` 的投递状态查询索引。
+///
+/// `idx_product_publication_deliveries_processable` 支撑待发送/到期重试批次
+/// 扫描；前向随 `ensure` 幂等创建，回滚为删除该索引后批次查询退化为集合扫描。
 fn product_publication_delivery_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -194,6 +207,16 @@ mod tests {
         assert_eq!(sku_mall.options.as_ref().unwrap().unique, Some(true));
 
         assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1 }));
+
+        let publication_id = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_product_publications_id")
+            })
+            .unwrap();
+        assert_eq!(publication_id.keys, doc! { "id": 1 });
+        assert_eq!(publication_id.options.as_ref().unwrap().unique, Some(true));
     }
 
     #[test]
@@ -212,6 +235,16 @@ mod tests {
             doc! { "product_publication_id": 1, "revision_no": 1 }
         );
         assert_eq!(revision.options.as_ref().unwrap().unique, Some(true));
+
+        let revision_id = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_product_publication_revisions_id")
+            })
+            .unwrap();
+        assert_eq!(revision_id.keys, doc! { "id": 1 });
+        assert_eq!(revision_id.options.as_ref().unwrap().unique, Some(true));
     }
 
     #[test]

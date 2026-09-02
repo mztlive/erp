@@ -2,6 +2,8 @@ use mongodb::bson::{doc, Bson, Document};
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
 
+/// `product_category` 集合名（单一来源：`CatalogExt` 关联常量）。
+pub(super) const PRODUCT_CATEGORIES: &str = <mongodb::Database as CatalogExt>::PRODUCT_CATEGORIES;
 /// `product_revision` 集合名（单一来源：`CatalogExt` 关联常量）。
 pub(super) const PRODUCT_REVISIONS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISIONS;
 /// `sku` 集合名（单一来源：`CatalogExt` 关联常量）。

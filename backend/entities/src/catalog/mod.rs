@@ -47,7 +47,10 @@ pub use sku_attribute::SkuAttribute;
 pub use sku_attribute_value::SkuAttributeValue;
 pub use sku_revision::SkuRevision;
 pub use sku_revision_attribute_value::SkuRevisionAttributeValue;
-pub use specification::{SpecSignatureEntry, SpecificationSignatureSet, EMPTY_SPEC_SIGNATURE};
+pub use specification::{
+    parse_specification_signature, read_specification_signature, SpecSignatureEntry,
+    SpecificationSignatureRead, SpecificationSignatureSet, EMPTY_SPEC_SIGNATURE,
+};
 pub use status::{EnableStatus, ListingStatus, ProductListingStatus, SkuCoverageStatus};
 pub use unit_of_measure::UnitOfMeasure;
 pub use voucher_category_profile_revision::VoucherCategoryProfileRevision;

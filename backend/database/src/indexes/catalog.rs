@@ -101,8 +101,14 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 }
 
 /// 返回 `product_category` 的身份约束与树形/启停查询索引。
+///
+/// `uk_product_categories_id` 是稳定主键唯一索引，祖先链 `$match`/`$graphLookup`
+/// 的 `connectToField: id` 依赖它。前向：`ensure_indexes` 幂等创建；已有重复
+/// `id` 时创建失败（重复值门禁）。回滚：删除该索引后按 `id` 查询退化为集合扫描。
+/// `idx_product_categories_tree` 覆盖子节点按 `parent_category_id` 展开。
 fn product_category_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_product_categories_id", doc! { "id": 1 }),
         unique_index("uk_product_categories_category_code", doc! { "category_code": 1 }),
         named_index(
             "idx_product_categories_tree",
@@ -303,6 +309,16 @@ mod tests {
     fn product_category_indexes_cover_code_tree_and_status() {
         let indexes = product_category_indexes();
 
+        let id_unique = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_product_categories_id")
+            })
+            .unwrap();
+        assert_eq!(id_unique.keys, doc! { "id": 1 });
+        assert_eq!(id_unique.options.as_ref().unwrap().unique, Some(true));
+
         let code = indexes
             .iter()
             .find(|index| {
@@ -313,7 +329,15 @@ mod tests {
         assert_eq!(code.keys, doc! { "category_code": 1 });
         assert_eq!(code.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(names(&indexes).contains(&"idx_product_categories_tree".to_string()));
+        let tree = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_product_categories_tree")
+            })
+            .unwrap();
+        assert_eq!(tree.keys, doc! { "parent_category_id": 1, "category_code": 1 });
+
         assert!(names(&indexes).contains(&"idx_product_categories_status_tree".to_string()));
     }
 

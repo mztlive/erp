@@ -9,6 +9,7 @@ use crate::errors::Result;
 use crate::query::{page_or_default, page_size_or_default};
 
 use super::common::{non_blank, normalize_sort, PageParams};
+use super::product::ProductSkuInput;
 
 /// 卡券类目扩展修订列表允许的排序字段白名单。
 pub(crate) const VOUCHER_PROFILE_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
@@ -40,6 +41,62 @@ pub struct VoucherSkuInput {
     pub sales_visible_price_gross: Option<Amount>,
     /// 市场展示参考价（非负定点金额）。
     pub market_price: Option<Amount>,
+}
+
+impl VoucherSkuInput {
+    /// 构造缺省卡券唯一 SKU 输入。
+    ///
+    /// 默认单位 ID 必须由 Service 先从字典解析后再注入；本方法不访问数据库。
+    ///
+    /// # 参数
+    /// * `base_unit_id` - 已解析出的默认基础单位
+    ///
+    /// # 返回
+    /// 返回无条码、物流属性和价格的最小 SKU 输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn default_for_unit(base_unit_id: UnitOfMeasureId) -> Self {
+        Self {
+            base_unit_id,
+            barcode: None,
+            weight_kg: None,
+            volume_m3: None,
+            sales_visible_price_gross: None,
+            market_price: None,
+        }
+    }
+
+    /// 把卡券类目 SKU 输入转换为通用商品唯一 SKU 输入。
+    ///
+    /// 转换结果固定：无既有身份、无规格、无主图且 `reenable=false`。
+    ///
+    /// # 参数
+    /// * `voucher_no` - 同时作为商品编号与 SKU 编号的卡券编号
+    /// * `name` - 商品与 SKU 当前名称
+    ///
+    /// # 返回
+    /// 返回不携带既有身份、无规格和无主图的通用 SKU 输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn into_product_sku(self, voucher_no: String, name: String) -> ProductSkuInput {
+        ProductSkuInput {
+            sku_id: None,
+            expected_sku_revision_id: None,
+            reenable: false,
+            sku_no: voucher_no,
+            name,
+            base_unit_id: self.base_unit_id,
+            barcode: self.barcode,
+            main_image_asset_id: None,
+            weight_kg: self.weight_kg,
+            volume_m3: self.volume_m3,
+            sales_visible_price_gross: self.sales_visible_price_gross,
+            market_price: self.market_price,
+            spec_entries: Vec::new(),
+        }
+    }
 }
 
 /// 卡券类目原子创建请求（商品 + 首个修订 + 唯一 SKU + 卡券类目扩展修订，
@@ -225,5 +282,65 @@ impl VoucherCategoryProfileListParams {
                 sort_dir,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use entities::ids::UnitOfMeasureId;
+    use entities::money::{Amount, Quantity};
+
+    use super::VoucherSkuInput;
+
+    /// 缺省 SKU 只有已注入的单位，其余字段为空且转换后无身份/规格/主图。
+    #[test]
+    fn default_voucher_sku_converts_without_identity_or_spec() {
+        let input = VoucherSkuInput::default_for_unit(UnitOfMeasureId::new("unit-sheet"));
+        let sku = input.into_product_sku("V-001".to_string(), "体验卡".to_string());
+
+        assert_eq!(sku.base_unit_id.as_ref(), "unit-sheet");
+        assert!(sku.barcode.is_none());
+        assert!(sku.weight_kg.is_none());
+        assert!(sku.volume_m3.is_none());
+        assert!(sku.sales_visible_price_gross.is_none());
+        assert!(sku.market_price.is_none());
+        assert!(sku.sku_id.is_none());
+        assert!(sku.expected_sku_revision_id.is_none());
+        assert!(!sku.reenable);
+        assert!(sku.main_image_asset_id.is_none());
+        assert!(sku.spec_entries.is_empty());
+        assert_eq!(sku.sku_no, "V-001");
+        assert_eq!(sku.name, "体验卡");
+    }
+
+    /// 完整 SKU 的条码、单位、重量、体积和价格在转换中不得丢失。
+    #[test]
+    fn complete_voucher_sku_preserves_measurable_fields() {
+        let input = VoucherSkuInput {
+            base_unit_id: UnitOfMeasureId::new("unit-sheet"),
+            barcode: Some("6901234567890".to_string()),
+            weight_kg: Some(Quantity::from_str("0.010000").unwrap()),
+            volume_m3: Some(Quantity::from_str("0.000100").unwrap()),
+            sales_visible_price_gross: Some(Amount::from_str("99.00").unwrap()),
+            market_price: Some(Amount::from_str("129.00").unwrap()),
+        };
+        let sku = input.into_product_sku("V-002".to_string(), "礼品卡".to_string());
+
+        assert_eq!(sku.barcode.as_deref(), Some("6901234567890"));
+        assert_eq!(sku.base_unit_id.as_ref(), "unit-sheet");
+        assert_eq!(sku.weight_kg, Some(Quantity::from_str("0.010000").unwrap()));
+        assert_eq!(sku.volume_m3, Some(Quantity::from_str("0.000100").unwrap()));
+        assert_eq!(
+            sku.sales_visible_price_gross,
+            Some(Amount::from_str("99.00").unwrap())
+        );
+        assert_eq!(sku.market_price, Some(Amount::from_str("129.00").unwrap()));
+        assert!(sku.sku_id.is_none());
+        assert!(sku.expected_sku_revision_id.is_none());
+        assert!(!sku.reenable);
+        assert!(sku.main_image_asset_id.is_none());
+        assert!(sku.spec_entries.is_empty());
     }
 }

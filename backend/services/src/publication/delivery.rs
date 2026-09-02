@@ -180,8 +180,8 @@ impl PublicationService {
         req.validate()?;
         let rows = self
             .db
-            .product_publication_deliveries()
-            .list_processable_publication_deliveries(
+            .publication()
+            .list_processable_publication_delivery_contexts(
                 Instant::now(),
                 req.limit.unwrap_or(50),
                 &mut NoTransaction,
@@ -195,19 +195,12 @@ impl PublicationService {
             skipped: 0,
             items: Vec::with_capacity(rows.len()),
         };
-        for delivery in rows {
-            let revision = self
-                .db
-                .product_publication_revisions()
-                .find_by_id(delivery.publication_revision_id.as_ref(), &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("投递关联的发布修订不存在".to_string()))?;
-            let publication = self
-                .db
-                .product_publications()
-                .find_by_id(revision.product_publication_id.as_ref(), &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("投递关联的稳定发布不存在".to_string()))?;
+        for context in rows {
+            let (publication, revision, delivery) = require_publication_delivery_relations(
+                context.delivery,
+                context.revision,
+                context.publication,
+            )?;
             let operation_id = publication_operation_id(
                 actor.id(),
                 "PROCESS",
@@ -1093,6 +1086,39 @@ pub(super) fn publication_delivery_actions(
     }
 }
 
+/// 解释批次上下文中的修订与稳定发布事实。
+///
+/// 仓储只返回投递及关联事实（含缺失）；本函数保持既有缺失关系失败语义，
+/// 不得把坏关系折叠为跳过，也不得在此发起商城调用。
+///
+/// # 参数
+/// * `delivery` - 待处理投递
+/// * `revision` - 批量读取到的发布修订；缺失为 `None`
+/// * `publication` - 批量读取到的稳定发布；缺失为 `None`
+///
+/// # 返回
+/// 返回完整的发布、修订与投递三元组，供后续逐项处理。
+///
+/// # 错误
+/// 修订缺失返回「投递关联的发布修订不存在」；发布缺失返回
+/// 「投递关联的稳定发布不存在」。
+///
+/// # 约束
+/// 不得把缺失关系折叠为跳过；商城调用与结果统计仍由调用方编排。
+fn require_publication_delivery_relations(
+    delivery: ProductPublicationDelivery,
+    revision: Option<ProductPublicationRevision>,
+    publication: Option<ProductPublication>,
+) -> Result<(
+    ProductPublication,
+    ProductPublicationRevision,
+    ProductPublicationDelivery,
+)> {
+    let revision = revision.ok_or_else(|| Error::NotFound("投递关联的发布修订不存在".to_string()))?;
+    let publication = publication.ok_or_else(|| Error::NotFound("投递关联的稳定发布不存在".to_string()))?;
+    Ok((publication, revision, delivery))
+}
+
 fn ensure_publication_delivery_relation(
     publication: &ProductPublication,
     revision: &ProductPublicationRevision,
@@ -1231,10 +1257,89 @@ fn publication_stable_id(prefix: &str, identity: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{publication_delivery_actions, publication_operation_id};
+    use super::{
+        publication_delivery_actions, publication_operation_id, require_publication_delivery_relations,
+    };
+    use crate::errors::Error;
     use crate::publication::ClassifiedError;
+    use entities::common::time::Instant;
+    use entities::ids::{
+        ProductCategoryId, ProductPublicationDeliveryId, ProductPublicationId, ProductPublicationRevisionId,
+        SkuRevisionId, SourceSystemId, SupplierOfferingRevisionId,
+    };
     use entities::integration_ops::ErrorClass;
-    use entities::publication::PublicationDeliveryStatus;
+    use entities::money::{Amount, Quantity, Rate};
+    use entities::publication::{
+        ProductCapability, ProductPublicationDelivery, ProductPublicationDeliveryData,
+        ProductPublicationRevision, ProductPublicationRevisionData, PublicationDeliveryStatus, SaleStatus,
+    };
+    use std::str::FromStr;
+
+    /// 构造待发送投递夹具。
+    ///
+    /// # 返回
+    /// 返回合法待发送投递。
+    ///
+    /// # 错误
+    /// 夹具非法时 panic。
+    ///
+    /// # 约束
+    /// 仅用于缺失关系失败语义单测。
+    fn pending_delivery() -> ProductPublicationDelivery {
+        ProductPublicationDelivery::new(
+            ProductPublicationDeliveryId::new("del-1"),
+            ProductPublicationDeliveryData {
+                publication_revision_id: ProductPublicationRevisionId::new("rev-1"),
+                target_mall_id: SourceSystemId::new("mall-1"),
+                delivery_status: PublicationDeliveryStatus::PendingSend,
+                attempt_count: 0,
+                last_attempt_at: None,
+                next_attempt_at: None,
+                mall_ack_at: None,
+                mall_version: None,
+                error_class: None,
+                error_code: None,
+                error_summary: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 构造发布修订夹具。
+    ///
+    /// # 返回
+    /// 返回合法发布修订。
+    ///
+    /// # 错误
+    /// 夹具非法时 panic。
+    ///
+    /// # 约束
+    /// 仅用于缺失发布失败语义单测。
+    fn revision() -> ProductPublicationRevision {
+        ProductPublicationRevision::new(
+            ProductPublicationRevisionId::new("rev-1"),
+            1,
+            ProductPublicationRevisionData {
+                product_publication_id: ProductPublicationId::new("pub-1"),
+                sku_revision_id: SkuRevisionId::new("sku-rev-1"),
+                supplier_offering_revision_id: SupplierOfferingRevisionId::new("off-rev-1"),
+                category_id: ProductCategoryId::new("cat-1"),
+                name: "福利商城卡".to_string(),
+                specification: None,
+                sales_description: "员工福利采购".to_string(),
+                minimum_purchase_quantity: Quantity::from_str("1.000000").unwrap(),
+                sales_price_gross: Amount::from_str("100.00").unwrap(),
+                sales_tax_rate: Rate::from_str("0.130000").unwrap(),
+                base_unit_code: "张".to_string(),
+                sales_region: None,
+                sale_status: SaleStatus::OnSale,
+                product_capabilities: vec![ProductCapability::Cancel],
+                valid_from: Instant::from_unix_secs(1_700_000_000),
+                valid_to: Some(Instant::from_unix_secs(1_800_000_000)),
+            },
+        )
+        .unwrap()
+    }
 
     #[test]
     fn publication_operation_identity_is_stable_and_hides_request_id() {
@@ -1282,5 +1387,24 @@ mod tests {
             ),
             vec!["QUERY_RESULT", "RETRY", "ESCALATE"]
         );
+    }
+
+    #[test]
+    fn missing_revision_fails_closed_and_is_not_skipped() {
+        let error = require_publication_delivery_relations(pending_delivery(), None, None).unwrap_err();
+        assert!(matches!(
+            error,
+            Error::NotFound(message) if message == "投递关联的发布修订不存在"
+        ));
+    }
+
+    #[test]
+    fn missing_publication_fails_closed_and_is_not_skipped() {
+        let error =
+            require_publication_delivery_relations(pending_delivery(), Some(revision()), None).unwrap_err();
+        assert!(matches!(
+            error,
+            Error::NotFound(message) if message == "投递关联的稳定发布不存在"
+        ));
     }
 }

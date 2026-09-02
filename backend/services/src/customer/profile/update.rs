@@ -160,7 +160,7 @@ fn update_roots(
     let revision_id = PartyRevisionId::new(next_id());
     party.update(
         PartyUpdate {
-            unified_credit_code: string_update(req.unified_credit_code.clone()),
+            unified_credit_code: FieldUpdate::from_optional_text(req.unified_credit_code.clone()),
             status: None,
         },
         actor,
@@ -169,7 +169,7 @@ fn update_roots(
     let status = req.status.filter(|status| *status != account.stable.status);
     account.update(
         CustomerAccountUpdate {
-            default_payment_term_id: string_update(req.default_payment_term_id.clone()),
+            default_payment_term_id: FieldUpdate::from_optional_text(req.default_payment_term_id.clone()),
             status,
         },
         actor,
@@ -184,15 +184,6 @@ fn update_roots(
             change_reason: req.change_reason.clone(),
         },
     )?)
-}
-
-/// 将可选字符串映射为保留、清空或设置意图。
-fn string_update(value: Option<String>) -> FieldUpdate<String> {
-    match value {
-        Some(value) if value.trim().is_empty() => FieldUpdate::Clear,
-        Some(value) => FieldUpdate::Set(value),
-        None => FieldUpdate::Unchanged,
-    }
 }
 
 /// 返回 Party ID newtype。

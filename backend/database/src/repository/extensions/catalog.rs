@@ -13,9 +13,10 @@ use entities::catalog::{
 use mongodb::Database;
 
 use super::super::catalog::{
-    CatalogRepository, ProductBrandFilter, ProductCategoryAttributeFilter, ProductCategoryFilter,
-    ProductFilter, ProductRevisionFilter, SellableSkuFilter, SkuAttributeFilter, SkuAttributeValueFilter,
-    SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter,
+    CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductCategoryAttributeFilter,
+    ProductCategoryFilter, ProductFilter, ProductListingSummary, ProductRevisionFilter, SellableSkuFilter,
+    SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter,
+    VoucherCategoryProfileRevisionFilter,
 };
 use crate::Repository;
 
@@ -83,6 +84,12 @@ pub trait CatalogExt {
 
     /// 卡券类目扩展修订列表筛选条件类型（定义见 `repository::catalog`）。
     type VoucherCategoryProfileRevisionFilter;
+
+    /// 分类祖先链投影事实类型（定义见 `repository::catalog`）。
+    type CategoryParentChainFact;
+
+    /// 商品上架汇总投影类型（定义见 `repository::catalog`）。
+    type ProductListingSummary;
 
     /// 获取 `product_category` 集合的 Repository。
     ///
@@ -182,6 +189,8 @@ impl CatalogExt for Database {
     type SkuFilter = SkuFilter;
     type SkuRevisionFilter = SkuRevisionFilter;
     type VoucherCategoryProfileRevisionFilter = VoucherCategoryProfileRevisionFilter;
+    type CategoryParentChainFact = CategoryParentChainFact;
+    type ProductListingSummary = ProductListingSummary;
 
     /// 获取 `product_category` 集合的 Repository。
     ///

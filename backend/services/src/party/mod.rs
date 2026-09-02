@@ -265,7 +265,7 @@ impl PartyService {
             let mut probe = party.clone();
             probe.update(
                 PartyUpdate {
-                    unified_credit_code: credit_code_update(Some(raw_code.clone())),
+                    unified_credit_code: FieldUpdate::from_optional_text(Some(raw_code.clone())),
                     status: None,
                 },
                 actor.id(),
@@ -313,7 +313,7 @@ impl PartyService {
                     };
                     party_for_tx.update(
                         PartyUpdate {
-                            unified_credit_code: credit_code_update(unified_credit_code),
+                            unified_credit_code: FieldUpdate::from_optional_text(unified_credit_code),
                             status,
                         },
                         &updated_by,
@@ -527,21 +527,6 @@ fn normalized_text(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-/// 将可选信用代码入参映射为 `FieldUpdate`：`None` 表示不修改，空字符串表示清除。
-///
-/// # 参数
-/// * `value` - 请求携带的统一社会信用代码
-///
-/// # 返回
-/// 返回实体更新意图。
-fn credit_code_update(value: Option<String>) -> FieldUpdate<String> {
-    match value {
-        Some(code) if code.trim().is_empty() => FieldUpdate::Clear,
-        Some(code) => FieldUpdate::Set(code),
-        None => FieldUpdate::Unchanged,
-    }
 }
 
 /// 清除同一主体其他行的默认标记（跨行约束，§6.2）。

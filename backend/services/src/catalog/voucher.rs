@@ -17,9 +17,8 @@ use super::sku_edit::{NewSkuContext, SkuEditItem};
 use super::CatalogService;
 use crate::audit::AuditActor;
 use crate::catalog::dto::{
-    CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, ProductSkuInput, SortDir,
-    UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
-    VoucherSkuInput,
+    CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, SortDir, UpdateVoucherCategoryRequest,
+    VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
 };
 use crate::errors::{Error, Result};
 
@@ -253,7 +252,7 @@ impl CatalogService {
         };
         let sku = match sku {
             Some(sku) => sku,
-            None => default_voucher_sku(self.ensure_voucher_default_unit(actor).await?),
+            None => VoucherSkuInput::default_for_unit(self.ensure_voucher_default_unit(actor).await?),
         };
         self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id))
             .await?;
@@ -378,7 +377,7 @@ impl CatalogService {
                     effective_to,
                     created_by: actor.id(),
                 },
-                voucher_product_sku_input(voucher_no, name.clone(), sku),
+                sku.into_product_sku(voucher_no, name.clone()),
             )
             .await?;
         let revision = ProductRevision::new(
@@ -604,57 +603,6 @@ impl CatalogService {
                 })
             })
             .await
-    }
-}
-
-/// 构造缺省卡券唯一 SKU 输入。
-///
-/// # 参数
-/// * `base_unit_id` - 已解析出的默认基础单位“张”
-///
-/// # 返回
-/// 返回无条码、物流属性和价格的最小 SKU 输入。
-///
-/// # 错误
-/// 无。
-fn default_voucher_sku(base_unit_id: entities::ids::UnitOfMeasureId) -> VoucherSkuInput {
-    VoucherSkuInput {
-        base_unit_id,
-        barcode: None,
-        weight_kg: None,
-        volume_m3: None,
-        sales_visible_price_gross: None,
-        market_price: None,
-    }
-}
-
-/// 把卡券类目输入转换为通用商品唯一 SKU 输入。
-///
-/// # 参数
-/// * `voucher_no` - 同时作为商品编号与 SKU 编号的卡券编号
-/// * `name` - 商品与 SKU 当前名称
-/// * `sku` - 卡券唯一 SKU 的单位、条码、物流和价格输入
-///
-/// # 返回
-/// 返回不携带既有身份、无规格和无主图的通用 SKU 输入。
-///
-/// # 错误
-/// 无。
-fn voucher_product_sku_input(voucher_no: String, name: String, sku: VoucherSkuInput) -> ProductSkuInput {
-    ProductSkuInput {
-        sku_id: None,
-        expected_sku_revision_id: None,
-        reenable: false,
-        sku_no: voucher_no,
-        name,
-        base_unit_id: sku.base_unit_id,
-        barcode: sku.barcode,
-        main_image_asset_id: None,
-        weight_kg: sku.weight_kg,
-        volume_m3: sku.volume_m3,
-        sales_visible_price_gross: sku.sales_visible_price_gross,
-        market_price: sku.market_price,
-        spec_entries: Vec::new(),
     }
 }
 

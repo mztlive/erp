@@ -16,11 +16,14 @@
 mod attribute;
 mod category;
 mod dictionary;
+mod listing;
+mod parent_chain;
 mod product;
 mod product_pipeline;
 mod sellable;
 mod shared;
 mod sku;
+mod specification_audit;
 mod voucher;
 
 #[allow(unused_imports)]
@@ -29,6 +32,10 @@ pub use attribute::{SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter
 pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow};
 #[allow(unused_imports)]
 pub use dictionary::{ProductBrandFilter, ProductBrandRow, UnitOfMeasureFilter, UnitOfMeasureRow};
+#[allow(unused_imports)]
+pub use listing::ProductListingSummary;
+#[allow(unused_imports)]
+pub use parent_chain::CategoryParentChainFact;
 #[allow(unused_imports)]
 pub use product::{ProductFilter, ProductRevisionFilter, ProductRevisionRow, ProductRow};
 #[allow(unused_imports)]

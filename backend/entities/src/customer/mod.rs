@@ -6,12 +6,14 @@
 //! - `customer_assignment` 是按有效期保存的归属事实行（§6.2），按字段字典
 //!   精确建模：`BaseModel` + 归属字段 + 生效区间，不硬套 StableBase。
 
+pub mod assignment_command;
 pub mod customer_account;
 pub mod customer_assignment;
 pub mod customer_profile_command;
 pub mod profile_validation;
 
 pub use crate::ids::{CustomerAccountId, CustomerAssignmentId};
+pub use assignment_command::{AssignCustomerAssignment, CustomerAssignmentCommand, EndCustomerAssignment};
 pub use customer_account::{
     CustomerAccount, CustomerAccountData, CustomerAccountStatus, CustomerAccountUpdate,
 };

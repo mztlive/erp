@@ -12,6 +12,8 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use entities::party::{PartyAddress, PartyBankAccount, PartyContact, QueryFingerprint};
+
 use crate::errors::{Error, Result};
 
 const CIPHERTEXT_VERSION: &str = "v1";
@@ -77,6 +79,62 @@ impl SensitiveDataCodec {
     /// 该密钥仅传给实体构造函数计算 HMAC，不得持久化或输出。
     pub fn fingerprint_key(&self) -> &[u8] {
         &self.fingerprint_key
+    }
+
+    /// 计算联系人手机号的强类型查询指纹。
+    ///
+    /// 密钥只驻留在本编解码器；返回值可供实体比较，不再把明文或密钥传入匹配 VO。
+    ///
+    /// # 参数
+    /// * `plain` - 手机号明文
+    ///
+    /// # 返回
+    /// 返回预计算的查询指纹。
+    ///
+    /// # 错误
+    /// 无。规范化失败由实体指纹算法按空输入处理。
+    ///
+    /// # 关键业务约束
+    /// 不得把密钥或明文交给比较 VO；仅传递本方法的 typed 结果。
+    pub fn contact_mobile_fingerprint(&self, plain: &str) -> QueryFingerprint {
+        QueryFingerprint::from_precomputed(PartyContact::mobile_fingerprint(plain, self.fingerprint_key()))
+    }
+
+    /// 计算地址内容的强类型查询指纹。
+    ///
+    /// # 参数
+    /// * `plain` - 地址明文
+    ///
+    /// # 返回
+    /// 返回预计算的查询指纹。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 密钥不离开本编解码器。
+    pub fn address_fingerprint(&self, plain: &str) -> QueryFingerprint {
+        QueryFingerprint::from_precomputed(PartyAddress::address_fingerprint(plain, self.fingerprint_key()))
+    }
+
+    /// 计算银行账号的强类型查询指纹。
+    ///
+    /// # 参数
+    /// * `plain` - 账号明文
+    ///
+    /// # 返回
+    /// 返回预计算的查询指纹。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 密钥不离开本编解码器。
+    pub fn bank_account_number_fingerprint(&self, plain: &str) -> QueryFingerprint {
+        QueryFingerprint::from_precomputed(PartyBankAccount::account_number_fingerprint(
+            plain,
+            self.fingerprint_key(),
+        ))
     }
 
     /// 使用 AES-256-GCM 加密明文并返回带版本的 URL-safe 编码。

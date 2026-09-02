@@ -15,6 +15,8 @@ use crate::errors::{Error, Result};
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;
+/// 分类祖先链投影事实类型（经 `CatalogExt` 关联类型跨 crate 可达）。
+type CategoryParentChainFact = <mongodb::Database as CatalogExt>::CategoryParentChainFact;
 
 impl CatalogService {
     // ---------- 商品分类（树形字典） ----------
@@ -278,6 +280,8 @@ impl CatalogService {
     // ---------- 商品品牌 ----------
     /// 校验新父分类的祖先链不包含本节点（成环检测）。
     ///
+    /// 祖先链投影由 Repository 一次取回；本方法只解释缺失、命中自身、成环和截断。
+    ///
     /// # 参数
     /// * `id` - 本节点 ID
     /// * `parent_id` - 新父分类（`None` 为根）
@@ -286,25 +290,96 @@ impl CatalogService {
     /// 合法时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 父分类不存在或沿祖先链命中本节点时返回错误。
+    /// 父分类不存在或沿祖先链命中本节点、成环、过深时返回错误。
     pub(super) async fn ensure_parent_chain_ok(
         &self,
         id: &str,
         parent_id: Option<&ProductCategoryId>,
     ) -> Result<()> {
-        let mut cursor = parent_id.cloned();
-        while let Some(current) = cursor {
-            if current.as_ref() == id {
-                return Err(Error::BusinessLogicError("父子关系不能形成环".to_string()));
-            }
-            let parent = self
-                .db
-                .product_categories()
-                .find_by_id(current.as_ref(), &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("父分类不存在".to_string()))?;
-            cursor = parent.parent_category_id;
+        if parent_id.is_some_and(|parent| parent.as_ref() == id) {
+            return Err(Error::BusinessLogicError("父子关系不能形成环".to_string()));
         }
-        Ok(())
+        let fact = self
+            .db
+            .product_categories()
+            .parent_chain(parent_id, &mut NoTransaction)
+            .await?;
+        interpret_parent_chain(id, &fact)
+    }
+}
+
+/// 把祖先链持久化事实适配为分类树业务错误。
+///
+/// # 参数
+/// * `self_id` - 正在创建或移动的分类 ID
+/// * `fact` - Repository 返回的 ID/父 ID、缺失、成环与截断事实
+///
+/// # 返回
+/// 根节点或合法多级链返回 `Ok(())`。
+///
+/// # 错误
+/// 命中自身或成环返回 `BusinessLogicError`；父节点缺失返回 `NotFound`；
+/// 过深截断失败关闭。
+fn interpret_parent_chain(self_id: &str, fact: &CategoryParentChainFact) -> Result<()> {
+    if fact.start_parent_id.is_none() {
+        return Ok(());
+    }
+    if fact.hits_id(self_id) || fact.cycle_detected {
+        return Err(Error::BusinessLogicError("父子关系不能形成环".to_string()));
+    }
+    if fact.missing_parent_id.is_some() {
+        return Err(Error::NotFound("父分类不存在".to_string()));
+    }
+    if fact.truncated {
+        return Err(Error::BusinessLogicError(
+            "分类祖先链过深或存在环，已失败关闭".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fact(
+        start_parent_id: Option<&str>,
+        missing_parent_id: Option<&str>,
+        cycle_detected: bool,
+        truncated: bool,
+    ) -> CategoryParentChainFact {
+        CategoryParentChainFact::from_projection(
+            start_parent_id.map(ToString::to_string),
+            missing_parent_id.map(ToString::to_string),
+            cycle_detected,
+            truncated,
+        )
+    }
+
+    /// 根节点与正常多级链通过；缺失、命中自身、成环和截断失败关闭。
+    #[test]
+    fn interpret_parent_chain_covers_root_valid_missing_and_cycles() {
+        assert!(interpret_parent_chain("child", &CategoryParentChainFact::root()).is_ok());
+        assert!(interpret_parent_chain("child", &fact(Some("parent"), None, false, false)).is_ok());
+
+        let missing = interpret_parent_chain("child", &fact(Some("ghost"), Some("ghost"), false, false));
+        assert!(matches!(missing, Err(Error::NotFound(_))));
+
+        let direct = interpret_parent_chain("child", &fact(Some("child"), None, false, false));
+        assert!(matches!(direct, Err(Error::BusinessLogicError(_))));
+
+        let ancestor_hit = fact(Some("parent"), None, false, false)
+            .with_link("parent".to_string(), Some("child".to_string()))
+            .with_link("child".to_string(), None);
+        assert!(matches!(
+            interpret_parent_chain("child", &ancestor_hit),
+            Err(Error::BusinessLogicError(_))
+        ));
+
+        let indirect = interpret_parent_chain("child", &fact(Some("parent"), None, true, false));
+        assert!(matches!(indirect, Err(Error::BusinessLogicError(_))));
+
+        let truncated = interpret_parent_chain("child", &fact(Some("parent"), None, false, true));
+        assert!(matches!(truncated, Err(Error::BusinessLogicError(_))));
     }
 }

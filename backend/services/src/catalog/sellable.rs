@@ -111,20 +111,30 @@ pub struct SellableSkuSpecificationAttributeView {
     pub value: String,
 }
 
-/// 将稳定 SKU 规格签名转换为对外的结构化规格属性。
-fn specification_attributes(signature: &str) -> Vec<SellableSkuSpecificationAttributeView> {
-    signature
-        .split('|')
-        .filter_map(|entry| {
-            let (name, value) = entry.split_once('=')?;
-            let name = name.trim();
-            let value = value.trim();
-            (!name.is_empty() && !value.is_empty()).then(|| SellableSkuSpecificationAttributeView {
-                name: name.to_string(),
-                value: value.to_string(),
+/// 将稳定 SKU 规格签名映射为对外的结构化规格属性。
+///
+/// 规范签名由 [`entities::catalog::read_specification_signature`] 解析；历史非法
+/// 签名在审计清零前兼容为空属性，避免列表整页失败。
+///
+/// # 参数
+/// * `signature` - 已持久化的规格签名
+///
+/// # 返回
+/// 返回按规范顺序排列的规格属性视图；非法历史签名返回空集合。
+///
+/// # 错误
+/// 无。
+fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificationAttributeView> {
+    match entities::catalog::read_specification_signature(signature) {
+        entities::catalog::SpecificationSignatureRead::Canonical(entries) => entries
+            .into_iter()
+            .map(|entry| SellableSkuSpecificationAttributeView {
+                name: entry.attribute_code,
+                value: entry.value_code,
             })
-        })
-        .collect()
+            .collect(),
+        entities::catalog::SpecificationSignatureRead::LegacyNonCanonical => Vec::new(),
+    }
 }
 
 /// 文本筛选去首尾空白；空串视为未筛选。
@@ -183,10 +193,9 @@ impl CatalogService {
             .catalog()
             .search_sellable_skus(&filter, &mut NoTransaction)
             .await?;
-        let items = rows
-            .items
-            .into_iter()
-            .map(|row| SellableSkuView {
+        let mut items = Vec::with_capacity(rows.items.len());
+        for row in rows.items {
+            items.push(SellableSkuView {
                 sku_id: row.sku_id,
                 sku_version: row.sku_version,
                 sku_revision_id: row.sku_revision_id,
@@ -196,7 +205,7 @@ impl CatalogService {
                 product_no: row.product_no,
                 product_kind: row.product_kind,
                 name: row.name,
-                specification_attributes: specification_attributes(&row.specification_signature),
+                specification_attributes: specification_attribute_views(&row.specification_signature),
                 specification: row.specification,
                 barcode: row.barcode,
                 base_unit_id: row.base_unit_id,
@@ -210,8 +219,8 @@ impl CatalogService {
                 supplier_count: row.supplier_count,
                 supply_regions: row.supply_regions,
                 eligibility_as_of,
-            })
-            .collect();
+            });
+        }
         Ok(PageView {
             items,
             total: rows.total,
@@ -237,7 +246,7 @@ pub(crate) fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{specification_attributes, SellableSkuListParams};
+    use super::{specification_attribute_views, SellableSkuListParams};
     use validator::Validate;
 
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。
@@ -282,16 +291,17 @@ mod tests {
         assert!(params.validate().is_err());
     }
 
-    /// 公司商品池返回真实规格属性名/值，无规格 SKU 返回空集合。
+    /// 公司商品池只映射规范签名；无规格 SKU 返回空集合。
     #[test]
     fn sellable_sku_specification_attributes_come_from_stable_identity() {
-        let attributes = specification_attributes("尺码=L|颜色=红色");
+        let attributes = specification_attribute_views("尺码=L|颜色=红色");
 
         assert_eq!(attributes.len(), 2);
         assert_eq!(attributes[0].name, "尺码");
         assert_eq!(attributes[0].value, "L");
         assert_eq!(attributes[1].name, "颜色");
         assert_eq!(attributes[1].value, "红色");
-        assert!(specification_attributes("").is_empty());
+        assert!(specification_attribute_views("").is_empty());
+        assert!(specification_attribute_views("尺码L").is_empty());
     }
 }
