@@ -1109,6 +1109,7 @@ pub enum CardFundsReviewResult {
     Rejected,
 }
 
+#[cfg(test)]
 impl CardFundsReviewResult {
     /// 返回 HTTP 稳定代码。
     pub(crate) fn as_str(self) -> &'static str {
@@ -1131,6 +1132,7 @@ pub enum CardFundsReviewConclusion {
     Rejected,
 }
 
+#[cfg(test)]
 impl CardFundsReviewConclusion {
     /// 返回 HTTP 稳定代码。
     pub(crate) fn as_str(self) -> &'static str {

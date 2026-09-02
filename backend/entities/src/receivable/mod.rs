@@ -13,8 +13,12 @@
 //!   `NO_APPROVAL`，不得新增审批绑定字段或审批状态机；发票与账户状态是固定枚举，数据模型
 //!   第 7 章未定义其状态机，不发明（§13.3）。
 
+pub mod card_funds_receipt;
 pub mod card_funds_review_decision;
 pub mod customer_receipt;
+pub mod funds_ledger;
+pub mod funds_review_chain;
+pub mod funds_snapshot;
 pub mod invoice;
 pub mod receipt_allocation;
 pub mod receivable_account;
@@ -25,12 +29,21 @@ pub mod sales_change_delta;
 pub mod sales_invoice_allocation;
 pub mod sales_invoice_allocation_plan;
 
+pub use card_funds_receipt::{
+    CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
+    CardFundsCommandReceiptError, CardFundsCommandReceiptVersion, CardFundsRegistrationKind,
+    CardFundsRegistrationReceipt, CardFundsRegistrationReceiptError, CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
+    CARD_FUNDS_RECEIPT_REGISTRATION_ACTION, CARD_FUNDS_REVIEW_ACTION,
+};
 pub use card_funds_review_decision::{
     CardFundsReviewConclusion as EntityCardFundsReviewConclusion, CardFundsReviewEvidence,
     CardFundsReviewResult as EntityCardFundsReviewResult, CardFundsReviewType as EntityCardFundsReviewType,
     ValidatedCardFundsReviewDecision,
 };
 pub use customer_receipt::*;
+pub use funds_ledger::ReceivableFundsLedger;
+pub use funds_review_chain::ReceivableFundsReviewChain;
+pub use funds_snapshot::ReceivableFundsSnapshot;
 pub use invoice::*;
 pub use receipt_allocation::*;
 pub use receivable_account::*;

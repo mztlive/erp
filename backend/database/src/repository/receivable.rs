@@ -94,6 +94,15 @@ pub struct InvoicingBatchResult {
     pub rejected: Vec<ReceivableAccountId>,
 }
 
+/// 批量条件核销结果：按账户逐个报告命中情况，由 Service 转译业务错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettlementBatchResult {
+    /// 条件命中并完成核销的账户（输入顺序）。
+    pub applied: Vec<ReceivableAccountId>,
+    /// 条件未命中（超过剩余开放余额）被拒绝的账户（输入顺序）。
+    pub rejected: Vec<ReceivableAccountId>,
+}
+
 /// 应收往来子账列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ReceivableAccountFilter {
@@ -1563,6 +1572,9 @@ fn invoice_projection() -> Document {
         "created_at": 1,
     }
 }
+
+#[path = "receivable_card_funds.rs"]
+mod card_funds;
 
 #[cfg(test)]
 mod tests {

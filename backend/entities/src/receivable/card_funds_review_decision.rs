@@ -46,6 +46,28 @@ pub enum CardFundsReviewResult {
     Rejected,
 }
 
+impl CardFundsReviewResult {
+    /// 返回幂等收据与 HTTP 稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `APPROVED` 或 `REJECTED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 与历史 7/9 字段收据 wire 代码一致，禁止改写。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
+        }
+    }
+}
+
 /// W13 复核结论（实体侧镜像）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CardFundsReviewConclusion {
