@@ -32,6 +32,9 @@ pub(crate) const MASTER_MAPPING_TASKS: &str = <mongodb::Database as MallSyncExt>
 /// `mall_snapshot_reapply_operation` 集合名。
 pub(crate) const MALL_SNAPSHOT_REAPPLY_OPERATIONS: &str =
     <mongodb::Database as MallSyncExt>::MALL_SNAPSHOT_REAPPLY_OPERATIONS;
+/// `mall_sales_order_snapshot_watermarks` 集合名。
+pub(crate) const MALL_SALES_ORDER_SNAPSHOT_WATERMARKS: &str =
+    <mongodb::Database as MallSyncExt>::MALL_SALES_ORDER_SNAPSHOT_WATERMARKS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -80,6 +83,12 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         db,
         MALL_SNAPSHOT_REAPPLY_OPERATIONS,
         mall_snapshot_reapply_operation_indexes(),
+    )
+    .await?;
+    create_indexes(
+        db,
+        MALL_SALES_ORDER_SNAPSHOT_WATERMARKS,
+        mall_sales_order_snapshot_watermark_indexes(),
     )
     .await?;
     Ok(())
@@ -185,6 +194,20 @@ fn master_mapping_task_indexes() -> Vec<IndexModel> {
     ]
 }
 
+/// 返回来源单快照单调水位索引。
+///
+/// `uk_mall_sales_order_snapshot_watermarks_order`：每个
+/// `(source_system_id, external_order_key)` 一行，配合 `$lt` CAS 阻止并发
+/// 旧版本落盘。exact 唯一索引只防同时键，不能替代本单调约束。
+/// 前向：`ensure_indexes` 幂等创建；回滚：删除该索引及集合，查询退化为无水位
+/// （并发旧版本可能再次落盘，仅作应急）。
+fn mall_sales_order_snapshot_watermark_indexes() -> Vec<IndexModel> {
+    vec![unique_index(
+        "uk_mall_sales_order_snapshot_watermarks_order",
+        doc! { "source_system_id": 1, "external_order_key": 1 },
+    )]
+}
+
 /// 返回重新归集操作的幂等与任务时间线索引。
 fn mall_snapshot_reapply_operation_indexes() -> Vec<IndexModel> {
     vec![
@@ -238,8 +261,9 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        mall_sales_order_snapshot_indexes, mall_sales_reconciliation_item_indexes,
-        mall_sales_sync_cursor_indexes, mall_snapshot_reapply_operation_indexes, master_mapping_task_indexes,
+        mall_sales_order_snapshot_indexes, mall_sales_order_snapshot_watermark_indexes,
+        mall_sales_reconciliation_item_indexes, mall_sales_sync_cursor_indexes,
+        mall_snapshot_reapply_operation_indexes, master_mapping_task_indexes,
     };
 
     #[test]
@@ -306,6 +330,23 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| { index.keys == doc! { "mapping_status": 1, "observed_at": 1 } }));
+    }
+
+    #[test]
+    fn snapshot_watermark_order_is_globally_unique() {
+        let indexes = mall_sales_order_snapshot_watermark_indexes();
+        let watermark = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_mall_sales_order_snapshot_watermarks_order")
+            })
+            .unwrap();
+        assert_eq!(
+            watermark.keys,
+            doc! { "source_system_id": 1, "external_order_key": 1 }
+        );
+        assert_eq!(watermark.options.as_ref().unwrap().unique, Some(true));
     }
 
     #[test]

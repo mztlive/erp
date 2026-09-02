@@ -33,6 +33,8 @@ pub trait MallSyncExt {
     const MASTER_MAPPING_TASKS: &'static str = "master_mapping_tasks";
     /// `mall_snapshot_reapply_operation` 集合名。
     const MALL_SNAPSHOT_REAPPLY_OPERATIONS: &'static str = "mall_snapshot_reapply_operations";
+    /// `mall_sales_order_snapshot_watermarks` 集合名（INT-R16 单调水位）。
+    const MALL_SALES_ORDER_SNAPSHOT_WATERMARKS: &'static str = "mall_sales_order_snapshot_watermarks";
 
     /// 同步作业列表筛选条件类型（定义见 `repository::mall_sync`）。
     type MallSalesSyncJobFilter;

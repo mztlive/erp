@@ -772,6 +772,9 @@ pub enum ApplyRowOutcome {
 }
 
 /// 行级导入结果请求。
+///
+/// 唯一 ID 与 `imported`/`failed`/`skipped` 精确字段形状由
+/// [`entities::legacy_import::ApplyResultSet`] 在查库前强制收紧。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ApplyRowResult {
     /// 目标导入行。
@@ -791,6 +794,8 @@ pub struct ApplyRowResult {
 }
 
 /// 导入批次应用请求（后台应用阶段的逐行结果汇总）。
+///
+/// 集合长度由本 DTO 校验；重复 ID 与 outcome 字段形状由 `ApplyResultSet` 拒绝。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ApplyLegacyImportBatchRequest {
     /// 逐行结果（可分批提交；未提交行保持待导入）。

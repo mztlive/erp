@@ -195,6 +195,9 @@ impl MallSalesOrderSnapshot {
 
     /// 判断传入来源更新时间是否早于当前快照。
     ///
+    /// 与 [`super::SnapshotFactIdentity::supersedes_candidate`] 使用同一比较：
+    /// 仅当本快照 `source_updated_at` 严格大于候选项时视为已覆盖。
+    ///
     /// # 参数
     /// * `candidate_updated_at` - 待接收快照的来源更新时间
     ///

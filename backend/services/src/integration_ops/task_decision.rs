@@ -3,9 +3,10 @@
 use database::{AccessControlExt, Executor, IntegrationOpsExt, NoTransaction, WorkItemExt};
 use entities::common::time::Instant;
 use entities::integration_ops::{
-    ErrorTaskStatus, IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference,
-    ReconciliationDifferenceId, ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData,
-    ReconciliationDifferenceResolutionId, ResolutionAction, ResolutionType, ResolutionVersionCheck,
+    CompactEvidenceSet, ErrorTaskStatus, EvidenceRecordRef, IntegrationCommandIdentity, IntegrationErrorTask,
+    ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
+    ReconciliationDifferenceResolutionData, ReconciliationDifferenceResolutionId, ResolutionAction,
+    ResolutionType, ResolutionVersionCheck,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::Database;
@@ -149,7 +150,7 @@ impl IntegrationOpsService {
                 }
                 work_item.record_activity(actor.id(), Instant::now())?;
                 db.work_items().update(&mut work_item, session).await?;
-                let result = task_action_result(&command, receipt.receipt_id(), fact.clone());
+                let result = task_action_result(&command, receipt.receipt_id(), fact.clone())?;
                 store_action_receipt(db, &actor, &receipt, &fact, session).await?;
                 Ok(result)
             })
@@ -253,7 +254,7 @@ impl IntegrationOpsService {
             next_subject_version: None,
             verified_evidence: message.verified_evidence,
         };
-        Ok(Some(task_action_result(command, receipt.receipt_id(), fact)))
+        Ok(Some(task_action_result(command, receipt.receipt_id(), fact)?))
     }
 
     async fn replay_task_completion(
@@ -741,7 +742,7 @@ async fn difference_action_fact(
             let fact = query_action_fact(db, &subject, executor).await?;
             Ok(DirectFact {
                 action: ResolutionAction::QueryOriginalResult,
-                evidence_reference: Some(format!("audit_log:{receipt_id}")),
+                evidence_reference: Some(audit_log_reference(receipt_id)?),
                 resulting_status: DirectReconciliationStatus::Open,
                 outcome: fact.outcome,
                 business_result_reference: fact.business_result_reference,
@@ -1123,18 +1124,37 @@ fn task_action_result(
     command: &IntegrationTaskActionCommand,
     receipt_id: &str,
     fact: ActionFact,
-) -> IntegrationTaskActionResult {
-    IntegrationTaskActionResult {
+) -> Result<IntegrationTaskActionResult> {
+    Ok(IntegrationTaskActionResult {
         work_item_id: command.work_item_id.clone(),
         work_item_status: IntegrationWorkItemStatus::Open,
         evidence: IntegrationTaskActionEvidence {
             operation_id: command.action.operation_id.clone(),
             outcome: fact.outcome,
             business_result_reference: fact.business_result_reference,
-            evidence_reference: Some(format!("audit_log:{receipt_id}")),
+            evidence_reference: Some(audit_log_reference(receipt_id)?),
         },
         next_allowed_actions: next_allowed_actions(command.action.item_type, fact.outcome),
-    }
+    })
+}
+
+/// 由收据 ID 构造 `audit_log:id` 证据记录引用。
+///
+/// # 参数
+/// * `receipt_id` - 命令收据 ID
+///
+/// # 返回
+/// 返回精确 `type:id` 编码。
+///
+/// # 错误
+/// 收据 ID 不符合证据记录 grammar 时返回校验错误。
+///
+/// # 约束
+/// 语法由 [`EvidenceRecordRef`] 独占，禁止 `format!` 拼接。
+fn audit_log_reference(receipt_id: &str) -> Result<String> {
+    EvidenceRecordRef::new("audit_log", receipt_id)
+        .map(|reference| reference.to_string())
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 fn next_allowed_actions(item_type: IntegrationItemType, outcome: IntegrationActionOutcome) -> Vec<String> {
@@ -1182,19 +1202,26 @@ fn direct_result(
     }
 }
 
+/// 将动作证据引用规范化为可写入摘要的紧凑集合。
+///
+/// # 参数
+/// * `refs` - 客户端提交的受控证据引用
+///
+/// # 返回
+/// 空集合返回 `Ok(None)`；否则返回排序去重后的紧凑编码。
+///
+/// # 错误
+/// 记录 ID 非法或编码超过 512 字节时返回校验错误。
+///
+/// # 约束
+/// grammar、排序、去重与长度由 [`CompactEvidenceSet`] 独占。
 fn compact_evidence(refs: &[ControlledEvidenceRef]) -> Result<Option<String>> {
-    if refs.is_empty() {
-        return Ok(None);
-    }
-    let value = refs
-        .iter()
-        .map(|evidence| format!("{}:{}", evidence.kind.as_str(), evidence.record_id.trim()))
-        .collect::<Vec<_>>()
-        .join(",");
-    if value.len() > 512 {
-        return Err(Error::ValidationError("证据引用汇总过长".to_string()));
-    }
-    Ok(Some(value))
+    CompactEvidenceSet::try_from_pairs(
+        refs.iter()
+            .map(|evidence| (evidence.kind.as_str(), evidence.record_id.as_str())),
+    )
+    .map(|set| set.map(CompactEvidenceSet::into_wire))
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 async fn store_action_receipt(

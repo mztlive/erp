@@ -19,12 +19,17 @@
 
 use sha2::{Digest, Sha256};
 
+mod evidence_reference;
 mod inbox_message;
 mod integration_error_task;
 mod reconciliation_difference;
 mod reconciliation_difference_resolution;
 mod w29_close;
 
+pub use evidence_reference::{
+    CanonicalEvidenceReference, CompactEvidenceSet, EvidenceRecordRef, EvidenceReferenceSet,
+    EvidenceSubjectBindings, ReplayOriginalReference,
+};
 pub use inbox_message::*;
 pub use integration_error_task::*;
 pub use reconciliation_difference::*;

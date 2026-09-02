@@ -25,6 +25,7 @@ pub mod mall_sales_sync_cursor;
 pub mod mall_sales_sync_job;
 pub mod master_mapping_task;
 pub mod reapply_operation;
+pub mod snapshot_ingest;
 
 pub use external_order_key::ExternalOrderKey;
 pub use mall_sales_order_snapshot::{
@@ -45,6 +46,9 @@ pub use master_mapping_task::{
 };
 pub use reapply_operation::{
     MallSnapshotReapplyOperation, MallSnapshotReapplyOperationData, ReapplyOperationStatus,
+};
+pub use snapshot_ingest::{
+    SnapshotFactIdentity, SnapshotIngestDecision, SnapshotIngestPlan, SnapshotOrderIdentity,
 };
 
 /// W17 命令的稳定幂等身份。

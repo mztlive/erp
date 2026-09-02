@@ -12,6 +12,13 @@
 //! （§4.5），本文件不提供任何软删除入口。
 //!
 //! 筛选/行类型定义在本文件，经 `LegacyImportExt` 的关联类型对外暴露。
+//!
+//! - `apply_scope`：按请求行 ID 且受批次约束的应用范围读取（INT-R29）。
+
+mod apply_scope;
+
+#[allow(unused_imports)]
+pub use apply_scope::LegacyImportApplyScope;
 
 use entities::common::time::BusinessDate;
 use entities::legacy_import::{

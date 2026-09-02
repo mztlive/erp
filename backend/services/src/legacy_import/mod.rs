@@ -21,6 +21,7 @@
 use database::LegacyImportExt;
 use mongodb::Database;
 
+mod apply_batch;
 mod batch;
 mod confirmation;
 pub mod dto;

@@ -1,6 +1,4 @@
-use database::{
-    AccessControlExt, BulkJobExt, Executor, LegacyImportExt, NoTransaction, PartyExt, Transactional,
-};
+use database::{AccessControlExt, BulkJobExt, Executor, LegacyImportExt, NoTransaction, Transactional};
 use entities::bulk_job::{BackgroundJob, JobStatus};
 use entities::common::time::Instant;
 use entities::legacy_import::{
@@ -16,9 +14,8 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::dto::{
-    self, ApplyLegacyImportBatchRequest, ApplyRowOutcome, ImportExecutionAction, ImportExecutionCommand,
-    ImportExecutionNextStep, ImportExecutionResult, ImportExecutionResultStatus, LegacyImportBatchView,
-    CUSTOMER_NOT_FOUND_ERROR_CODE, CUSTOMER_NOT_FOUND_ERROR_DETAIL, CUSTOMER_OBJECT_TYPE,
+    self, ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,
+    ImportExecutionResultStatus,
 };
 use super::receipt::{optional_text, parse_command_version, parse_receipt_number, required_text};
 use super::{LegacyImportService, COMMAND_FINGERPRINT_PREFIX, IMPORT_EXECUTION_AUDIT_PREFIX};
@@ -140,236 +137,6 @@ impl LegacyImportService {
             ImportExecutionTransactionResult { batch, job, receipt },
             audit_id.to_string(),
         )))
-    }
-
-    /// 应用导入批次（后台应用阶段逐行结果）。
-    ///
-    /// 批次处于 `Importing` 时执行：逐行推进解析/映射/导入状态、更新批次统计
-    /// 与状态、推进 D04 后台任务进度；客户行导入前经 D07 校验目标主体存在。
-    /// 幂等：批次已终态或行已终态时重复提交不产生新写入。
-    ///
-    /// # 参数
-    /// * `batch_id` - 导入批次 ID
-    /// * `req` - 逐行结果
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回应用后批次的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 批次不存在
-    /// * `BusinessLogicError` - 批次未进入 `Importing` 阶段
-    /// * `ValidationError` - 请求体校验失败
-    pub async fn apply_batch(
-        &self,
-        batch_id: &str,
-        req: ApplyLegacyImportBatchRequest,
-        actor: &AuditActor,
-    ) -> Result<LegacyImportBatchView> {
-        req.validate()?;
-        let mut batch = self
-            .db
-            .legacy_import_batches()
-            .find_by_id(batch_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-        if batch.is_terminal() {
-            tracing::info!(batch_id, status = ?batch.status, "批次已终态，按幂等返回");
-            return self.batch_view_of(batch).await;
-        }
-        if !batch.is_importing() {
-            return Err(Error::BusinessLogicError(
-                "批次尚未进入导入阶段，禁止应用".to_string(),
-            ));
-        }
-        let mut rows = self
-            .db
-            .legacy_import_rows()
-            .find_rows_by_batch_ids(
-                &[LegacyImportBatchId::new(batch_id.to_string())],
-                &mut NoTransaction,
-            )
-            .await?;
-        let background_job = self
-            .db
-            .background_jobs()
-            .find_by_request_id(&batch.batch_no, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
-        if !matches!(
-            background_job.status,
-            JobStatus::Running | JobStatus::PartiallySucceeded
-        ) {
-            return Err(Error::BusinessLogicError(
-                "后台应用尚未由 START_APPLY 启动".to_string(),
-            ));
-        }
-
-        let now = Instant::now();
-        let (mut delta_success, mut delta_failed, mut delta_skipped) = (0u64, 0u64, 0u64);
-        for result in &req.results {
-            let Some(row) = rows
-                .iter_mut()
-                .find(|row| row.base.id == result.row_id.to_string())
-            else {
-                continue;
-            };
-            if row.import_status != ImportStatus::PendingImport {
-                continue;
-            }
-            row.prepare_for_import(result.external_identity_map_id.clone())?;
-            match result.outcome {
-                ApplyRowOutcome::Imported => {
-                    let target = result.target_document_id.clone().ok_or_else(|| {
-                        Error::ValidationError("导入成功结果必须提供目标单据 ID".to_string())
-                    })?;
-                    if self.party_validates_for(row, &target).await? {
-                        row.mark_imported(target, result.target_object_reference.clone())?;
-                        delta_success += 1;
-                    } else {
-                        delta_failed += 1;
-                    }
-                }
-                ApplyRowOutcome::Failed => {
-                    let code = result
-                        .error_code
-                        .clone()
-                        .ok_or_else(|| Error::ValidationError("失败结果必须提供错误码".to_string()))?;
-                    row.mark_import_failed(code, result.error_detail.clone())?;
-                    delta_failed += 1;
-                }
-                ApplyRowOutcome::Skipped => {
-                    let code = result
-                        .error_code
-                        .clone()
-                        .ok_or_else(|| Error::ValidationError("跳过结果必须提供原因错误码".to_string()))?;
-                    row.mark_skipped(code, result.error_detail.clone())?;
-                    delta_skipped += 1;
-                }
-            }
-        }
-
-        let success_rows = LegacyImportRow::count_by_import_status(&rows, ImportStatus::Imported);
-        let failed_rows = LegacyImportRow::count_by_import_status(&rows, ImportStatus::Failed);
-        batch.update_counts(batch.total_rows, success_rows, failed_rows)?;
-        let pending_rows = LegacyImportRow::pending_import_count(&rows);
-        let all_terminal = pending_rows == 0;
-        let outcome = LegacyImportBatch::application_outcome(pending_rows, failed_rows);
-        batch.advance(outcome)?;
-        let audit = actor.clone().resource_log(
-            "legacy_import_batch.apply",
-            "legacy_import_batch",
-            batch.base.id.clone(),
-        )?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut rows_for_tx = rows.clone();
-        let mut batch_for_tx = batch.clone();
-        let mut job_for_tx = background_job.clone();
-        let updated_batch = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    for row in &mut rows_for_tx {
-                        if row.import_status != ImportStatus::PendingImport {
-                            db.legacy_import_rows().update(row, session).await?;
-                        }
-                    }
-                    db.legacy_import_batches()
-                        .update(&mut batch_for_tx, session)
-                        .await?;
-                    Self::advance_background_job(
-                        &mut job_for_tx,
-                        delta_success,
-                        delta_skipped,
-                        delta_failed,
-                        all_terminal,
-                        now,
-                    )?;
-                    db.background_jobs().update(&mut job_for_tx, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<LegacyImportBatch, crate::errors::Error>(batch_for_tx)
-                })
-            })
-            .await?;
-
-        self.batch_view_of(updated_batch).await
-    }
-
-    /// 推进后台任务进度并收尾。
-    ///
-    /// 任务必须已由 `START_APPLY` 启动；按本批结果累加进度；全部行终态时
-    /// 标记成功（失败数为零）或部分成功（存在失败）。
-    ///
-    /// # 参数
-    /// * `job` - 后台任务（内存态）
-    /// * `success` - 本批成功数
-    /// * `skipped` - 本批跳过数
-    /// * `failed` - 本批失败数
-    /// * `all_terminal` - 是否全部行终态
-    /// * `at` - 当前时刻
-    ///
-    /// # 错误
-    /// 状态迁移或计数不变量违反时返回错误。
-    fn advance_background_job(
-        job: &mut entities::bulk_job::BackgroundJob,
-        success: u64,
-        skipped: u64,
-        failed: u64,
-        all_terminal: bool,
-        at: Instant,
-    ) -> Result<()> {
-        if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
-            return Err(Error::BusinessLogicError(
-                "后台任务未启动，禁止记录导入进度".to_string(),
-            ));
-        }
-        if success + skipped + failed > 0 {
-            job.record_progress(success, skipped, failed, at)?;
-        }
-        if all_terminal {
-            if failed == 0 {
-                job.mark_succeeded(at)?;
-            } else {
-                job.mark_partially_succeeded()?;
-                job.mark_succeeded(at)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// 校验客户行目标主体存在（D07 仓储读取）。
-    ///
-    /// 客户行（`CUSTOMER`）必须命中 D07 既有主体；未命中时行标记失败
-    /// `CUSTOMER_NOT_FOUND` 并返回 `Ok(false)`（按失败处理）。
-    ///
-    /// # 参数
-    /// * `row` - 导入行（内存态）
-    /// * `target_document_id` - 目标单据 ID（客户行应为主体 ID）
-    ///
-    /// # 返回
-    /// 校验通过返回 `Ok(true)`；主体缺失时返回 `Ok(false)`（行已标记失败）。
-    ///
-    /// # 错误
-    /// 行状态迁移或数据库读取失败时返回错误。
-    async fn party_validates_for(&self, row: &mut LegacyImportRow, target_document_id: &str) -> Result<bool> {
-        if row.source_object_type != CUSTOMER_OBJECT_TYPE {
-            return Ok(true);
-        }
-        let exists = self
-            .db
-            .parties()
-            .find_by_id(target_document_id, &mut NoTransaction)
-            .await?
-            .is_some();
-        if exists {
-            return Ok(true);
-        }
-        row.mark_import_failed(
-            CUSTOMER_NOT_FOUND_ERROR_CODE.to_string(),
-            Some(CUSTOMER_NOT_FOUND_ERROR_DETAIL.to_string()),
-        )?;
-        Ok(false)
     }
 }
 
@@ -1014,10 +781,7 @@ mod tests {
         import_batch.failed_rows = 1;
         let mut job = build_background_job(&import_batch, "admin-1").unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(1, 1, 1, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
-        job.mark_partially_succeeded().unwrap();
-        job.mark_succeeded(Instant::from_unix_secs(1_700_000_200))
+        job.record_import_result_batch(1, 1, 1, true, Instant::from_unix_secs(1_700_000_100))
             .unwrap();
 
         let outcome = prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).unwrap();

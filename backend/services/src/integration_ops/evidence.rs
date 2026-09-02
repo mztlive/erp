@@ -7,8 +7,9 @@ use database::{
     Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, ReturnsExt, SupplierFulfillmentExt,
 };
 use entities::integration_ops::{
+    CanonicalEvidenceReference, EvidenceRecordRef, EvidenceReferenceSet, EvidenceSubjectBindings,
     InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask, MessageType, ReconciliationDifference,
-    ResolutionAction,
+    ReplayOriginalReference, ResolutionAction,
 };
 use entities::mall_order::ProcessingStatus;
 use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
@@ -83,17 +84,6 @@ impl EvidenceSubject {
             .collect(),
         }
     }
-
-    fn is_associated_with(&self, ids: &[String]) -> bool {
-        ids.iter().any(|id| {
-            self.message_id.as_deref() == Some(id.as_str())
-                || self.business_object_id.as_deref() == Some(id.as_str())
-                || self
-                    .fact_references
-                    .iter()
-                    .any(|reference| reference_mentions(reference, id))
-        })
-    }
 }
 
 /// 已由权威仓储重验的证据。
@@ -102,7 +92,7 @@ pub(super) struct VerifiedEvidence {
     /// 归一化后的客户端证据引用。
     pub reference: ControlledEvidenceRef,
     /// 可写入领域证据字段的稳定引用。
-    pub canonical_reference: String,
+    pub canonical_reference: CanonicalEvidenceReference,
 }
 
 /// 查询原结果的服务端事实。
@@ -174,10 +164,15 @@ impl IntegrationEvidenceAuthority for Database {
                     .await?
                     .ok_or_else(|| Error::NotFound("关联入站消息不存在".to_string()))?;
                 if message.status == InboxMessageStatus::Processed && message.processed_at.is_some() {
-                    return Ok(OriginalResultFact::Terminal(format!(
-                        "inbox_message:{}:v{}:processed",
-                        message.base.id, message.base.version
-                    )));
+                    return Ok(OriginalResultFact::Terminal(
+                        canonical_verified(
+                            "inbox_message",
+                            &message.base.id,
+                            Some(message.base.version),
+                            "processed",
+                        )?
+                        .into_wire(),
+                    ));
                 }
                 if replay_adapter_registered(message.message_type, message.payload_reference.as_deref())
                     && matches!(
@@ -229,10 +224,12 @@ impl IntegrationEvidenceAuthority for Database {
                 processed_at: None,
             })?;
             self.inbox_messages().update(&mut message, executor).await?;
-            Ok(format!(
-                "inbox_message:{}:v{}:requeued;business_fact_key:{}",
-                message.base.id, message.base.version, message.business_fact_key
-            ))
+            Ok(evidence_reference_grammar(ReplayOriginalReference::new(
+                &message.base.id,
+                message.base.version,
+                &message.business_fact_key,
+            ))?
+            .into_wire())
         })
     }
 
@@ -252,10 +249,13 @@ impl IntegrationEvidenceAuthority for Database {
                     "关联商城事实尚未完成重新归集".to_string(),
                 ));
             }
-            Ok(format!(
-                "mall_order_fact:{}:v{}:attributed",
-                fact.base.id, fact.base.version
-            ))
+            Ok(canonical_verified(
+                "mall_order_fact",
+                &fact.base.id,
+                Some(fact.base.version),
+                "attributed",
+            )?
+            .into_wire())
         })
     }
 
@@ -267,15 +267,15 @@ impl IntegrationEvidenceAuthority for Database {
         executor: &'a mut dyn Executor,
     ) -> EvidenceFuture<'a, VerifiedEvidence> {
         Box::pin(async move {
-            let parsed = EvidenceRecordRef::parse(&evidence.record_id)?;
-            let canonical_reference = match parsed.kind {
+            let parsed = evidence_reference_grammar(EvidenceRecordRef::parse(&evidence.record_id))?;
+            let canonical_reference = match parsed.kind() {
                 "inbox_message" => {
                     if evidence.kind != ControlledEvidenceKind::ExternalCaseResult {
                         return kind_mismatch();
                     }
                     let message = self
                         .inbox_messages()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的入站消息不存在".to_string()))?;
                     if message.status != InboxMessageStatus::Processed || message.processed_at.is_none() {
@@ -284,10 +284,12 @@ impl IntegrationEvidenceAuthority for Database {
                         ));
                     }
                     ensure_association(subject, std::slice::from_ref(&message.base.id))?;
-                    format!(
-                        "inbox_message:{}:v{}:processed",
-                        message.base.id, message.base.version
-                    )
+                    canonical_verified(
+                        "inbox_message",
+                        &message.base.id,
+                        Some(message.base.version),
+                        "processed",
+                    )?
                 }
                 "mall_order_fact" => {
                     if evidence.kind != ControlledEvidenceKind::BusinessObjectVerification {
@@ -295,7 +297,7 @@ impl IntegrationEvidenceAuthority for Database {
                     }
                     let fact = self
                         .mall_order_facts()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的商城事实不存在".to_string()))?;
                     if fact.processing_status != ProcessingStatus::Attributed {
@@ -311,10 +313,12 @@ impl IntegrationEvidenceAuthority for Database {
                             fact.business_fact_key.clone(),
                         ],
                     )?;
-                    format!(
-                        "mall_order_fact:{}:v{}:attributed",
-                        fact.base.id, fact.base.version
-                    )
+                    canonical_verified(
+                        "mall_order_fact",
+                        &fact.base.id,
+                        Some(fact.base.version),
+                        "attributed",
+                    )?
                 }
                 "customer_refund" => {
                     if !matches!(
@@ -327,7 +331,7 @@ impl IntegrationEvidenceAuthority for Database {
                     }
                     let refund = self
                         .customer_refunds()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的客户退款不存在".to_string()))?;
                     if refund.status != CustomerRefundStatus::Posted {
@@ -352,10 +356,12 @@ impl IntegrationEvidenceAuthority for Database {
                                 .map(ToString::to_string),
                         ),
                     )?;
-                    format!(
-                        "customer_refund:{}:v{}:posted",
-                        refund.base.id, refund.base.version
-                    )
+                    canonical_verified(
+                        "customer_refund",
+                        &refund.base.id,
+                        Some(refund.base.version),
+                        "posted",
+                    )?
                 }
                 "supplier_refund" => {
                     if !matches!(
@@ -368,7 +374,7 @@ impl IntegrationEvidenceAuthority for Database {
                     }
                     let refund = self
                         .supplier_refunds()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的供应商退款不存在".to_string()))?;
                     if refund.status != SupplierRefundStatus::Posted {
@@ -390,16 +396,18 @@ impl IntegrationEvidenceAuthority for Database {
                             refund.original_payable_entry_id.as_ref().map(ToString::to_string),
                         ),
                     )?;
-                    format!(
-                        "supplier_refund:{}:v{}:posted",
-                        refund.base.id, refund.base.version
-                    )
+                    canonical_verified(
+                        "supplier_refund",
+                        &refund.base.id,
+                        Some(refund.base.version),
+                        "posted",
+                    )?
                 }
                 "mall_refund" => {
                     ensure_compensation_kind(evidence.kind)?;
                     let refund = self
                         .mall_refunds()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的商城退款不存在".to_string()))?;
                     ensure_association(
@@ -411,16 +419,18 @@ impl IntegrationEvidenceAuthority for Database {
                             refund.mall_order_id.to_string(),
                         ],
                     )?;
-                    format!(
-                        "mall_refund:{}:v{}:succeeded",
-                        refund.base.id, refund.base.version
-                    )
+                    canonical_verified(
+                        "mall_refund",
+                        &refund.base.id,
+                        Some(refund.base.version),
+                        "succeeded",
+                    )?
                 }
                 "supplier_refund_fact" => {
                     ensure_compensation_kind(evidence.kind)?;
                     let fact = self
                         .supplier_refund_facts()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的供应商退款事实不存在".to_string()))?;
                     ensure_association(
@@ -432,16 +442,18 @@ impl IntegrationEvidenceAuthority for Database {
                             fact.source_event_id.clone(),
                         ],
                     )?;
-                    format!(
-                        "supplier_refund_fact:{}:v{}:succeeded",
-                        fact.base.id, fact.base.version
-                    )
+                    canonical_verified(
+                        "supplier_refund_fact",
+                        &fact.base.id,
+                        Some(fact.base.version),
+                        "succeeded",
+                    )?
                 }
                 "mall_balance_restoration" => {
                     ensure_compensation_kind(evidence.kind)?;
                     let restoration = self
                         .mall_balance_restorations()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的余额恢复事实不存在".to_string()))?;
                     ensure_association(
@@ -453,10 +465,12 @@ impl IntegrationEvidenceAuthority for Database {
                             restoration.mall_refund_id.to_string(),
                         ],
                     )?;
-                    format!(
-                        "mall_balance_restoration:{}:v{}:succeeded",
-                        restoration.base.id, restoration.base.version
-                    )
+                    canonical_verified(
+                        "mall_balance_restoration",
+                        &restoration.base.id,
+                        Some(restoration.base.version),
+                        "succeeded",
+                    )?
                 }
                 "reconciliation_difference_resolution" => {
                     if evidence.kind != ControlledEvidenceKind::DistinctReview {
@@ -464,7 +478,7 @@ impl IntegrationEvidenceAuthority for Database {
                     }
                     let record = self
                         .reconciliation_difference_resolutions()
-                        .find_by_id(parsed.id, executor)
+                        .find_by_id(parsed.id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("证据引用的差异复核记录不存在".to_string()))?;
                     if record.reconciliation_difference_id.to_string() != subject.item_id
@@ -476,12 +490,17 @@ impl IntegrationEvidenceAuthority for Database {
                             "差异复核记录不满足同一差异、已补证且岗位分离要求".to_string(),
                         ));
                     }
-                    format!("reconciliation_difference_resolution:{}:reviewed", record.base.id)
+                    canonical_verified(
+                        "reconciliation_difference_resolution",
+                        &record.base.id,
+                        None,
+                        "reviewed",
+                    )?
                 }
                 _ => {
                     return Err(Error::BusinessLogicError(format!(
                         "证据对象类型 {} 尚未注册权威验证器",
-                        parsed.kind
+                        parsed.kind()
                     )))
                 }
             };
@@ -511,7 +530,7 @@ impl IntegrationEvidenceAuthority for Database {
                             "inbox_message",
                             &message.base.id,
                             "已处理入站结果",
-                        ));
+                        )?);
                     }
                 }
             }
@@ -522,7 +541,7 @@ impl IntegrationEvidenceAuthority for Database {
                         "mall_order_fact",
                         &fact.base.id,
                         "已归集商城事实",
-                    ));
+                    )?);
                 }
             }
             if subject.business_object_type.as_deref() == Some("reconciliation_difference")
@@ -535,18 +554,18 @@ impl IntegrationEvidenceAuthority for Database {
                         executor,
                     )
                     .await?;
-                evidence.extend(records.into_iter().filter_map(|record| {
-                    (record.resolution_action == ResolutionAction::AddEvidence
-                        && record.evidence_reference.is_some())
-                    .then(|| {
-                        controlled_ref(
+                for record in records {
+                    if record.resolution_action == ResolutionAction::AddEvidence
+                        && record.evidence_reference.is_some()
+                    {
+                        evidence.push(controlled_ref(
                             ControlledEvidenceKind::DistinctReview,
                             "reconciliation_difference_resolution",
                             &record.id,
                             "差异独立复核记录",
-                        )
-                    })
-                }));
+                        )?);
+                    }
+                }
             }
             discover_compensation(self, subject, executor, &mut evidence).await?;
             Ok(evidence)
@@ -702,15 +721,12 @@ pub(super) async fn verify_evidence_refs(
 
 /// 从验证结果派生单一稳定证据引用；多条以分号连接。
 pub(super) fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String> {
-    let reference = verified
-        .iter()
-        .map(|evidence| evidence.canonical_reference.as_str())
-        .collect::<Vec<_>>()
-        .join(";");
-    if reference.is_empty() || reference.len() > 512 {
-        return Err(Error::ValidationError("终态证据引用为空或过长".to_string()));
-    }
-    Ok(reference)
+    evidence_reference_grammar(EvidenceReferenceSet::try_from_canonical(
+        verified
+            .iter()
+            .map(|evidence| evidence.canonical_reference.clone()),
+    ))
+    .map(EvidenceReferenceSet::into_wire)
 }
 
 fn ensure_required_kinds(
@@ -790,6 +806,11 @@ async fn find_subject_mall_fact(
             return Ok(Some(fact));
         }
     }
+    let bindings = EvidenceSubjectBindings::new(
+        subject.message_id.as_deref(),
+        subject.business_object_id.as_deref(),
+        &subject.fact_references,
+    );
     let candidate = subject
         .business_object_id
         .as_deref()
@@ -799,12 +820,7 @@ async fn find_subject_mall_fact(
                 .as_deref()
                 .is_none_or(|kind| kind.eq_ignore_ascii_case("mall_order_fact"))
         })
-        .or_else(|| {
-            subject
-                .fact_references
-                .iter()
-                .find_map(|reference| referenced_id(reference, "mall_order_fact"))
-        });
+        .or_else(|| bindings.referenced_id("mall_order_fact"));
     match candidate {
         Some(id) => db
             .mall_order_facts()
@@ -832,7 +848,7 @@ async fn discover_compensation(
     if kind.is_empty() || kind == "customer_refund" {
         if let Some(refund) = db.customer_refunds().find_by_id(id, executor).await? {
             if refund.status == CustomerRefundStatus::Posted {
-                push_compensation_refs(evidence, "customer_refund", &refund.base.id, "已过账客户退款");
+                push_compensation_refs(evidence, "customer_refund", &refund.base.id, "已过账客户退款")?;
                 return Ok(());
             }
         }
@@ -840,14 +856,14 @@ async fn discover_compensation(
     if kind.is_empty() || kind == "supplier_refund" {
         if let Some(refund) = db.supplier_refunds().find_by_id(id, executor).await? {
             if refund.status == SupplierRefundStatus::Posted {
-                push_compensation_refs(evidence, "supplier_refund", &refund.base.id, "已过账供应商退款");
+                push_compensation_refs(evidence, "supplier_refund", &refund.base.id, "已过账供应商退款")?;
                 return Ok(());
             }
         }
     }
     if kind.is_empty() || kind == "mall_refund" {
         if let Some(refund) = db.mall_refunds().find_by_id(id, executor).await? {
-            push_compensation_refs(evidence, "mall_refund", &refund.base.id, "商城退款成功事实");
+            push_compensation_refs(evidence, "mall_refund", &refund.base.id, "商城退款成功事实")?;
             return Ok(());
         }
     }
@@ -858,7 +874,7 @@ async fn discover_compensation(
                 "supplier_refund_fact",
                 &refund.base.id,
                 "供应商退款成功事实",
-            );
+            )?;
             return Ok(());
         }
     }
@@ -869,47 +885,116 @@ async fn discover_compensation(
                 "mall_balance_restoration",
                 &restoration.base.id,
                 "余额恢复成功事实",
-            );
+            )?;
         }
     }
     Ok(())
 }
 
-fn push_compensation_refs(refs: &mut Vec<ControlledEvidenceRef>, kind: &str, id: &str, label: &str) {
+fn push_compensation_refs(
+    refs: &mut Vec<ControlledEvidenceRef>,
+    kind: &str,
+    id: &str,
+    label: &str,
+) -> Result<()> {
     refs.push(controlled_ref(
         ControlledEvidenceKind::CompensationResult,
         kind,
         id,
         label,
-    ));
+    )?);
     refs.push(controlled_ref(
         ControlledEvidenceKind::FinancialReconciliation,
         kind,
         id,
         label,
-    ));
+    )?);
+    Ok(())
 }
 
+/// 由权威对象类型与记录 ID 构造客户端证据引用。
+///
+/// # 参数
+/// * `evidence_kind` - 受控证据类型
+/// * `record_kind` - 权威对象类型
+/// * `id` - 记录身份 ID
+/// * `label` - 展示标签
+///
+/// # 返回
+/// 返回 `type:id` 记录引用。
+///
+/// # 错误
+/// 对象类型或 ID 不符合精确 grammar 时返回校验错误。
+///
+/// # 约束
+/// 语法由 [`EvidenceRecordRef`] 独占；本函数只做 Service DTO 装配。
 fn controlled_ref(
     evidence_kind: ControlledEvidenceKind,
     record_kind: &str,
     id: &str,
     label: &str,
-) -> ControlledEvidenceRef {
-    ControlledEvidenceRef {
+) -> Result<ControlledEvidenceRef> {
+    Ok(ControlledEvidenceRef {
         kind: evidence_kind,
-        record_id: format!("{record_kind}:{id}"),
+        record_id: evidence_reference_grammar(EvidenceRecordRef::new(record_kind, id))?.to_string(),
         label: label.to_string(),
-    }
+    })
 }
 
 fn ensure_association(subject: &EvidenceSubject, ids: &[String]) -> Result<()> {
-    if subject.is_associated_with(ids) {
+    let bindings = EvidenceSubjectBindings::new(
+        subject.message_id.as_deref(),
+        subject.business_object_id.as_deref(),
+        &subject.fact_references,
+    );
+    if bindings.associates_any(ids.iter().map(String::as_str)) {
         return Ok(());
     }
     Err(Error::ConflictError(
         "证据记录与当前业务项没有可验证的正式关联".to_string(),
     ))
+}
+
+/// 把领域证据 grammar 错误映射为既有 HTTP 400 校验错误。
+///
+/// # 参数
+/// * `result` - 领域引用解析或集合构造结果
+///
+/// # 返回
+/// 成功时返回领域值。
+///
+/// # 错误
+/// 非法 grammar、空集合或超过 512 字节时返回 [`Error::ValidationError`]。
+///
+/// # 约束
+/// 不重复实现 grammar；仅保留 wire 错误类别。
+fn evidence_reference_grammar<T>(result: entities::Result<T>) -> Result<T> {
+    result.map_err(|error| Error::ValidationError(error.to_string()))
+}
+
+/// 由权威仓储事实构造 canonical 证据引用。
+///
+/// # 参数
+/// * `kind` - 对象类型
+/// * `id` - 记录身份 ID
+/// * `version` - 正式版本；无版本形态传 `None`
+/// * `status` - 终态或核验状态
+///
+/// # 返回
+/// 返回可写入终态证据字段的 canonical 引用。
+///
+/// # 错误
+/// 身份段不符合精确 grammar 时返回校验错误。
+///
+/// # 约束
+/// 编码规则由 [`CanonicalEvidenceReference::verified`] 独占。
+fn canonical_verified(
+    kind: &str,
+    id: &str,
+    version: Option<u64>,
+    status: &str,
+) -> Result<CanonicalEvidenceReference> {
+    evidence_reference_grammar(CanonicalEvidenceReference::verified(kind, id, version, status))
 }
 
 fn ensure_compensation_kind(kind: ControlledEvidenceKind) -> Result<()> {
@@ -939,48 +1024,10 @@ fn refund_association_ids(
         .collect()
 }
 
-struct EvidenceRecordRef<'a> {
-    kind: &'a str,
-    id: &'a str,
-}
-
-impl<'a> EvidenceRecordRef<'a> {
-    fn parse(value: &'a str) -> Result<Self> {
-        let value = value.trim();
-        let (kind, id) = value
-            .split_once(':')
-            .ok_or_else(|| Error::ValidationError("证据记录 ID 必须使用 type:id 格式".to_string()))?;
-        if kind.is_empty() || id.is_empty() || id.contains(':') {
-            return Err(Error::ValidationError(
-                "证据记录 ID 必须使用唯一的 type:id 格式".to_string(),
-            ));
-        }
-        Ok(Self { kind, id })
-    }
-}
-
-fn referenced_id<'a>(reference: &'a str, kind: &str) -> Option<&'a str> {
-    let reference = reference.trim();
-    reference
-        .strip_prefix(&format!("{kind}://"))
-        .or_else(|| reference.strip_prefix(&format!("{kind}:")))
-        .filter(|id| !id.is_empty() && !id.contains([';', ',', '|']))
-}
-
-fn reference_mentions(reference: &str, id: &str) -> bool {
-    reference == id
-        || reference
-            .split(|character: char| {
-                character.is_whitespace() || matches!(character, ':' | '/' | ';' | '|' | ',' | '=')
-            })
-            .any(|token| token == id)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_completion_policy, ensure_direct_reason, error_evidence_policy,
-        reconciliation_reason_registry, EvidenceRecordRef,
+        ensure_completion_policy, ensure_direct_reason, error_evidence_policy, reconciliation_reason_registry,
     };
     use crate::integration_ops::{
         ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode, DirectReconciliationConclusion,
@@ -1009,13 +1056,6 @@ mod tests {
             record_id: "inbox_message:message-1".to_string(),
             label: "result".to_string(),
         }
-    }
-
-    #[test]
-    fn canonical_reference_parser_rejects_unregistered_nested_identity() {
-        assert!(EvidenceRecordRef::parse("inbox_message:message-1").is_ok());
-        assert!(EvidenceRecordRef::parse("inbox_message:message-1:forged").is_err());
-        assert!(EvidenceRecordRef::parse("message-1").is_err());
     }
 
     #[test]

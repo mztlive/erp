@@ -15,10 +15,12 @@
 
 use sha2::{Digest, Sha256};
 
+pub mod apply_result_set;
 pub mod legacy_import_batch;
 pub mod legacy_import_confirmation;
 pub mod legacy_import_row;
 
+pub use apply_result_set::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
 pub use legacy_import_batch::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
 pub use legacy_import_confirmation::{
     ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,

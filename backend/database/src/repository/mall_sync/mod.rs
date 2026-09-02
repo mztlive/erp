@@ -11,6 +11,13 @@
 //! 实体单调推进 + 版本 CAS 的原子写入口。
 //!
 //! 筛选/行类型定义在本文件，经 `MallSyncExt` 的关联类型对外暴露。
+//!
+//! - [`snapshot_ingest`]：快照落盘 exact/latest 批量事实与单调水位、批量插入（INT-R16）。
+
+mod snapshot_ingest;
+
+#[allow(unused_imports)]
+pub use snapshot_ingest::SnapshotIngestScope;
 
 use entities::catalog::{EnableStatus, VoucherCategoryProfileRevision};
 use entities::common::time::Instant;

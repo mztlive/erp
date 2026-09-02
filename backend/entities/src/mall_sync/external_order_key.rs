@@ -15,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 ///
 /// 地基修订候选：与 `source_registry::ExternalIdKey` 同构（P0 冻结，暂在
 /// 域内复制一份），建议后续下沉到 `common/` 统一实现。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalOrderKey(Vec<u8>);
 
 impl ExternalOrderKey {

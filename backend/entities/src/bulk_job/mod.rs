@@ -15,6 +15,7 @@ pub mod background_job;
 pub mod background_job_item;
 pub mod bulk_selection_item;
 pub mod bulk_selection_snapshot;
+mod import_result_batch;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};

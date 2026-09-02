@@ -346,7 +346,9 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许记录进度，或累计已处理数超过目标总数时返回错误。
     pub fn record_progress(&mut self, success: u64, skipped: u64, failed: u64, at: Instant) -> Result<()> {
-        if !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
+        if self.finished_at.is_some()
+            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
+        {
             return Err(Error::from(format!("状态 {:?} 不允许记录进度", self.status)));
         }
         let processed = self
@@ -394,7 +396,9 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许完成，或仍有目标未处理时返回错误。
     pub fn mark_succeeded(&mut self, at: Instant) -> Result<()> {
-        if !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
+        if self.finished_at.is_some()
+            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
+        {
             return Err(Error::from(format!("状态 {:?} 不允许完成", self.status)));
         }
         if self.processed_count != self.total_count {
@@ -418,7 +422,9 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许失败时返回错误。
     pub fn mark_failed(&mut self, error_summary: Option<String>, at: Instant) -> Result<()> {
-        if !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
+        if self.finished_at.is_some()
+            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
+        {
             return Err(Error::from(format!("状态 {:?} 不允许失败", self.status)));
         }
         self.status = JobStatus::Failed;
@@ -509,12 +515,13 @@ impl BackgroundJob {
     /// 判断任务是否已处于终态。
     ///
     /// # 返回
-    /// `SUCCEEDED` / `FAILED` / `CANCELLED` 时返回 `true`。
+    /// `SUCCEEDED` / `FAILED` / `CANCELLED`，或已全部结束的混合
+    /// `PARTIALLY_SUCCEEDED`（已写入 `finished_at`）时返回 `true`。
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.status,
             JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled
-        )
+        ) || (self.status == JobStatus::PartiallySucceeded && self.finished_at.is_some())
     }
 }
 

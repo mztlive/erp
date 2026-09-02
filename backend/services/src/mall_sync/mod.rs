@@ -1,9 +1,9 @@
 //! 域 D23 `mall_sync` 服务编排。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 快照落盘（快照 + 作业进度 + 审计日志）→ 跨集合事务；事实键唯一索引
-//!   `(source_system_id, external_order_key, source_updated_at)` 为权威去重，
-//!   重复推送与迟到快照在写入前判定跳过（§6.13）；
+//! - 快照落盘（快照 + 作业进度 + 审计日志 + 来源单水位）→ 跨集合事务；
+//!   Repository 批量读取 exact/latest，Entity 分类 Duplicate/Stale/Accept，
+//!   水位 CAS 阻止并发旧版本落盘；事实键唯一索引仍为等时去重权威（§6.13）；
 //! - 作业完成（作业终态 + 水位前移/新建 + 审计日志）→ 跨集合事务；只有
 //!   `Success` 才前移水位（§8.4 第 2 条：分页全部安全持久化后才前移水位）；
 //! - 核对作业创建（作业 + 差异明细 + 审计日志）→ 跨集合事务；
@@ -30,13 +30,12 @@ use entities::ids::{
     MallSalesReconciliationJobId, MallSalesSyncCursorId, MallSalesSyncJobId, MasterMappingTaskId, WorkItemId,
 };
 use entities::mall_sync::{
-    ExternalOrderKey, MallSalesOrderSnapshot, MallSalesOrderSnapshotData, MallSalesReconciliationItem,
-    MallSalesReconciliationItemData, MallSalesReconciliationJob, MallSalesReconciliationJobData,
-    MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobData, MallSalesSyncJobStatus,
-    MallSalesSyncJobType, MallSnapshotReapplyOperation, MallSnapshotReapplyOperationData,
-    MallSyncCommandIdentity, MallSyncTimeRange, MallSyncTriggerSource, MappingSourceIdentity,
-    MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData, ReconciliationJobStatus,
-    SyncJobCompletionDisposition,
+    MallSalesOrderSnapshot, MallSalesReconciliationItem, MallSalesReconciliationItemData,
+    MallSalesReconciliationJob, MallSalesReconciliationJobData, MallSalesSyncCursor, MallSalesSyncJob,
+    MallSalesSyncJobData, MallSalesSyncJobStatus, MallSalesSyncJobType, MallSnapshotReapplyOperation,
+    MallSnapshotReapplyOperationData, MallSyncCommandIdentity, MallSyncTimeRange, MallSyncTriggerSource,
+    MappingSourceIdentity, MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData,
+    ReconciliationJobStatus, SyncJobCompletionDisposition,
 };
 use entities::source_registry::{
     ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityTarget, ExternalIdentityTargetData,
@@ -54,6 +53,7 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 pub mod dto;
+mod snapshot_ingest;
 
 pub use self::dto::{
     CompleteMallSalesSyncJobRequest, ConfirmMappingCommand, ConfirmMappingResult,
@@ -553,123 +553,6 @@ impl MallSyncService {
             .await?
             .ok_or_else(|| Error::NotFound("同步作业不存在".to_string()))?;
         Ok(job.into())
-    }
-
-    /// 落盘一页商城销售单快照（幂等）。
-    ///
-    /// 按事实键去重：重复推送（相同 `source_updated_at`）与早于最新快照的迟到
-    /// 数据直接跳过（§6.13），不产生重复快照；同时推进作业处理计数。
-    /// 快照内容创建后不可修改，映射状态保持待映射。
-    ///
-    /// # 参数
-    /// * `req` - 落盘请求（作业 + 本页快照）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回本页落盘与跳过计数。
-    ///
-    /// # 错误
-    /// * `NotFound` - 同步作业不存在
-    /// * `BusinessLogicError` - 作业不在运行中
-    /// * `ConflictError` - 并发重复推送触发唯一索引冲突
-    pub async fn ingest_snapshots(
-        &self,
-        req: IngestMallSalesOrderSnapshotsRequest,
-        actor: &AuditActor,
-    ) -> Result<IngestMallSalesOrderSnapshotsResult> {
-        req.validate()?;
-        let job = self
-            .db
-            .mall_sales_sync_jobs()
-            .find_by_id(req.sync_job_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("同步作业不存在".to_string()))?;
-        if !job.accepts_snapshots() {
-            return Err(Error::BusinessLogicError(
-                "同步作业不在运行中，禁止落盘快照".to_string(),
-            ));
-        }
-        let now = Instant::now();
-        let mut accepted = Vec::new();
-        let mut skipped = 0u64;
-        for item in &req.items {
-            let key = ExternalOrderKey::from_trimmed(&item.external_order_no);
-            if self
-                .db
-                .mall_sales_order_snapshots()
-                .find_by_fact_key(
-                    &job.source_system_id,
-                    &key,
-                    item.source_updated_at,
-                    &mut NoTransaction,
-                )
-                .await?
-                .is_some()
-            {
-                skipped += 1;
-                continue;
-            }
-            if self
-                .snapshot_is_stale(&job.source_system_id, &key, item.source_updated_at)
-                .await?
-            {
-                skipped += 1;
-                continue;
-            }
-            accepted.push(MallSalesOrderSnapshot::new(
-                MallSalesOrderSnapshotId::new(next_id()),
-                MallSalesOrderSnapshotData {
-                    source_system_id: job.source_system_id.clone(),
-                    external_order_no: item.external_order_no.clone(),
-                    source_updated_at: item.source_updated_at,
-                    content_hash: item.content_hash.clone(),
-                    source_status_code: item.source_status_code.clone(),
-                    normalized_snapshot: item.normalized_snapshot.clone(),
-                    raw_payload_reference: item.raw_payload_reference.clone(),
-                    observed_at: now,
-                    sync_job_id: MallSalesSyncJobId::new(job.base.id.clone()),
-                },
-            )?);
-        }
-        if accepted.is_empty() {
-            return Ok(IngestMallSalesOrderSnapshotsResult {
-                accepted: 0,
-                skipped,
-                snapshot_ids: Vec::new(),
-            });
-        }
-
-        let mut job = job;
-        job.record_progress(1, accepted.len() as u64, 0)?;
-        let accepted_count = accepted.len() as u64;
-        let snapshot_ids = accepted.iter().map(|snapshot| snapshot.base.id.clone()).collect();
-        let audit = actor.clone().resource_log(
-            "mall_sales_order_snapshot.create",
-            "mall_sales_order_snapshot",
-            job.base.id.clone(),
-        )?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut job_for_tx = job.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    for snapshot in &accepted {
-                        db.mall_sales_order_snapshots().create(snapshot, session).await?;
-                    }
-                    db.mall_sales_sync_jobs().update(&mut job_for_tx, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
-        Ok(IngestMallSalesOrderSnapshotsResult {
-            accepted: accepted_count,
-            skipped,
-            snapshot_ids,
-        })
     }
 
     /// 分页查询快照列表。
@@ -2366,35 +2249,6 @@ impl MallSyncService {
             mapping_evidence_entry_id: audit.base.id,
             recorded_at: Instant::from_unix_secs(audit.base.created_at as i64),
         }))
-    }
-
-    /// 判定快照是否迟到（早于同一来源单最新快照）。
-    ///
-    /// 数据模型 §6.13：同一来源单收到更早 `source_updated_at` 的快照直接丢弃，
-    /// 不持久化、不推进当前版本。
-    ///
-    /// # 参数
-    /// * `source_system_id` - 来源商城
-    /// * `external_order_key` - 来源单二进制比较键
-    /// * `source_updated_at` - 商城更新时间
-    ///
-    /// # 返回
-    /// 迟到返回 `true`（应丢弃）。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn snapshot_is_stale(
-        &self,
-        source_system_id: &entities::ids::SourceSystemId,
-        external_order_key: &ExternalOrderKey,
-        source_updated_at: entities::common::time::Instant,
-    ) -> Result<bool> {
-        let latest = self
-            .db
-            .mall_sales_order_snapshots()
-            .find_latest_by_order(source_system_id, external_order_key, &mut NoTransaction)
-            .await?;
-        Ok(latest.is_some_and(|snapshot| snapshot.supersedes_candidate(source_updated_at)))
     }
 
     /// 从权威来源配置读取 W17 当前阶段；缺失、停用或非一期均失败关闭。
