@@ -85,6 +85,15 @@ pub struct ReceivableAccountRow {
     pub created_at: u64,
 }
 
+/// 批量条件开票结果：按账户逐个报告命中情况，由 Service 转译业务错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoicingBatchResult {
+    /// 条件命中并完成开票的账户（输入顺序）。
+    pub applied: Vec<ReceivableAccountId>,
+    /// 条件未命中（超过剩余可开票额度）被拒绝的账户（输入顺序）。
+    pub rejected: Vec<ReceivableAccountId>,
+}
+
 /// 应收往来子账列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ReceivableAccountFilter {
@@ -513,6 +522,60 @@ impl<'a> Repository<'a, ReceivableAccount> {
             executor,
         )
         .await
+    }
+
+    /// 批量条件开票：按子账聚合增量原子更新开票进度（FIN-R10）。
+    ///
+    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（`invoicing_guard`
+    /// 保证 `invoiced_total + delta <= invoiceable_total`），并按输入顺序
+    /// 报告每个账户的命中情况；调用方（Service）负责将 `rejected` 转译为
+    /// 业务错误，失败时整个事务回滚，不产生部分写入。
+    ///
+    /// # 参数
+    /// * `deltas` - 按子账聚合的开票增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    pub async fn apply_invoicings_many(
+        &self,
+        deltas: &[(ReceivableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult> {
+        let mut applied = Vec::new();
+        let mut rejected = Vec::new();
+        for (id, amount) in deltas {
+            let amount = amount_bson(amount)?;
+            let filter = invoicing_guard(id.as_ref(), &amount);
+            let hit = self
+                .conditional_update(
+                    filter,
+                    progress_pipeline(
+                        "invoiced_total",
+                        "open_invoiceable_total",
+                        &amount,
+                        true,
+                        updated_by,
+                    ),
+                    executor,
+                )
+                .await?;
+            if hit {
+                applied.push(id.clone());
+            } else {
+                rejected.push(id.clone());
+            }
+        }
+        Ok(InvoicingBatchResult { applied, rejected })
     }
 
     /// 条件开票冲减：减少净已开票进度（不产生负已开票）。
@@ -1272,6 +1335,37 @@ impl<'a> ReceivableRepository<'a> {
         }
         mongo_ops::insert_one(&collection, review, executor).await
     }
+
+    /// 批量创建销项发票分配（`insert_many`，调用方事务内原子写入，FIN-R10）。
+    ///
+    /// 唯一键冲突，由 Service 转译并整体回滚。
+    /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
+    /// `database::Transactional::with_transaction` 传入事务会话。
+    ///
+    /// # 参数
+    /// * `allocations` - 待持久化的销项发票分配
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 全部写入成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    pub async fn create_sales_invoice_allocations_many(
+        &self,
+        allocations: &[SalesInvoiceAllocation],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_many(
+            &self.db.collection::<SalesInvoiceAllocation>(
+                <mongodb::Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
+            ),
+            allocations.to_vec(),
+            executor,
+        )
+        .await
+    }
 }
 
 /// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
@@ -1290,6 +1384,30 @@ impl<'a> ReceivableRepository<'a> {
 /// 金额无法表示为 Decimal128 时返回错误。
 fn amount_bson(amount: &Amount) -> Result<Bson> {
     Ok(Bson::Decimal128(amount.to_string().parse()?))
+}
+
+/// 构造条件开票的写前置条件（不超额开票）。
+///
+/// 以写条件而非读后判断保证 `invoiced_total + 本次开票 <= invoiceable_total`，
+/// 不满足时整个更新不生效（matched 为 0）。
+///
+/// # 参数
+/// * `id` - 应收往来子账 ID
+/// * `amount` - 本次开票含税金额（已转为 Decimal128 形态）
+///
+/// # 返回
+/// 返回未删除账户的开票额度守卫文档。
+fn invoicing_guard(id: &str, amount: &Bson) -> Document {
+    doc! {
+        "id": id,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "$expr": {
+            "$lte": [
+                { "$add": ["$invoiced_total", amount] },
+                "$invoiceable_total",
+            ],
+        },
+    }
 }
 
 /// 构建排序文档：字段名经白名单映射，未命中回退 `created_at` 降序。

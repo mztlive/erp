@@ -14,7 +14,7 @@ use entities::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingReceip
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalView, ReceiptAllocationLineRequest,
+    DocumentApprovalView,
 };
 use crate::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
@@ -155,22 +155,6 @@ pub fn ensure_final_approve_posting(receipt: &CustomerReceipt) -> Result<()> {
         ));
     }
     Ok(())
-}
-
-/// 将提交请求行转换为冻结分配。
-///
-/// # 错误
-/// 金额非法时返回错误。
-pub fn pending_allocations_from_request(
-    lines: &[ReceiptAllocationLineRequest],
-) -> Result<Vec<PendingReceiptAllocation>> {
-    lines
-        .iter()
-        .map(|line| {
-            PendingReceiptAllocation::new(line.receivable_entry_id.clone(), line.allocated_amount)
-                .map_err(Into::into)
-        })
-        .collect()
 }
 
 /// 无已绑定定义的必须审批单据不得提交。

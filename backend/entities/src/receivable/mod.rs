@@ -13,6 +13,7 @@
 //!   `NO_APPROVAL`，不得新增审批绑定字段或审批状态机；发票与账户状态是固定枚举，数据模型
 //!   第 7 章未定义其状态机，不发明（§13.3）。
 
+pub mod card_funds_review_decision;
 pub mod customer_receipt;
 pub mod invoice;
 pub mod receipt_allocation;
@@ -22,7 +23,13 @@ pub mod receivable_entry_offset;
 pub mod receivable_funds_review;
 pub mod sales_change_delta;
 pub mod sales_invoice_allocation;
+pub mod sales_invoice_allocation_plan;
 
+pub use card_funds_review_decision::{
+    CardFundsReviewConclusion as EntityCardFundsReviewConclusion, CardFundsReviewEvidence,
+    CardFundsReviewResult as EntityCardFundsReviewResult, CardFundsReviewType as EntityCardFundsReviewType,
+    ValidatedCardFundsReviewDecision,
+};
 pub use customer_receipt::*;
 pub use invoice::*;
 pub use receipt_allocation::*;
@@ -32,3 +39,4 @@ pub use receivable_entry_offset::*;
 pub use receivable_funds_review::*;
 pub use sales_change_delta::ReceivableDelta;
 pub use sales_invoice_allocation::*;
+pub use sales_invoice_allocation_plan::*;

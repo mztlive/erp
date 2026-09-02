@@ -24,7 +24,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
-use entities::file_asset::{FileAsset, SecurityScanStatus};
+
 use entities::ids::{
     BusinessDocumentId, CustomerReceiptId, InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId,
     ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId,
@@ -70,8 +70,11 @@ use crate::work_item::{WorkItemAllowedAction, WorkItemService};
 
 mod adapter;
 mod cancel_approval;
+pub(crate) mod card_funds_decision;
 pub(crate) mod card_funds_task;
+mod customer_receipt_commit;
 mod dto;
+mod invoice_commit;
 pub(crate) mod invoice_task;
 mod start_approval;
 
@@ -79,14 +82,19 @@ pub use self::adapter::customer_receipt_object_readable;
 use self::adapter::{
     build_customer_receipt_snapshot, customer_receipt_adapter, customer_receipt_responsible_org_id,
     customer_receipt_start_command, customer_receipt_subject_ref, document_approval_view,
-    ensure_final_approve_posting, execute_customer_receipt_domain_action, pending_allocations_from_request,
-    require_frozen_binding, start_approval_command_kind, start_customer_receipt_approval,
-    RECENT_HISTORY_LIMIT,
+    ensure_final_approve_posting, execute_customer_receipt_domain_action, require_frozen_binding,
+    start_approval_command_kind, start_customer_receipt_approval, RECENT_HISTORY_LIMIT,
 };
 use self::cancel_approval::{
     build_customer_receipt_cancel_input, load_cancel_runtime, persist_customer_receipt_cancel,
     CustomerReceiptCancelPersistInput,
 };
+use self::card_funds_decision::{
+    canonical_evidence as card_funds_canonical_evidence,
+    validate_evidence_assets as validate_card_funds_evidence_assets,
+    validated_from_dto as validated_card_funds_decision, workflow_comment as card_funds_workflow_comment,
+};
+use self::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use self::dto::SortDir;
 pub use self::dto::{
     CancelCustomerReceiptApprovalRequest, CardFundsRegistrationAllocation, CardFundsRegistrationResult,
@@ -100,8 +108,10 @@ pub use self::dto::{
     InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest, ReceiptAllocationView,
     ReceivableAccountListParams, ReceivableAccountSummaryView, ReceivableAccountView,
     ReceivableInvoiceFactView, ReceivableReceiptFactView, RegisterCardFundsInvoiceRequest,
-    RegisterCardFundsReceiptRequest, SalesInvoiceAllocationView, SubmitCustomerReceiptRequest,
+    RegisterCardFundsReceiptRequest, SalesInvoiceAllocationLineRequest, SalesInvoiceAllocationView,
+    SubmitCustomerReceiptRequest,
 };
+use self::invoice_commit::{convert_post_allocations, ensure_sales_invoice, PreparedInvoiceCommit};
 use self::start_approval::{
     build_customer_receipt_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_start_receipt, load_start_receipt_with_executor,
@@ -639,7 +649,7 @@ impl ReceivableService {
         {
             return Err(Error::ValidationError("任务 ID 非法".to_string()));
         }
-        validate_card_funds_decision(&command.decision)?;
+        let validated = validated_card_funds_decision(&command.decision)?;
         let expected_task_version = parse_task_version(&command.expected_task_version)?;
         let fingerprint = card_funds_command_fingerprint(&command)?;
         let audit_id = card_funds_audit_id(actor.id(), &command.idempotency_key);
@@ -656,6 +666,7 @@ impl ReceivableService {
         let actor_id = actor.id().to_string();
         let rbac_for_tx = self.rbac.clone();
         let command_for_tx = command.clone();
+        let validated_for_tx = validated.clone();
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let transaction_result = client
@@ -683,7 +694,13 @@ impl ReceivableService {
                     let snapshot = load_card_funds_snapshot(&db, &account, session).await?;
                     validate_card_funds_versions(&account, &snapshot, decision, &work_item)?;
                     validate_card_funds_facts(&account, &snapshot, decision)?;
-                    validate_card_funds_evidence(&db, decision, session).await?;
+                    {
+                        let assets = db
+                            .file_assets()
+                            .find_by_ids(validated_for_tx.evidence().document_ids(), session)
+                            .await?;
+                        validate_card_funds_evidence_assets(&validated_for_tx, &assets, Instant::now())?;
+                    }
                     validate_card_funds_reviewer_separation(
                         &db, &account, &snapshot, &work_item, &actor_id, session,
                     )
@@ -693,9 +710,15 @@ impl ReceivableService {
                         .await?;
 
                     let completed_at = Instant::now();
-                    let evidence = canonical_review_evidence(decision)?;
-                    let review_type = entity_review_type(decision.review_type);
-                    let review_result = entity_review_result(decision.review_result);
+                    let evidence = card_funds_canonical_evidence(&validated_for_tx);
+                    let review_type = entity_review_type(match validated_for_tx.review_type() {
+                        entities::receivable::EntityCardFundsReviewType::Opening => CardFundsReviewType::Opening,
+                        entities::receivable::EntityCardFundsReviewType::SyncDelta => CardFundsReviewType::SyncDelta,
+                    });
+                    let review_result = entity_review_result(match validated_for_tx.review_result() {
+                        entities::receivable::EntityCardFundsReviewResult::Approved => CardFundsReviewResult::Approved,
+                        entities::receivable::EntityCardFundsReviewResult::Rejected => CardFundsReviewResult::Rejected,
+                    });
                     let review = ReceivableFundsReview::new(
                         ReceivableFundsReviewId::new(next_id()),
                         ReceivableFundsReviewData {
@@ -715,22 +738,33 @@ impl ReceivableService {
                         },
                     )?;
 
-                    let cache_status = match decision.review_result {
-                        CardFundsReviewResult::Approved => AccountReviewStatus::Reviewed,
-                        CardFundsReviewResult::Rejected => pending_review_status(decision.review_type),
+                    let cache_status = match validated_for_tx.review_result() {
+                        entities::receivable::EntityCardFundsReviewResult::Approved => AccountReviewStatus::Reviewed,
+                        entities::receivable::EntityCardFundsReviewResult::Rejected => {
+                            let dto_type = match validated_for_tx.review_type() {
+                                entities::receivable::EntityCardFundsReviewType::Opening => CardFundsReviewType::Opening,
+                                entities::receivable::EntityCardFundsReviewType::SyncDelta => CardFundsReviewType::SyncDelta,
+                            };
+                            pending_review_status(dto_type)
+                        }
                     };
-                    let cache_update = match decision.review_result {
-                        CardFundsReviewResult::Approved => entities::receivable::ReceivableAccountUpdate {
+                    let cache_update = match validated_for_tx.review_result() {
+                        entities::receivable::EntityCardFundsReviewResult::Approved => entities::receivable::ReceivableAccountUpdate {
                             review_status: Some(cache_status),
                             reviewed_by: Some(actor_id.clone()),
                             reviewed_at: Some(completed_at),
-                            review_evidence_reference: Some(
-                                evidence.unwrap_or_else(|| decision.evidence_document_ids[0].to_string()),
-                            ),
+                            review_evidence_reference: Some(evidence.clone().unwrap_or_else(|| {
+                                validated_for_tx
+                                    .evidence()
+                                    .document_ids()
+                                    .first()
+                                    .map(|id| id.to_string())
+                                    .unwrap_or_default()
+                            })),
                             gross_total: None,
                             invoiceable_total: None,
                         },
-                        CardFundsReviewResult::Rejected => entities::receivable::ReceivableAccountUpdate {
+                        entities::receivable::EntityCardFundsReviewResult::Rejected => entities::receivable::ReceivableAccountUpdate {
                             review_status: Some(cache_status),
                             reviewed_by: Some(String::new()),
                             reviewed_at: None,
@@ -745,18 +779,19 @@ impl ReceivableService {
                         WorkflowActionId::new(next_id()),
                         WorkflowActionData {
                             document_id: BusinessDocumentId::new(account.sales_order_id.to_string()),
-                            action_type: match decision.review_result {
-                                CardFundsReviewResult::Approved => WorkflowActionType::Approve,
-                                CardFundsReviewResult::Rejected => WorkflowActionType::Reject,
+                            action_type: match validated_for_tx.review_result() {
+                                entities::receivable::EntityCardFundsReviewResult::Approved => WorkflowActionType::Approve,
+                                entities::receivable::EntityCardFundsReviewResult::Rejected => WorkflowActionType::Reject,
                             },
-                            from_status: account_review_status_code(pending_review_status(
-                                decision.review_type,
-                            ))
+                            from_status: account_review_status_code(pending_review_status(match validated_for_tx.review_type() {
+                                entities::receivable::EntityCardFundsReviewType::Opening => CardFundsReviewType::Opening,
+                                entities::receivable::EntityCardFundsReviewType::SyncDelta => CardFundsReviewType::SyncDelta,
+                            }))
                             .to_string(),
                             to_status: account_review_status_code(cache_status).to_string(),
                             actor_id: actor_id.clone(),
                             actor_role: work_item.owner_role.clone(),
-                            comment: workflow_decision_comment(decision)?,
+                            comment: card_funds_workflow_comment(&validated_for_tx),
                         },
                     )?;
                     work_item.record_activity(&actor_id, completed_at)?;
@@ -766,7 +801,9 @@ impl ReceivableService {
                     db.receivable_accounts().update(&mut account, session).await?;
                     db.workflow_actions().create(&workflow, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
-                    let follow_up_work_item = if decision.review_result == CardFundsReviewResult::Rejected {
+                    let follow_up_work_item = if validated_for_tx.review_result()
+                        == entities::receivable::EntityCardFundsReviewResult::Rejected
+                    {
                         Some(
                             card_funds_task::ensure_card_funds_review_task(
                                 &db,
@@ -787,8 +824,15 @@ impl ReceivableService {
                         review_no: review.review_no,
                         account_review_status: account.review_status.as_str().to_string(),
                         completed_at: completed_at.unix_secs(),
-                        review_result: decision.review_result,
-                        conclusion: decision.conclusion,
+                        review_result: match validated_for_tx.review_result() {
+                            entities::receivable::EntityCardFundsReviewResult::Approved => CardFundsReviewResult::Approved,
+                            entities::receivable::EntityCardFundsReviewResult::Rejected => CardFundsReviewResult::Rejected,
+                        },
+                        conclusion: match validated_for_tx.conclusion() {
+                            entities::receivable::EntityCardFundsReviewConclusion::NoHistoryFromZero => CardFundsReviewConclusion::NoHistoryFromZero,
+                            entities::receivable::EntityCardFundsReviewConclusion::RecordedFactsReconciled => CardFundsReviewConclusion::RecordedFactsReconciled,
+                            entities::receivable::EntityCardFundsReviewConclusion::Rejected => CardFundsReviewConclusion::Rejected,
+                        },
                         follow_up_work_item_id: follow_up_work_item.as_ref().map(|item| item.base.id.clone()),
                         follow_up_work_item_type: follow_up_work_item
                             .map(|item| item.work_item_type.as_str().to_string()),
@@ -1690,32 +1734,30 @@ impl ReceivableService {
         if let Some(receipt_id) = command_receipt.committed_resource_id(&self.db).await? {
             return self.customer_receipt_detail(&receipt_id).await;
         }
-        let new_receipt = match (&req.receipt_id, req.expected_version, req.receipt) {
-            (None, None, Some(create)) => {
-                create.validate()?;
-                Some(CustomerReceipt::new(
+        let prepared = req.prepare()?;
+        let (new_receipt, requested_id, expected_version, allocations) = match prepared {
+            PreparedCustomerReceiptCommit::New { receipt, allocations } => {
+                receipt.validate()?;
+                let candidate = CustomerReceipt::new(
                     CustomerReceiptId::new(next_id()),
                     CustomerReceiptData {
-                        receipt_no: create.receipt_no,
-                        counterparty_party_id: create.counterparty_party_id,
-                        customer_id: create.customer_id,
-                        received_at: create.received_at,
-                        amount: create.amount,
-                        bank_reference: create.bank_reference,
+                        receipt_no: receipt.receipt_no,
+                        counterparty_party_id: receipt.counterparty_party_id,
+                        customer_id: receipt.customer_id,
+                        received_at: receipt.received_at,
+                        amount: receipt.amount,
+                        bank_reference: receipt.bank_reference,
                     },
                     actor.id(),
-                )?)
+                )?;
+                (Some(candidate), None, None, allocations)
             }
-            (Some(_), Some(version), None) if version > 0 => None,
-            _ => {
-                return Err(Error::ValidationError(
-                    "新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version".to_string(),
-                ));
-            }
+            PreparedCustomerReceiptCommit::Existing {
+                receipt_id,
+                expected_version,
+                allocations,
+            } => (None, Some(receipt_id), Some(expected_version), allocations),
         };
-        let requested_id = req.receipt_id.clone();
-        let expected_version = req.expected_version;
-        let allocations = pending_allocations_from_request(&req.allocations)?;
         let idempotency_key = req.idempotency_key;
         let adapter = customer_receipt_adapter()?;
         let db = self.db.clone();
@@ -1879,7 +1921,7 @@ impl ReceivableService {
         let adapter = customer_receipt_adapter()?;
         let mut receipt = self.load_customer_receipt(id).await?;
         ensure_expected_version(receipt.base.version, req.expected_version)?;
-        let allocations = pending_allocations_from_request(&req.allocations)?;
+        let allocations = self::customer_receipt_commit::convert_allocations(&req.allocations)?;
         start_customer_receipt_approval(&mut receipt, allocations)?;
         self.dispatch_customer_receipt_start(id, receipt, req.idempotency_key, actor, adapter)
             .await
@@ -2348,49 +2390,9 @@ impl ReceivableService {
         if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
             return self.invoice_detail(&invoice_id).await;
         }
+        let prepared = req.prepare()?;
         let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
-        let new_invoice = match (&req.invoice_id, req.expected_version, req.invoice) {
-            (None, None, Some(create)) => {
-                create.validate()?;
-                if create.invoice_direction != InvoiceDirection::Sales {
-                    return Err(Error::ValidationError("应收登记命令只接受销项发票".to_string()));
-                }
-                Some(Invoice::new(
-                    InvoiceId::new(next_id()),
-                    InvoiceData {
-                        invoice_direction: create.invoice_direction,
-                        invoice_kind: create.invoice_kind,
-                        party_id: create.party_id,
-                        invoice_code: create.invoice_code,
-                        invoice_no: create.invoice_no,
-                        invoice_date: create.invoice_date,
-                        gross_amount: create.gross_amount,
-                        net_amount: create.net_amount,
-                        tax_amount: create.tax_amount,
-                        rounding_adjustment_amount: create
-                            .rounding_adjustment_amount
-                            .unwrap_or(zero_amount()),
-                        rounding_reason: create.rounding_reason,
-                        original_invoice_id: None,
-                    },
-                    actor.id(),
-                )?)
-            }
-            (Some(_), Some(version), None) if version > 0 => None,
-            _ => {
-                return Err(Error::ValidationError(
-                    "新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version".to_string(),
-                ));
-            }
-        };
-        let invoice_id = req
-            .invoice_id
-            .clone()
-            .or_else(|| new_invoice.as_ref().map(|invoice| invoice.base.id.clone()))
-            .ok_or_else(|| Error::ValidationError("缺少发票身份".to_string()))?;
-        let expected_version = req.expected_version;
-        let allocations = req.allocations;
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -2401,26 +2403,53 @@ impl ReceivableService {
             .clone()
             .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
-                    let mut invoice = match new_invoice {
-                        Some(invoice) => {
-                            register_created_invoice_document(&db, &rbac, &invoice, &actor_owned, session)
-                                .await?;
-                            db.invoices().create(&invoice, session).await?;
-                            invoice
+                    let (mut invoice, plan_lines) = match prepared {
+                        PreparedInvoiceCommit::New { invoice, allocations } => {
+                            invoice.validate()?;
+                            let new_invoice = Invoice::new(
+                                InvoiceId::new(next_id()),
+                                InvoiceData {
+                                    invoice_direction: invoice.invoice_direction,
+                                    invoice_kind: invoice.invoice_kind,
+                                    party_id: invoice.party_id,
+                                    invoice_code: invoice.invoice_code,
+                                    invoice_no: invoice.invoice_no,
+                                    invoice_date: invoice.invoice_date,
+                                    gross_amount: invoice.gross_amount,
+                                    net_amount: invoice.net_amount,
+                                    tax_amount: invoice.tax_amount,
+                                    rounding_adjustment_amount: invoice
+                                        .rounding_adjustment_amount
+                                        .unwrap_or(zero_amount()),
+                                    rounding_reason: invoice.rounding_reason,
+                                    original_invoice_id: None,
+                                },
+                                actor_id.as_str(),
+                            )?;
+                            register_created_invoice_document(
+                                &db,
+                                &rbac,
+                                &new_invoice,
+                                &actor_owned,
+                                session,
+                            )
+                            .await?;
+                            db.invoices().create(&new_invoice, session).await?;
+                            (new_invoice, allocations)
                         }
-                        None => {
+                        PreparedInvoiceCommit::Existing {
+                            invoice_id,
+                            expected_version,
+                            allocations,
+                        } => {
                             let invoice = db
                                 .invoices()
                                 .find_by_id(&invoice_id, session)
                                 .await?
                                 .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
-                            ensure_expected_version(
-                                invoice.base.version,
-                                expected_version.ok_or_else(|| {
-                                    Error::ValidationError("已有发票缺少期望版本".to_string())
-                                })?,
-                            )?;
-                            invoice
+                            ensure_expected_version(invoice.base.version, expected_version)?;
+                            ensure_sales_invoice(&invoice)?;
+                            (invoice, allocations)
                         }
                     };
                     if invoice.stable.status() != InvoiceStatus::Draft {
@@ -2440,8 +2469,7 @@ impl ReceivableService {
                     {
                         return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
                     }
-
-                    let allocation_account_ids: Vec<ReceivableAccountId> = allocations
+                    let allocation_account_ids: Vec<ReceivableAccountId> = plan_lines
                         .iter()
                         .map(|line| line.receivable_account_id.clone())
                         .collect();
@@ -2455,69 +2483,59 @@ impl ReceivableService {
                         session,
                     )
                     .await?;
-
-                    let requested: Amount = allocations.iter().fold(zero_amount(), |sum, line| {
-                        sum.checked_add(line.allocated_gross_amount)
-                    });
-                    if requested != invoice.gross_amount {
-                        return Err(Error::BusinessLogicError(
-                            "发票分配合计必须等于发票金额".to_string(),
-                        ));
-                    }
-
-                    let mut new_allocations = Vec::with_capacity(allocations.len());
-                    let mut receivable_account_ids = Vec::new();
-                    let mut sales_order_ids = Vec::new();
-                    for (index, line) in allocations.iter().enumerate() {
-                        let account = db
-                            .receivable_accounts()
-                            .find_by_id(&line.receivable_account_id, session)
-                            .await?
+                    let allocation_ids: Vec<SalesInvoiceAllocationId> = (0..plan_lines.len())
+                        .map(|_| SalesInvoiceAllocationId::new(next_id()))
+                        .collect();
+                    let plan = entities::receivable::SalesInvoiceAllocationPlan::new(
+                        invoice.base.id.clone().into(),
+                        invoice.gross_amount,
+                        invoice.net_amount,
+                        invoice.tax_amount,
+                        &plan_lines,
+                        &allocation_ids,
+                    )?;
+                    let account_id_strs: Vec<String> = plan
+                        .account_invoicing_deltas()
+                        .iter()
+                        .map(|(id, _)| id.to_string())
+                        .collect();
+                    let accounts = db
+                        .receivable_accounts()
+                        .find_accounts_by_ids(&account_id_strs, session)
+                        .await?;
+                    let accounts_by_id: HashMap<&str, &ReceivableAccount> = accounts
+                        .iter()
+                        .map(|account| (account.base.id.as_str(), account))
+                        .collect();
+                    for (account_id, _) in plan.account_invoicing_deltas() {
+                        let account = accounts_by_id
+                            .get(account_id.as_ref())
                             .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-                        sales_order_ids.push(account.sales_order_id.to_string());
-                        receivable_account_ids.push(line.receivable_account_id.to_string());
                         if account.counterparty_party_id != invoice.party_id {
                             return Err(Error::BusinessLogicError("禁止跨往来主体开票".to_string()));
                         }
-                        let applied = db
-                            .receivable_accounts()
-                            .apply_invoicing(
-                                &line.receivable_account_id,
-                                &line.allocated_gross_amount,
-                                &actor_id,
-                                session,
-                            )
-                            .await?;
-                        if !applied {
-                            return Err(Error::BusinessLogicError(
-                                "子账剩余可开票额度不足，开票被拒绝".to_string(),
-                            ));
-                        }
-                        new_allocations.push(SalesInvoiceAllocation::new(
-                            SalesInvoiceAllocationId::new(next_id()),
-                            SalesInvoiceAllocationData {
-                                invoice_id: invoice.base.id.clone().into(),
-                                receivable_account_id: line.receivable_account_id.clone(),
-                                allocation_seq: (index as u32) + 1,
-                                allocation_action: AllocationAction::Apply,
-                                allocated_gross_amount: line.allocated_gross_amount,
-                                allocated_net_amount: line.allocated_net_amount,
-                                allocated_tax_amount: line.allocated_tax_amount,
-                                reverses_allocation_id: None,
-                            },
-                        )?);
+                    }
+                    let invoicing = db
+                        .receivable_accounts()
+                        .apply_invoicings_many(plan.account_invoicing_deltas(), &actor_id, session)
+                        .await?;
+                    if !invoicing.rejected.is_empty() {
+                        return Err(Error::BusinessLogicError(
+                            "子账剩余可开票额度不足，开票被拒绝".to_string(),
+                        ));
                     }
                     invoice.mark_registered(&actor_id)?;
                     db.invoices().update(&mut invoice, session).await?;
-                    for allocation in &new_allocations {
-                        db.sales_invoice_allocations().create(allocation, session).await?;
-                    }
+                    db.receivable()
+                        .create_sales_invoice_allocations_many(plan.new_allocations(), session)
+                        .await?;
                     let audit = actor_owned.clone().resource_log(
                         "invoice.commit",
                         "invoice",
                         invoice.base.id.clone(),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
+                    let mut receivable_account_ids = account_id_strs.clone();
                     receivable_account_ids.sort();
                     receivable_account_ids.dedup();
                     for account_id in receivable_account_ids {
@@ -2529,6 +2547,10 @@ impl ReceivableService {
                         )
                         .await?;
                     }
+                    let mut sales_order_ids: Vec<String> = accounts
+                        .iter()
+                        .map(|account| account.sales_order_id.to_string())
+                        .collect();
                     sales_order_ids.sort();
                     sales_order_ids.dedup();
                     for sales_order_id in sales_order_ids {
@@ -2597,6 +2619,7 @@ impl ReceivableService {
         let invoice_id = id.to_string();
         let detail_id = invoice_id.clone();
         let work_item_id = req.work_item_id.clone();
+        let plan_lines = convert_post_allocations(&req.allocations);
         rbac.run_authorized_policy_transaction(policy_revision, move |session| {
             Box::pin(async move {
                 let mut invoice = db
@@ -2604,6 +2627,7 @@ impl ReceivableService {
                     .find_by_id(&invoice_id, session)
                     .await?
                     .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
+                ensure_sales_invoice(&invoice)?;
                 if invoice.stable.status() != entities::receivable::InvoiceStatus::Draft {
                     return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
                 }
@@ -2621,8 +2645,7 @@ impl ReceivableService {
                     }
                 }
 
-                let allocation_account_ids: Vec<ReceivableAccountId> = req
-                    .allocations
+                let allocation_account_ids: Vec<ReceivableAccountId> = plan_lines
                     .iter()
                     .map(|line| line.receivable_account_id.clone())
                     .collect();
@@ -2637,67 +2660,58 @@ impl ReceivableService {
                 )
                 .await?;
 
-                let requested: Amount = req.allocations.iter().fold(zero_amount(), |sum, line| {
-                    sum.checked_add(line.allocated_gross_amount)
-                });
-                if requested != invoice.gross_amount {
-                    return Err(Error::BusinessLogicError(
-                        "发票分配合计必须等于发票金额".to_string(),
-                    ));
-                }
-
-                let mut new_allocations = Vec::with_capacity(req.allocations.len());
-                let mut receivable_account_ids = Vec::new();
-                let mut sales_order_ids = Vec::new();
-                for (index, line) in req.allocations.iter().enumerate() {
-                    let account = db
-                        .receivable_accounts()
-                        .find_by_id(&line.receivable_account_id, session)
-                        .await?
+                let allocation_ids: Vec<SalesInvoiceAllocationId> = (0..plan_lines.len())
+                    .map(|_| SalesInvoiceAllocationId::new(next_id()))
+                    .collect();
+                let plan = entities::receivable::SalesInvoiceAllocationPlan::new(
+                    invoice.base.id.clone().into(),
+                    invoice.gross_amount,
+                    invoice.net_amount,
+                    invoice.tax_amount,
+                    &plan_lines,
+                    &allocation_ids,
+                )?;
+                let account_id_strs: Vec<String> = plan
+                    .account_invoicing_deltas()
+                    .iter()
+                    .map(|(id, _)| id.to_string())
+                    .collect();
+                let accounts = db
+                    .receivable_accounts()
+                    .find_accounts_by_ids(&account_id_strs, session)
+                    .await?;
+                let accounts_by_id: HashMap<&str, &ReceivableAccount> = accounts
+                    .iter()
+                    .map(|account| (account.base.id.as_str(), account))
+                    .collect();
+                for (account_id, _) in plan.account_invoicing_deltas() {
+                    let account = accounts_by_id
+                        .get(account_id.as_ref())
                         .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-                    sales_order_ids.push(account.sales_order_id.to_string());
-                    receivable_account_ids.push(line.receivable_account_id.to_string());
                     if account.counterparty_party_id != invoice.party_id {
                         return Err(Error::BusinessLogicError("禁止跨往来主体开票".to_string()));
                     }
-                    let applied = db
-                        .receivable_accounts()
-                        .apply_invoicing(
-                            &line.receivable_account_id,
-                            &line.allocated_gross_amount,
-                            &actor_id,
-                            session,
-                        )
-                        .await?;
-                    if !applied {
-                        return Err(Error::BusinessLogicError(
-                            "子账剩余可开票额度不足，开票被拒绝".to_string(),
-                        ));
-                    }
-                    new_allocations.push(SalesInvoiceAllocation::new(
-                        SalesInvoiceAllocationId::new(next_id()),
-                        SalesInvoiceAllocationData {
-                            invoice_id: invoice.base.id.clone().into(),
-                            receivable_account_id: line.receivable_account_id.clone(),
-                            allocation_seq: (index as u32) + 1,
-                            allocation_action: AllocationAction::Apply,
-                            allocated_gross_amount: line.allocated_gross_amount,
-                            allocated_net_amount: line.allocated_net_amount,
-                            allocated_tax_amount: line.allocated_tax_amount,
-                            reverses_allocation_id: None,
-                        },
-                    )?);
+                }
+                let invoicing = db
+                    .receivable_accounts()
+                    .apply_invoicings_many(plan.account_invoicing_deltas(), &actor_id, session)
+                    .await?;
+                if !invoicing.rejected.is_empty() {
+                    return Err(Error::BusinessLogicError(
+                        "子账剩余可开票额度不足，开票被拒绝".to_string(),
+                    ));
                 }
                 invoice.mark_registered(&actor_id)?;
                 db.invoices().update(&mut invoice, session).await?;
-                for allocation in &new_allocations {
-                    db.sales_invoice_allocations().create(allocation, session).await?;
-                }
+                db.receivable()
+                    .create_sales_invoice_allocations_many(plan.new_allocations(), session)
+                    .await?;
                 let audit =
                     actor_owned
                         .clone()
                         .resource_log("invoice.post", "invoice", invoice.base.id.clone())?;
                 db.audit_logs().create(&audit, session).await?;
+                let mut receivable_account_ids = account_id_strs.clone();
                 receivable_account_ids.sort();
                 receivable_account_ids.dedup();
                 for account_id in receivable_account_ids {
@@ -2709,7 +2723,10 @@ impl ReceivableService {
                     )
                     .await?;
                 }
-                // 开票过账后刷新销售单开票进度（开票不参与关闭判定）
+                let mut sales_order_ids: Vec<String> = accounts
+                    .iter()
+                    .map(|account| account.sales_order_id.to_string())
+                    .collect();
                 sales_order_ids.sort();
                 sales_order_ids.dedup();
                 for sales_order_id in sales_order_ids {
@@ -3961,75 +3978,6 @@ fn invoice_fact_views(snapshot: &CardFundsSnapshot) -> Vec<ReceivableInvoiceFact
         .collect()
 }
 
-/// 校验 W13 决定的证据、结论和原因组合。
-fn validate_card_funds_decision(decision: &CardFundsReviewDecision) -> Result<()> {
-    if decision.receivable_account_id.as_ref().trim().is_empty()
-        || decision.receivable_account_id.as_ref().chars().count() > 128
-    {
-        return Err(Error::ValidationError("应收账户 ID 非法".to_string()));
-    }
-    let mut document_ids = HashSet::new();
-    for id in &decision.evidence_document_ids {
-        if id.as_ref().trim().is_empty() || id.as_ref().chars().count() > 128 {
-            return Err(Error::ValidationError("证据文件 ID 非法".to_string()));
-        }
-        if !document_ids.insert(id.to_string()) {
-            return Err(Error::ValidationError("证据文件不得重复".to_string()));
-        }
-    }
-    let mut references = HashSet::new();
-    for reference in &decision.evidence_references {
-        let normalized = reference.trim();
-        if normalized.is_empty() {
-            return Err(Error::ValidationError("证据引用不能为空白".to_string()));
-        }
-        if normalized.chars().count() > 256 {
-            return Err(Error::ValidationError(
-                "单条证据引用不能超过 256 个字符".to_string(),
-            ));
-        }
-        if !references.insert(normalized.to_string()) {
-            return Err(Error::ValidationError("证据引用不得重复".to_string()));
-        }
-    }
-    if decision.evidence_document_ids.is_empty() && decision.evidence_references.is_empty() {
-        return Err(Error::ValidationError("正式复核证据不能为空".to_string()));
-    }
-    if decision
-        .expected_review_chain_tail_id
-        .as_deref()
-        .is_some_and(|tail| tail.trim().is_empty())
-    {
-        return Err(Error::ValidationError("复核链尾不能为空白".to_string()));
-    }
-    let reason = decision.reason_code.as_deref().map(str::trim);
-    match (decision.review_result, decision.conclusion) {
-        (CardFundsReviewResult::Approved, CardFundsReviewConclusion::NoHistoryFromZero)
-        | (CardFundsReviewResult::Approved, CardFundsReviewConclusion::RecordedFactsReconciled) => {
-            if decision.reason_code.is_some() {
-                return Err(Error::ValidationError("通过决定不得携带驳回原因".to_string()));
-            }
-        }
-        (CardFundsReviewResult::Rejected, CardFundsReviewConclusion::Rejected) => {
-            let reason = reason
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| Error::ValidationError("驳回决定必须填写原因代码".to_string()))?;
-            if !matches!(
-                reason,
-                "EVIDENCE_INSUFFICIENT" | "FACTS_MISMATCH" | "COUNTERPARTY_UNCLEAR" | "OTHER"
-            ) {
-                return Err(Error::ValidationError("驳回原因代码不在受控范围内".to_string()));
-            }
-        }
-        _ => {
-            return Err(Error::ValidationError("复核结果与结论组合不合法".to_string()));
-        }
-    }
-    canonical_review_evidence(decision)?;
-    workflow_decision_comment(decision)?;
-    Ok(())
-}
-
 /// 将 HTTP 字符串任务版本严格解析为运行时乐观锁版本。
 fn parse_task_version(value: &str) -> Result<u64> {
     let normalized = value.trim();
@@ -4207,59 +4155,6 @@ fn validate_card_funds_facts(
     Ok(())
 }
 
-/// 校验受控文件证据存在、扫描通过且仍在保留期内。
-async fn validate_card_funds_evidence(
-    db: &Database,
-    decision: &CardFundsReviewDecision,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let assets = db
-        .file_assets()
-        .find_by_ids(&decision.evidence_document_ids, executor)
-        .await?;
-    validate_card_funds_evidence_facts(decision, &assets, Instant::now())
-}
-
-/// 按命令原始顺序校验批量读取的 W13 受控证据事实。
-///
-/// 批量仓储结果不承诺顺序；本方法按 `evidence_document_ids` 逐项解释缺失与
-/// 安全状态，保持既有首错、扫描状态、销毁与过期语义。
-///
-/// # 参数
-/// * `decision` - W13 正式决定及其有序证据 ID
-/// * `assets` - 仓储一次批量读取的活跃文件资产事实
-/// * `now` - 本次校验的统一时点
-///
-/// # 返回
-/// 所有文件均存在且可用时返回 `Ok(())`。
-///
-/// # 错误
-/// 首个缺失文件返回 `NotFound`；首个不可用文件返回 `BusinessLogicError`。
-fn validate_card_funds_evidence_facts(
-    decision: &CardFundsReviewDecision,
-    assets: &[FileAsset],
-    now: Instant,
-) -> Result<()> {
-    let assets_by_id = assets
-        .iter()
-        .map(|asset| (asset.base.id.as_str(), asset))
-        .collect::<HashMap<_, _>>();
-    for id in &decision.evidence_document_ids {
-        let asset = assets_by_id
-            .get(id.as_ref())
-            .ok_or_else(|| Error::NotFound(format!("复核证据文件不存在: {id}")))?;
-        if asset.security_scan_status != SecurityScanStatus::Passed
-            || asset.destroyed_at.is_some()
-            || asset.expires_at.is_some_and(|expires_at| expires_at <= now)
-        {
-            return Err(Error::BusinessLogicError(
-                "复核证据文件未通过安全检查、已销毁或已过期".to_string(),
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// 重验责任资格，并对已登记票款事实执行可证明的经办/复核岗位分离。
 async fn validate_card_funds_reviewer_separation(
     db: &Database,
@@ -4356,32 +4251,6 @@ async fn ensure_fact_separation(
     Ok(())
 }
 
-/// 将多值证据无损压缩到现有复核实体的单文档加单引用形态。
-fn canonical_review_evidence(decision: &CardFundsReviewDecision) -> Result<Option<String>> {
-    let mut references = decision
-        .evidence_references
-        .iter()
-        .map(|reference| reference.trim().to_string())
-        .collect::<Vec<_>>();
-    references.extend(
-        decision
-            .evidence_document_ids
-            .iter()
-            .skip(1)
-            .map(|id| format!("file_asset:{id}")),
-    );
-    if references.is_empty() {
-        return Ok(None);
-    }
-    let canonical = references.join("; ");
-    if canonical.chars().count() > 512 {
-        return Err(Error::ValidationError(
-            "规范化后的复核证据引用不能超过 512 个字符".to_string(),
-        ));
-    }
-    Ok(Some(canonical))
-}
-
 /// 将 HTTP 复核类型转换为领域事实枚举。
 fn entity_review_type(review_type: CardFundsReviewType) -> entities::receivable::FundsReviewType {
     match review_type {
@@ -4414,34 +4283,6 @@ fn account_review_status_code(status: AccountReviewStatus) -> &'static str {
         AccountReviewStatus::Reviewed => "REVIEWED",
         AccountReviewStatus::SyncDeltaPending => "SYNC_DELTA_PENDING",
     }
-}
-
-/// 形成长度受控、可审计但不承担机器判定的工作流意见。
-fn workflow_decision_comment(decision: &CardFundsReviewDecision) -> Result<Option<String>> {
-    let mut parts = vec![format!("conclusion={}", decision.conclusion.as_str())];
-    if let Some(reason) = decision
-        .reason_code
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        parts.push(format!("reason={reason}"));
-    }
-    if let Some(comment) = decision
-        .comment
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        parts.push(comment.to_string());
-    }
-    let comment = parts.join("; ");
-    if comment.chars().count() > 512 {
-        return Err(Error::ValidationError(
-            "工作流复核意见不能超过 512 个字符".to_string(),
-        ));
-    }
-    Ok(Some(comment))
 }
 
 /// 计算不可由客户端解释或递增的复核链版本。
@@ -5337,14 +5178,16 @@ fn net_sales_allocated(allocations: &[SalesInvoiceAllocation]) -> Amount {
 #[cfg(test)]
 mod card_funds_review_tests {
     use entities::common::time::Instant;
-    use entities::file_asset::{ContentHmac, FileAsset, FileAssetData, RetentionClass, SensitivityClass};
+    use entities::file_asset::{
+        ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
+    };
     use entities::ids::{FileAssetId, ReceivableAccountId};
 
+    use super::card_funds_decision::{canonical_evidence, validate_evidence_assets, validated_from_dto};
     use super::{
-        canonical_review_evidence, card_funds_audit_id, card_funds_receipt_message, parse_card_funds_receipt,
-        parse_task_version, validate_card_funds_decision, validate_card_funds_evidence_facts,
+        card_funds_audit_id, card_funds_receipt_message, parse_card_funds_receipt, parse_task_version,
         CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewReceipt, CardFundsReviewResult,
-        CardFundsReviewType, Error, SecurityScanStatus, COMMAND_FINGERPRINT_PREFIX,
+        CardFundsReviewType, Error, COMMAND_FINGERPRINT_PREFIX,
     };
 
     fn opening_decision() -> CardFundsReviewDecision {
@@ -5393,15 +5236,17 @@ mod card_funds_review_tests {
     fn semantic_validation_rejects_result_conclusion_drift_and_missing_evidence() {
         let mut invalid = opening_decision();
         invalid.conclusion = CardFundsReviewConclusion::Rejected;
-        assert!(validate_card_funds_decision(&invalid).is_err());
+        assert!(validated_from_dto(&invalid).is_err());
 
         let mut invalid = opening_decision();
         invalid.evidence_document_ids.clear();
-        assert!(validate_card_funds_decision(&invalid).is_err());
+        invalid.evidence_references.clear();
+        assert!(validated_from_dto(&invalid).is_err());
 
         let mut invalid = opening_decision();
-        invalid.reason_code = Some(String::new());
-        assert!(validate_card_funds_decision(&invalid).is_err());
+        invalid.reason_code = Some("OTHER".to_string());
+        // Approved 携带驳回原因应拒绝
+        assert!(validated_from_dto(&invalid).is_err());
     }
 
     #[test]
@@ -5409,25 +5254,26 @@ mod card_funds_review_tests {
         let mut decision = opening_decision();
         decision.evidence_document_ids.push(FileAssetId::new("file-2"));
         decision.evidence_references.push("BANK-REF-1".to_string());
-
+        let validated = validated_from_dto(&decision).unwrap();
+        // canonical 为排序后结果：BANK-REF-1 与 file_asset:file-2 的字典序
+        let mut expected = ["BANK-REF-1".to_string(), "file_asset:file-2".to_string()];
+        expected.sort();
         assert_eq!(
-            canonical_review_evidence(&decision).unwrap().as_deref(),
-            Some("BANK-REF-1; file_asset:file-2")
+            canonical_evidence(&validated).as_deref(),
+            Some(expected.join("; ").as_str())
         );
+        assert_eq!(validated.evidence().document_ids().len(), 2);
     }
 
     #[test]
     fn evidence_batch_restores_input_order_and_accepts_unordered_results() {
         let mut decision = opening_decision();
         decision.evidence_document_ids.push(FileAssetId::new("file-2"));
+        let validated = validated_from_dto(&decision).unwrap();
         let assets = vec![evidence_asset("file-2", true), evidence_asset("file-1", true)];
-
-        assert!(validate_card_funds_evidence_facts(
-            &decision,
-            &assets,
-            Instant::from_unix_secs(1_700_000_000),
-        )
-        .is_ok());
+        assert!(
+            validate_evidence_assets(&validated, &assets, Instant::from_unix_secs(1_700_000_000),).is_ok()
+        );
     }
 
     #[test]
@@ -5435,16 +5281,68 @@ mod card_funds_review_tests {
         let mut decision = opening_decision();
         decision.evidence_document_ids =
             vec![FileAssetId::new("file-missing"), FileAssetId::new("file-pending")];
+        let validated = validated_from_dto(&decision).unwrap();
         let assets = vec![evidence_asset("file-pending", false)];
 
-        let error =
-            validate_card_funds_evidence_facts(&decision, &assets, Instant::from_unix_secs(1_700_000_000))
-                .unwrap_err();
+        let error = validate_evidence_assets(&validated, &assets, Instant::from_unix_secs(1_700_000_000))
+            .unwrap_err();
 
         assert!(matches!(
             error,
             Error::NotFound(message) if message == "复核证据文件不存在: file-missing"
         ));
+    }
+
+    #[test]
+    fn canonical_evidence_is_sorted_and_byte_stable() {
+        let mut decision = opening_decision();
+        decision.evidence_document_ids.push(FileAssetId::new("file-2"));
+        decision.evidence_references.push("z-ref".to_string());
+        decision.evidence_references.push("a-ref".to_string());
+        let v1 = validated_from_dto(&decision).unwrap();
+        let c1 = canonical_evidence(&v1).unwrap();
+        let v2 = validated_from_dto(&decision).unwrap();
+        assert_eq!(canonical_evidence(&v2).unwrap(), c1);
+        // 手工排序验证：a-ref 位于 file_asset:file-2 之前（字典序）
+        assert!(c1.contains("a-ref"));
+        assert!(c1.contains("file_asset:file-2"));
+    }
+
+    #[test]
+    fn evidence_usability_uses_file_asset_point_in_time_check() {
+        let decision = opening_decision();
+        let validated = validated_from_dto(&decision).unwrap();
+        let now = Instant::from_unix_secs(1_700_000_000);
+        let mut expired_asset = evidence_asset("file-1", true);
+        expired_asset.expires_at = Some(Instant::from_unix_secs(1_699_999_999));
+        assert!(validate_evidence_assets(&validated, &[expired_asset], now).is_err());
+        let mut destroyed_asset = evidence_asset("file-1", true);
+        destroyed_asset
+            .destroy(Instant::from_unix_secs(1_700_000_000))
+            .unwrap();
+        assert!(validate_evidence_assets(&validated, &[destroyed_asset], now).is_err());
+    }
+
+    #[test]
+    fn old_helpers_are_deleted_and_new_vo_is_unique_entry() {
+        let source = include_str!("mod.rs");
+        // 仅检查生产代码部分，避免本测试自身字面量触发误判
+        let production = source
+            .split("fn old_helpers_are_deleted")
+            .next()
+            .unwrap_or(source);
+        assert!(source.contains("validated_from_dto"));
+        assert!(source.contains("validate_evidence_assets"));
+        assert!(source.contains("canonical_evidence"));
+        assert!(source.contains("workflow_comment"));
+        assert!(source.contains("ValidatedCardFundsReviewDecision"));
+        assert!(source.contains("CardFundsReviewEvidence"));
+        assert!(source.contains("is_usable_at") || source.contains("validate_usable_at"));
+        // 旧 Service 私有 helper 已删除（FIN-E10 四处纯规则已收敛至实体/VO）
+        assert!(!production.contains("fn validate_card_funds_decision"));
+        assert!(!production.contains("fn validate_card_funds_evidence_facts"));
+        assert!(!production.contains("fn canonical_review_evidence"));
+        assert!(!production.contains("fn workflow_decision_comment"));
     }
 
     #[test]
