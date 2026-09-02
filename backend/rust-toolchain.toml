@@ -1,0 +1,5 @@
+# 本地 dev 使用 nightly，以便 profile.dev 走 Cranelift。
+# Docker/CI 镜像固定 rust:1.97，且不复制本文件，release 仍用稳定版 LLVM。
+[toolchain]
+channel = "nightly"
+components = ["rustc-codegen-cranelift-preview", "rustfmt", "clippy"]

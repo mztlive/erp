@@ -8,3 +8,16 @@ registry = "sparse+https://rsproxy.cn/index/"
 index = "https://rsproxy.cn/crates.io-index"
 [net]
 git-fetch-with-cli = true
+
+# Cranelift 仅用于本地 dev（cargo build/test/run）。cargo check 不做 codegen，不受影响。
+# 需要 nightly（见 rust-toolchain.toml）。release / Docker（rust:1.97）不复制本文件，仍走 LLVM。
+[unstable]
+codegen-backend = true
+
+[profile.dev]
+codegen-backend = "cranelift"
+
+# 依赖（尤其 rustls / aws-lc-rs）走 LLVM：Cranelift 不支持 #[link_name] 的 \u{1} 前缀，
+# 会把 native 符号编错。工作区 crate 仍用上面的 Cranelift。
+[profile.dev.package."*"]
+codegen-backend = "llvm"

@@ -127,7 +127,7 @@ if [[ "${IS_REMOTE}" -eq 1 ]]; then
 fi
 
 API_BASE="${API_BASE:-http://127.0.0.1:10001}"
-CLI_BIN="${HOME}/Development/rust-build-target/debug/cli"
+CLI_BIN="${BACKEND_DIR}/target/debug/cli"
 
 # 超级管理员只能由 CLI init-admin 创建。开发密码无法登录时修复为 admin / 123456。
 ensure_super_admin() {

@@ -14,7 +14,7 @@ API_PORT=10001
 FRONT_PORT=3000
 API_HEALTH="http://127.0.0.1:${API_PORT}/health"
 FRONT_URL="http://localhost:${FRONT_PORT}"
-WEB_API_BIN="${HOME}/Development/rust-build-target/debug/web-api"
+WEB_API_BIN="${BACKEND_DIR}/target/debug/web-api"
 
 wait_healthy() {
     local url="$1" name="$2" timeout="$3"

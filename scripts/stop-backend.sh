@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # 停止 web-api（E2E 重置前停写、修复后重启用）。
-# 只匹配 rust-build-target 下的 debug web-api 进程，避免误杀其他同名进程。
+# 只匹配 backend/target/debug 下的 web-api 进程，避免误杀其他同名进程。
 set -euo pipefail
 
-WEB_API_BIN="${HOME}/Development/rust-build-target/debug/web-api"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(cd "${SCRIPT_DIR}/../backend" && pwd)"
+WEB_API_BIN="${BACKEND_DIR}/target/debug/web-api"
 PIDS="$(pgrep -f "${WEB_API_BIN}" || true)"
 if [[ -z "${PIDS}" ]]; then
     echo "web-api 未在运行"
