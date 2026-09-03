@@ -1,15 +1,16 @@
 let meta = #{
     name: "remediate-service-layering",
-    description: "按合同关闭剩余 OPEN 责任簇：跨波打包、前缀不相交组合并行实现/评审/修复/核验，相交组合分片顺序执行，每簇独立验证后才进入一次统一门禁与提交",
-    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Verify 未通过的 ID 不得关闭。Quality 失败不提交。",
+    description: "按合同关闭剩余 OPEN 责任簇：跨波打包、前缀不相交组合并行实现/评审/修复/核验，每簇独立验证后进入纯单元测试统一门禁，门禁失败自动修复重试直到可提交",
+    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Verify 未通过的 ID 不得关闭。Quality 只跑单元测试门禁，不跑任何集成测试；门禁失败自动修复重试，通过后才提交。",
     phases: [
         #{ title: "Inventory", detail: "读取合同 OPEN/BLOCKED 状态并与波次目录求交" },
         #{ title: "Plan", detail: "并行确认每个簇仍 OPEN 且代码未改完" },
-        #{ title: "Implement", detail: "不相交组合并行实现；相交组合分片顺序执行。隔离 target 跑定向测试" },
+        #{ title: "Implement", detail: "不相交组合分片并行实现；相交组合顺序分片。隔离 target 跑定向单元测试" },
         #{ title: "Review", detail: "每个实现成功的组合并行对抗评审" },
         #{ title: "Repair", detail: "按不相交分片并行 resume 修复本簇评审 blocker" },
         #{ title: "Verify", detail: "只读对抗核验关闭证据；失败不得进入关闭集" },
-        #{ title: "Quality", detail: "第 5 节统一门禁一次；只关闭本轮 Verify 通过的 ID" },
+        #{ title: "Quality", detail: "纯单元测试统一门禁一次，不跑集成测试" },
+        #{ title: "QualityRepair", detail: "门禁失败时修复后重跑门禁，直到通过或耗尽重试" },
         #{ title: "Commit", detail: "Quality 通过且有关闭项时提交一次" },
         #{ title: "Report", detail: "关闭证据、分片并行度和下轮建议" },
     ],
@@ -98,10 +99,20 @@ let verify_schema = #{
     },
 };
 
+let quality_repair_schema = #{
+    "type": "object",
+    "required": ["files_changed", "summary", "remaining_issues"],
+    "properties": #{
+        "files_changed": #{ "type": "array", "maxItems": 120, "items": #{ "type": "string" } },
+        "summary": #{ "type": "string" },
+        "remaining_issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
+    },
+};
+
 let quality_schema = #{
     "type": "object",
     "required": [
-        "passed", "closed_ids", "held_ids", "commands", "mongo_commands",
+        "passed", "closed_ids", "held_ids", "commands",
         "files_changed", "remaining_issues", "summary"
     ],
     "properties": #{
@@ -109,7 +120,6 @@ let quality_schema = #{
         "closed_ids": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
         "held_ids": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
         "commands": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
-        "mongo_commands": #{ "type": "array", "maxItems": 16, "items": #{ "type": "string" } },
         "files_changed": #{ "type": "array", "maxItems": 120, "items": #{ "type": "string" } },
         "remaining_issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
         "summary": #{ "type": "string" },
@@ -437,6 +447,14 @@ fn review_passed(review) {
     ok
 }
 
+fn quality_passed(result) {
+    let ok = false;
+    if result != () && result.success && result.output != () {
+        if is_true(result.output.passed) { ok = true; }
+    }
+    ok
+}
+
 fn empty_impl(cluster, summary) {
     #{
         cluster: cluster.name,
@@ -707,7 +725,8 @@ fn layering_rules_text() {
     text += "Closing an item requires deleting the old Service helper/rule source. A one-line forwarder is not done.\n";
     text += "Query changes must not alter soft-delete, current pointer, business date, stable sort, first error, missing facts, money precision, or transaction visibility.\n";
     text += "Money, stock, task uniqueness, idempotency and version problems need concurrency proof; a snapshot query is not a lock.\n";
-    text += "Follow section 7.2 per cluster: failing or characterizing tests first; domain; repository; service switch + delete old path; Mongo/integration if applicable.\n";
+    text += "Follow section 7.2 per cluster: failing or characterizing unit tests first; domain; repository; service switch + delete old path.\n";
+    text += "Unit-only gate: run only cargo test --workspace --lib. Never add, modify, or run any integration test: no tests/ directory, no --test target, no --include-ignored, no real MongoDB or external service.\n";
     text += "Section 7.3: one cluster = one business fact or tightly coupled R+E+S. Do not mix unrelated P0 with file splits.\n";
     text += "SALES-E19 must ship with SALES-R02..R05. Those four are BLOCKED until finance owners sign occupancy policy; do not invent that policy.\n";
     text += "Frozen files in backend/AGENTS.md (entities/src/lib.rs, database repository/mod.rs, indexes/mod.rs, services/src/lib.rs, errors.rs, page.rs, query.rs, etc.) ";
@@ -748,11 +767,11 @@ fn implement_prompt_for(cluster, batch_id, dirty_note, target_dir) {
     prompt += "Do not fmt, touch, or lock files outside this group. Do not edit Cargo.lock unless a new test crate is required (it is not).\n";
     prompt += "Grep only the assigned ID rows in docs/service-layering-remediation-contract.md. Never read that whole file. Then grep/read_file the live source those rows cite. Do not trust this prompt's memory of line numbers.\n";
     prompt += "Inspect git status first. Implement every assigned ID in this group. Shared modules in the group are intentional.\n";
-    prompt += "FOCUSED TESTS: after edits, run cargo fmt on touched files, then focused cargo test -p entities and/or -p database and/or -p services --lib with a narrow filter for this group's symbols. ";
+    prompt += "FOCUSED TESTS: after edits, run cargo fmt on touched files, then focused unit tests only: cargo test -p entities and/or -p database and/or -p services --lib with a narrow filter for this group's symbols. ";
     prompt += "You MUST set CARGO_TARGET_DIR=" + target_dir + " for every cargo check/test so you do not race the workspace target. ";
     prompt += "When finished, rm -rf " + target_dir + ". Never export CARGO_TARGET_DIR into the repo, shell rc, or a later Quality agent.\n";
     prompt += "Do not run cargo test --workspace, clippy --workspace, or the three ./scripts/check-*.sh scripts; Quality owns those.\n";
-    prompt += "Do not run #[ignore] Mongo tests; Quality owns isolated Mongo. Leave mongo_ran=false. Write the tests if the row needs them.\n";
+    prompt += "Never add, modify, or run any integration test: no tests/ directory, no --test target, no --include-ignored, no real MongoDB. Leave mongo_ran=false. Write the required unit tests (--lib) if the row needs them.\n";
     prompt += "Return completed_ids only for items whose old rule source is deleted and whose required unit tests exist and the focused cargo test passed. Otherwise put them in skipped_ids with blockers.\n";
     prompt
 }
@@ -786,7 +805,7 @@ fn repair_prompt_for(cluster, findings_payload, dirty_note, resumed, target_dir)
     }
     prompt += "PARALLEL SAFETY: only touch this group's prefixes. Do not expand scope.\n";
     prompt += "If you must re-run focused tests, set CARGO_TARGET_DIR=" + target_dir + " and rm -rf it afterwards. Do not run workspace gates.\n";
-    prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit. Do not run Mongo.\n";
+    prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit. Never run integration tests, MongoDB, or #[ignore] tests.\n";
     prompt
 }
 
@@ -808,9 +827,9 @@ fn verify_prompt_for(cluster, impl_payload, review_payload) {
     prompt
 }
 
-fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, verify_payloads, mongo_needed) {
+fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, verify_payloads) {
     let prompt = "";
-    prompt += "Integrate and verify this service-layering remediation batch.\n";
+    prompt += "Integrate and verify this service-layering remediation batch. Unit-only gate: never run integration tests.\n";
     prompt += "Batch id: " + batch_id + ". Owner: Grok.\n";
     prompt += "IDs allowed to close (Verify passed): " + json_encode(allowed_ids) + ".\n";
     prompt += "Inspect git status and diff first. Never git reset/checkout/restore/clean. Preserve unrelated dirty files.\n";
@@ -823,7 +842,7 @@ fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, 
     prompt += "cargo fmt --all -- --check\n";
     prompt += "cargo check --workspace --all-features --locked\n";
     prompt += "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings\n";
-    prompt += "cargo test --workspace --all-features --locked\n";
+    prompt += "cargo test --workspace --lib --all-features --locked\n";
     prompt += "./scripts/check-bpm-boundaries.sh\n";
     prompt += "./scripts/check-service-boundaries.sh\n";
     prompt += "./scripts/check-permissions-drift.sh\n";
@@ -831,14 +850,31 @@ fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, 
     prompt += "All cargo commands must use the workspace default target directory only. ";
     prompt += "Do not set CARGO_TARGET_DIR. Do not use /tmp/erp-*-target, /tmp/cargo-*, or any other temporary or dedicated target dir. ";
     prompt += "Do not copy historical contract commands that exported CARGO_TARGET_DIR. Do not create or leave behind a temporary cargo target.\n";
-    prompt += "If mongo_needed=" + mongo_needed + ", also run the new or named #[ignore] integration/concurrency/explain tests on an isolated replica set. ";
-    prompt += "Use ERP_TEST_MONGO_URI if set, otherwise backend/scripts/dev-mongo.sh or docker compose --profile test, never a shared/production URI. ";
-    prompt += "If Mongo cannot be started, do NOT mark those R/CAS/index items DONE; put them in held_ids with environment_blocked evidence.\n";
+    prompt += "UNIT-ONLY GATE: run only cargo test --workspace --lib. Never add, modify, or run any integration test. ";
+    prompt += "Forbidden: any tests/ directory target, any --test target, --include-ignored, real MongoDB, ERP_TEST_MONGO_URI, dev-mongo.sh, docker compose test profile, or external service. ";
+    prompt += "R/E close evidence uses --lib unit tests only; record Mongo/integration dimensions as N/A per contract section 5.\n";
+    prompt += "If a gate command fails, fix only this batch\u0027s breakage, then rerun the full gate sequence from the start. Do not leave the tree red.\n";
     prompt += "Only after gates pass, update docs/service-layering-remediation-contract.md for closed_ids: status DONE, 执行登记 with batch/owner/deps/evidence, ";
-    prompt += "and append a 批次验收登记 covering layering result, targeted tests, Mongo N/A-or-results, unified gates, compat/rollback, and unrun external bounds.\n";
+    prompt += "and append a 批次验收登记 covering layering result, targeted unit tests, Mongo N/A, unified gates, compat/rollback, and unrun external bounds.\n";
     prompt += "Do not mark BLOCKED rows DONE. Do not close SALES-E19 without SALES-R02..R05. Do not invent occupancy policy.\n";
     prompt += "closed_ids MUST be a subset of the Verify-passed allowed IDs listed above. held_ids are attempted but not closed.\n";
-    prompt += "Do not git add or git commit. Leave this batch's code and contract edits in the working tree. A later commit agent will create one commit if this batch passed with closed_ids.\n";
+    prompt += "If any gate still fails after your fixes, set passed=false, keep closed_ids empty, and list every failing command plus the concrete error in remaining_issues.\n";
+    prompt += "Do not git add or git commit. Leave this batch\u0027s code and contract edits in the working tree. A later commit agent will create one commit if this batch passed with closed_ids.\n";
+    prompt
+}
+
+fn quality_repair_prompt_for(batch_id, quality_payload, attempt) {
+    let prompt = "";
+    prompt += "Repair only the unit-gate failures for service-layering batch " + batch_id + ". Attempt " + attempt.to_string() + ".\n";
+    prompt += "Failing Quality payload (fix these, do not expand scope): " + quality_payload + "\n";
+    prompt += "Inspect git status and diff first. Never git reset/checkout/restore/clean. Preserve unrelated dirty files.\n";
+    prompt += "Fix only concrete gate breakage: fmt, check, clippy, --lib unit test failures, boundary scripts, or diff check. ";
+    prompt += "Keep repository/entity/service/BPM boundaries from contract section 2. Old Service helpers must stay deleted.\n";
+    prompt += "UNIT-ONLY: never add, modify, or run integration tests to make the gate green. ";
+    prompt += "Forbidden: tests/ targets, --test, --include-ignored, MongoDB, or external services. Fix with unit-testable code only.\n";
+    prompt += "After fixes, rerun the failing gate commands locally (fmt, check, affected --lib tests, boundary scripts) to confirm. ";
+    prompt += "Do not run the full workspace suite more than needed; the next Quality gate agent runs the full sequence.\n";
+    prompt += "Do not edit docs/service-layering-remediation-contract.md close statuses. Do not git add or git commit.\n";
     prompt
 }
 

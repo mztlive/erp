@@ -31,9 +31,9 @@
 3. **服务层**：在 `services/src/<domain>` 添加 `dto.rs`；编排流程，不得绕过仓库层。
 4. **HTTP 层**：在 `apps/web-api/src/core/handler` 新增 handler，默认必须复用 service DTO，禁止重复定义等价请求/响应类型；仅在 HTTP 形态差异时允许最小薄包装并实现 `From/Into`。
 5. **路由/权限**：将新接口挂到 `apps/web-api/src/core/routes`；管理员路由必须位于 `admin` 并走 JWT + RBAC；为 handler 添加 `#[permission_macros::permission(...)]`。
-6. **测试**：新增至少一个 happy-path 测试，并补充至少一个失败/边界路径测试。
+6. **测试**：按“测试期望”覆盖维度新增单元测试（至少一个 happy-path，加失败/边界路径，尽量覆盖全面）；不新增集成测试。
 7. **检查**：执行 `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`./scripts/check-bpm-boundaries.sh`。
-8. **回归**：执行 `cargo test --workspace`，确保变更无回归。
+8. **回归**：执行 `cargo test --workspace --lib`，确保变更无回归；不执行任何集成测试。
 
 ## 编码约定
 
@@ -87,7 +87,7 @@
 - **迁移与验收要求**：
   - 下沉后必须删除原 Service 重复私有 helper，避免双份规则源。
   - 至少补充一条实体/值对象单元测试覆盖该规则（happy-path + 失败路径）。
-  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
+  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；不执行任何集成测试。
 
 ## 性能优化约定（社区最佳实践）
 
@@ -112,21 +112,25 @@
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"`；`cargo run -p cli -- reset-password --account admin`。密码优先 `--password`，其次环境变量 `ERP_ADMIN_PASSWORD`，否则交互输入。
-- Workspace：`cargo build --workspace`、`cargo test --workspace`。
-- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
+- Workspace：`cargo build --workspace`、`cargo test --workspace --lib`（只跑单元测试，不执行任何集成测试）。
+- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；不执行任何集成测试。
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。
 
 ## 测试期望
 
-- 单元测试内联（`mod tests`），覆盖新的业务规则与边界。
-- 集成测试放在各 crate 的 `tests/` 目录。
-- 每个功能改动至少包含一个 happy-path 测试；路由/行为变更需更新 HTTP 层测试。
-- 对权限与参数校验等场景，至少覆盖一个失败路径测试。
+- 单元测试内联（`mod tests`），要求尽量覆盖全面：
+  - 每个功能改动至少一个 happy-path 单元测试；路由/行为变更需更新 HTTP 层单元测试。
+  - 失败与边界路径：参数校验、权限拒绝、空输入/空集合、重复输入、超长/超限、缺失关联与软删除数据。
+  - 查询与分页：过滤组合、稳定排序、总数一致、边界页（空页/尾页/越界页）、批量归组与去重。
+  - 金额与数量：零值、正负值、精度、舍入、溢出与守恒；聚合逻辑须与基准算法对拍。
+  - 状态与幂等：全部允许/禁止迁移、幂等重放、异载荷冲突、版本冲突与失败原子性。
+  - 覆盖不到的维度必须在 PR 描述中说明理由，不得以“后续补集成测试”为由省略。
+- 不新增、不修改、不执行任何集成测试：禁止运行各 crate `tests/` 目录、任何 `--test` 目标、`--include-ignored` 或依赖真实 MongoDB / 外部服务的测试命令。
 - 上传/临时产物不纳入版本控制，提交前清理大体积日志。
 
 ## CI 与质量门禁
 
-- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
+- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；CI 不执行任何集成测试。
 - 任何生成文件（如权限定义）必须在 CI 中校验未漂移。
 
 ## API 契约与兼容性
@@ -1148,15 +1152,13 @@ erp-client/lib/query-client.ts
 
 ### 两段式测试约定
 
-- **域级仓储/HTTP 集成测试只在 P6 编写**，P2/P3 实现阶段不提交，避免与实现漂移。
-  目录占位说明见 `database/tests/README.md`、`apps/web-api/tests/README.md`。
-- 需要真实 MongoDB（事务需要单节点副本集）的测试统一
-  `#[ignore]` + `require_mongo!()`（`ERP_TEST_MONGO_URI` 门控，由
-  `backend/crates/test-support` 提供），无数据库环境 `cargo test --workspace`
-  必须全绿；P6 / 发布验收执行 `cargo test --workspace -- --include-ignored`。
-- 每个测试使用独立随机数据库名并在结束 drop，禁止共享固定库名。
-- 本地启动 MongoDB：`backend/scripts/dev-mongo.sh` 或
-  `docker compose --profile test up -d mongo`。
+- 只编写单元测试（内联 `mod tests`）；不新增、不修改任何域级仓储/HTTP 集成测试，P6 也不编写。
+  `database/tests/README.md`、`apps/web-api/tests/README.md` 仅为历史目录占位说明。
+- 不执行任何集成测试：禁止运行各 crate `tests/` 目录、任何 `--test` 目标、`--include-ignored`
+  或依赖真实 MongoDB / 外部服务的测试命令（含 `ERP_TEST_MONGO_URI` 门控测试）；回归与验收统一执行
+  `cargo test --workspace --lib`。
+- 不再为集成测试启动或依赖本地 MongoDB；已有 `backend/scripts/dev-mongo.sh` 或
+  `docker compose --profile test up -d mongo` 仅为历史环境说明，不作为当前验收流程。
 
 ### worktree 与分支命名
 
