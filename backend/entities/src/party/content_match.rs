@@ -61,31 +61,44 @@ pub enum SensitiveFactReuse {
 }
 
 impl SensitiveFactReuse {
-    /// 按可选明文决定沿用原事实或比较预计算指纹。
+    /// 返回沿用原事实的比较意图。
     ///
-    /// 明文缺失或去空白后为空时不调用 `fingerprint`，直接沿用原事实。
-    /// 非空明文把原始字符串交给调用方计算指纹，本方法不 trim 明文。
+    /// Service 在敏感明文缺失或去空白后为空时使用本构造；本方法不接收明文、
+    /// 密钥或指纹计算闭包。
     ///
     /// # 参数
-    /// * `plaintext` - 请求中的敏感明文；`None` 或空白表示未提供
-    /// * `fingerprint` - Service/crypto port 提供的预计算闭包
+    /// 无。
     ///
     /// # 返回
-    /// 返回沿用原事实或带预计算指纹的比较意图。
+    /// 返回沿用原事实的比较意图。
     ///
     /// # 错误
-    /// 无。指纹计算失败由调用方在闭包外处理。
+    /// 无。
     ///
     /// # 关键业务约束
-    /// 闭包只接收明文切片并返回 typed fingerprint；密钥不得进入本 VO。
-    pub fn from_optional_plaintext(
-        plaintext: Option<&str>,
-        fingerprint: impl FnOnce(&str) -> QueryFingerprint,
-    ) -> Self {
-        match plaintext {
-            Some(value) if !value.trim().is_empty() => Self::Fingerprint(fingerprint(value)),
-            _ => Self::ReuseOriginal,
-        }
+    /// 沿用原事实表示跳过敏感字段比较，仅比较非敏感规范值。
+    pub fn reuse_original() -> Self {
+        Self::ReuseOriginal
+    }
+
+    /// 由 Service 预计算指纹构造敏感字段比较意图。
+    ///
+    /// 指纹必须由 Service/crypto port 持有密钥算好后传入；本方法不接收明文、
+    /// 密钥或计算闭包。
+    ///
+    /// # 参数
+    /// * `fingerprint` - Service 预计算的强类型查询指纹
+    ///
+    /// # 返回
+    /// 返回携带预计算指纹的比较意图。
+    ///
+    /// # 错误
+    /// 无。指纹格式由计算方保证。
+    ///
+    /// # 关键业务约束
+    /// 密钥与敏感明文不得进入本 VO。
+    pub fn from_fingerprint(fingerprint: QueryFingerprint) -> Self {
+        Self::Fingerprint(fingerprint)
     }
 
     /// 判断敏感字段是否与库存指纹一致。
@@ -434,12 +447,8 @@ mod tests {
     #[test]
     fn contact_reuses_original_when_sensitive_plain_missing_or_blank() {
         let contact = contact();
-        let missing = contact_match(SensitiveFactReuse::from_optional_plaintext(None, |_| {
-            panic!("缺失明文不得计算指纹")
-        }));
-        let blank = contact_match(SensitiveFactReuse::from_optional_plaintext(Some("  \n"), |_| {
-            panic!("空白明文不得计算指纹")
-        }));
+        let missing = contact_match(SensitiveFactReuse::reuse_original());
+        let blank = contact_match(SensitiveFactReuse::reuse_original());
         assert!(contact.matches_content(&missing));
         assert!(contact.matches_content(&blank));
     }
@@ -447,16 +456,10 @@ mod tests {
     #[test]
     fn contact_matches_same_fingerprint_and_rejects_changed_sensitive_or_fields() {
         let contact = contact();
-        let same = contact_match(SensitiveFactReuse::from_optional_plaintext(
-            Some(" 13800138000 "),
-            mobile_fp,
-        ));
+        let same = contact_match(SensitiveFactReuse::from_fingerprint(mobile_fp(" 13800138000 ")));
         assert!(contact.matches_content(&same));
 
-        let changed_mobile = contact_match(SensitiveFactReuse::from_optional_plaintext(
-            Some("13900139000"),
-            mobile_fp,
-        ));
+        let changed_mobile = contact_match(SensitiveFactReuse::from_fingerprint(mobile_fp("13900139000")));
         assert!(!contact.matches_content(&changed_mobile));
 
         let changed_name = PartyContactContentMatch::new(
@@ -464,16 +467,43 @@ mod tests {
             Some("采购负责人".to_string()),
             Some("021-12345678".to_string()),
             Some("zhangsan@example.com".to_string()),
-            SensitiveFactReuse::ReuseOriginal,
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(!contact.matches_content(&changed_name));
+
+        let changed_title = PartyContactContentMatch::new(
+            "张三",
+            Some("普通员工".to_string()),
+            Some("021-12345678".to_string()),
+            Some("zhangsan@example.com".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(!contact.matches_content(&changed_title));
+
+        let changed_telephone = PartyContactContentMatch::new(
+            "张三",
+            Some("采购负责人".to_string()),
+            Some("021-87654321".to_string()),
+            Some("zhangsan@example.com".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(!contact.matches_content(&changed_telephone));
+
+        let changed_email = PartyContactContentMatch::new(
+            "张三",
+            Some("采购负责人".to_string()),
+            Some("021-12345678".to_string()),
+            Some("other@example.com".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(!contact.matches_content(&changed_email));
 
         let empty_title_equals_none = PartyContactContentMatch::new(
             "张三",
             Some("   ".to_string()),
             Some("021-12345678".to_string()),
             Some("zhangsan@example.com".to_string()),
-            SensitiveFactReuse::ReuseOriginal,
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(!contact.matches_content(&empty_title_equals_none));
 
@@ -500,7 +530,7 @@ mod tests {
             Some("  ".to_string()),
             Some("".to_string()),
             None,
-            SensitiveFactReuse::ReuseOriginal,
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(untitled.matches_content(&blank_optionals));
     }
@@ -511,21 +541,42 @@ mod tests {
         let same = PartyAddressContentMatch::new(
             AddressType::Fulfillment,
             Some(" 张三 ".to_string()),
-            SensitiveFactReuse::from_optional_plaintext(Some("北京市朝阳区望京街10号"), address_fp),
+            SensitiveFactReuse::from_fingerprint(address_fp("北京市朝阳区望京街10号")),
         );
         assert!(address.matches_content(&same));
 
         let missing = PartyAddressContentMatch::new(
             AddressType::Fulfillment,
             Some("张三".to_string()),
-            SensitiveFactReuse::from_optional_plaintext(None, |_| panic!("不得计算")),
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(address.matches_content(&missing));
+
+        let blank = PartyAddressContentMatch::new(
+            AddressType::Fulfillment,
+            Some("张三".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(address.matches_content(&blank));
+
+        let changed_address = PartyAddressContentMatch::new(
+            AddressType::Fulfillment,
+            Some("张三".to_string()),
+            SensitiveFactReuse::from_fingerprint(address_fp("北京市朝阳区望京街11号")),
+        );
+        assert!(!address.matches_content(&changed_address));
+
+        let changed_contact_name = PartyAddressContentMatch::new(
+            AddressType::Fulfillment,
+            Some("李四".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(!address.matches_content(&changed_contact_name));
 
         let type_changed = PartyAddressContentMatch::new(
             AddressType::Registered,
             Some("张三".to_string()),
-            SensitiveFactReuse::ReuseOriginal,
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(!address.matches_content(&type_changed));
     }
@@ -537,16 +588,24 @@ mod tests {
             " 上海示例科技有限公司 ",
             " 招商银行 ",
             Some(" 上海分行 ".to_string()),
-            SensitiveFactReuse::from_optional_plaintext(Some("6225-8802-1234-5678"), account_fp),
+            SensitiveFactReuse::from_fingerprint(account_fp("6225-8802-1234-5678")),
         );
         assert!(account.matches_content(&same));
         assert!(account.ensure_unmodified(&same).is_ok());
+
+        let missing_number = PartyBankAccountContentMatch::new(
+            "上海示例科技有限公司",
+            "招商银行",
+            Some("上海分行".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(account.ensure_unmodified(&missing_number).is_ok());
 
         let blank_number = PartyBankAccountContentMatch::new(
             "上海示例科技有限公司",
             "招商银行",
             Some("上海分行".to_string()),
-            SensitiveFactReuse::from_optional_plaintext(Some("   "), |_| panic!("不得计算")),
+            SensitiveFactReuse::reuse_original(),
         );
         assert!(account.ensure_unmodified(&blank_number).is_ok());
 
@@ -554,7 +613,7 @@ mod tests {
             "其他公司",
             "招商银行",
             Some("上海分行".to_string()),
-            SensitiveFactReuse::ReuseOriginal,
+            SensitiveFactReuse::reuse_original(),
         );
         let error = account.ensure_unmodified(&changed_name).unwrap_err();
         assert_eq!(
@@ -562,11 +621,27 @@ mod tests {
             "既有银行账户内容不可原地修改，请结束旧账户后新增账户"
         );
 
+        let changed_bank = PartyBankAccountContentMatch::new(
+            "上海示例科技有限公司",
+            "工商银行",
+            Some("上海分行".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(account.ensure_unmodified(&changed_bank).is_err());
+
+        let changed_branch = PartyBankAccountContentMatch::new(
+            "上海示例科技有限公司",
+            "招商银行",
+            Some("北京分行".to_string()),
+            SensitiveFactReuse::reuse_original(),
+        );
+        assert!(account.ensure_unmodified(&changed_branch).is_err());
+
         let changed_number = PartyBankAccountContentMatch::new(
             "上海示例科技有限公司",
             "招商银行",
             Some("上海分行".to_string()),
-            SensitiveFactReuse::from_optional_plaintext(Some("6225880299999999"), account_fp),
+            SensitiveFactReuse::from_fingerprint(account_fp("6225880299999999")),
         );
         assert!(account.ensure_unmodified(&changed_number).is_err());
     }

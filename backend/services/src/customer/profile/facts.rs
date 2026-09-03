@@ -226,6 +226,9 @@ impl CustomerProfileService {
 
     /// 由请求构造联系人比较输入，并预计算手机号指纹。
     ///
+    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
+    ///
     /// # 参数
     /// * `input` - 客户资料联系人输入
     ///
@@ -237,13 +240,39 @@ impl CustomerProfileService {
             input.title.clone(),
             input.telephone.clone(),
             input.email.clone(),
-            SensitiveFactReuse::from_optional_plaintext(input.mobile.as_deref(), |plain| {
-                self.sensitive_data.contact_mobile_fingerprint(plain)
-            }),
+            self.mobile_reuse(input.mobile.as_deref()),
         )
     }
 
+    /// 由可选手机号明文构造敏感比较意图。
+    ///
+    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    /// 强类型指纹，密钥与明文不进入实体。
+    ///
+    /// # 参数
+    /// * `plaintext` - 请求中的手机号明文；`None` 或空白表示未提供
+    ///
+    /// # 返回
+    /// 返回沿用原事实或带预计算指纹的比较意图。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    fn mobile_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
+        match plaintext {
+            Some(value) if !value.trim().is_empty() => {
+                SensitiveFactReuse::from_fingerprint(self.sensitive_data.contact_mobile_fingerprint(value))
+            }
+            _ => SensitiveFactReuse::reuse_original(),
+        }
+    }
+
     /// 由请求构造地址比较输入，并预计算地址指纹。
+    ///
+    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
     ///
     /// # 参数
     /// * `input` - 客户资料地址输入
@@ -254,13 +283,39 @@ impl CustomerProfileService {
         PartyAddressContentMatch::new(
             input.address_type,
             input.contact_name.clone(),
-            SensitiveFactReuse::from_optional_plaintext(input.address.as_deref(), |plain| {
-                self.sensitive_data.address_fingerprint(plain)
-            }),
+            self.address_reuse(input.address.as_deref()),
         )
     }
 
+    /// 由可选地址明文构造敏感比较意图。
+    ///
+    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    /// 强类型指纹，密钥与明文不进入实体。
+    ///
+    /// # 参数
+    /// * `plaintext` - 请求中的地址明文；`None` 或空白表示未提供
+    ///
+    /// # 返回
+    /// 返回沿用原事实或带预计算指纹的比较意图。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    fn address_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
+        match plaintext {
+            Some(value) if !value.trim().is_empty() => {
+                SensitiveFactReuse::from_fingerprint(self.sensitive_data.address_fingerprint(value))
+            }
+            _ => SensitiveFactReuse::reuse_original(),
+        }
+    }
+
     /// 由请求构造银行账户比较输入，并预计算账号指纹。
+    ///
+    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
     ///
     /// # 参数
     /// * `input` - 客户资料银行账户输入
@@ -275,10 +330,33 @@ impl CustomerProfileService {
             &input.account_name,
             &input.bank_name,
             input.bank_branch_name.clone(),
-            SensitiveFactReuse::from_optional_plaintext(input.account_number.as_deref(), |plain| {
-                self.sensitive_data.bank_account_number_fingerprint(plain)
-            }),
+            self.bank_account_reuse(input.account_number.as_deref()),
         )
+    }
+
+    /// 由可选银行账号明文构造敏感比较意图。
+    ///
+    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    /// 强类型指纹，密钥与明文不进入实体。
+    ///
+    /// # 参数
+    /// * `plaintext` - 请求中的银行账号明文；`None` 或空白表示未提供
+    ///
+    /// # 返回
+    /// 返回沿用原事实或带预计算指纹的比较意图。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    fn bank_account_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
+        match plaintext {
+            Some(value) if !value.trim().is_empty() => SensitiveFactReuse::from_fingerprint(
+                self.sensitive_data.bank_account_number_fingerprint(value),
+            ),
+            _ => SensitiveFactReuse::reuse_original(),
+        }
     }
 
     /// 计算地址集合差异；既有行未携带明文且元数据未变化时原样保留。
