@@ -14,7 +14,7 @@
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
-use database::{AccessControlExt, NoTransaction, Transactional, WarehouseExt};
+use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional, WarehouseExt};
 use entities::common::time::BusinessDate;
 use entities::file_asset::content_fingerprint;
 use entities::ids::WarehouseId;
@@ -560,8 +560,8 @@ impl WarehouseService {
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
         self.db
-            .warehouse()
-            .sku(req.sku_id.as_ref(), &mut NoTransaction)
+            .skus()
+            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
         let id = WarehouseSkuPolicyId::new(next_id());

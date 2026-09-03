@@ -167,6 +167,34 @@ impl<'a> Repository<'a, SalesOrderSubmission> {
         )
         .await
     }
+
+    /// 批量读取销售单关联的全部简报提交。
+    ///
+    /// 工作项简报 hydration 入口：按销售单 `$in` 一次取回全部提交，禁止 N+1。
+    ///
+    /// # 参数
+    /// * `order_ids` - 销售单稳定 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回销售单命中的全部提交。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的销售提交集合，按所属销售单引用过滤，不访问销售单集合。
+    pub async fn list_work_item_brief_submissions_by_orders(
+        &self,
+        order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderSubmission>> {
+        if order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor)
+            .await
+    }
 }
 
 impl<'a> Repository<'a, SalesOrderSubmissionLine> {

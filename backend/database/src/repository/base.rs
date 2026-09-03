@@ -436,6 +436,30 @@ where
         .await
     }
 
+    /// 按稳定 ID 批量读取简报所需的同类业务对象。
+    ///
+    /// 通用按 ID 批量加载能力归属基类，不归属工作项域；保留原方法名以兼容现有调用方。
+    ///
+    /// # 参数
+    /// * `ids` - 业务对象稳定 ID 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的业务对象；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_work_item_brief_entities_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<T>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 判断是否存在符合条件的活跃实体。
     ///
     /// 查询只投影 MongoDB `_id`，并在首条命中后停止，

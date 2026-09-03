@@ -16,13 +16,12 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{CatalogExt, WarehouseExt};
+use super::extensions::WarehouseExt;
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
-use entities::catalog::Sku;
 use entities::common::time::BusinessDate;
 use entities::ids::{SkuId, WarehouseId};
 use entities::money::Quantity;
@@ -34,8 +33,6 @@ const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
 const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_REVISIONS;
 /// `warehouse_sku_policy` 集合名。
 const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_SKU_POLICIES;
-/// `sku` 集合名。
-const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
 
 /// 仓库列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -420,21 +417,6 @@ impl<'a> WarehouseRepository<'a> {
     /// MongoDB 查询失败时返回错误。
     pub async fn warehouse(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Warehouse>> {
         active_entity_by_id(self.db, WAREHOUSES, id, executor).await
-    }
-
-    /// 按主键读取未删除 SKU。
-    ///
-    /// # 参数
-    /// * `id` - SKU 主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配 SKU；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn sku(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Sku>> {
-        active_entity_by_id(self.db, SKUS, id, executor).await
     }
 
     /// 按主键读取未删除仓库-SKU 策略。

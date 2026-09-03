@@ -4,6 +4,7 @@ use std::num::NonZeroU32;
 
 use bpm::ApprovalNodeExecutionId;
 use entities::common::time::Instant;
+use entities::ids::SalesOrderId;
 use entities::work_item::{
     AssignmentSource, FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemPriority,
     WorkItemStatus, WorkItemType,
@@ -758,6 +759,71 @@ impl<'a> Repository<'a, WorkItem> {
         .await
     }
 
+    /// 列出指定销售责任范围的开放供给分配任务。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单
+    /// * `responsibility_key` - 冻结责任范围键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的开放任务；调用方据此处理幂等与异常重复。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按业务对象引用过滤销售单，不访问销售单集合。
+    pub async fn list_open_procurement_by_responsibility(
+        &self,
+        sales_order_id: &SalesOrderId,
+        responsibility_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many(
+            doc! {
+                "business_object_type": "sales_order",
+                "business_object_id": sales_order_id.to_string(),
+                "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
+                "responsibility_key": responsibility_key,
+                "status": WorkItemStatus::Open.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询映射任务关联的正式责任任务，按创建时间稳定排序。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 映射任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的正式任务；调用方必须校验责任事实唯一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按业务对象引用过滤映射任务，不访问映射任务集合。
+    pub async fn list_for_master_mapping_task(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "work_item_type": WorkItemType::BusinessException.as_str(),
+                "business_object_type": "MASTER_MAPPING_TASK",
+                "business_object_id": mapping_task_id,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 查询应付子账全部付款执行任务并把最新任务排在前面。
     ///
     /// # 参数
@@ -1444,33 +1510,6 @@ fn work_item_projection() -> Document {
     }
 }
 
-impl<'a, T> Repository<'a, T>
-where
-    T: Serialize + serde::de::DeserializeOwned + Send + Sync,
-{
-    /// 按稳定 ID 批量读取工作项简报所需的同类业务对象。
-    ///
-    /// # 参数
-    /// * `ids` - 业务对象稳定 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的业务对象；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_brief_entities_by_ids(
-        &self,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<T>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": ids } }, executor).await
-    }
-}
-
 impl<'a> Repository<'a, WorkItem> {
     /// 按稳定 ID 读取任意已注册工作项。
     ///
@@ -1516,377 +1555,89 @@ impl<'a> Repository<'a, WorkItem> {
         )
         .await
     }
-}
 
-impl<'a> Repository<'a, entities::AccountCore> {
-    /// 按稳定 ID 读取工作项授权使用的账号事实。
+    /// 查询错误任务的正式责任关联。
     ///
     /// # 参数
-    /// * `id` - 统一账号 ID
-    /// * `executor` - 数据访问执行器
+    /// * `task_id` - 集成错误任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回未删除账号；不存在时返回 `None`。
+    /// 返回全部匹配的正式任务；调用方必须校验责任关联唯一。
     ///
     /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_account(
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按业务对象引用过滤集成错误任务，不访问错误任务集合。
+    pub async fn list_for_integration_error_task(
         &self,
-        id: &str,
+        task_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<entities::AccountCore>> {
-        self.find_by_id(id, executor).await
-    }
-
-    /// 批量读取工作项负责人和提交人展示账号。
-    ///
-    /// # 参数
-    /// * `ids` - 账号 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的账号；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_party_accounts(
-        &self,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::AccountCore>> {
-        self.list_work_item_brief_entities_by_ids(ids, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::AuditLog> {
-    /// 批量读取指定资源的成功创建审计。
-    ///
-    /// # 参数
-    /// * `resource_type` - 资源类型
-    /// * `resource_ids` - 资源 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回动作固定为 `<resource_type>.create` 的成功审计。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_creation_audits(
-        &self,
-        resource_type: &str,
-        resource_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::AuditLog>> {
-        if resource_ids.is_empty() {
-            return Ok(Vec::new());
-        }
+    ) -> Result<Vec<WorkItem>> {
         self.find_many(
             doc! {
-                "resource_type": resource_type,
-                "resource_id": { "$in": resource_ids },
-                "action": format!("{resource_type}.create"),
-                "success": true,
+                "business_object_type": "integration_error_task",
+                "business_object_id": task_id,
             },
             executor,
         )
         .await
     }
 
-    /// 批量读取指定资源的全部成功工作项事实审计。
+    /// 查询对账差异的正式责任关联。
     ///
     /// # 参数
-    /// * `resource_type` - 资源类型
-    /// * `resource_ids` - 资源 ID 集合
-    /// * `executor` - 数据访问执行器
+    /// * `difference_id` - 对账差异 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回资源类型和 ID 命中的全部成功审计。
+    /// 返回全部匹配的正式任务；调用方必须校验责任关联唯一。
     ///
     /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_successful_work_item_fact_audits(
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按业务对象引用过滤对账差异，不访问差异集合。
+    pub async fn list_for_reconciliation_difference(
         &self,
-        resource_type: &str,
-        resource_ids: &[String],
+        difference_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::AuditLog>> {
-        if resource_ids.is_empty() {
-            return Ok(Vec::new());
-        }
+    ) -> Result<Vec<WorkItem>> {
         self.find_many(
             doc! {
-                "resource_type": resource_type,
-                "resource_id": { "$in": resource_ids },
-                "success": true,
+                "business_object_type": "reconciliation_difference",
+                "business_object_id": difference_id,
             },
             executor,
         )
         .await
     }
-}
 
-impl<'a> Repository<'a, entities::purchase_order::PurchaseOrderSubmission> {
-    /// 按稳定 ID 读取采购审核岗位分离使用的提交事实。
+    /// 批量读取导入确认引用的正式任务。
     ///
     /// # 参数
-    /// * `id` - 采购提交 ID
-    /// * `executor` - 数据访问执行器
+    /// * `work_item_ids` - 正式任务 ID 列表
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回未删除采购提交；不存在时返回 `None`。
+    /// 返回全部匹配的未删除任务；输入为空时返回空列表。
     ///
     /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_purchase_submission(
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按主键 `$in` 批量读取，不访问确认事实集合。
+    pub async fn list_legacy_import_confirmations_by_ids(
         &self,
-        id: &str,
+        work_item_ids: &[entities::ids::WorkItemId],
         executor: &mut dyn Executor,
-    ) -> Result<Option<entities::purchase_order::PurchaseOrderSubmission>> {
-        self.find_by_id(id, executor).await
-    }
-
-    /// 批量读取采购单关联的全部简报提交。
-    ///
-    /// # 参数
-    /// * `order_ids` - 采购单稳定 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回采购单命中的全部提交；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_brief_submissions_by_orders(
-        &self,
-        order_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::purchase_order::PurchaseOrderSubmission>> {
-        if order_ids.is_empty() {
+    ) -> Result<Vec<WorkItem>> {
+        if work_item_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "purchase_order_id": { "$in": order_ids } }, executor)
-            .await
-    }
-}
-
-impl<'a> Repository<'a, entities::sales_order::SalesOrderSubmission> {
-    /// 批量读取销售单关联的全部简报提交。
-    ///
-    /// # 参数
-    /// * `order_ids` - 销售单稳定 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回销售单命中的全部提交；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_brief_submissions_by_orders(
-        &self,
-        order_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::sales_order::SalesOrderSubmission>> {
-        if order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor)
-            .await
-    }
-}
-
-impl<'a> Repository<'a, entities::sales_review::SalesChangeSubmission> {
-    /// 按稳定 ID 读取销售变更岗位分离使用的提交事实。
-    ///
-    /// # 参数
-    /// * `id` - 销售变更提交 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除销售变更提交；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_sales_change_submission(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::sales_review::SalesChangeSubmission>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::receivable::ReceivableAccount> {
-    /// 按稳定 ID 读取票款复核任务使用的应收子账。
-    ///
-    /// # 参数
-    /// * `id` - 应收子账 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除应收子账；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_receivable_account(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::receivable::ReceivableAccount>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::sales_order::SalesOrder> {
-    /// 按稳定 ID 读取工作项当前销售单事实。
-    ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除销售单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_sales_order(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::sales_order::SalesOrder>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::sales_order::SalesOrderRevision> {
-    /// 按稳定 ID 读取工作项当前销售正式版本。
-    ///
-    /// # 参数
-    /// * `id` - 销售正式版本 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除销售版本；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_sales_order_revision(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::sales_order::SalesOrderRevision>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::inventory::StockAdjustment> {
-    /// 按稳定 ID 读取库存调整岗位分离事实。
-    ///
-    /// # 参数
-    /// * `id` - 库存调整单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除库存调整单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_stock_adjustment(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::inventory::StockAdjustment>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::inventory::StockAdjustmentLine> {
-    /// 批量读取库存调整简报明细。
-    ///
-    /// # 参数
-    /// * `adjustment_ids` - 库存调整单 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配的库存调整明细；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_work_item_brief_lines_by_adjustments(
-        &self,
-        adjustment_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<entities::inventory::StockAdjustmentLine>> {
-        if adjustment_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(
-            doc! { "stock_adjustment_id": { "$in": adjustment_ids } },
-            executor,
-        )
-        .await
-    }
-}
-
-impl<'a> Repository<'a, entities::supplier_settlement::SupplierSettlementStatement> {
-    /// 按稳定 ID 读取供应商结算岗位分离事实。
-    ///
-    /// # 参数
-    /// * `id` - 供应商结算单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除结算单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_supplier_settlement(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::supplier_settlement::SupplierSettlementStatement>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::integration_ops::IntegrationErrorTask> {
-    /// 按稳定 ID 读取 W29 集成异常对象。
-    ///
-    /// # 参数
-    /// * `id` - 集成异常任务 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除集成异常对象；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_integration_error_task(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::integration_ops::IntegrationErrorTask>> {
-        self.find_by_id(id, executor).await
-    }
-}
-
-impl<'a> Repository<'a, entities::integration_ops::ReconciliationDifference> {
-    /// 按稳定 ID 读取 W29 对账差异对象。
-    ///
-    /// # 参数
-    /// * `id` - 对账差异 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除对账差异；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_reconciliation_difference(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::integration_ops::ReconciliationDifference>> {
-        self.find_by_id(id, executor).await
+        let ids = work_item_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 }
 

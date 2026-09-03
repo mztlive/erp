@@ -187,6 +187,58 @@ impl<'a> Repository<'a, PurchaseOrderSubmission> {
         )
         .await
     }
+
+    /// 按稳定 ID 读取采购审核岗位分离使用的提交事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 采购提交 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除采购提交；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的采购提交集合，不访问采购单主表。
+    pub async fn find_work_item_purchase_submission(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PurchaseOrderSubmission>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 批量读取采购单关联的全部简报提交。
+    ///
+    /// 工作项简报 hydration 入口：按采购单 `$in` 一次取回全部提交，禁止 N+1。
+    ///
+    /// # 参数
+    /// * `order_ids` - 采购单稳定 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回采购单命中的全部提交。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的采购提交集合，按所属采购单引用过滤，不访问采购单集合。
+    pub async fn list_work_item_brief_submissions_by_orders(
+        &self,
+        order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmission>> {
+        if order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "purchase_order_id": { "$in": order_ids } }, executor)
+            .await
+    }
 }
 
 impl<'a> Repository<'a, PurchaseOrderSubmissionLine> {

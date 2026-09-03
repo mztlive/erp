@@ -14,11 +14,9 @@
 //!
 //! - [`processable_delivery_batch`]：待处理投递批次上下文（MASTER-R04）。
 
-use entities::catalog::SkuRevision;
 use entities::common::time::Instant;
 use entities::ids::{
-    InboxMessageId, IntegrationErrorTaskId, SkuId, SkuRevisionId, SourceSystemId, SupplierOfferingId,
-    SupplierOfferingRevisionId, WorkItemId,
+    InboxMessageId, IntegrationErrorTaskId, SkuId, SourceSystemId, SupplierOfferingRevisionId, WorkItemId,
 };
 use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
@@ -27,7 +25,6 @@ use entities::publication::{
     ProductPublicationRevisionMedia, ProductPublicationStatus, PublicationDeliveryStatus, SafetyPauseCause,
     SafetyPauseSourceObjectType, SaleStatus, SystemSafetyPauseOperation,
 };
-use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
@@ -1040,89 +1037,6 @@ impl<'a> PublicationRepository<'a> {
         )
         .await?;
         Ok(())
-    }
-}
-
-impl<'a> Repository<'a, SupplierOfferingRevision> {
-    /// 按稳定 ID 读取发布修订引用的供给修订。
-    ///
-    /// # 参数
-    /// * `id` - 供给修订 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除供给修订；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_publication_offering_revision(
-        &self,
-        id: &SupplierOfferingRevisionId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierOfferingRevision>> {
-        self.find_by_id(id.as_ref(), executor).await
-    }
-
-    /// 列出稳定供给的全部不可变商业条款修订。
-    ///
-    /// # 参数
-    /// * `offering_id` - 供应商供给稳定 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的供给修订。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_publication_offering_revisions(
-        &self,
-        offering_id: &SupplierOfferingId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierOfferingRevision>> {
-        self.find_many(doc! { "supplier_offering_id": offering_id.to_string() }, executor)
-            .await
-    }
-}
-
-impl<'a> Repository<'a, SkuRevision> {
-    /// 按稳定 ID 读取发布修订引用的 SKU 修订。
-    ///
-    /// # 参数
-    /// * `id` - SKU 修订 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除 SKU 修订；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_publication_sku_revision(
-        &self,
-        id: &SkuRevisionId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SkuRevision>> {
-        self.find_by_id(id.as_ref(), executor).await
-    }
-}
-
-impl<'a> Repository<'a, SupplierOffering> {
-    /// 按稳定 ID 读取发布或安全暂停使用的供给身份。
-    ///
-    /// # 参数
-    /// * `id` - 供给稳定 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除供给；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_publication_supplier_offering(
-        &self,
-        id: &SupplierOfferingId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierOffering>> {
-        self.find_by_id(id.as_ref(), executor).await
     }
 }
 

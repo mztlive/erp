@@ -14,7 +14,6 @@ mod catalog;
 mod contract;
 mod cost;
 mod customer;
-mod customer_center_receivable;
 mod customer_center_related;
 mod document_registry;
 pub mod extensions;
@@ -55,7 +54,6 @@ pub use bulk_job::BackgroundJobRegistration;
 pub use card_instance::CardBaselineRegistration;
 pub use catalog::SkuRow;
 pub use customer::CustomerAccountRow;
-pub use customer_center_receivable::CustomerCenterReceivableRow;
 pub use customer_center_related::{
     CustomerCenterContractRow, CustomerCenterRelatedRow, CustomerCenterSalesOrderRow,
 };
@@ -64,6 +62,7 @@ pub use extensions::DatabaseExt;
 pub use procurement_responsibility::ProcurementResponsibilityRuleFilter;
 pub use projection::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
 pub use publication::{PublicationDeliveryEscalation, PublicationDeliveryFailure};
+pub use receivable::customer_center::CustomerCenterReceivableRow;
 pub use supplier::SupplierAccountRow;
 pub use supplier_offering::SupplierOfferingRow;
 pub use work_item::WorkItemRow;

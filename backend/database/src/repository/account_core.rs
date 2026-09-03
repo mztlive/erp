@@ -127,6 +127,50 @@ impl<'a> Repository<'a, AccountCore> {
             .collect())
     }
 
+    /// 批量读取采购责任规则与解析结果引用的负责人账号。
+    ///
+    /// 采购责任展示入口的历史名称，语义与 [`Self::list_by_ids`] 完全一致；
+    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `owner_ids` - 负责人账号 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回全部匹配且未软删除的统一账号；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn list_procurement_responsibility_owners(
+        &self,
+        owner_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AccountCore>> {
+        self.list_by_ids(owner_ids, executor).await
+    }
+
+    /// 按稳定 ID 读取采购负责人账号事实。
+    ///
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_account`] 完全一致；
+    /// 保留本方法以避免展示层调用方改名，仅委托属主单条查询。
+    ///
+    /// # 参数
+    /// * `owner_id` - 负责人账号 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回未删除账号；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_procurement_responsibility_owner(
+        &self,
+        owner_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<AccountCore>> {
+        self.find_account(owner_id, executor).await
+    }
+
     /// 根据账号类型查询账号集合。
     ///
     /// # 参数
@@ -212,5 +256,55 @@ impl<'a> Repository<'a, AccountCore> {
         }
         let options = FindOptions::builder().limit(i64::from(limit)).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
+    }
+
+    /// 按稳定 ID 读取工作项授权使用的账号事实。
+    ///
+    /// 工作项入口的历史名称，语义与 [`Self::find_account`] 完全一致；
+    /// 保留本方法以避免调用方改名，仅委托属主单条查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `id` - 统一账号 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回未删除账号；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法只封装工作项授权所需的持久化账号事实，账号状态与权限仍由调用方重验。
+    pub async fn find_work_item_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<AccountCore>> {
+        self.find_account(id, executor).await
+    }
+
+    /// 批量读取工作项负责人和提交人展示账号。
+    ///
+    /// 工作项入口的历史名称，语义与 [`Self::list_by_ids`] 完全一致；
+    /// 保留本方法以避免调用方改名，仅委托属主批量查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `ids` - 账号 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回全部匹配且未删除的账号记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法只返回未软删除账号的持久化事实，展示名称映射由调用方完成。
+    pub async fn list_work_item_party_accounts(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AccountCore>> {
+        self.list_by_ids(ids, executor).await
     }
 }

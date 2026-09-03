@@ -130,6 +130,35 @@ impl<'a> Repository<'a, VoucherCategoryProfileRevision> {
             total: total as i64,
         })
     }
+
+    /// 查找 SKU 当前启用的卡券类目扩展修订。
+    ///
+    /// # 参数
+    /// * `sku_id` - 目标 SKU ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回状态为 `Active` 的卡券类目扩展修订；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的卡券类目扩展修订集合，按 SKU 引用过滤，不访问 SKU 集合。
+    pub async fn find_active_by_sku(
+        &self,
+        sku_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<VoucherCategoryProfileRevision>> {
+        self.find_one(
+            doc! {
+                "sku_id": sku_id,
+                "status": EnableStatus::Active.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 impl<'a> CatalogRepository<'a> {

@@ -261,6 +261,30 @@ impl<'a> Repository<'a, SalesChangeSubmission> {
         )
         .await
     }
+
+    /// 按稳定 ID 读取销售变更岗位分离使用的提交事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 销售变更提交 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除销售变更提交；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的销售变更提交集合，不访问销售变更单集合。
+    pub async fn find_work_item_sales_change_submission(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesChangeSubmission>> {
+        self.find_by_id(id, executor).await
+    }
 }
 
 impl<'a> Repository<'a, SalesChangeSubmissionLine> {

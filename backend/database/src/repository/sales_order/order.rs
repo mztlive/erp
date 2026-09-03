@@ -1,10 +1,8 @@
 //! `sales_order` 与 `sales_order_line` 仓储：主单列表查询、稳定明细维护。
 
-use entities::receivable::ReceivableAccount;
 use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderId, SalesOrderLine,
 };
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -216,6 +214,66 @@ impl<'a> Repository<'a, SalesOrder> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
+    /// 按销售单 ID 集合批量读取已生效且可作为采购来源的销售单。
+    ///
+    /// # 参数
+    /// * `sales_order_ids` - 销售单稳定身份集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配、未删除且商业状态为生效的销售单；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 未删除过滤与 [`Self::find_orders_by_ids`] 一致，由基类 `find_many` 统一追加。
+    pub async fn find_effective_orders_by_ids(
+        &self,
+        sales_order_ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>> {
+        if sales_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = sales_order_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        self.find_many(
+            doc! {
+                "id": { "$in": ids },
+                "commercial_status": CommercialStatus::Effective.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按稳定 ID 读取工作项当前销售单事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 销售单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除销售单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的销售单集合，不访问应收或版本集合。
+    pub async fn find_work_item_sales_order(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrder>> {
+        self.find_by_id(id, executor).await
+    }
+
     /// 分页检索销售单列表（投影查询）。
     ///
     /// 只返回 [`SalesOrderRow`] 所需的列表字段，不加载整文档；排序字段由
@@ -294,91 +352,6 @@ impl<'a> Repository<'a, SalesOrderLine> {
         self.find_many_sorted(
             doc! { "sales_order_id": sales_order_id.to_string() },
             doc! { "line_no": 1 },
-            executor,
-        )
-        .await
-    }
-}
-
-impl<'a> Repository<'a, ReceivableAccount> {
-    /// 列出销售单的全部应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按子账序号升序排列的应收子账。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_sales_order(
-        &self,
-        sales_order_id: &SalesOrderId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableAccount>> {
-        self.find_many_sorted(
-            doc! { "sales_order_id": sales_order_id.to_string() },
-            doc! { "account_seq": 1 },
-            executor,
-        )
-        .await
-    }
-
-    /// 查找销售单的首个应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回 `account_seq = 1` 的应收子账；尚未形成时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_primary_by_sales_order(
-        &self,
-        sales_order_id: &SalesOrderId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReceivableAccount>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "account_seq": 1,
-            },
-            executor,
-        )
-        .await
-    }
-}
-
-impl<'a> Repository<'a, WorkItem> {
-    /// 列出指定销售责任范围的开放供给分配任务。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `responsibility_key` - 冻结责任范围键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的开放任务；调用方据此处理幂等与异常重复。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_open_procurement_by_responsibility(
-        &self,
-        sales_order_id: &SalesOrderId,
-        responsibility_key: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkItem>> {
-        self.find_many(
-            doc! {
-                "business_object_type": "sales_order",
-                "business_object_id": sales_order_id.to_string(),
-                "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
-                "responsibility_key": responsibility_key,
-                "status": WorkItemStatus::Open.as_str(),
-            },
             executor,
         )
         .await

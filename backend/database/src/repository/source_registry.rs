@@ -274,6 +274,65 @@ impl<'a> Repository<'a, ExternalIdentityMap> {
     }
 }
 
+impl<'a> Repository<'a, ExternalIdentityTarget> {
+    /// 查询外部身份映射的全部目标历史，最新有效期优先。
+    ///
+    /// # 参数
+    /// * `mapping_id` - 外部身份映射 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部目标历史，按 `valid_from` 降序、ID 升序稳定排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
+    pub async fn list_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! { "external_identity_map_id": mapping_id },
+            doc! { "valid_from": -1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询外部身份映射当前有效目标，按生效时间稳定排序。
+    ///
+    /// # 参数
+    /// * `mapping_id` - 外部身份映射 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回状态为 `Active` 的目标，按 `valid_from` 与 ID 升序排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
+    pub async fn list_active_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! {
+                "external_identity_map_id": mapping_id,
+                "status": TargetStatus::Active.as_str(),
+            },
+            doc! { "valid_from": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
 /// D01 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的

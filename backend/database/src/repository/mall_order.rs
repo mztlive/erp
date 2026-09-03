@@ -1071,6 +1071,32 @@ impl<'a> Repository<'a, MallOrderItem> {
         )
         .await
     }
+
+    /// 按商城订单明细主键批量读取明细（`$in` 一次取回，避免 N+1）。
+    ///
+    /// # 参数
+    /// * `item_ids` - 商城订单明细主键集合；为空时返回空列表，不访问数据库
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除商城订单明细；传入 ID 缺失时不补位，由调用方校验完整性。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只查询 `mall_order_items` 集合；不做分页截断，不返回 Service DTO。
+    pub async fn list_by_ids(
+        &self,
+        item_ids: &[MallOrderItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallOrderItem>> {
+        if item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = item_ids.iter().map(|id| id.to_string()).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
 }
 
 impl<'a> Repository<'a, MallPaymentSource> {

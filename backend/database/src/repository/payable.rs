@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 
 use entities::common::{stable::StableBase, time::BusinessDate};
-use entities::ids::{PayableAccountId, PayableEntryId, SupplierAccountId};
+use entities::ids::{PayableAccountId, PayableEntryId, PurchaseOrderId, SupplierAccountId};
 use entities::money::Amount;
 use entities::payable::{
     PayableAccount, PayableAccountStatus, PayableEntry, PayableEntryOffset, PayableSourceType,
@@ -283,6 +283,35 @@ impl<'a> Repository<'a, PayableAccount> {
         }
         let ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    /// 按采购单查询其来源的应付往来子账。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回来源单据为该采购单的应付子账；尚未形成时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 未删除过滤由基类 `find_one` 统一追加；来源类型固定为采购单。
+    pub async fn find_by_purchase_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PayableAccount>> {
+        self.find_one(
+            doc! {
+                "source_document_id": purchase_order_id.to_string(),
+                "source_type": PayableSourceType::PurchaseOrder.as_str(),
+            },
+            executor,
+        )
+        .await
     }
 
     /// 条件核销：增加已核销进度（不超额核销）。

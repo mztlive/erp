@@ -19,12 +19,10 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use entities::ids::{
-    MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId, MallOrderItemId, SupplierAccountId,
+    MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId, SupplierAccountId,
     SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
     SupplierOfferingRevisionId, SupplierOrderActionId, SupplierRefundFactId,
 };
-use entities::mall_after_sales::MallAfterSalesRequestLine;
-use entities::mall_order::MallOrderItem;
 use entities::money::{Amount, Quantity};
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
@@ -279,56 +277,6 @@ impl<'a> Repository<'a, SupplierFulfillmentItem> {
             .await?;
         items.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(items)
-    }
-}
-
-impl<'a> Repository<'a, MallOrderItem> {
-    /// 按商城订单明细主键批量读取明细。
-    ///
-    /// # 参数
-    /// * `item_ids` - 商城订单明细主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除商城订单明细。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_ids(
-        &self,
-        item_ids: &[MallOrderItemId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallOrderItem>> {
-        if item_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": ids_to_strings(item_ids) } }, executor)
-            .await
-    }
-}
-
-impl<'a> Repository<'a, MallAfterSalesRequestLine> {
-    /// 按商城售后申请读取全部申请行。
-    ///
-    /// # 参数
-    /// * `request_id` - 商城售后申请主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回关联该申请的未删除申请行。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_request_id(
-        &self,
-        request_id: &MallAfterSalesRequestId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallAfterSalesRequestLine>> {
-        self.find_many(
-            doc! { "after_sales_request_id": request_id.to_string() },
-            executor,
-        )
-        .await
     }
 }
 
@@ -616,6 +564,29 @@ impl<'a> Repository<'a, SupplierRefundFact> {
             .await?;
         facts.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(facts)
+    }
+
+    /// 判断指定入站消息是否已形成供应商退款正式事实。
+    ///
+    /// # 参数
+    /// * `message_id` - 入站消息 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 已存在正式退款事实时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `supplier_refund_fact` 集合，按入站消息引用判定存在性，不访问入站消息集合。
+    pub async fn exists_by_inbox_message(
+        &self,
+        message_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(doc! { "inbox_message_id": message_id }, executor)
+            .await
     }
 }
 

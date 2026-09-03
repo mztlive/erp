@@ -4,10 +4,11 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, ProductCategory, ProductCategoryAttribute, ProductKind};
+use entities::ids::ProductCategoryId;
 
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::shared::sort_doc;
+use super::shared::{in_filter, sort_doc};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
@@ -109,6 +110,72 @@ impl<'a> Repository<'a, ProductCategory> {
     pub async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool> {
         self.exists(doc! { "parent_category_id": parent_category_id }, executor)
             .await
+    }
+
+    /// 按稳定主键批量查询商品分类。
+    ///
+    /// # 参数
+    /// * `ids` - 商品分类稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除商品分类实体；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_ids(
+        &self,
+        ids: &[ProductCategoryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductCategory>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
+            .await
+    }
+
+    /// 批量读取采购责任解析或规则展示引用的商品分类。
+    ///
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
+    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `category_ids` - 商品分类 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的商品分类；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_procurement_responsibility_categories(
+        &self,
+        category_ids: &[ProductCategoryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductCategory>> {
+        self.find_by_ids(category_ids, executor).await
+    }
+
+    /// 判断采购责任规则引用的商品分类是否存在。
+    ///
+    /// 只封装存在性事实，不判断规则引用合法性。
+    ///
+    /// # 参数
+    /// * `category_id` - 商品分类稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 存在且未删除时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn has_procurement_responsibility_category(
+        &self,
+        category_id: &ProductCategoryId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.find_by_id(category_id.as_ref(), executor).await?.is_some())
     }
 
     /// 分页检索商品分类列表（投影查询）。

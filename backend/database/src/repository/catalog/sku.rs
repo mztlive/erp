@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, ListingStatus, Product, Sku, SkuRevision, SkuRevisionAttributeValue};
 use entities::common::time::BusinessDate;
-use entities::ids::{ProductId, SkuId};
+use entities::ids::{ProductId, SkuId, SkuRevisionId};
 use entities::money::{Amount, Quantity};
 
 use super::super::extensions::CatalogExt;
@@ -160,6 +160,49 @@ impl<'a> Repository<'a, Sku> {
             executor,
         )
         .await
+    }
+
+    /// 批量读取采购责任解析或规则展示引用的 SKU。
+    ///
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
+    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `sku_ids` - SKU 稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的 SKU；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_procurement_responsibility_skus(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Sku>> {
+        self.find_by_ids(sku_ids, executor).await
+    }
+
+    /// 判断采购责任规则引用的 SKU 是否存在。
+    ///
+    /// 只封装存在性事实，不判断规则引用合法性。
+    ///
+    /// # 参数
+    /// * `sku_id` - SKU 稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 存在且未删除时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn has_procurement_responsibility_sku(
+        &self,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.find_by_id(sku_id.as_ref(), executor).await?.is_some())
     }
 
     /// 分页检索 SKU 列表（投影查询）。
@@ -328,6 +371,31 @@ impl<'a> Repository<'a, SkuRevision> {
         })
     }
 
+    /// 按稳定 ID 读取发布修订引用的 SKU 修订。
+    ///
+    /// 发布修订通过 SKU 修订稳定 ID 引用不可变商品版本，本方法提供该跨域只读
+    /// 事实的数据访问能力，不承载业务规则判断。
+    ///
+    /// # 参数
+    /// * `id` - SKU 修订 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除 SKU 修订；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 只查询本域 `sku_revisions` 集合，不触碰其他集合。
+    pub async fn find_publication_sku_revision(
+        &self,
+        id: &SkuRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SkuRevision>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
     /// 按规范化条码精确查询全部「在用」SKU 修订。
     ///
     /// 条码走 `idx_sku_revisions_barcode` 精确查询索引；同一条码允许命中多个
@@ -381,6 +449,51 @@ impl<'a> Repository<'a, SkuRevision> {
         }
         let ids: Vec<String> = sku_ids.iter().map(|id| id.to_string()).collect();
         self.find_many(doc! { "sku_id": { "$in": ids } }, executor).await
+    }
+
+    /// 按稳定主键批量查询 SKU 修订。
+    ///
+    /// # 参数
+    /// * `ids` - SKU 修订稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回匹配的未删除 SKU 修订实体；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_ids(
+        &self,
+        ids: &[SkuRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
+            .await
+    }
+
+    /// 批量读取采购责任规则展示需要的 SKU 当前修订。
+    ///
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
+    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    ///
+    /// # 参数
+    /// * `revision_ids` - SKU 修订 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的 SKU 修订；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_procurement_responsibility_sku_revisions(
+        &self,
+        revision_ids: &[SkuRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        self.find_by_ids(revision_ids, executor).await
     }
 }
 

@@ -1,5 +1,7 @@
-//! 客户对象中心的应收汇总读模型。
+//! 域 D18 `receivable` 仓储：客户对象中心的应收汇总读模型。
 //!
+//! `impl Repository<ReceivableAccount>` 归属应收域，由
+//! `receivable.rs` 经 `customer_center` 子模块挂载；
 //! 应收余额、可开票余额、逾期未核销金额和最早逾期日在 MongoDB 内按客户聚合；
 //! 金额始终保持 Decimal128，不经过二进制浮点数。
 
@@ -15,9 +17,9 @@ use mongodb::bson::{doc, Bson, Decimal128, Document};
 use mongodb::Database;
 use serde::Deserialize;
 
-use super::extensions::ReceivableExt;
-use super::Repository;
 use crate::executor::Executor;
+use crate::repository::extensions::ReceivableExt;
+use crate::repository::Repository;
 use crate::Result;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 
@@ -46,6 +48,10 @@ impl<'a> Repository<'a, ReceivableAccount> {
     ///
     /// # 错误
     /// MongoDB 聚合或定点数值反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本域拥有的 `receivable_accounts`、`receivable_entries` 与
+    /// `receivable_entry_offsets` 集合，不访问客户集合；调用方负责客户存在性与授权校验。
     pub async fn customer_center_receivable(
         &self,
         customer_id: &str,

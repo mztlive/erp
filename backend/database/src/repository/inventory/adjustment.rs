@@ -141,6 +141,63 @@ impl<'a> Repository<'a, StockAdjustment> {
             total: total as i64,
         })
     }
+
+    /// 按稳定 ID 读取库存调整岗位分离事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 库存调整单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除库存调整单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的库存调整单集合，不访问明细集合。
+    pub async fn find_work_item_stock_adjustment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<StockAdjustment>> {
+        self.find_by_id(id, executor).await
+    }
+}
+
+impl<'a> Repository<'a, StockAdjustmentLine> {
+    /// 批量读取库存调整简报明细。
+    ///
+    /// 工作项简报 hydration 入口：按调整单 `$in` 一次取回全部明细，禁止 N+1。
+    ///
+    /// # 参数
+    /// * `adjustment_ids` - 库存调整单 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的库存调整明细。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的库存调整明细集合，按所属调整单引用过滤，不访问表头集合。
+    pub async fn list_work_item_brief_lines_by_adjustments(
+        &self,
+        adjustment_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockAdjustmentLine>> {
+        if adjustment_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! { "stock_adjustment_id": { "$in": adjustment_ids } },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。

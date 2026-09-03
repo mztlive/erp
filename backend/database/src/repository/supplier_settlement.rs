@@ -437,6 +437,30 @@ impl<'a> Repository<'a, SupplierSettlementStatement> {
             .await
     }
 
+    /// 按稳定 ID 读取供应商结算岗位分离事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 供应商结算单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除结算单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的结算单集合，不访问结算明细集合。
+    pub async fn find_work_item_supplier_settlement(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatement>> {
+        self.find_by_id(id, executor).await
+    }
+
     /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
     pub async fn aggregate_supplier_settlement_statement_stats(
         &self,

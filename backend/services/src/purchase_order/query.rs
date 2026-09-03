@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SupplierExt};
+use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
 use entities::purchase_order::PurchaseOrder;
 use validator::Validate;
 
@@ -224,8 +224,8 @@ impl PurchaseOrderService {
         };
         let payable_summary = self
             .db
-            .purchase_order()
-            .find_payable_account(&order.base.id.clone().into(), &mut NoTransaction)
+            .payable_accounts()
+            .find_by_purchase_order(&order.base.id.clone().into(), &mut NoTransaction)
             .await?
             .map(|account| super::dto::PurchaseOrderPayableSummaryView {
                 payable_open_amount: account.open_total,
@@ -350,8 +350,8 @@ impl PurchaseOrderService {
             .collect::<Vec<_>>();
         let numbers = self
             .db
-            .purchase_order()
-            .find_sales_orders_by_ids(&ids, &mut NoTransaction)
+            .sales_orders()
+            .find_orders_by_ids(&ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))

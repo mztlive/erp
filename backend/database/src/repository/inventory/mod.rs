@@ -12,7 +12,7 @@ mod shared;
 
 use mongodb::Database;
 
-use super::extensions::{CatalogExt, DocumentRegistryExt, FulfillmentExt, InventoryExt, WarehouseExt};
+use super::extensions::InventoryExt;
 
 #[allow(unused_imports)]
 pub use adjustment::{StockAdjustmentFilter, StockAdjustmentRow};
@@ -33,18 +33,6 @@ const STOCK_RESERVATIONS: &str = <mongodb::Database as InventoryExt>::STOCK_RESE
 const STOCK_MOVEMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_MOVEMENTS;
 /// `stock_adjustment` 集合名。
 const STOCK_ADJUSTMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENTS;
-/// `warehouse` 集合名。
-const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
-/// `warehouse_revision` 集合名。
-const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_REVISIONS;
-/// `sku` 集合名。
-const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
-/// `sku_revision` 集合名。
-const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_REVISIONS;
-/// `purchase_receipt` 集合名。
-const PURCHASE_RECEIPTS: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS;
-/// `business_document` 集合名。
-const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;
 
 /// D17 域专用仓储：语义查询与多步骤事务写入。
 ///

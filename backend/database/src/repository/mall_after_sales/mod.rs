@@ -16,6 +16,7 @@
 //! - [`restoration_limit_scope`]：余额恢复关联事实图与历史恢复净额（INT-R12）。
 
 mod consumption_refund_limit_scope;
+mod request_line_query;
 mod restoration_limit_scope;
 
 // 供公共方法返回类型命名；当前调用方以类型推断消费，故允许未直接 use。
@@ -26,9 +27,8 @@ pub use restoration_limit_scope::RestorationLimitScope;
 
 use entities::common::time::Instant;
 use entities::mall_after_sales::{
-    AfterSalesRequestStatus, AfterSalesRequestType, MallAfterSalesRequest, MallAfterSalesRequestLine,
-    MallBalanceRestoration, MallBalanceRestorationAllocation, MallRefund, MallRefundAllocation,
-    MallRefundLine,
+    AfterSalesRequestStatus, AfterSalesRequestType, MallAfterSalesRequest, MallBalanceRestoration,
+    MallBalanceRestorationAllocation, MallRefund, MallRefundAllocation, MallRefundLine,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -178,8 +178,6 @@ impl<'a> Repository<'a, MallAfterSalesRequest> {
         })
     }
 }
-
-impl<'a> Repository<'a, MallAfterSalesRequestLine> {}
 
 /// `mall_refund` 只读追加仓储（退款头是不可变正式事实，§4.5 不设软删除）。
 pub struct MallRefundRepository<'a> {

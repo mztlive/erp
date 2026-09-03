@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use futures_util::TryStreamExt;
@@ -11,7 +11,6 @@ use entities::catalog::{
     SkuCoverageStatus,
 };
 use entities::common::time::BusinessDate;
-use entities::file_asset::FileAsset;
 use entities::ids::{FileAssetId, ProductId, ProductRevisionId};
 use entities::money::Amount;
 
@@ -292,6 +291,29 @@ impl<'a> Repository<'a, ProductRevision> {
         })
     }
 
+    /// 按稳定主键批量查询商品修订。
+    ///
+    /// # 参数
+    /// * `ids` - 商品修订稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回匹配的未删除商品修订实体；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_ids(
+        &self,
+        ids: &[ProductRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevision>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
+            .await
+    }
+
     /// 批量查询一组商品的修订（`$in`，一次取回）。
     ///
     /// 用于按 SKU 所属商品聚合修订明细，避免逐商品 N+1。
@@ -542,6 +564,10 @@ impl<'a> CatalogRepository<'a> {
 
     /// 返回一组 Catalog 文件引用中尚未登记的文件资产 ID。
     ///
+    /// 用例编排入口：存在性判定委托文件资产属主
+    /// `Repository<FileAsset>::missing_file_asset_ids`，本方法不直接查询
+    /// `file_assets` 集合。
+    ///
     /// # 参数
     /// * `asset_ids` - 商品媒体或 SKU 主图引用的文件资产 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
@@ -550,35 +576,19 @@ impl<'a> CatalogRepository<'a> {
     /// 返回未命中的 ID，保持输入顺序并去除重复值。
     ///
     /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    /// 属主查询的 MongoDB 错误直接透出。
+    ///
+    /// # 约束
+    /// 不得在本方法内重写文件资产存在性查询；只允许调用属主仓储能力。
     pub async fn missing_file_asset_ids(
         &self,
         asset_ids: &[FileAssetId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<FileAssetId>> {
-        if asset_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let rows = self
-            .db
+        self.db
             .file_assets()
-            .find_many(
-                in_filter("id", asset_ids.iter().map(ToString::to_string)),
-                executor,
-            )
-            .await?;
-        let existing = rows
-            .into_iter()
-            .map(|asset: FileAsset| asset.base.id)
-            .collect::<HashSet<_>>();
-        let mut missing = Vec::new();
-        let mut seen = HashSet::new();
-        for asset_id in asset_ids {
-            if !existing.contains(asset_id.as_ref()) && seen.insert(asset_id.to_string()) {
-                missing.push(asset_id.clone());
-            }
-        }
-        Ok(missing)
+            .missing_file_asset_ids(asset_ids, executor)
+            .await
     }
 
     /// 批量装配商品修订投影的媒体关系。

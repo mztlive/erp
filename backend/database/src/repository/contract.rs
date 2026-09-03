@@ -142,6 +142,41 @@ impl<'a> Repository<'a, Contract> {
             total: total as i64,
         })
     }
+
+    /// 查找当前客户范围内指向指定结算主体的生效合同。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 当前操作人可参与的客户 ID 集合
+    /// * `settlement_party_id` - 目标结算主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回任一客户范围内的生效合同；客户集合为空或无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `contracts` 集合，不访问结算主体或客户集合。
+    pub async fn find_effective_for_settlement_party(
+        &self,
+        customer_ids: &[String],
+        settlement_party_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Contract>> {
+        if customer_ids.is_empty() {
+            return Ok(None);
+        }
+        self.find_one(
+            doc! {
+                "customer_id": { "$in": customer_ids },
+                "settlement_party_id": settlement_party_id,
+                "status": ContractStatus::Effective.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 impl<'a> Repository<'a, ContractRevision> {

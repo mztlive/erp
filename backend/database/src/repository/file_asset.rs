@@ -8,6 +8,8 @@
 //!
 //! 筛选/行类型定义在本文件，经 `FileAssetExt` 的关联类型对外暴露。
 
+use std::collections::HashSet;
+
 use entities::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
@@ -145,6 +147,46 @@ impl<'a> Repository<'a, FileAsset> {
         }
         let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    /// 返回给定文件资产 ID 中尚未登记的缺失 ID。
+    ///
+    /// 基于 [`Repository::find_by_ids`] 复用未软删除过滤取回已存在事实，
+    /// 再与输入做差集；本方法是文件资产存在性判定的唯一属主实现。
+    ///
+    /// # 参数
+    /// * `ids` - 待校验的文件资产 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未命中的 ID，保持输入顺序并去除重复值；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只查询 `file_assets` 集合，不跨聚合访问其他集合。
+    pub async fn missing_file_asset_ids(
+        &self,
+        ids: &[FileAssetId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FileAssetId>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let found = self.find_by_ids(ids, executor).await?;
+        let existing = found
+            .into_iter()
+            .map(|asset| asset.base.id)
+            .collect::<HashSet<_>>();
+        let mut missing = Vec::new();
+        let mut seen = HashSet::new();
+        for id in ids {
+            if !existing.contains(id.as_ref()) && seen.insert(id.to_string()) {
+                missing.push(id.clone());
+            }
+        }
+        Ok(missing)
     }
 
     /// 分页检索文件资产列表（投影查询）。

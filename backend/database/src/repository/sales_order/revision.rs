@@ -146,6 +146,30 @@ impl<'a> Repository<'a, SalesOrderRevision> {
         .await?;
         Ok(sales_order_revision_no_from_rows(rows))
     }
+
+    /// 按稳定 ID 读取工作项当前销售正式版本。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 销售正式版本 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除销售版本；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的销售版本集合，不访问销售单主表。
+    pub async fn find_work_item_sales_order_revision(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderRevision>> {
+        self.find_by_id(id, executor).await
+    }
 }
 
 /// 构建销售单最大正式版本号查询条件。

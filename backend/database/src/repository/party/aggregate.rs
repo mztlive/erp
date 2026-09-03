@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use entities::ids::PartyId;
 use entities::party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile};
 use mongodb::bson::doc;
@@ -250,6 +252,66 @@ impl<'a> PartyRepository<'a> {
         party_ids.sort_by_key(ToString::to_string);
         party_ids.dedup();
         Ok(party_ids)
+    }
+
+    /// 按主体 ID 批量读取当前修订的法定名称。
+    ///
+    /// 只返回未删除主体、其当前修订指针仍指向同主体未删除修订时形成的
+    /// `主体 ID -> 法定名称` 投影。缺失主体、缺少当前修订指针或修订归属
+    /// 与指针不一致时不生成键；法定名称按持久化原值返回（含空字符串），
+    /// 不在仓储层执行空白回退等业务决策，供供应商列表等事实束按账号关联
+    /// 后直接拼装展示。
+    ///
+    /// # 参数
+    /// * `party_ids` - 稳定主体 ID 集合；允许重复，空集合直接返回空映射
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回主体 ID 字符串到当前法定名称的映射；关联不完整的主体无键。
+    ///
+    /// # 错误
+    /// 当主体或修订批量查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 只经主体域属主查询（`parties`/`party_revisions`）组装，不直查外域集合。
+    pub async fn current_legal_names_by_party_ids(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        if party_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let parties = Repository::<Party>::new(self.db, PARTIES)
+            .list_by_ids(party_ids, executor)
+            .await?;
+        let revision_ids: Vec<String> = parties
+            .iter()
+            .filter_map(|party| party.stable.current_revision_id.clone())
+            .collect();
+        if revision_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+            .list_by_ids(&revision_ids, executor)
+            .await?;
+        let revision_names: HashMap<(String, String), &str> = revisions
+            .iter()
+            .map(|revision| {
+                (
+                    (revision.party_id.to_string(), revision.base.id.clone()),
+                    revision.legal_name.as_str(),
+                )
+            })
+            .collect();
+        Ok(parties
+            .iter()
+            .filter_map(|party| {
+                let revision_id = party.stable.current_revision_id.as_deref()?;
+                let legal_name = revision_names.get(&(party.base.id.clone(), revision_id.to_string()))?;
+                Some((party.base.id.clone(), (*legal_name).to_string()))
+            })
+            .collect())
     }
 
     /// 追加主体修订并切换当前生效版本（跨集合多步骤写入）。

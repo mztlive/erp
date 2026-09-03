@@ -21,7 +21,9 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{AccessControlExt, SupplierApiExt};
+use super::extensions::{
+    AccessControlExt, BulkJobExt, PublicationExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
+};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -656,12 +658,7 @@ impl<'a> SupplierApiRepository<'a> {
         job_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<BackgroundJob>> {
-        Repository::new(
-            self.db,
-            <Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS,
-        )
-        .find_by_id(job_id, executor)
-        .await
+        self.db.background_jobs().find_by_id(job_id, executor).await
     }
 
     /// 按稳定审计 ID 读取连接治理审计记录。
@@ -706,19 +703,17 @@ impl<'a> SupplierApiRepository<'a> {
         if job_types.is_empty() {
             return Ok(None);
         }
-        Repository::new(
-            self.db,
-            <Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS,
-        )
-        .find_one(
-            doc! {
-                "id": job_id,
-                "domain_job_id": connection_id.to_string(),
-                "domain_job_type": { "$in": job_types },
-            },
-            executor,
-        )
-        .await
+        self.db
+            .background_jobs()
+            .find_one(
+                doc! {
+                    "id": job_id,
+                    "domain_job_id": connection_id.to_string(),
+                    "domain_job_type": { "$in": job_types },
+                },
+                executor,
+            )
+            .await
     }
 
     /// 批量读取连接治理上下文与停用影响。
@@ -797,6 +792,9 @@ impl<'a> SupplierApiRepository<'a> {
 
     /// 汇总连接停用前必须重验的活动业务影响。
     ///
+    /// 跨聚合事实包：外聚合读经由所属仓储访问器（`supplier_offerings`、
+    /// `product_publications`、`supplier_fulfillment_orders`、`background_jobs`）
+    /// 编排，本类型不直连外聚合集合。
     /// 供给、发布、履约订单和目录同步任务都使用各自集合的正式状态；查询不读取
     /// 地址或密钥引用，也不返回业务对象明细。
     ///
@@ -820,9 +818,7 @@ impl<'a> SupplierApiRepository<'a> {
             .active_publication_count(&active_offering_revisions, executor)
             .await?;
         let open_supplier_orders = mongo_ops::count_documents(
-            &self.db.collection::<Document>(
-                <Database as super::extensions::SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ORDERS,
-            ),
+            &self.db.supplier_fulfillment_orders().collection(),
             doc! {
                 "connection_id": connection_id.to_string(),
                 "fulfillment_status": { "$nin": ["COMPLETED", "REJECTED"] },
@@ -832,9 +828,7 @@ impl<'a> SupplierApiRepository<'a> {
         )
         .await?;
         let active_sync_jobs = mongo_ops::count_documents(
-            &self
-                .db
-                .collection::<Document>(<Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS),
+            &self.db.background_jobs().collection(),
             doc! {
                 "domain_job_type": "SUPPLIER_CATALOG_SYNC",
                 "domain_job_id": connection_id.to_string(),
@@ -872,9 +866,11 @@ impl<'a> SupplierApiRepository<'a> {
         struct OfferingRevisionRow {
             current_revision_id: Option<String>,
         }
-        let collection = self.db.collection::<OfferingRevisionRow>(
-            <Database as super::extensions::SupplierOfferingExt>::SUPPLIER_OFFERINGS,
-        );
+        let collection = self
+            .db
+            .supplier_offerings()
+            .collection()
+            .clone_with_type::<OfferingRevisionRow>();
         let rows = mongo_ops::find_many(
             &collection,
             doc! {
@@ -920,9 +916,11 @@ impl<'a> SupplierApiRepository<'a> {
             product_publication_id: String,
         }
         let revisions = mongo_ops::find_many(
-            &self.db.collection::<PublicationRevisionRow>(
-                <Database as super::extensions::PublicationExt>::PRODUCT_PUBLICATION_REVISIONS,
-            ),
+            &self
+                .db
+                .product_publication_revisions()
+                .collection()
+                .clone_with_type::<PublicationRevisionRow>(),
             doc! {
                 "supplier_offering_revision_id": { "$in": offering_revision_ids },
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -941,9 +939,7 @@ impl<'a> SupplierApiRepository<'a> {
             return Ok(0);
         }
         mongo_ops::count_documents(
-            &self.db.collection::<Document>(
-                <Database as super::extensions::PublicationExt>::PRODUCT_PUBLICATIONS,
-            ),
+            &self.db.product_publications().collection(),
             doc! {
                 "id": { "$in": publication_ids },
                 "status": "mall_effective",

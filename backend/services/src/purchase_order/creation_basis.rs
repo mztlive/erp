@@ -195,8 +195,8 @@ impl PurchaseOrderService {
             .collect::<Vec<_>>();
         let orders = self
             .db
-            .purchase_order()
-            .find_effective_sales_orders_by_ids(&order_ids, &mut NoTransaction)
+            .sales_orders()
+            .find_effective_orders_by_ids(&order_ids, &mut NoTransaction)
             .await?;
         let owner_names = self
             .resolve_account_names(

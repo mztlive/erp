@@ -137,6 +137,113 @@ impl<'a> Repository<'a, AuditLog> {
         )
         .await
     }
+
+    /// 查询映射任务的不可变审计时间线。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 映射任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回资源匹配的审计记录，按创建时间与 ID 升序排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，按资源引用过滤映射任务，不访问映射任务集合。
+    pub async fn list_master_mapping_task_history(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        self.find_many_sorted(
+            doc! {
+                "resource_type": "MASTER_MAPPING_TASK",
+                "resource_id": mapping_task_id,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取指定资源的成功创建审计。
+    ///
+    /// 工作项简报 hydration 入口：只返回动作固定为 `<resource_type>.create` 的
+    /// 成功审计，供调用方解析创建人事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型
+    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回动作固定为 `<resource_type>.create` 的成功审计。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
+    pub async fn list_work_item_creation_audits(
+        &self,
+        resource_type: &str,
+        resource_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        if resource_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "resource_type": resource_type,
+                "resource_id": { "$in": resource_ids },
+                "action": format!("{resource_type}.create"),
+                "success": true,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取指定资源的全部成功工作项事实审计。
+    ///
+    /// 工作项简报 hydration 入口：返回资源类型和 ID 命中的全部成功审计，
+    /// 调用方按业务动作判定所需事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型
+    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回资源类型和 ID 命中的全部成功审计。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
+    pub async fn list_successful_work_item_fact_audits(
+        &self,
+        resource_type: &str,
+        resource_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        if resource_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "resource_type": resource_type,
+                "resource_id": { "$in": resource_ids },
+                "success": true,
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 审计日志列表过滤条件。
