@@ -134,16 +134,12 @@ mod tests {
             assessments: HashMap::new(),
         };
         for (key, id, occurred) in rows {
-            support
-                .facts
-                .entry(key)
-                .or_default()
-                .push(OrderFactSummary {
-                    id: id.to_string(),
-                    fact_type: FactType::PaymentSucceeded,
-                    occurred_at: Instant::from_unix_secs(occurred),
-                    data_source: DataSource::Realtime,
-                });
+            support.facts.entry(key).or_default().push(OrderFactSummary {
+                id: id.to_string(),
+                fact_type: FactType::PaymentSucceeded,
+                occurred_at: Instant::from_unix_secs(occurred),
+                data_source: DataSource::Realtime,
+            });
         }
         assert_eq!(
             support

@@ -263,9 +263,7 @@ fn index_items_by_external_id(items: &[MallOrderItem]) -> Result<BTreeMap<String
 ///
 /// # 返回
 /// 返回来源序号到来源的映射。
-fn index_sources_by_number(
-    sources: &[MallPaymentSource],
-) -> Result<BTreeMap<u32, &MallPaymentSource>> {
+fn index_sources_by_number(sources: &[MallPaymentSource]) -> Result<BTreeMap<u32, &MallPaymentSource>> {
     let mut index = BTreeMap::new();
     for source in sources {
         index.insert(source.source_no, source);

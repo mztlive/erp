@@ -55,12 +55,7 @@ impl<'a> MallConsumptionBackfillItemRepository<'a> {
         job_id: &entities::ids::MallConsumptionBackfillJobId,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        mongo_ops::count_documents(
-            &self.collection(),
-            count_by_job_filter(job_id.as_ref()),
-            executor,
-        )
-        .await
+        mongo_ops::count_documents(&self.collection(), count_by_job_filter(job_id.as_ref()), executor).await
     }
 }
 
