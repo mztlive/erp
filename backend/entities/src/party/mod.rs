@@ -37,7 +37,7 @@ pub use party_bank_account::{PartyBankAccount, PartyBankAccountData, PartyBankAc
 pub use party_contact::{PartyContact, PartyContactData, PartyContactUpdate};
 pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
-pub use status::EffectiveRecordStatus;
+pub use status::{select_current_default, EffectiveRecordStatus};
 
 use crate::errors::{Error, Result};
 

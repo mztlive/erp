@@ -1745,6 +1745,20 @@ mod rule_list_isolation_tests {
                 None,
                 "owner-1",
             );
+            // 先写入再软删除：部分唯一索引只覆盖启用且未删除的行，删除后
+            // 同选择器键被释放，后续同键启用规则可写入。
+            fixture
+                .db()
+                .procurement_responsibility_rules()
+                .create(&deleted, &mut NoTransaction)
+                .await
+                .expect("规则写入失败");
+            fixture
+                .db()
+                .procurement_responsibility_rules()
+                .soft_delete(&mut deleted, &mut NoTransaction)
+                .await
+                .expect("规则软删除失败");
             for rule in [
                 test_rule(
                     "r-sku",
@@ -1760,7 +1774,6 @@ mod rule_list_isolation_tests {
                     Some("cat-1"),
                     "owner-1",
                 ),
-                deleted.clone(),
             ] {
                 fixture
                     .db()
@@ -1769,12 +1782,6 @@ mod rule_list_isolation_tests {
                     .await
                     .expect("规则写入失败");
             }
-            fixture
-                .db()
-                .procurement_responsibility_rules()
-                .soft_delete(&mut deleted, &mut NoTransaction)
-                .await
-                .expect("规则软删除失败");
 
             let page =
                 load_procurement_rule_list_page(fixture.db(), &page_filter(None, 1, 10), &mut NoTransaction)

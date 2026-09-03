@@ -265,9 +265,11 @@ impl SupplierService {
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?
             + 60;
         let mut fields = Vec::new();
-        if let Some(contact) =
-            current_default(contacts, |item| item.is_default, |item| item.status.is_active())
-        {
+        if let Some(contact) = entities::party::select_current_default(
+            contacts,
+            |item| item.is_default,
+            |item| item.status.is_active(),
+        ) {
             fields.push(sensitive_field(
                 codec,
                 SensitiveFieldKind::ContactMobile,
@@ -278,9 +280,11 @@ impl SupplierService {
                 expires_at,
             )?);
         }
-        if let Some(address) =
-            current_default(addresses, |item| item.is_default, |item| item.status.is_active())
-        {
+        if let Some(address) = entities::party::select_current_default(
+            addresses,
+            |item| item.is_default,
+            |item| item.status.is_active(),
+        ) {
             fields.push(sensitive_field(
                 codec,
                 SensitiveFieldKind::Address,
@@ -291,7 +295,7 @@ impl SupplierService {
                 expires_at,
             )?);
         }
-        if let Some(account) = current_default(
+        if let Some(account) = entities::party::select_current_default(
             bank_accounts,
             |item| item.is_default,
             |item| item.status.is_active(),
@@ -442,18 +446,6 @@ fn assemble_supplier_views(
             }
         })
         .collect()
-}
-
-/// 从列表中优先选择启用的默认事实，否则选择首个启用事实。
-fn current_default<T>(
-    items: &[T],
-    is_default: impl Fn(&T) -> bool,
-    is_active: impl Fn(&T) -> bool,
-) -> Option<&T> {
-    items
-        .iter()
-        .find(|item| is_default(item) && is_active(item))
-        .or_else(|| items.iter().find(|item| is_active(item)))
 }
 
 /// 构造带短时揭示令牌的敏感字段视图。

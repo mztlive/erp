@@ -81,6 +81,30 @@ impl DocumentState for EffectiveRecordStatus {
     }
 }
 
+/// 从有效事实集合中选择当前默认项（PROC-E04）。
+///
+/// 优先返回启用的默认事实，否则返回首个启用事实；全部停用或空集合返回
+/// `None`。选择保持输入顺序，调用方不得在迁移时改变存量列表顺序的回退语义；
+/// 令牌签发与敏感视图构造继续位于 Service。
+///
+/// # 参数
+/// * `items` - 有效事实行切片
+/// * `is_default` - 判断行是否为默认项
+/// * `is_active` - 判断行是否处于启用状态
+///
+/// # 返回
+/// 返回选中的行引用；无启用行时返回 `None`。
+pub fn select_current_default<T>(
+    items: &[T],
+    is_default: impl Fn(&T) -> bool,
+    is_active: impl Fn(&T) -> bool,
+) -> Option<&T> {
+    items
+        .iter()
+        .find(|item| is_default(item) && is_active(item))
+        .or_else(|| items.iter().find(|item| is_active(item)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::EffectiveRecordStatus;
@@ -107,5 +131,103 @@ mod tests {
             "幂等迁移合法"
         );
         assert!(status.transition_to(EffectiveRecordStatus::Active).is_ok());
+    }
+
+    struct Fact {
+        name: &'static str,
+        is_default: bool,
+        active: bool,
+    }
+
+    fn select(facts: &[Fact]) -> Option<&'static str> {
+        super::select_current_default(facts, |fact| fact.is_default, |fact| fact.active).map(|fact| fact.name)
+    }
+
+    /// 默认且启用的事实优先被选中。
+    #[test]
+    fn select_prefers_enabled_default() {
+        let facts = vec![
+            Fact {
+                name: "first-active",
+                is_default: false,
+                active: true,
+            },
+            Fact {
+                name: "default-active",
+                is_default: true,
+                active: true,
+            },
+        ];
+        assert_eq!(select(&facts), Some("default-active"));
+    }
+
+    /// 默认但停用时回退到首个启用事实。
+    #[test]
+    fn select_falls_back_to_first_active_when_default_disabled() {
+        let facts = vec![
+            Fact {
+                name: "default-disabled",
+                is_default: true,
+                active: false,
+            },
+            Fact {
+                name: "first-active",
+                is_default: false,
+                active: true,
+            },
+            Fact {
+                name: "second-active",
+                is_default: false,
+                active: true,
+            },
+        ];
+        assert_eq!(select(&facts), Some("first-active"));
+    }
+
+    /// 多个启用且无默认时选择顺序不变的首个启用事实。
+    #[test]
+    fn select_returns_first_active_without_default() {
+        let facts = vec![
+            Fact {
+                name: "disabled",
+                is_default: false,
+                active: false,
+            },
+            Fact {
+                name: "first-active",
+                is_default: false,
+                active: true,
+            },
+            Fact {
+                name: "second-active",
+                is_default: false,
+                active: true,
+            },
+        ];
+        assert_eq!(select(&facts), Some("first-active"));
+    }
+
+    /// 全部停用时返回空。
+    #[test]
+    fn select_returns_none_when_all_disabled() {
+        let facts = vec![
+            Fact {
+                name: "default-disabled",
+                is_default: true,
+                active: false,
+            },
+            Fact {
+                name: "other-disabled",
+                is_default: false,
+                active: false,
+            },
+        ];
+        assert_eq!(select(&facts), None);
+    }
+
+    /// 空集合返回空。
+    #[test]
+    fn select_returns_none_for_empty_set() {
+        assert_eq!(select(&[]), None);
     }
 }

@@ -374,3 +374,271 @@ mod tests {
         assert!(query.sort_ascending);
     }
 }
+
+#[cfg(test)]
+mod isolation_tests {
+    use std::str::FromStr;
+
+    use entities::common::time::{BusinessDate, Instant};
+    use entities::ids::{
+        SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId,
+        SupplierOfferingRevisionId,
+    };
+    use entities::money::{Quantity, Rate, UnitPrice};
+    use entities::supplier_offering::{
+        AvailabilityStatus, PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability,
+        SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevision,
+        SupplierOfferingRevisionData,
+    };
+    use test_support::{require_mongo, TestDb};
+
+    use super::super::super::extensions::SupplierOfferingExt;
+    use crate::ensure_indexes;
+    use crate::{NoTransaction, Transactional};
+
+    /// 构造最小供给三元组（供给头 + 首版修订 + 可供投影）。
+    fn offering_triple(
+        id: &str,
+        status: AvailabilityStatus,
+    ) -> (
+        SupplierOffering,
+        SupplierOfferingRevision,
+        SupplierOfferingAvailability,
+    ) {
+        let offering_id = SupplierOfferingId::new(id);
+        let revision_id = SupplierOfferingRevisionId::new(format!("{id}-rev-1"));
+        let mut offering = SupplierOffering::new(
+            offering_id.clone(),
+            SupplierOfferingData {
+                sku_id: SkuId::new("sku-1"),
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                supplier_product_code: Some("SPU-001".to_string()),
+                supplier_sku_code: "SKU-001".to_string(),
+                source_type: entities::supplier_offering::OfferingSourceType::Manual,
+                source_connection_id: None,
+            },
+            "tester",
+        )
+        .expect("供给构造失败");
+        let revision = SupplierOfferingRevision::new(
+            revision_id.clone(),
+            SupplierOfferingRevisionData {
+                supplier_offering_id: offering_id.clone(),
+                revision_no: 1,
+                dropship_supply_price_gross: UnitPrice::from_str("11.30").unwrap(),
+                dropship_supply_price_net: UnitPrice::from_str("9.83").unwrap(),
+                bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
+                bulk_supply_price_net: UnitPrice::from_str("7.86").unwrap(),
+                input_tax_rate: Rate::from_str("0.13").unwrap(),
+                dropship_express: None,
+                freight_amount: None,
+                service_fee_amount: None,
+                bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
+                supply_region: vec!["全国".to_string()],
+                product_capabilities: Vec::new(),
+                valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
+                valid_to: None,
+                prefill_source_refs: PrefillSourceRefs::default(),
+            },
+        )
+        .expect("供给修订构造失败");
+        let availability = SupplierOfferingAvailability::new(
+            SupplierOfferingAvailabilityId::new(format!("{id}-avail-1")),
+            SupplierOfferingAvailabilityData {
+                supplier_offering_id: offering_id.clone(),
+                availability_status: status,
+                available_quantity: Some(Quantity::from_str("20").unwrap()),
+                source_updated_at: Instant::now(),
+                received_at: Instant::now(),
+                source_revision_token: Some("v1".to_string()),
+                updated_by: "tester".to_string(),
+            },
+        )
+        .expect("可供投影构造失败");
+        offering.stable.current_revision_id = Some(revision_id.to_string());
+        (offering, revision, availability)
+    }
+
+    /// 空库返回空页与空事实束，不发空 `$in` 关联查询。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库。
+    ///
+    /// # 返回
+    /// 断言总数为零且修订/可供映射全部为空。
+    ///
+    /// # 错误
+    /// MongoDB 连接或列表装载失败时测试失败。
+    ///
+    /// # 约束
+    /// Batch 维度：空集合短路；Page 维度：总数与空页一致。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn empty_db_returns_empty_bundle() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_offering_list_empty")
+                .await
+                .expect("测试数据库创建失败");
+            ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let bundle = fixture
+                .db()
+                .supplier_offering_repository()
+                .load_offering_list_page(
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    1,
+                    20,
+                    None,
+                    false,
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("列表装载失败");
+            assert_eq!(bundle.page.total, 0);
+            assert!(bundle.page.items.is_empty());
+            assert!(bundle.revisions.is_empty());
+            assert!(bundle.availabilities.is_empty());
+        });
+    }
+
+    /// 当前修订与可供投影按键归组；不匹配的可供状态在分页前过滤。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库并写入一组供给三元组。
+    ///
+    /// # 返回
+    /// 断言命中时总数为 1 且修订/可供映射以供给主键为键；`Stale`
+    /// 过滤时总数为 0，证明关联筛选在分页前生效。
+    ///
+    /// # 错误
+    /// MongoDB 连接、夹具写入或列表装载失败时测试失败。
+    ///
+    /// # 约束
+    /// 只沿当前修订指针读取；总数语义与分页查询一致。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn bundle_returns_current_facts_and_prefilters_before_paging() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_offering_list_facts")
+                .await
+                .expect("测试数据库创建失败");
+            ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let (offering, revision, availability) =
+                offering_triple("offering-1", AvailabilityStatus::Available);
+            fixture
+                .db()
+                .supplier_offering_repository()
+                .create_with_revision_and_availability(
+                    &offering,
+                    &revision,
+                    &availability,
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("供给写入失败");
+            let bundle = fixture
+                .db()
+                .supplier_offering_repository()
+                .load_offering_list_page(
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    1,
+                    20,
+                    None,
+                    false,
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("列表装载失败");
+            assert_eq!(bundle.page.total, 1);
+            assert!(bundle.revisions.contains_key("offering-1"));
+            assert!(bundle.availabilities.contains_key("offering-1"));
+            let filtered = fixture
+                .db()
+                .supplier_offering_repository()
+                .load_offering_list_page(
+                    Some(AvailabilityStatus::Stale),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    1,
+                    20,
+                    None,
+                    false,
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("过滤装载失败");
+            assert_eq!(filtered.page.total, 0, "不匹配的可供状态不得命中分页");
+            assert!(filtered.page.items.is_empty());
+        });
+    }
+
+    /// 事务内写入在同一 session 可见，复用调用方 executor。
+    ///
+    /// # 参数
+    /// 无，内部在事务中创建供给后即时装载。
+    ///
+    /// # 返回
+    /// 断言事务内总数包含未提交供给。
+    ///
+    /// # 错误
+    /// 事务或列表装载失败时测试失败。
+    ///
+    /// # 约束
+    /// Repository 不自行开启事务；事务内重验复用同一 session。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn transaction_reads_own_writes_with_same_session() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_offering_list_txn")
+                .await
+                .expect("测试数据库创建失败");
+            ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let db = fixture.db().clone();
+            let client = db.client().clone();
+            client
+                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                    let db = db.clone();
+                    Box::pin(async move {
+                        let (offering, revision, availability) =
+                            offering_triple("offering-txn", AvailabilityStatus::Available);
+                        db.supplier_offering_repository()
+                            .create_with_revision_and_availability(
+                                &offering,
+                                &revision,
+                                &availability,
+                                session,
+                            )
+                            .await?;
+                        let bundle = db
+                            .supplier_offering_repository()
+                            .load_offering_list_page(
+                                None, None, None, None, None, None, None, None, 1, 20, None, false, session,
+                            )
+                            .await?;
+                        assert_eq!(bundle.page.total, 1, "事务内应能 read-your-writes");
+                        Ok(())
+                    })
+                })
+                .await
+                .expect("事务内列表装载失败");
+        });
+    }
+}
