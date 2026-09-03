@@ -708,9 +708,8 @@ fn dispatch_quality_repairs(batch_id, quality_result, attempt, stall, preserve_n
             if idx < groups.len() {
                 let group = groups[idx];
                 names.push(group.name);
-                let target_dir = "/tmp/erp-layering-qg" + idx.to_string() + "-r" + attempt.to_string();
                 jobs.push(#{
-                    prompt: quality_repair_prompt_for_group(batch_id, group, qfail, attempt, stall, target_dir, preserve_note),
+                    prompt: quality_repair_prompt_for_group(batch_id, group, qfail, attempt, stall, preserve_note),
                     label: "quality-repair:" + group.name + ":r" + attempt.to_string(),
                     capability_mode: "all",
                     output_schema: quality_repair_schema,
@@ -1031,7 +1030,7 @@ fn plan_prompt_for(cluster) {
     prompt
 }
 
-fn implement_prompt_for(cluster, batch_id, dirty_note, target_dir) {
+fn implement_prompt_for(cluster, batch_id, dirty_note) {
     let prompt = "";
     prompt += "Implement only this verified service-layering group in the current Rust workspace.\n";
     prompt += "Waves: " + json_encode(cluster.wave_ids) + ".\n";
@@ -1047,8 +1046,8 @@ fn implement_prompt_for(cluster, batch_id, dirty_note, target_dir) {
     prompt += "Grep only the assigned ID rows in docs/service-layering-remediation-contract.md. Never read that whole file. Then grep/read_file the live source those rows cite. Do not trust this prompt's memory of line numbers.\n";
     prompt += "Inspect git status first. Implement every assigned ID in this group. Shared modules in the group are intentional.\n";
     prompt += "FOCUSED TESTS: after edits, run cargo fmt on touched files, then focused unit tests only: cargo test -p entities and/or -p database and/or -p services --lib with a narrow filter for this group's symbols. ";
-    prompt += "You MUST set CARGO_TARGET_DIR=" + target_dir + " for every cargo check/test so you do not race the workspace target. ";
-    prompt += "When finished, rm -rf " + target_dir + ". Never export CARGO_TARGET_DIR into the repo, shell rc, or a later Quality agent.\n";
+    prompt += "DISK SAFETY: never set CARGO_TARGET_DIR. Always use the workspace default target directory so parallel agents share one target dir and do not exhaust disk. ";
+    prompt += "If cargo prints Blocking waiting for file lock on build directory, wait for the holder to finish; do not kill it, do not switch target dir, do not rm -rf target/. Never export CARGO_TARGET_DIR into the repo, shell rc, or a later Quality agent.\n";
     prompt += "Do not run cargo test --workspace, clippy --workspace, or the three ./scripts/check-*.sh scripts; Quality owns those.\n";
     prompt += "Never add, modify, or run any integration test: no tests/ directory, no --test target, no --include-ignored, no real MongoDB. Leave mongo_ran=false. Write the required unit tests (--lib) if the row needs them.\n";
     prompt += "Return completed_ids only for items whose old rule source is deleted and whose required unit tests exist and the focused cargo test passed. Otherwise put them in skipped_ids with blockers.\n";
@@ -1069,7 +1068,7 @@ fn review_prompt_for(cluster, impl_payload) {
     prompt
 }
 
-fn repair_prompt_for(cluster, findings_payload, dirty_note, resumed, target_dir) {
+fn repair_prompt_for(cluster, findings_payload, dirty_note, resumed) {
     let prompt = "";
     prompt += "Repair only the review blockers for group " + cluster.name + ".\n";
     prompt += "Item IDs: " + json_encode(cluster.item_ids) + ". Prefixes: " + json_encode(cluster.prefixes) + ".\n";
@@ -1083,7 +1082,7 @@ fn repair_prompt_for(cluster, findings_payload, dirty_note, resumed, target_dir)
         prompt += "Grep only the assigned ID rows; never read the whole contract file.\n";
     }
     prompt += "PARALLEL SAFETY: only touch this group's prefixes. Do not expand scope.\n";
-    prompt += "If you must re-run focused tests, set CARGO_TARGET_DIR=" + target_dir + " and rm -rf it afterwards. Do not run workspace gates.\n";
+    prompt += "DISK SAFETY: never set CARGO_TARGET_DIR; use the workspace default target dir. If you must re-run focused tests, run one cargo command at a time and wait on the file lock. Do not run workspace gates.\n";
     prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit. Never run integration tests, MongoDB, or #[ignore] tests.\n";
     prompt
 }
@@ -1159,7 +1158,7 @@ fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, 
     prompt
 }
 
-fn quality_repair_prompt_for_group(batch_id, group, quality_payload, attempt, stall, target_dir, preserve_note) {
+fn quality_repair_prompt_for_group(batch_id, group, quality_payload, attempt, stall, preserve_note) {
     let prompt = "";
     prompt += "Repair only this unit-gate failure group for service-layering batch " + batch_id + ". Attempt " + attempt.to_string() + ".\n";
     prompt += "Group: " + group.name + ". Allowed prefixes: " + json_encode(group.prefixes) + ".\n";
@@ -1175,8 +1174,8 @@ fn quality_repair_prompt_for_group(batch_id, group, quality_payload, attempt, st
     prompt += "Keep repository/entity/service/BPM boundaries from contract section 2. Old Service helpers must stay deleted.\n";
     prompt += "UNIT-ONLY: never add, modify, or run integration tests to make the gate green. ";
     prompt += "Forbidden: tests/ targets, cargo test without --lib, --test <name>, --include-ignored, MongoDB, or external services. ";
-    prompt += "Fix with unit-testable code only. After edits, cargo fmt the touched files, then focused cargo test -p <crate> --lib with CARGO_TARGET_DIR=" + target_dir + ". ";
-    prompt += "When finished, rm -rf " + target_dir + ". Do not run the workspace suite; Quality retests next.\n";
+    prompt += "Fix with unit-testable code only. After edits, cargo fmt the touched files, then focused cargo test -p <crate> --lib with the workspace default target dir; never set CARGO_TARGET_DIR. ";
+    prompt += "If cargo reports a file lock, wait for it. Do not run the workspace suite; Quality retests next.\n";
     if stall {
         prompt += "STALL: previous repair left the same failing fingerprint. Do not repeat the same patch. ";
         prompt += "Re-run the failing --lib test yourself, read the actual assertion/compile error, and fix the root cause.\n";
@@ -1639,9 +1638,8 @@ for slice in impl_slices {
     for idx in slice {
         if idx < impl_groups.len() {
             let cluster = impl_groups[idx];
-            let target_dir = "/tmp/erp-layering-" + idx.to_string();
             jobs.push(#{
-                prompt: implement_prompt_for(cluster, batch_id, dirty_note, target_dir),
+                prompt: implement_prompt_for(cluster, batch_id, dirty_note),
                 label: "implement:" + cluster.name,
                 capability_mode: "all",
                 output_schema: implementation_schema,
@@ -1737,9 +1735,8 @@ for slice in repair_slices {
                 let agent_id = "";
                 if gi2 < implementation_results.len() { agent_id = implementation_results[gi2].agent_id; }
                 let resumed = is_text(agent_id);
-                let target_dir = "/tmp/erp-layering-r" + gi2.to_string();
                 let job = #{
-                    prompt: repair_prompt_for(cluster, findings, dirty_note, resumed, target_dir),
+                    prompt: repair_prompt_for(cluster, findings, dirty_note, resumed),
                     label: "repair:" + cluster.name,
                     capability_mode: "all",
                     output_schema: implementation_schema,
