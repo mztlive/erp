@@ -1,14 +1,13 @@
 let meta = #{
     name: "remediate-service-layering",
-    description: "按 docs/service-layering-remediation-contract.md 分波关闭剩余 OPEN 责任簇：P0 优先、耦合 R+E 同批、同模块簇合并后不相交组并行改代码且不跑 cargo、对抗评审、resume 修评审、Quality 独占全仓门禁、失败则 resume 一轮再重跑门禁、失败停波、回写合同后每波提交一次",
-    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Quality 两次门禁仍失败后不再开下一波。",
+    description: "按 docs/service-layering-remediation-contract.md 分波关闭剩余 OPEN 责任簇：P0 优先、耦合 R+E 同批、同模块簇合并后顺序实现、对抗评审、repair 接实现上下文、失败停波、统一门禁、回写合同，Quality 通过后每波提交一次",
+    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Quality 或 planner 失败后不再开下一波。",
     phases: [
         #{ title: "Inventory", detail: "读取合同状态并与波次目录求交" },
-        #{ title: "Implement", detail: "同模块簇合并为一次实现；不相交组并行改代码，不跑 cargo test/check/clippy" },
+        #{ title: "Implement", detail: "同模块簇合并为一次实现，组与组之间顺序执行以免 cargo 抢 target" },
         #{ title: "Review", detail: "仅对实现成功的组合并行对抗评审" },
-        #{ title: "Repair", detail: "resume 实现者，只修本波评审 blocker，不跑 cargo" },
-        #{ title: "Quality", detail: "第 5 节统一门禁（唯一编译入口）、Mongo 证据；全绿才回写合同" },
-        #{ title: "Gate-repair", detail: "门禁失败时 resume 原实现者或一个 integrator，只改代码，不跑 cargo" },
+        #{ title: "Repair", detail: "resume 实现者，只修本波评审 blocker" },
+        #{ title: "Quality", detail: "第 5 节统一门禁、Mongo 证据与合同回写" },
         #{ title: "Commit", detail: "Quality 通过且有关闭项时提交本波，失败不提交" },
         #{ title: "Report", detail: "写出本轮关闭证据和下波建议" },
     ],
@@ -23,6 +22,32 @@ let status_schema = #{
         "in_progress_ids": #{ "type": "array", "maxItems": 20, "items": #{ "type": "string" } },
         "done_count": #{ "type": "integer" },
         "evidence": #{ "type": "string" },
+    },
+};
+
+let plan_schema = #{
+    "type": "object",
+    "required": ["wave_id", "clusters", "summary"],
+    "properties": #{
+        "wave_id": #{ "type": "string" },
+        "clusters": #{
+            "type": "array",
+            "maxItems": 8,
+            "items": #{
+                "type": "object",
+                "required": ["name", "item_ids", "still_open", "code_still_wrong", "needs_mongo", "prefixes", "skip_reason"],
+                "properties": #{
+                    "name": #{ "type": "string" },
+                    "item_ids": #{ "type": "array", "maxItems": 12, "items": #{ "type": "string" } },
+                    "still_open": #{ "type": "boolean" },
+                    "code_still_wrong": #{ "type": "boolean" },
+                    "needs_mongo": #{ "type": "boolean" },
+                    "prefixes": #{ "type": "array", "maxItems": 20, "items": #{ "type": "string" } },
+                    "skip_reason": #{ "type": "string" },
+                },
+            },
+        },
+        "summary": #{ "type": "string" },
     },
 };
 
@@ -74,7 +99,7 @@ let quality_schema = #{
     "type": "object",
     "required": [
         "passed", "closed_ids", "held_ids", "commands", "mongo_commands",
-        "files_changed", "failed_paths", "remaining_issues", "environment_blocked", "summary"
+        "files_changed", "remaining_issues", "summary"
     ],
     "properties": #{
         "passed": #{ "type": "boolean" },
@@ -83,9 +108,7 @@ let quality_schema = #{
         "commands": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
         "mongo_commands": #{ "type": "array", "maxItems": 16, "items": #{ "type": "string" } },
         "files_changed": #{ "type": "array", "maxItems": 80, "items": #{ "type": "string" } },
-        "failed_paths": #{ "type": "array", "maxItems": 80, "items": #{ "type": "string" } },
         "remaining_issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
-        "environment_blocked": #{ "type": "boolean" },
         "summary": #{ "type": "string" },
     },
 };
@@ -217,41 +240,13 @@ fn prefixes_conflict(left, right) {
 
 fn can_absorb(group, cluster) {
     let ok = false;
-    let ids = [];
-    for item_id in group.item_ids { ids = add_unique(ids, item_id); }
-    for item_id in cluster.item_ids { ids = add_unique(ids, item_id); }
-    if ids.len() <= 12 { ok = true; }
-    ok
-}
-
-fn write_rounds_for(groups) {
-    let rounds = [];
-    for group in groups {
-        let placed = false;
-        let next = [];
-        for round in rounds {
-            let conflict = false;
-            for existing in round {
-                if prefixes_conflict(existing.prefixes, group.prefixes) { conflict = true; }
-            }
-            if !placed && !conflict {
-                let copy = [];
-                for existing in round { copy.push(existing); }
-                copy.push(group);
-                next.push(copy);
-                placed = true;
-            } else {
-                next.push(round);
-            }
-        }
-        if !placed {
-            let solo = [];
-            solo.push(group);
-            next.push(solo);
-        }
-        rounds = next;
+    if group.member_names.len() < 3 {
+        let ids = [];
+        for item_id in group.item_ids { ids = add_unique(ids, item_id); }
+        for item_id in cluster.item_ids { ids = add_unique(ids, item_id); }
+        if ids.len() <= 12 { ok = true; }
     }
-    rounds
+    ok
 }
 
 fn absorb_cluster(group, cluster) {
@@ -302,140 +297,6 @@ fn merge_overlapping_clusters(clusters) {
         groups = next;
     }
     groups
-}
-
-fn is_generic_prefix(prefix) {
-    let generic = false;
-    if is_text(prefix) {
-        if prefix == "backend/entities/src/" { generic = true; }
-        if prefix == "backend/database/src/repository/" { generic = true; }
-        if prefix == "backend/database/src/indexes/" { generic = true; }
-        if prefix == "backend/services/src/" { generic = true; }
-        if prefix == "backend/database/src/" { generic = true; }
-        if prefix == "backend/crates/bpm/src/" { generic = true; }
-    }
-    generic
-}
-
-fn group_owns_path(prefixes, files_changed, path) {
-    let owned = false;
-    if is_text(path) {
-        if is_text_array(files_changed) {
-            for file_path in files_changed {
-                if is_text(file_path) {
-                    if path == file_path { owned = true; }
-                    if path.starts_with(file_path) { owned = true; }
-                    if file_path.starts_with(path) { owned = true; }
-                }
-            }
-        }
-        if !owned {
-            if is_text_array(prefixes) {
-                for prefix in prefixes {
-                    if is_text(prefix) && !is_generic_prefix(prefix) {
-                        if path == prefix { owned = true; }
-                        if path.starts_with(prefix) { owned = true; }
-                    }
-                }
-            }
-        }
-    }
-    owned
-}
-
-fn fallback_impl(cluster) {
-    #{
-        cluster: cluster.name,
-        success: false,
-        completed_ids: [],
-        skipped_ids: cluster.item_ids,
-        needs_mongo: cluster.needs_mongo,
-        mongo_ran: false,
-        summary: "implementer failed",
-        blockers: ["implementer returned unusable output"],
-        files_changed: [],
-    }
-}
-
-fn impl_from_agent(cluster, impl_result) {
-    let out = fallback_impl(cluster);
-    if impl_result != () && impl_result.success && impl_result.output != () {
-        let completed = [];
-        if is_text_array(impl_result.output.completed_ids) {
-            completed = intersect_ids(impl_result.output.completed_ids, cluster.item_ids);
-        }
-        let files = [];
-        if is_text_array(impl_result.output.files_changed) {
-            files = impl_result.output.files_changed;
-        }
-        let skipped = [];
-        if is_text_array(impl_result.output.skipped_ids) {
-            skipped = impl_result.output.skipped_ids;
-        }
-        let blockers = [];
-        if is_text_array(impl_result.output.blockers) {
-            blockers = impl_result.output.blockers;
-        }
-        let summary = "implemented";
-        if is_text(impl_result.output.summary) { summary = impl_result.output.summary; }
-        out = #{
-            cluster: cluster.name,
-            success: true,
-            completed_ids: completed,
-            skipped_ids: skipped,
-            needs_mongo: cluster.needs_mongo,
-            mongo_ran: false,
-            summary: summary,
-            blockers: blockers,
-            files_changed: files,
-        };
-    }
-    out
-}
-
-fn quality_failed_paths(quality_output) {
-    let paths = [];
-    if quality_output != () {
-        if is_text_array(quality_output.failed_paths) {
-            for path in quality_output.failed_paths {
-                paths = add_unique(paths, path);
-            }
-        }
-        if is_text_array(quality_output.remaining_issues) {
-            for issue in quality_output.remaining_issues {
-                if is_text(issue) {
-                    if issue.starts_with("backend/") { paths = add_unique(paths, issue); }
-                }
-            }
-        }
-    }
-    paths
-}
-
-fn quality_issue_texts(quality_output) {
-    let issues = [];
-    if quality_output != () {
-        if is_text_array(quality_output.remaining_issues) {
-            for issue in quality_output.remaining_issues {
-                issues = add_unique(issues, issue);
-            }
-        }
-        if is_text(quality_output.summary) {
-            issues = add_unique(issues, quality_output.summary);
-        }
-    }
-    issues
-}
-
-fn no_cargo_rules_text() {
-    let text = "";
-    text += "CARGO: Do not run cargo test, cargo check, cargo clippy, cargo test --workspace, or clippy --workspace. ";
-    text += "Do not run ./scripts/check-bpm-boundaries.sh, check-service-boundaries.sh, or check-permissions-drift.sh. ";
-    text += "Do not set CARGO_TARGET_DIR. Do not use /tmp/erp-*-target, /tmp/cargo-*, or any extra target directory. ";
-    text += "Disk cannot hold a second target. Quality is the only agent allowed to compile or test, using the workspace default target. ";
-    text += "You may run rustfmt or cargo fmt on files you touched in this group, nothing else. ";
-    text += "Do not run #[ignore] Mongo tests. Write the required tests as source only.\n";
-    text
 }
 
 fn review_findings_payload(review) {
@@ -692,7 +553,7 @@ fn layering_rules_text() {
 
 fn implement_prompt_for(wave, cluster, batch_id, dirty_note) {
     let prompt = "";
-    prompt += "Implement only this service-layering group in the current parent workspace. Do not use an isolated worktree.\n";
+    prompt += "Implement only this verified service-layering group in the current Rust workspace.\n";
     prompt += "Wave: " + wave.id + " (" + wave.kind + ") " + wave.title + ".\n";
     prompt += "Group: " + cluster.name + ". Member clusters: " + json_encode(cluster.member_names) + ".\n";
     prompt += "Item IDs: " + json_encode(cluster.item_ids) + ".\n";
@@ -700,14 +561,12 @@ fn implement_prompt_for(wave, cluster, batch_id, dirty_note) {
     prompt += "Batch id to record: " + batch_id + ". Owner: Grok.\n";
     prompt += dirty_note + "\n";
     prompt += layering_rules_text();
-    prompt += no_cargo_rules_text();
     prompt += "Grep only the assigned ID rows in docs/service-layering-remediation-contract.md. Never read that whole file. Then grep/read_file the live source those rows cite. Do not trust this prompt's memory of line numbers.\n";
-    prompt += "If a row is already DONE or the cited problem is already gone, put that ID in skipped_ids with a skip reason. Do not re-implement it.\n";
     prompt += "Inspect git status first. Modify only service files under the prefixes plus the matching domain-owned backend/entities, backend/database repository/indexes, or backend/crates/bpm modules those rows name.\n";
     prompt += "Implement every assigned ID in this group. Shared modules in the group are intentional; do not skip an ID because another ID in the same group touches the same crate.\n";
-    prompt += "Write the unit tests each row requires (failing or characterizing tests first per section 7.2) but do not execute them. Quality will run cargo test once for the whole wave.\n";
-    prompt += "Return completed_ids only for items whose old rule source is deleted and whose required unit tests exist in source. Otherwise put them in skipped_ids with blockers.\n";
-    prompt += "checks_run may list rustfmt on touched files; leave it empty if you formatted in the editor. mongo_ran must be false.\n";
+    prompt += "Run only focused checks: cargo fmt on touched files, cargo test -p entities/database/services --lib with a narrow filter for this group's symbols, and any new #[ignore] Mongo test only if ERP_TEST_MONGO_URI is already set.\n";
+    prompt += "Do not run cargo test --workspace, clippy --workspace, or the three ./scripts/check-*.sh scripts; Quality owns those.\n";
+    prompt += "Return completed_ids only for items whose old rule source is deleted and whose required unit tests exist. Otherwise put them in skipped_ids with blockers.\n";
     prompt
 }
 
@@ -733,32 +592,26 @@ fn repair_prompt_for(wave, cluster, findings_payload, dirty_note, resumed) {
     prompt += dirty_note + "\n";
     if resumed {
         prompt += "This session already implemented this group. Do not re-read the whole contract or rediscover the crate. ";
-        prompt += "Use git diff plus the findings list.\n";
+        prompt += "Use git diff plus the findings list. Do not rerun cargo tests that already passed unless a finding requires it.\n";
     } else {
         prompt += layering_rules_text();
         prompt += "Grep only the assigned ID rows; never read the whole contract file.\n";
     }
-    prompt += no_cargo_rules_text();
-    prompt += "Do not expand scope. Do not run cargo test/check/clippy or workspace gates. Quality will compile after this repair.\n";
+    prompt += "Do not expand scope. Re-run only focused tests with a narrow filter. Do not run workspace gates.\n";
     prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit.\n";
     prompt
 }
 
-fn quality_prompt_for(wave, batch_id, cluster_payloads, review_payloads, mongo_needed, is_retry, previous_issues) {
+fn quality_prompt_for(wave, batch_id, cluster_payloads, review_payloads, mongo_needed) {
     let prompt = "";
-    prompt += "Run the unified quality gates for service-layering wave " + wave.id + ". You are the gate runner, not the implementer.\n";
+    prompt += "Integrate and verify wave " + wave.id + " of the service-layering remediation contract.\n";
     prompt += "Batch id: " + batch_id + ". Owner: Grok.\n";
     prompt += "Inspect git status and diff first. Never git reset/checkout/restore/clean. Preserve unrelated dirty files.\n";
     prompt += "Implementer payloads: " + cluster_payloads + "\n";
     prompt += "Review payloads: " + review_payloads + "\n";
-    if is_retry {
-        prompt += "This is the one allowed retry after a code-only gate repair. Previous remaining issues: " + previous_issues + "\n";
-        prompt += "Re-run the gates against the current tree. Do not assume the previous cargo output is still valid.\n";
-    }
-    prompt += "Do NOT fix compile errors, test failures, behavior regressions, leftover Service helpers, or missing tests. ";
-    prompt += "Those belong to a later resume of the original implementer. You may rustfmt only files from this wave that fail fmt --check.\n";
-    prompt += "Keep repository/entity/service/BPM boundaries from contract section 2. Do not expand scope.\n";
-    prompt += "Run from backend, in this order, and stop fixing — record failures instead:\n";
+    prompt += "Fix only concrete blockers introduced by this wave. Keep repository/entity/service/BPM boundaries from contract section 2.\n";
+    prompt += "Every added or modified method must keep its multi-line docs. Entity rules need direct unit tests. Old Service helpers must stay deleted.\n";
+    prompt += "Then run from backend, in order, and fix wave-caused failures:\n";
     prompt += "cargo fmt --all -- --check\n";
     prompt += "cargo check --workspace --all-features --locked\n";
     prompt += "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings\n";
@@ -772,48 +625,12 @@ fn quality_prompt_for(wave, batch_id, cluster_payloads, review_payloads, mongo_n
     prompt += "Do not copy historical contract commands that exported CARGO_TARGET_DIR. Do not create or leave behind a temporary cargo target.\n";
     prompt += "If mongo_needed=" + mongo_needed + ", also run the new or named #[ignore] integration/concurrency/explain tests on an isolated replica set. ";
     prompt += "Use ERP_TEST_MONGO_URI if set, otherwise backend/scripts/dev-mongo.sh or docker compose --profile test, never a shared/production URI. ";
-    prompt += "If Mongo cannot be started, set environment_blocked=true, do NOT mark those R/CAS/index items DONE, and put them in held_ids.\n";
-    prompt += "If any command fails, set passed=false, do not edit the contract, fill failed_paths with the rustc/test file paths, ";
-    prompt += "and put the command output summaries in remaining_issues. closed_ids must be empty when passed=false.\n";
-    prompt += "Only after every gate passes, set passed=true and update docs/service-layering-remediation-contract.md for closed_ids: status DONE, 执行登记 with batch/owner/deps/evidence, ";
+    prompt += "If Mongo cannot be started, do NOT mark those R/CAS/index items DONE; put them in held_ids with environment_blocked evidence.\n";
+    prompt += "Only after gates pass, update docs/service-layering-remediation-contract.md for closed_ids: status DONE, 执行登记 with batch/owner/deps/evidence, ";
     prompt += "and append a 批次验收登记 covering layering result, targeted tests, Mongo N/A-or-results, unified gates, compat/rollback, and unrun external bounds.\n";
     prompt += "Do not mark BLOCKED rows DONE. Do not close SALES-E19 without SALES-R02..R05. Do not invent occupancy policy.\n";
     prompt += "closed_ids must be a subset of this wave's attempted IDs. held_ids are attempted but not closed.\n";
     prompt += "Do not git add or git commit. Leave this wave's code and contract edits in the working tree. A later commit agent will create one commit if this wave passed with closed_ids.\n";
-    prompt
-}
-
-fn gate_repair_prompt_for(wave, cluster, findings_payload, dirty_note, resumed) {
-    let prompt = "";
-    prompt += "Repair only the Quality cargo/gate failures for group " + cluster.name + " in wave " + wave.id + ".\n";
-    prompt += "Item IDs: " + json_encode(cluster.item_ids) + ". Prefixes: " + json_encode(cluster.prefixes) + ".\n";
-    prompt += "Quality failures (fix these, do not expand scope): " + findings_payload + "\n";
-    prompt += dirty_note + "\n";
-    if resumed {
-        prompt += "This session already implemented this group. Use git diff plus the cargo/test log. Do not rediscover the crate.\n";
-    } else {
-        prompt += layering_rules_text();
-        prompt += "Grep only the assigned ID rows; never read the whole contract file.\n";
-    }
-    prompt += no_cargo_rules_text();
-    prompt += "Do not run cargo test/check/clippy. Quality will re-run the unified gates after this repair.\n";
-    prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit.\n";
-    prompt
-}
-
-fn integrator_prompt_for(wave, findings_payload, dirty_note, prefixes) {
-    let prompt = "";
-    prompt += "Repair unattributed Quality cargo/gate failures for service-layering wave " + wave.id + ".\n";
-    prompt += "These paths/issues could not be assigned to a single implementer group.\n";
-    prompt += "Allowed prefixes: " + json_encode(prefixes) + ".\n";
-    prompt += "Quality failures (fix these, do not expand scope): " + findings_payload + "\n";
-    prompt += dirty_note + "\n";
-    prompt += layering_rules_text();
-    prompt += no_cargo_rules_text();
-    prompt += "Only edit files implicated by the cargo/test log. Do not close extra IDs. Do not touch frozen files.\n";
-    prompt += "Do not run cargo test/check/clippy. Quality will re-run the unified gates after this repair.\n";
-    prompt += "Do not edit docs/service-layering-remediation-contract.md. Do not git add or git commit.\n";
-    prompt += "Return completed_ids empty unless you fully finished an assigned wave ID; otherwise use skipped_ids/blockers.\n";
     prompt
 }
 
@@ -845,7 +662,7 @@ let list_waves = false;
 let dry_run = false;
 let wave_arg = "next";
 let max_waves = 1;
-let max_clusters = 6;
+let max_clusters = 3;
 let include_blocked = false;
 let allow_p1 = false;
 let do_commit = true;
@@ -860,7 +677,7 @@ if args != () {
     if args.smoke_merge != () { smoke_merge = is_true(args.smoke_merge); }
     if is_text(args.wave) { wave_arg = args.wave; }
     if args.max_waves != () { max_waves = integer_or(args.max_waves, 1); }
-    if args.max_clusters != () { max_clusters = integer_or(args.max_clusters, 6); }
+    if args.max_clusters != () { max_clusters = integer_or(args.max_clusters, 3); }
     if args.include_blocked != () { include_blocked = is_true(args.include_blocked); }
     if args.allow_p1_with_open_p0 != () { allow_p1 = is_true(args.allow_p1_with_open_p0); }
     if args.commit != () { do_commit = is_true(args.commit); }
@@ -872,7 +689,7 @@ if args != () {
 if max_waves < 1 { max_waves = 1; }
 if max_waves > 12 { max_waves = 12; }
 if max_clusters < 1 { max_clusters = 1; }
-if max_clusters > 8 { max_clusters = 8; }
+if max_clusters > 6 { max_clusters = 6; }
 
 if smoke_merge {
     let sample = find_wave(waves, "p0-proc-po-plan");
@@ -1087,8 +904,8 @@ let commits_total = [];
 let quality_passed_all = true;
 
 for wave in selected {
-    if remaining_budget() < 20 {
-        log("Stopping before " + wave.id + ": remaining agent budget " + remaining_budget().to_string() + " < 20");
+    if remaining_budget() < 8 {
+        log("Stopping before " + wave.id + ": remaining agent budget " + remaining_budget().to_string() + " < 8");
         quality_passed_all = false;
         break;
     }
@@ -1097,94 +914,129 @@ for wave in selected {
     let planned_clusters = [];
     for cluster in wave.clusters {
         let leftover = intersect_ids(cluster.item_ids, work_ids);
-        if leftover.len() > 0 {
+        if leftover.len() > 0 && planned_clusters.len() < max_clusters {
             planned_clusters.push(#{
                 name: cluster.name,
                 item_ids: leftover,
                 prefixes: cluster.prefixes,
                 needs_mongo: cluster.needs_mongo,
             });
+        } else if leftover.len() > 0 {
+            log("Deferred extra cluster in " + wave.id + ": " + cluster.name);
         }
     }
     if planned_clusters.len() == 0 {
-        log("Wave " + wave.id + " had no remaining OPEN clusters");
+        log("Wave " + wave.id + " had no clusters after max_clusters filter");
         continue;
     }
 
-    let merged_all = merge_overlapping_clusters(planned_clusters);
-    let impl_groups = [];
-    for group in merged_all {
-        if impl_groups.len() < max_clusters {
-            impl_groups.push(group);
-        } else {
-            log("Deferred extra merged group in " + wave.id + ": " + group.name);
-        }
-    }
-    let merged_names = [];
-    for group in impl_groups { merged_names.push(group.name); }
-    log("Implement groups for " + wave.id + ": " + json_encode(merged_names));
+    phase("Implement");
+    let plan_prompt = "";
+    plan_prompt += "Independently verify this service-layering wave against the live contract and code. ";
+    plan_prompt += "Wave: " + wave.id + ". Planned clusters: " + json_encode(planned_clusters) + ". ";
+    plan_prompt += "Grep only these ID rows in docs/service-layering-remediation-contract.md; do not read the whole file. Then grep/read_file the cited service/entity/repository files. ";
+    plan_prompt += "still_open=true only if the contract Status is OPEN or IN_PROGRESS. code_still_wrong=true only if the cited problem still exists. ";
+    plan_prompt += "If the row is already DONE, BLOCKED, or the code already matches the forced adjustment, set skip_reason and still_open/code_still_wrong accordingly. ";
+    plan_prompt += "needs_mongo=true when the close checks require aggregation, index explain, CAS, uniqueness, or real transactions. ";
+    plan_prompt += "Keep item_ids inside the planned list. Empty skip_reason means the cluster should be implemented now.\n";
+    let plan_result = agent(plan_prompt, #{
+        label: "plan:" + wave.id,
+        capability_mode: "read-only",
+        output_schema: plan_schema,
+    });
 
-    let need_agents = impl_groups.len() * 3 + 6;
-    if remaining_budget() < need_agents {
-        log("Stopping before implement on " + wave.id + ": remaining budget " + remaining_budget().to_string() + " < " + need_agents.to_string());
+    let active_clusters = [];
+    if plan_result != () && plan_result.success && plan_result.output != () && is_text_array(plan_result.output.clusters) {
+        for planned in planned_clusters {
+            let matched = ();
+            for reported in plan_result.output.clusters {
+                if matched == () && reported.name == planned.name { matched = reported; }
+            }
+            let item_ids = planned.item_ids;
+            let skip_reason = "";
+            let still_open = true;
+            let code_still_wrong = true;
+            let needs_mongo = planned.needs_mongo;
+            if matched != () {
+                if is_text_array(matched.item_ids) {
+                    item_ids = intersect_ids(matched.item_ids, planned.item_ids);
+                }
+                if is_text(matched.skip_reason) { skip_reason = matched.skip_reason; }
+                if type_of(matched.still_open) == "bool" { still_open = matched.still_open; }
+                if type_of(matched.code_still_wrong) == "bool" { code_still_wrong = matched.code_still_wrong; }
+                if type_of(matched.needs_mongo) == "bool" { needs_mongo = matched.needs_mongo; }
+            } else {
+                skip_reason = "planner omitted cluster; fail closed";
+            }
+            if skip_reason == "" && still_open && code_still_wrong && item_ids.len() > 0 {
+                active_clusters.push(#{
+                    name: planned.name,
+                    item_ids: item_ids,
+                    prefixes: planned.prefixes,
+                    needs_mongo: needs_mongo,
+                });
+            } else {
+                log("Skipping cluster " + planned.name + ": " + skip_reason);
+            }
+        }
+    } else {
+        log("Planner failed for " + wave.id + "; fail-closed, skipping this and later waves");
+        wave_reports.push(#{ wave: wave.id, status: "planner_failed" });
         quality_passed_all = false;
         break;
     }
 
-    phase("Implement");
+    if active_clusters.len() == 0 {
+        wave_reports.push(#{ wave: wave.id, status: "nothing_to_implement" });
+        continue;
+    }
+
+    let impl_groups = merge_overlapping_clusters(active_clusters);
+    let merged_names = [];
+    for group in impl_groups { merged_names.push(group.name); }
+    log("Implement groups for " + wave.id + ": " + json_encode(merged_names));
+
     let implementation_results = [];
     let impl_agent_ids = [];
-    for cluster in impl_groups {
-        implementation_results.push(fallback_impl(cluster));
-        impl_agent_ids.push("");
-    }
-    let impl_rounds = write_rounds_for(impl_groups);
-    log("Implement write rounds for " + wave.id + ": " + impl_rounds.len().to_string());
-    for round in impl_rounds {
-        let impl_jobs = [];
-        let round_indexes = [];
-        let gi = 0;
-        for cluster in impl_groups {
-            let in_round = false;
-            for round_group in round {
-                if round_group.name == cluster.name { in_round = true; }
-            }
-            if in_round {
-                impl_jobs.push(#{
-                    prompt: implement_prompt_for(wave, cluster, batch_id, dirty_note),
-                    label: "implement:" + wave.id + ":" + cluster.name,
-                    capability_mode: "all",
-                    output_schema: implementation_schema,
-                });
-                round_indexes.push(gi);
-            }
-            gi += 1;
-        }
-        if impl_jobs.len() > 0 {
-            if remaining_budget() < impl_jobs.len() {
-                log("Not enough budget for implement round on " + wave.id + "; fail-closed");
-                quality_passed_all = false;
-                wave_reports.push(#{ wave: wave.id, status: "implement_budget", groups: merged_names });
-                break;
-            }
-            let impl_raw = parallel(impl_jobs);
-            let impl_pos = 0;
-            for mapped in round_indexes {
-                let impl_result = ();
-                if impl_pos < impl_raw.len() { impl_result = impl_raw[impl_pos]; }
-                if mapped < impl_groups.len() {
-                    implementation_results[mapped] = impl_from_agent(impl_groups[mapped], impl_result);
-                    impl_agent_ids[mapped] = agent_id_of(impl_result);
-                }
-                impl_pos += 1;
-            }
-        }
-    }
-    if !quality_passed_all { break; }
-
     let successful_impls = 0;
-    for impl_output in implementation_results {
-        if is_true(impl_output.success) { successful_impls += 1; }
+    for cluster in impl_groups {
+        let impl_result = agent(implement_prompt_for(wave, cluster, batch_id, dirty_note), #{
+            label: "implement:" + wave.id + ":" + cluster.name,
+            capability_mode: "all",
+            output_schema: implementation_schema,
+        });
+        let impl_output = #{
+            cluster: cluster.name,
+            success: false,
+            completed_ids: [],
+            skipped_ids: cluster.item_ids,
+            needs_mongo: cluster.needs_mongo,
+            mongo_ran: false,
+            summary: "implementer failed",
+            blockers: ["implementer returned unusable output"],
+            files_changed: [],
+        };
+        let impl_agent_id = agent_id_of(impl_result);
+        if impl_result != () && impl_result.success && impl_result.output != () {
+            let completed = [];
+            if is_text_array(impl_result.output.completed_ids) {
+                completed = intersect_ids(impl_result.output.completed_ids, cluster.item_ids);
+            }
+            impl_output = #{
+                cluster: cluster.name,
+                success: true,
+                completed_ids: completed,
+                skipped_ids: impl_result.output.skipped_ids,
+                needs_mongo: cluster.needs_mongo,
+                mongo_ran: is_true(impl_result.output.mongo_ran),
+                summary: impl_result.output.summary,
+                blockers: impl_result.output.blockers,
+                files_changed: impl_result.output.files_changed,
+            };
+            successful_impls += 1;
+        }
+        implementation_results.push(impl_output);
+        impl_agent_ids.push(impl_agent_id);
     }
 
     if successful_impls == 0 {
@@ -1239,14 +1091,24 @@ for wave in selected {
     }
 
     phase("Repair");
-    let repair_jobs = [];
-    let repair_indexes = [];
+    let repaired_results = [];
     let repair_index = 0;
     for cluster in impl_groups {
-        let impl_ok = false;
+        let current_impl = #{
+            cluster: cluster.name,
+            success: false,
+            completed_ids: [],
+            skipped_ids: cluster.item_ids,
+            needs_mongo: cluster.needs_mongo,
+            mongo_ran: false,
+            summary: "missing implementer payload",
+            blockers: ["missing implementer payload"],
+            files_changed: [],
+        };
         if repair_index < implementation_results.len() {
-            impl_ok = is_true(implementation_results[repair_index].success);
+            current_impl = implementation_results[repair_index];
         }
+        let impl_ok = is_true(current_impl.success);
         let impl_agent_id = "";
         if repair_index < impl_agent_ids.len() { impl_agent_id = impl_agent_ids[repair_index]; }
         let review = ();
@@ -1263,39 +1125,31 @@ for wave in selected {
         }
         if needs_repair && impl_ok {
             let resumed = is_text(impl_agent_id);
-            let job = #{
-                prompt: repair_prompt_for(wave, cluster, findings_payload, dirty_note, resumed),
+            let repair_opts = #{
                 label: "repair:" + wave.id + ":" + cluster.name,
                 capability_mode: "all",
                 output_schema: implementation_schema,
             };
-            if resumed { job.resume_from = impl_agent_id; }
-            repair_jobs.push(job);
-            repair_indexes.push(repair_index);
+            if resumed { repair_opts.resume_from = impl_agent_id; }
+            let repaired = agent(repair_prompt_for(wave, cluster, findings_payload, dirty_note, resumed), repair_opts);
+            if repaired != () && repaired.success && repaired.output != () {
+                current_impl = #{
+                    cluster: cluster.name,
+                    success: true,
+                    completed_ids: intersect_ids(repaired.output.completed_ids, cluster.item_ids),
+                    skipped_ids: repaired.output.skipped_ids,
+                    needs_mongo: cluster.needs_mongo,
+                    mongo_ran: is_true(repaired.output.mongo_ran),
+                    summary: repaired.output.summary,
+                    blockers: repaired.output.blockers,
+                    files_changed: repaired.output.files_changed,
+                };
+            }
         }
+        repaired_results.push(current_impl);
         repair_index += 1;
     }
-    if repair_jobs.len() > 0 {
-        if remaining_budget() < repair_jobs.len() {
-            log("Not enough budget for review-repair panel on " + wave.id + "; fail-closed");
-            quality_passed_all = false;
-            wave_reports.push(#{ wave: wave.id, status: "repair_budget", groups: merged_names });
-            break;
-        }
-        let repair_raw = parallel(repair_jobs);
-        let repair_pos = 0;
-        for mapped in repair_indexes {
-            let repaired = ();
-            if repair_pos < repair_raw.len() { repaired = repair_raw[repair_pos]; }
-            if mapped < impl_groups.len() {
-                let repaired_out = impl_from_agent(impl_groups[mapped], repaired);
-                if is_true(repaired_out.success) {
-                    implementation_results[mapped] = repaired_out;
-                }
-            }
-            repair_pos += 1;
-        }
-    }
+    implementation_results = repaired_results;
 
     let mongo_needed = false;
     for cluster in impl_groups {
@@ -1308,173 +1162,18 @@ for wave in selected {
         batch_id,
         json_encode(implementation_results),
         json_encode(review_results),
-        mongo_needed.to_string(),
-        false,
-        ""
+        mongo_needed.to_string()
     ), #{
         label: "quality:" + wave.id,
         capability_mode: "all",
         output_schema: quality_schema,
     });
-    let quality_agent_id = agent_id_of(quality_result);
-    let quality_attempts = 1;
-    let gate_repaired = false;
-
-    let quality_usable = quality_result != () && quality_result.success && quality_result.output != ();
-    let wave_passed = false;
-    let env_blocked = false;
-    if quality_usable {
-        wave_passed = is_true(quality_result.output.passed);
-        env_blocked = is_true(quality_result.output.environment_blocked);
-    }
-
-    let failed_paths = [];
-    if quality_usable { failed_paths = quality_failed_paths(quality_result.output); }
-    let should_gate_repair = false;
-    if quality_usable && !wave_passed {
-        if env_blocked {
-            if failed_paths.len() > 0 { should_gate_repair = true; }
-        } else {
-            should_gate_repair = true;
-        }
-    }
-
-    if should_gate_repair {
-        phase("Gate-repair");
-        let need_flags = [];
-        for cluster in impl_groups { need_flags.push(false); }
-        let unmatched_paths = [];
-        for path in failed_paths {
-            let owner_count = 0;
-            let last_owner = -1;
-            let gi = 0;
-            for cluster in impl_groups {
-                let impl_ok = false;
-                let files = [];
-                if gi < implementation_results.len() {
-                    impl_ok = is_true(implementation_results[gi].success);
-                    if is_text_array(implementation_results[gi].files_changed) {
-                        files = implementation_results[gi].files_changed;
-                    }
-                }
-                if impl_ok && group_owns_path(cluster.prefixes, files, path) {
-                    owner_count += 1;
-                    last_owner = gi;
-                }
-                gi += 1;
-            }
-            if owner_count == 1 {
-                need_flags[last_owner] = true;
-            } else {
-                unmatched_paths = add_unique(unmatched_paths, path);
-            }
-        }
-        if failed_paths.len() == 0 {
-            unmatched_paths = add_unique(unmatched_paths, "(unattributed quality failure)");
-        }
-
-        let findings_blob = json_encode(quality_issue_texts(quality_result.output));
-        if quality_usable {
-            findings_blob = json_encode(#{
-                failed_paths: failed_paths,
-                remaining_issues: quality_issue_texts(quality_result.output),
-                summary: quality_result.output.summary,
-            });
-        }
-
-        let gate_jobs = [];
-        let gate_group_indexes = [];
-        if unmatched_paths.len() > 0 {
-            let union_prefixes = [];
-            for cluster in impl_groups {
-                if is_text_array(cluster.prefixes) {
-                    for prefix in cluster.prefixes { union_prefixes = add_unique(union_prefixes, prefix); }
-                }
-            }
-            let unmatched_blob = json_encode(#{
-                unmatched_paths: unmatched_paths,
-                remaining_issues: quality_issue_texts(quality_result.output),
-                failed_paths: failed_paths,
-            });
-            gate_jobs.push(#{
-                prompt: integrator_prompt_for(wave, unmatched_blob, dirty_note, union_prefixes),
-                label: "repair-gate:" + wave.id + ":integrator",
-                capability_mode: "all",
-                output_schema: implementation_schema,
-            });
-        } else {
-            let gi2 = 0;
-            for cluster in impl_groups {
-                if gi2 < need_flags.len() {
-                    if need_flags[gi2] {
-                        let impl_agent_id = "";
-                        if gi2 < impl_agent_ids.len() { impl_agent_id = impl_agent_ids[gi2]; }
-                        let resumed = is_text(impl_agent_id);
-                        let job = #{
-                            prompt: gate_repair_prompt_for(wave, cluster, findings_blob, dirty_note, resumed),
-                            label: "repair-gate:" + wave.id + ":" + cluster.name,
-                            capability_mode: "all",
-                            output_schema: implementation_schema,
-                        };
-                        if resumed { job.resume_from = impl_agent_id; }
-                        gate_jobs.push(job);
-                        gate_group_indexes.push(gi2);
-                    }
-                }
-                gi2 += 1;
-            }
-        }
-
-        if gate_jobs.len() > 0 {
-            if remaining_budget() < gate_jobs.len() + 1 {
-                log("Not enough budget for gate-repair on " + wave.id + "; fail-closed");
-                quality_passed_all = false;
-                wave_reports.push(#{ wave: wave.id, status: "gate_repair_budget", groups: merged_names });
-                break;
-            }
-            let gate_raw = parallel(gate_jobs);
-            gate_repaired = true;
-            let gpos = 0;
-            for mapped in gate_group_indexes {
-                let repaired = ();
-                if gpos < gate_raw.len() { repaired = gate_raw[gpos]; }
-                if mapped < impl_groups.len() {
-                    let repaired_out = impl_from_agent(impl_groups[mapped], repaired);
-                    if is_true(repaired_out.success) {
-                        implementation_results[mapped] = repaired_out;
-                    }
-                }
-                gpos += 1;
-            }
-
-            phase("Quality");
-            let retry_opts = #{
-                label: "quality-retry:" + wave.id,
-                capability_mode: "all",
-                output_schema: quality_schema,
-            };
-            if is_text(quality_agent_id) { retry_opts.resume_from = quality_agent_id; }
-            quality_result = agent(quality_prompt_for(
-                wave,
-                batch_id,
-                json_encode(implementation_results),
-                json_encode(review_results),
-                mongo_needed.to_string(),
-                true,
-                findings_blob
-            ), retry_opts);
-            quality_attempts = 2;
-            quality_usable = quality_result != () && quality_result.success && quality_result.output != ();
-            wave_passed = false;
-            if quality_usable { wave_passed = is_true(quality_result.output.passed); }
-        } else {
-            log("Quality failed for " + wave.id + " with no attributable repair jobs");
-        }
-    }
 
     let wave_closed = [];
     let wave_held = [];
-    if quality_usable {
+    let wave_passed = false;
+    if quality_result != () && quality_result.success && quality_result.output != () {
+        wave_passed = is_true(quality_result.output.passed);
         if is_text_array(quality_result.output.closed_ids) {
             wave_closed = intersect_ids(quality_result.output.closed_ids, ids_in_wave(wave));
         }
@@ -1540,8 +1239,6 @@ for wave in selected {
         commit_sha: commit_output.commit_sha,
         commit_summary: commit_output.summary,
         groups: merged_names,
-        quality_attempts: quality_attempts,
-        gate_repaired: gate_repaired,
         quality: quality_result,
     });
 
@@ -1561,8 +1258,7 @@ report += "- Per-wave commit: " + do_commit.to_string() + " (one commit after Qu
 report += "- Remaining executable OPEN after run (inventory minus closed): " + work_ids.len().to_string() + "\n";
 report += "- BLOCKED still excluded: " + json_encode(blocked_ids) + "\n\n";
 report += "Next: re-run with args.wave=next (or the next p0-* id) until P0 waves are empty, then P1 waves. ";
-report += "Implementers do not run cargo; Quality is the only compile/test step (one retry after code-only gate-repair). ";
-report += "This run stops after implement/quality/commit failure or when remaining agent budget is too low; do not pass max_waves=12 unless you intend to chain only while gates pass. ";
+report += "This run stops after planner/implement/quality/commit failure or when remaining agent budget < 8; do not pass max_waves=12 unless you intend to chain only while gates pass. ";
 report += "Do not implement blocked-returns-occupancy until finance owners sign occupancy policy.\n\n";
 report += "## Wave results\n\n```json\n" + json_encode(wave_reports) + "\n```\n";
 let report_path = write_scratch_file("service-layering-remediation-report.md", report);
