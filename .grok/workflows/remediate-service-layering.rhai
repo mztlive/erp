@@ -1,7 +1,7 @@
 let meta = #{
     name: "remediate-service-layering",
-    description: "按合同关闭剩余 OPEN 责任簇：跨波打包、前缀不相交组合并行实现/评审/修复/核验，每簇独立验证后进入纯单元测试统一门禁，门禁失败自动修复重试直到可提交",
-    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Verify 未通过的 ID 不得关闭。Quality 只跑单元测试门禁，不跑任何集成测试；门禁失败自动修复重试，通过后才提交。",
+    description: "按合同关闭剩余 OPEN 责任簇：前缀不相交并行实现/评审/修复/核验，统一纯单元测试门禁，失败按不相交前缀并行修复并重跑直到可提交",
+    when_to_use: "当需要执行后端 Service 分层剩余整改合同时。发现新问题请用 sink-service-layering；本 workflow 只关闭合同第 6 节已编号且仍为 OPEN 的项，不实施 BLOCKED 项。Verify 未通过的 ID 不得关闭。Quality 只跑 cargo test --workspace --lib，禁止任何集成测试；门禁失败按不相交前缀并行派出修复 agent，重跑直到单元测试全绿且提交成功。",
     phases: [
         #{ title: "Inventory", detail: "读取合同 OPEN/BLOCKED 状态并与波次目录求交" },
         #{ title: "Plan", detail: "并行确认每个簇仍 OPEN 且代码未改完" },
@@ -9,10 +9,10 @@ let meta = #{
         #{ title: "Review", detail: "每个实现成功的组合并行对抗评审" },
         #{ title: "Repair", detail: "按不相交分片并行 resume 修复本簇评审 blocker" },
         #{ title: "Verify", detail: "只读对抗核验关闭证据；失败不得进入关闭集" },
-        #{ title: "Quality", detail: "纯单元测试统一门禁一次，不跑集成测试" },
-        #{ title: "QualityRepair", detail: "门禁失败时修复后重跑门禁，直到通过或耗尽重试" },
-        #{ title: "Commit", detail: "Quality 通过且有关闭项时提交一次" },
-        #{ title: "Report", detail: "关闭证据、分片并行度和下轮建议" },
+        #{ title: "Quality", detail: "纯单元测试统一门禁，不跑集成测试；unit_tests_passed 为硬条件" },
+        #{ title: "QualityRepair", detail: "门禁失败按不相交前缀并行修复，再重跑 Quality，直到全绿或预算耗尽" },
+        #{ title: "Commit", detail: "Quality 通过且有关闭项时提交；失败则重试直到提交成功" },
+        #{ title: "Report", detail: "关闭证据、分片并行度、门禁闭环和提交结果" },
     ],
 };
 
@@ -112,16 +112,31 @@ let quality_repair_schema = #{
 let quality_schema = #{
     "type": "object",
     "required": [
-        "passed", "closed_ids", "held_ids", "commands",
-        "files_changed", "remaining_issues", "summary"
+        "passed", "unit_tests_passed", "closed_ids", "held_ids", "commands",
+        "files_changed", "remaining_issues", "failure_groups", "summary"
     ],
     "properties": #{
         "passed": #{ "type": "boolean" },
+        "unit_tests_passed": #{ "type": "boolean" },
         "closed_ids": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
         "held_ids": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
         "commands": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
         "files_changed": #{ "type": "array", "maxItems": 120, "items": #{ "type": "string" } },
         "remaining_issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
+        "failure_groups": #{
+            "type": "array",
+            "maxItems": 12,
+            "items": #{
+                "type": "object",
+                "required": ["name", "prefixes", "issues", "commands"],
+                "properties": #{
+                    "name": #{ "type": "string" },
+                    "prefixes": #{ "type": "array", "maxItems": 8, "items": #{ "type": "string" } },
+                    "issues": #{ "type": "array", "maxItems": 24, "items": #{ "type": "string" } },
+                    "commands": #{ "type": "array", "maxItems": 8, "items": #{ "type": "string" } },
+                },
+            },
+        },
         "summary": #{ "type": "string" },
     },
 };
@@ -447,12 +462,276 @@ fn review_passed(review) {
     ok
 }
 
+fn commands_ran_integration(commands) {
+    let found = false;
+    if is_text_array(commands) {
+        for command in commands {
+            if is_text(command) {
+                if command.contains("--include-ignored") { found = true; }
+                if command.contains("ERP_TEST_MONGO") { found = true; }
+                if command.contains("dev-mongo") { found = true; }
+                if command.contains("docker compose") { found = true; }
+                if command.contains("--test ") { found = true; }
+                if command.contains("cargo test") {
+                    if !command.contains("--lib") { found = true; }
+                }
+            }
+        }
+    }
+    found
+}
+
 fn quality_passed(result) {
     let ok = false;
     if result != () && result.success && result.output != () {
-        if is_true(result.output.passed) { ok = true; }
+        if is_true(result.output.passed) {
+            if is_true(result.output.unit_tests_passed) {
+                if !commands_ran_integration(result.output.commands) {
+                    ok = true;
+                }
+            }
+        }
     }
     ok
+}
+
+fn quality_issues_text(result) {
+    let text = "quality-unavailable";
+    if result != () && result.success && result.output != () {
+        if type_of(result.output.failure_groups) == "array" && result.output.failure_groups.len() > 0 {
+            text = json_encode(result.output.failure_groups);
+        } else if is_text_array(result.output.remaining_issues) {
+            text = json_encode(result.output.remaining_issues);
+        } else if is_text(result.output.summary) {
+            text = result.output.summary;
+        }
+    }
+    text
+}
+
+fn quality_fingerprint_of(result) {
+    let text = quality_issues_text(result);
+    let fp = fingerprint(text);
+    if !is_text(fp) { fp = text; }
+    fp
+}
+
+fn sanitize_repair_prefixes(prefixes) {
+    let out = [];
+    if is_text_array(prefixes) {
+        for prefix in prefixes {
+            if is_text(prefix) {
+                let allowed = false;
+                if prefix.starts_with("backend/") { allowed = true; }
+                if prefix.starts_with("docs/") { allowed = true; }
+                if prefix.contains("/tests/") { allowed = false; }
+                if prefix.contains("tests/") { allowed = false; }
+                if allowed { out = add_unique(out, prefix); }
+            }
+        }
+    }
+    if out.len() == 0 { out.push("backend/"); }
+    out
+}
+
+fn prefixes_overlap(left, right) {
+    let found = false;
+    if is_text_array(left) {
+        if is_text_array(right) {
+            for pa in left {
+                if is_text(pa) && pa != "" {
+                    for pb in right {
+                        if is_text(pb) && pb != "" {
+                            if pa == pb { found = true; }
+                            if pa.starts_with(pb) { found = true; }
+                            if pb.starts_with(pa) { found = true; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
+fn repair_slice_can_take(slice, groups, gi, max_jobs) {
+    let ok = false;
+    if slice.len() < max_jobs {
+        if gi < groups.len() {
+            let clash = false;
+            for idx in slice {
+                if idx < groups.len() {
+                    if prefixes_overlap(groups[idx].prefixes, groups[gi].prefixes) {
+                        clash = true;
+                    }
+                }
+            }
+            if !clash { ok = true; }
+        }
+    }
+    ok
+}
+
+fn pack_repair_slices(groups, max_jobs) {
+    let slices = [];
+    let gi = 0;
+    for group in groups {
+        let placed = false;
+        let next_slices = [];
+        for slice in slices {
+            if !placed && repair_slice_can_take(slice, groups, gi, max_jobs) {
+                let grown = [];
+                for idx in slice { grown.push(idx); }
+                grown.push(gi);
+                next_slices.push(grown);
+                placed = true;
+            } else {
+                next_slices.push(slice);
+            }
+        }
+        if !placed {
+            let first = [];
+            first.push(gi);
+            next_slices.push(first);
+        }
+        slices = next_slices;
+        gi += 1;
+    }
+    slices
+}
+
+fn fallback_failure_group(result) {
+    let issues = [];
+    if result != () && result.success && result.output != () {
+        if is_text_array(result.output.remaining_issues) {
+            for issue in result.output.remaining_issues {
+                if is_text(issue) { issues = add_unique(issues, issue); }
+            }
+        }
+        if is_text(result.output.summary) { issues = add_unique(issues, result.output.summary); }
+    }
+    if issues.len() == 0 { issues.push("unspecified unit-gate failure; treat as workspace breakage"); }
+    #{
+        name: "workspace",
+        prefixes: ["backend/"],
+        issues: issues,
+        commands: ["cargo test --workspace --lib --all-features --locked"],
+    }
+}
+
+fn failure_groups_from_quality(result) {
+    let groups = [];
+    if result != () && result.success && result.output != () {
+        if type_of(result.output.failure_groups) == "array" {
+            let gi = 0;
+            for raw in result.output.failure_groups {
+                if raw != () {
+                    let name = "group-" + gi.to_string();
+                    if is_text(raw.name) { name = raw.name; }
+                    let prefixes = sanitize_repair_prefixes(raw.prefixes);
+                    let issues = [];
+                    if is_text_array(raw.issues) {
+                        for issue in raw.issues {
+                            if is_text(issue) { issues = add_unique(issues, issue); }
+                        }
+                    }
+                    let commands = [];
+                    if is_text_array(raw.commands) {
+                        for command in raw.commands {
+                            if is_text(command) { commands = add_unique(commands, command); }
+                        }
+                    }
+                    if issues.len() > 0 {
+                        groups.push(#{
+                            name: name,
+                            prefixes: prefixes,
+                            issues: issues,
+                            commands: commands,
+                        });
+                    }
+                }
+                gi += 1;
+            }
+        }
+    }
+    if groups.len() == 0 { groups.push(fallback_failure_group(result)); }
+    groups
+}
+
+fn run_agent_job(job) {
+    let opts = #{
+        label: job.label,
+        capability_mode: job.capability_mode,
+        output_schema: job.output_schema,
+    };
+    if job.resume_from != () {
+        if is_text(job.resume_from) { opts.resume_from = job.resume_from; }
+    }
+    agent(job.prompt, opts)
+}
+
+fn launch_jobs_or_seq(jobs, reserve) {
+    let results = launch_parallel(jobs, reserve);
+    if results.len() == 0 && jobs.len() > 0 {
+        log("parallel panel skipped; falling back to sequential agents, jobs=" + jobs.len().to_string());
+        for job in jobs {
+            if remaining_budget() > reserve {
+                results.push(run_agent_job(job));
+            } else {
+                log("sequential fallback stopped; remaining=" + remaining_budget().to_string());
+                results.push(());
+            }
+        }
+    }
+    results
+}
+
+fn dispatch_quality_repairs(batch_id, quality_result, attempt, stall, preserve_note, max_jobs) {
+    let groups = failure_groups_from_quality(quality_result);
+    let room = remaining_budget();
+    if room > 2 {
+        room = room - 2;
+    } else {
+        room = 1;
+    }
+    let cap = max_jobs;
+    if cap > room { cap = room; }
+    if cap < 1 { cap = 1; }
+    let slices = pack_repair_slices(groups, cap);
+    log("QualityRepair groups=" + groups.len().to_string() + " slices=" + slices.len().to_string() + " cap=" + cap.to_string());
+    let qfail = quality_issues_text(quality_result);
+    let slice_no = 0;
+    for slice in slices {
+        let jobs = [];
+        let names = [];
+        for idx in slice {
+            if idx < groups.len() {
+                let group = groups[idx];
+                names.push(group.name);
+                let target_dir = "/tmp/erp-layering-qg" + idx.to_string() + "-r" + attempt.to_string();
+                jobs.push(#{
+                    prompt: quality_repair_prompt_for_group(batch_id, group, qfail, attempt, stall, target_dir, preserve_note),
+                    label: "quality-repair:" + group.name + ":r" + attempt.to_string(),
+                    capability_mode: "all",
+                    output_schema: quality_repair_schema,
+                });
+            }
+        }
+        log("QualityRepair slice " + slice_no.to_string() + ": " + json_encode(names));
+        let raw = launch_jobs_or_seq(jobs, 2);
+        let ji = 0;
+        for slot in raw {
+            let name = "slot";
+            if ji < names.len() { name = names[ji]; }
+            if slot != () && slot.success && slot.output != () {
+                log("QualityRepair " + name + ": " + slot.output.summary);
+            } else {
+                log("QualityRepair " + name + " returned unusable output");
+            }
+            ji += 1;
+        }
+        slice_no += 1;
+    }
 }
 
 fn empty_impl(cluster, summary) {
@@ -827,63 +1106,91 @@ fn verify_prompt_for(cluster, impl_payload, review_payload) {
     prompt
 }
 
-fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, verify_payloads) {
+fn quality_prompt_for(batch_id, allowed_ids, cluster_payloads, review_payloads, verify_payloads, retest) {
     let prompt = "";
-    prompt += "Integrate and verify this service-layering remediation batch. Unit-only gate: never run integration tests.\n";
+    prompt += "Run the unit-only quality gate for this service-layering batch. Never run integration tests.\n";
     prompt += "Batch id: " + batch_id + ". Owner: Grok.\n";
     prompt += "IDs allowed to close (Verify passed): " + json_encode(allowed_ids) + ".\n";
     prompt += "Inspect git status and diff first. Never git reset/checkout/restore/clean. Preserve unrelated dirty files.\n";
-    prompt += "Implementer payloads: " + cluster_payloads + "\n";
-    prompt += "Review payloads: " + review_payloads + "\n";
-    prompt += "Verify payloads: " + verify_payloads + "\n";
-    prompt += "Fix only concrete blockers introduced by this batch. Keep repository/entity/service/BPM boundaries from contract section 2.\n";
+    if retest {
+        prompt += "This is a retest after QualityRepair. Re-run the full unit-only gate. Do not expand scope. ";
+        prompt += "Close the same allowed IDs if and only if the entire gate is green, including cargo test --workspace --lib with 0 failed.\n";
+    } else {
+        prompt += "Implementer payloads: " + cluster_payloads + "\n";
+        prompt += "Review payloads: " + review_payloads + "\n";
+        prompt += "Verify payloads: " + verify_payloads + "\n";
+    }
+    prompt += "You MAY run `cargo fmt --all` once (write) to absorb format-only noise, then the check sequence. ";
+    prompt += "You MAY fix cheap batch-caused fmt/clippy/check failures in place. ";
+    prompt += "If `cargo test --workspace --lib` fails, do a short pass on obvious breakage from this batch, then return passed=false with sharded failure_groups so parallel repairers can finish. ";
+    prompt += "Do not spend the whole session trying to make a red --lib suite green by yourself.\n";
+    prompt += "Keep repository/entity/service/BPM boundaries from contract section 2. ";
     prompt += "Every added or modified method must keep its multi-line docs. Entity rules need direct unit tests. Old Service helpers must stay deleted.\n";
-    prompt += "Then run from backend, in order, and fix batch-caused failures:\n";
+    prompt += "Run from backend, in this exact order:\n";
     prompt += "cargo fmt --all -- --check\n";
     prompt += "cargo check --workspace --all-features --locked\n";
-    prompt += "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings\n";
+    prompt += "cargo clippy --workspace --all-features --locked -- -D warnings\n";
     prompt += "cargo test --workspace --lib --all-features --locked\n";
     prompt += "./scripts/check-bpm-boundaries.sh\n";
     prompt += "./scripts/check-service-boundaries.sh\n";
     prompt += "./scripts/check-permissions-drift.sh\n";
     prompt += "git diff --check\n";
+    prompt += "Do not pass clippy --all-targets: that compiles crate tests/ integration tests. Clippy default lib+bins only.\n";
     prompt += "All cargo commands must use the workspace default target directory only. ";
-    prompt += "Do not set CARGO_TARGET_DIR. Do not use /tmp/erp-*-target, /tmp/cargo-*, or any other temporary or dedicated target dir. ";
-    prompt += "Do not copy historical contract commands that exported CARGO_TARGET_DIR. Do not create or leave behind a temporary cargo target.\n";
-    prompt += "UNIT-ONLY GATE: run only cargo test --workspace --lib. Never add, modify, or run any integration test. ";
-    prompt += "Forbidden: any tests/ directory target, any --test target, --include-ignored, real MongoDB, ERP_TEST_MONGO_URI, dev-mongo.sh, docker compose test profile, or external service. ";
-    prompt += "R/E close evidence uses --lib unit tests only; record Mongo/integration dimensions as N/A per contract section 5.\n";
-    prompt += "If a gate command fails, fix only this batch\u0027s breakage, then rerun the full gate sequence from the start. Do not leave the tree red.\n";
-    prompt += "Only after gates pass, update docs/service-layering-remediation-contract.md for closed_ids: status DONE, 执行登记 with batch/owner/deps/evidence, ";
-    prompt += "and append a 批次验收登记 covering layering result, targeted unit tests, Mongo N/A, unified gates, compat/rollback, and unrun external bounds.\n";
+    prompt += "Do not set CARGO_TARGET_DIR. Do not use /tmp/erp-*-target, /tmp/cargo-*, or any other temporary or dedicated target dir.\n";
+    prompt += "UNIT-ONLY HARD GATE: the only allowed test command is cargo test --workspace --lib --all-features --locked. ";
+    prompt += "unit_tests_passed=true only if that command exited 0 with 0 failed tests (ignored tests do not count as failures). ";
+    prompt += "passed=true is illegal unless unit_tests_passed=true AND the exact --lib command appears in commands. ";
+    prompt += "Forbidden: tests/ directory targets, cargo test without --lib, any --test <name> target, --include-ignored, real MongoDB, ";
+    prompt += "ERP_TEST_MONGO_URI, dev-mongo.sh, docker compose test profile, or external services. ";
+    prompt += "Do not add, modify, or run integration tests. R/E close evidence uses --lib only; Mongo/integration dimensions are N/A.\n";
+    prompt += "Put every command you actually ran into commands. The orchestrator rejects passed=true if commands include integration tests.\n";
+    prompt += "If the gate is still red, set passed=false, unit_tests_passed from the --lib result, keep closed_ids empty, ";
+    prompt += "list concrete errors in remaining_issues, and shard remaining work into failure_groups with disjoint prefixes ";
+    prompt += "(typical shards: backend/entities/src, backend/database/src, backend/services/src, backend/crates/bpm/src, backend/scripts, docs). ";
+    prompt += "Workspace-wide failures that are not file-local go in one group named workspace with prefixes [backend/]. ";
+    prompt += "Empty failure_groups is valid only when passed=true. Never put tests/ paths in prefixes.\n";
+    prompt += "Only after the full sequence is green, update docs/service-layering-remediation-contract.md for closed_ids: status DONE, ";
+    prompt += "执行登记 with batch/owner/deps/evidence, and append a 批次验收登记 covering layering result, targeted unit tests, ";
+    prompt += "Mongo N/A, unified unit gates, compat/rollback, and unrun external bounds.\n";
     prompt += "Do not mark BLOCKED rows DONE. Do not close SALES-E19 without SALES-R02..R05. Do not invent occupancy policy.\n";
     prompt += "closed_ids MUST be a subset of the Verify-passed allowed IDs listed above. held_ids are attempted but not closed.\n";
-    prompt += "If any gate still fails after your fixes, set passed=false, keep closed_ids empty, and list every failing command plus the concrete error in remaining_issues.\n";
-    prompt += "Do not git add or git commit. Leave this batch\u0027s code and contract edits in the working tree. A later commit agent will create one commit if this batch passed with closed_ids.\n";
+    prompt += "Do not git add or git commit. Leave this batch\u0027s code and contract edits in the working tree.\n";
     prompt
 }
 
-fn quality_repair_prompt_for(batch_id, quality_payload, attempt) {
+fn quality_repair_prompt_for_group(batch_id, group, quality_payload, attempt, stall, target_dir, preserve_note) {
     let prompt = "";
-    prompt += "Repair only the unit-gate failures for service-layering batch " + batch_id + ". Attempt " + attempt.to_string() + ".\n";
-    prompt += "Failing Quality payload (fix these, do not expand scope): " + quality_payload + "\n";
+    prompt += "Repair only this unit-gate failure group for service-layering batch " + batch_id + ". Attempt " + attempt.to_string() + ".\n";
+    prompt += "Group: " + group.name + ". Allowed prefixes: " + json_encode(group.prefixes) + ".\n";
+    prompt += "Issues to fix: " + json_encode(group.issues) + "\n";
+    prompt += "Failing commands for this group: " + json_encode(group.commands) + "\n";
+    prompt += "Full Quality payload (context only): " + quality_payload + "\n";
+    prompt += preserve_note + "\n";
     prompt += "Inspect git status and diff first. Never git reset/checkout/restore/clean. Preserve unrelated dirty files.\n";
+    prompt += "PARALLEL SAFETY: other repairers may be editing disjoint prefixes at the same time. ";
+    prompt += "Modify only files under the allowed prefixes. Format only touched files. Never cargo fmt --all. ";
+    prompt += "Do not edit files under any tests/ directory.\n";
     prompt += "Fix only concrete gate breakage: fmt, check, clippy, --lib unit test failures, boundary scripts, or diff check. ";
     prompt += "Keep repository/entity/service/BPM boundaries from contract section 2. Old Service helpers must stay deleted.\n";
     prompt += "UNIT-ONLY: never add, modify, or run integration tests to make the gate green. ";
-    prompt += "Forbidden: tests/ targets, --test, --include-ignored, MongoDB, or external services. Fix with unit-testable code only.\n";
-    prompt += "After fixes, rerun the failing gate commands locally (fmt, check, affected --lib tests, boundary scripts) to confirm. ";
-    prompt += "Do not run the full workspace suite more than needed; the next Quality gate agent runs the full sequence.\n";
+    prompt += "Forbidden: tests/ targets, cargo test without --lib, --test <name>, --include-ignored, MongoDB, or external services. ";
+    prompt += "Fix with unit-testable code only. After edits, cargo fmt the touched files, then focused cargo test -p <crate> --lib with CARGO_TARGET_DIR=" + target_dir + ". ";
+    prompt += "When finished, rm -rf " + target_dir + ". Do not run the workspace suite; Quality retests next.\n";
+    if stall {
+        prompt += "STALL: previous repair left the same failing fingerprint. Do not repeat the same patch. ";
+        prompt += "Re-run the failing --lib test yourself, read the actual assertion/compile error, and fix the root cause.\n";
+    }
     prompt += "Do not edit docs/service-layering-remediation-contract.md close statuses. Do not git add or git commit.\n";
     prompt
 }
 
-fn commit_prompt_for(batch_id, closed_ids, quality_payload) {
+fn commit_prompt_for(batch_id, closed_ids, quality_payload, attempt) {
     let prompt = "";
     prompt += "Create exactly one git commit for this service-layering batch.\n";
-    prompt += "Batch id: " + batch_id + ". Closed IDs: " + json_encode(closed_ids) + ".\n";
+    prompt += "Batch id: " + batch_id + ". Closed IDs: " + json_encode(closed_ids) + ". Attempt " + attempt.to_string() + ".\n";
     prompt += "Quality payload: " + quality_payload + "\n";
-    prompt += "Inspect git status and diff first. Commit only this batch's files: Quality files_changed plus docs/service-layering-remediation-contract.md if this batch updated it, plus matching tests.\n";
+    prompt += "Inspect git status and diff first. Commit only this batch's files: Quality files_changed plus docs/service-layering-remediation-contract.md if this batch updated it, plus matching in-crate unit tests. Never stage crate tests/ integration tests.\n";
     prompt += "Do not stage unrelated dirty or untracked files. Record any left-unstaged paths in skipped_dirty.\n";
     prompt += "Never git reset, checkout, restore, clean, stash, rebase, merge, or push. Never amend a commit you did not just create in this step.\n";
     prompt += "If this batch has no staged changes after the scoped add, set committed=false and commit_sha=none. Do not create an empty commit.\n";
@@ -933,6 +1240,8 @@ let max_groups = 8;
 let max_parallel = 8;
 let include_blocked = false;
 let allow_p1 = false;
+let max_quality_repairs = 12;
+let max_repair_parallel = 4;
 let do_commit = true;
 let custom_ids = [];
 let batch_date = "WAVE";
@@ -951,6 +1260,8 @@ if args != () {
         max_groups = integer_or(args.max_clusters, 8);
     }
     if args.max_parallel != () { max_parallel = integer_or(args.max_parallel, 8); }
+    if args.max_quality_repairs != () { max_quality_repairs = integer_or(args.max_quality_repairs, 12); }
+    if args.max_repair_parallel != () { max_repair_parallel = integer_or(args.max_repair_parallel, 4); }
     if args.include_blocked != () { include_blocked = is_true(args.include_blocked); }
     if args.allow_p1_with_open_p0 != () { allow_p1 = is_true(args.allow_p1_with_open_p0); }
     if args.commit != () { do_commit = is_true(args.commit); }
@@ -965,6 +1276,10 @@ if max_groups < 1 { max_groups = 1; }
 if max_groups > 16 { max_groups = 16; }
 if max_parallel < 1 { max_parallel = 1; }
 if max_parallel > 16 { max_parallel = 16; }
+if max_quality_repairs < 1 { max_quality_repairs = 1; }
+if max_quality_repairs > 24 { max_quality_repairs = 24; }
+if max_repair_parallel < 1 { max_repair_parallel = 1; }
+if max_repair_parallel > 8 { max_repair_parallel = 8; }
 
 if smoke_merge {
     let overlap = find_wave(waves, "p0-proc-po-plan");
@@ -979,12 +1294,28 @@ if smoke_merge {
     for group in overlap_groups { overlap_names.push(group.name); }
     let indep_names = [];
     for group in indep_groups { indep_names.push(group.name); }
+    let dummy_repair = [
+        #{ name: "entities", prefixes: ["backend/entities/src/"], issues: ["a"], commands: [] },
+        #{ name: "services", prefixes: ["backend/services/src/"], issues: ["b"], commands: [] },
+        #{ name: "sales", prefixes: ["backend/services/src/sales/"], issues: ["c"], commands: [] },
+        #{ name: "scripts", prefixes: ["backend/scripts/"], issues: ["d"], commands: [] },
+    ];
+    let dummy_repair_slices = pack_repair_slices(dummy_repair, 4);
+    let lib_flagged = commands_ran_integration(["cargo test --workspace --lib --all-features --locked"]);
+    let workspace_flagged = commands_ran_integration(["cargo test --workspace --all-features --locked"]);
+    let mongo_flagged = commands_ran_integration(["ERP_TEST_MONGO_URI=x cargo test -p database --test foo"]);
+    let cleaned_prefixes = sanitize_repair_prefixes(["backend/entities/src/", "backend/services/src/tests/", "docs/a", "/tmp/x"]);
     complete(#{
-        summary: "overlap groups=" + overlap_groups.len().to_string() + " slices=" + overlap_slices.len().to_string() + "; indep groups=" + indep_groups.len().to_string() + " slices=" + indep_slices.len().to_string(),
+        summary: "overlap groups=" + overlap_groups.len().to_string() + " slices=" + overlap_slices.len().to_string() + "; indep groups=" + indep_groups.len().to_string() + " slices=" + indep_slices.len().to_string() + "; repair slices=" + dummy_repair_slices.len().to_string(),
         overlap_groups: overlap_names,
         overlap_slices: slice_preview(overlap_groups, overlap_slices),
         indep_groups: indep_names,
         indep_slices: slice_preview(indep_groups, indep_slices),
+        repair_slices: slice_preview(dummy_repair, dummy_repair_slices),
+        lib_flagged: lib_flagged,
+        workspace_flagged: workspace_flagged,
+        mongo_flagged: mongo_flagged,
+        cleaned_prefixes: cleaned_prefixes,
     });
 }
 
@@ -1230,7 +1561,7 @@ for cluster in pending {
         output_schema: cluster_plan_schema,
     });
 }
-let plan_results = launch_parallel(plan_jobs, 6);
+let plan_results = launch_jobs_or_seq(plan_jobs, 6);
 
 let active_clusters = [];
 let plan_index = 0;
@@ -1318,7 +1649,7 @@ for slice in impl_slices {
         }
     }
     log("Implement slice " + slice_no.to_string() + ": " + json_encode(names_for_slice(impl_groups, slice)));
-    let raw = launch_parallel(jobs, 4);
+    let raw = launch_jobs_or_seq(jobs, 4);
     let ji = 0;
     for idx in slice {
         let slot = ();
@@ -1362,7 +1693,7 @@ for cluster in impl_groups {
     }
     ri += 1;
 }
-let review_raw = launch_parallel(review_jobs, 4);
+let review_raw = launch_jobs_or_seq(review_jobs, 4);
 let reviews_by_group = [];
 for cluster in impl_groups { reviews_by_group.push(()); }
 let rp = 0;
@@ -1420,7 +1751,7 @@ for slice in repair_slices {
         }
     }
     log("Repair slice " + repair_slice_no.to_string() + " size=" + jobs.len().to_string());
-    let raw = launch_parallel(jobs, 3);
+    let raw = launch_jobs_or_seq(jobs, 3);
     let ji = 0;
     for gi2 in slice_global {
         let slot = ();
@@ -1455,7 +1786,7 @@ for cluster in impl_groups {
     }
     vi += 1;
 }
-let verify_raw = launch_parallel(verify_jobs, 2);
+let verify_raw = launch_jobs_or_seq(verify_jobs, 2);
 let verifies_by_group = [];
 for cluster in impl_groups { verifies_by_group.push(()); }
 let vp = 0;
@@ -1489,46 +1820,87 @@ for cluster in impl_groups {
 }
 log("Verified IDs: " + json_encode(verified_ids));
 
-let mongo_needed = false;
-let hi = 0;
-for cluster in impl_groups {
-    if is_true(cluster.needs_mongo) {
-        if hi < implementation_results.len() {
-            if is_true(implementation_results[hi].success) { mongo_needed = true; }
-        }
-    }
-    hi += 1;
-}
-
-let quality_passed = false;
+let quality_ok = false;
 let wave_closed = [];
 let wave_held = verify_held;
 let quality_result = ();
+let quality_repair_count = 0;
+let quality_stall_streak = 0;
+let last_quality_fp = "";
+let unit_tests_ok = false;
 if verified_ids.len() == 0 {
     log("No Verify-passed IDs; skipping Quality and Commit");
 } else {
-    phase("Quality");
-    quality_result = agent(quality_prompt_for(
-        batch_id,
-        verified_ids,
-        json_encode(implementation_results),
-        json_encode(reviews_by_group),
-        json_encode(verifies_by_group),
-        mongo_needed.to_string()
-    ), #{
-        label: "quality:batch",
-        capability_mode: "all",
-        output_schema: quality_schema,
-    });
-    if quality_result != () && quality_result.success && quality_result.output != () {
-        quality_passed = is_true(quality_result.output.passed);
-        if quality_passed && is_text_array(quality_result.output.closed_ids) {
-            wave_closed = intersect_ids(quality_result.output.closed_ids, verified_ids);
+    let quality_slots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+    let stop_quality = false;
+    for attempt in quality_slots {
+        if !stop_quality {
+            if attempt <= max_quality_repairs {
+                if remaining_budget() < 2 {
+                    log("Quality loop stopping: remaining budget=" + remaining_budget().to_string());
+                    stop_quality = true;
+                } else {
+                    if attempt > 0 {
+                        phase("QualityRepair");
+                        let stall = false;
+                        if quality_stall_streak >= 2 { stall = true; }
+                        dispatch_quality_repairs(batch_id, quality_result, attempt, stall, dirty_note, max_repair_parallel);
+                        quality_repair_count += 1;
+                    }
+                    if remaining_budget() < 1 {
+                        log("Quality loop stopping before retest: remaining budget=0");
+                        stop_quality = true;
+                    } else {
+                        phase("Quality");
+                        let retest = false;
+                        if attempt > 0 { retest = true; }
+                        let qlabel = "quality:batch";
+                        if retest { qlabel = "quality:batch-r" + attempt.to_string(); }
+                        quality_result = agent(quality_prompt_for(
+                            batch_id,
+                            verified_ids,
+                            json_encode(implementation_results),
+                            json_encode(reviews_by_group),
+                            json_encode(verifies_by_group),
+                            retest
+                        ), #{
+                            label: qlabel,
+                            capability_mode: "all",
+                            output_schema: quality_schema,
+                        });
+                        if quality_passed(quality_result) {
+                            quality_ok = true;
+                            stop_quality = true;
+                            log("Quality gate passed on attempt " + attempt.to_string() + " repairs=" + quality_repair_count.to_string());
+                        } else {
+                            let qfp = quality_fingerprint_of(quality_result);
+                            if qfp == last_quality_fp {
+                                if last_quality_fp != "" { quality_stall_streak += 1; }
+                            } else {
+                                quality_stall_streak = 0;
+                            }
+                            last_quality_fp = qfp;
+                            log("Quality gate failed attempt=" + attempt.to_string() + " stall=" + quality_stall_streak.to_string());
+                        }
+                    }
+                }
+            }
         }
+    }
+    if quality_ok {
+        if quality_result != () && quality_result.success && quality_result.output != () {
+            if is_text_array(quality_result.output.closed_ids) {
+                wave_closed = intersect_ids(quality_result.output.closed_ids, verified_ids);
+            }
+        }
+    }
+    if quality_result != () && quality_result.success && quality_result.output != () {
+        unit_tests_ok = is_true(quality_result.output.unit_tests_passed);
         if is_text_array(quality_result.output.held_ids) {
             for item_id in quality_result.output.held_ids { wave_held = add_unique(wave_held, item_id); }
         }
     }
+    log("Quality closed loop finished: passed=" + quality_ok.to_string() + " unit_tests=" + unit_tests_ok.to_string() + " repairs=" + quality_repair_count.to_string());
 }
 
 let commit_output = #{
@@ -1538,37 +1910,47 @@ let commit_output = #{
     skipped_dirty: [],
     summary: "commit skipped",
 };
-if do_commit && quality_passed && wave_closed.len() > 0 {
-    phase("Commit");
+if do_commit && quality_ok && wave_closed.len() > 0 {
     let quality_payload = "quality unavailable";
     if quality_result != () { quality_payload = json_encode(quality_result); }
-    let commit_result = agent(commit_prompt_for(batch_id, wave_closed, quality_payload), #{
-        label: "commit:batch",
-        capability_mode: "all",
-        output_schema: commit_schema,
-    });
-    if commit_result != () && commit_result.success && commit_result.output != () {
-        commit_output = #{
-            committed: is_true(commit_result.output.committed),
-            commit_sha: commit_result.output.commit_sha,
-            files_staged: commit_result.output.files_staged,
-            skipped_dirty: commit_result.output.skipped_dirty,
-            summary: commit_result.output.summary,
-        };
-        if !is_text(commit_output.commit_sha) { commit_output.commit_sha = "none"; }
-    } else {
-        commit_output.summary = "commit agent failed";
+    let commit_slots = [0, 1, 2];
+    for ci in commit_slots {
+        if !is_true(commit_output.committed) {
+            if remaining_budget() < 1 {
+                commit_output.summary = "commit skipped: no agent budget";
+            } else {
+                phase("Commit");
+                let attempt_no = ci + 1;
+                let commit_result = agent(commit_prompt_for(batch_id, wave_closed, quality_payload, attempt_no), #{
+                    label: "commit:batch-r" + attempt_no.to_string(),
+                    capability_mode: "all",
+                    output_schema: commit_schema,
+                });
+                if commit_result != () && commit_result.success && commit_result.output != () {
+                    commit_output = #{
+                        committed: is_true(commit_result.output.committed),
+                        commit_sha: commit_result.output.commit_sha,
+                        files_staged: commit_result.output.files_staged,
+                        skipped_dirty: commit_result.output.skipped_dirty,
+                        summary: commit_result.output.summary,
+                    };
+                    if !is_text(commit_output.commit_sha) { commit_output.commit_sha = "none"; }
+                } else {
+                    commit_output.summary = "commit agent failed on attempt " + attempt_no.to_string();
+                }
+            }
+        }
     }
 } else if !do_commit {
     commit_output.summary = "args.commit=false";
-} else if !quality_passed {
+} else if !quality_ok {
     commit_output.summary = "quality did not pass; left uncommitted";
 } else {
     commit_output.summary = "no closed_ids; left uncommitted";
 }
 
-if do_commit && quality_passed && wave_closed.len() > 0 && !is_true(commit_output.committed) {
-    quality_passed = false;
+if do_commit && quality_ok && wave_closed.len() > 0 && !is_true(commit_output.committed) {
+    quality_ok = false;
 }
 
 work_ids = subtract_ids(work_ids, wave_closed);
@@ -1582,12 +1964,18 @@ report += "- Parallel slices: " + json_encode(slice_preview(impl_groups, impl_sl
 report += "- Verified IDs (close candidates): " + json_encode(verified_ids) + "\n";
 report += "- Closed this run: " + json_encode(wave_closed) + "\n";
 report += "- Held: " + json_encode(wave_held) + "\n";
-report += "- Quality passed: " + quality_passed.to_string() + "\n";
+report += "- Quality passed: " + quality_ok.to_string() + "\n";
+report += "- Unit tests passed (--lib only): " + unit_tests_ok.to_string() + "\n";
+report += "- Quality repair rounds: " + quality_repair_count.to_string() + "\n";
+report += "- Quality stall streak: " + quality_stall_streak.to_string() + "\n";
 report += "- Commit: " + json_encode(commit_output) + "\n";
 report += "- Remaining executable OPEN after run (inventory minus closed): " + work_ids.len().to_string() + "\n";
 report += "- BLOCKED still excluded: " + json_encode(blocked_ids) + "\n\n";
+report += "Gate is unit-only: cargo test --workspace --lib. Integration tests are forbidden. ";
+report += "Failed gates shard into disjoint prefix groups and repair in parallel, then retest until green or budget is exhausted. ";
 report += "Next: re-run with args.wave=next until P0 slices are empty, then P1. ";
-report += "Tune args.max_groups / args.max_parallel / args.max_waves. Same-prefix clusters stay sequential slices. ";
+report += "Tune args.max_groups / args.max_parallel / args.max_waves / args.max_quality_repairs / args.max_repair_parallel. ";
+report += "Same-prefix clusters stay sequential slices. ";
 report += "Do not implement blocked-returns-occupancy until finance owners sign occupancy policy.\n\n";
 report += "## Implementer results\n\n```json\n" + json_encode(implementation_results) + "\n```\n";
 let report_path = write_scratch_file("service-layering-remediation-report.md", report);
@@ -1598,13 +1986,15 @@ if is_true(commit_output.committed) && commit_output.commit_sha != "none" {
 }
 
 complete(#{
-    summary: wave_closed.len().to_string() + " IDs closed, " + wave_held.len().to_string() + " held, slices=" + impl_slices.len().to_string() + ", groups=" + impl_groups.len().to_string() + ", quality_passed=" + quality_passed.to_string(),
+    summary: wave_closed.len().to_string() + " IDs closed, " + wave_held.len().to_string() + " held, slices=" + impl_slices.len().to_string() + ", groups=" + impl_groups.len().to_string() + ", quality_passed=" + quality_ok.to_string() + ", unit_tests=" + unit_tests_ok.to_string() + ", repairs=" + quality_repair_count.to_string(),
     report_path: report_path,
     closed_ids: wave_closed,
     held_ids: wave_held,
     verified_ids: verified_ids,
     commits: commits_total,
-    quality_passed_all: quality_passed,
+    quality_passed_all: quality_ok,
+    unit_tests_passed: unit_tests_ok,
+    quality_repair_rounds: quality_repair_count,
     remaining_open_estimate: work_ids.len(),
     slices: slice_preview(impl_groups, impl_slices),
     groups: merged_names,
