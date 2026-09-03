@@ -6,10 +6,7 @@
  * - 负责人 / 转交候选：/admin/admins（账号列表）
  */
 
-import type {
-    OwnerComboboxItem,
-    SupplierComboboxItem,
-} from "@/components/business/entity-comboboxes"
+import type { OwnerComboboxItem } from "@/components/business/entity-comboboxes"
 import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 
@@ -19,18 +16,6 @@ const OPTIONS_PAGE_SIZE = 100
 type BackendPage<T> = Page<T>
 
 type EnableStatus = "active" | "disabled"
-
-type SupplierDto = {
-    id: string
-    party_id: string
-    party_no: string | null
-    legal_name: string | null
-    short_name: string | null
-    supplier_no: string
-    status: EnableStatus
-    created_at: number
-    version: number
-}
 
 type AdminItem = {
     id: string
@@ -75,25 +60,6 @@ async function fetchAllPages<T>(
 }
 
 /**
- * 拉取启用状态的供应商选项（名称来自其主体当前生效修订）。
- *
- * @returns Combobox 供应商选项列表。
- */
-export const fetchSupplierOptions = async (): Promise<
-    SupplierComboboxItem[]
-> => {
-    const suppliers = await fetchAllPages<SupplierDto>("/admin/suppliers", {
-        status: "active",
-    })
-    return suppliers.map((s) => ({
-        supplierId: s.id,
-        supplierName:
-            s.legal_name ?? s.short_name ?? s.party_no ?? s.supplier_no,
-        supplierCode: s.supplier_no,
-    }))
-}
-
-/**
  * 拉取负责人选项（管理后台账号列表）。
  *
  * @returns Combobox 负责人选项列表。
@@ -106,14 +72,6 @@ export const fetchOwnerOptions = async (): Promise<OwnerComboboxItem[]> => {
         userCode: a.account,
     }))
 }
-
-/**
- * 拉取任务转交候选（管理后台账号列表，与负责人同一数据源）。
- *
- * @returns Combobox 团队人选列表。
- */
-export const fetchTeamOptions = async (): Promise<OwnerComboboxItem[]> =>
-    fetchOwnerOptions()
 
 /**
  * 拉取启用状态的计量单位选项（供商品表单选择基础单位）。

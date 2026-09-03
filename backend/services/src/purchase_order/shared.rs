@@ -2,8 +2,6 @@
 
 use std::str::FromStr;
 
-use database::{NoTransaction, PartyExt, SupplierExt};
-use entities::ids::SupplierAccountId;
 use entities::money::{Amount, Rate};
 use entities::purchase_order::{PaymentTermSnapshot, PurchaseChangeOrder, PurchaseOrder};
 use entities::supplier::SupplierPaymentTerm;
@@ -30,34 +28,6 @@ impl PurchaseOrderService {
             ));
         }
         Ok(())
-    }
-
-    /// 解析供应商名称（D09 供应商角色 → D07 主体 → 当前主体修订法定名称）。
-    pub(super) async fn resolve_supplier_name(
-        &self,
-        supplier_id: &SupplierAccountId,
-    ) -> Result<Option<String>> {
-        let supplier = self
-            .db
-            .supplier_accounts()
-            .find_by_id(supplier_id, &mut NoTransaction)
-            .await?;
-        let Some(supplier) = supplier else { return Ok(None) };
-        let party = self
-            .db
-            .parties()
-            .find_by_id(&supplier.party_id, &mut NoTransaction)
-            .await?;
-        let Some(party) = party else { return Ok(None) };
-        let Some(revision_id) = party.stable.current_revision_id else {
-            return Ok(None);
-        };
-        let revision = self
-            .db
-            .party_revisions()
-            .find_by_id(&revision_id, &mut NoTransaction)
-            .await?;
-        Ok(revision.map(|revision| revision.legal_name))
     }
 
     /// 解析付款条件并生成门禁快照（金额/比例门槛暂空）。

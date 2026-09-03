@@ -2,6 +2,7 @@
 
 mod dto;
 mod resolver;
+mod rule_list;
 mod service;
 
 use crate::iam::SharedRbacService;

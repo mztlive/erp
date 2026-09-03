@@ -1,6 +1,4 @@
-//! 采购责任规则管理和预览用例编排。
-
-use std::collections::{HashMap, HashSet};
+//! 采购责任规则管理和预览用例编排.
 
 use super::dto::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
@@ -9,6 +7,7 @@ use super::dto::{
     ProcurementResponsibilityRuleView, UpdateProcurementResponsibilityRuleRequest,
 };
 use super::resolver::{load_owner_account, ResolutionInput};
+use super::rule_list::{apply_rule_list_facts, to_rule_list_views};
 use super::ProcurementResponsibilityService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -16,7 +15,7 @@ use database::{
     AccessControlExt, CatalogExt, Executor, NoTransaction, ProcurementResponsibilityExt,
     ProcurementResponsibilityRuleFilter,
 };
-use entities::ids::{ProcurementResponsibilityRuleId, SkuRevisionId};
+use entities::ids::ProcurementResponsibilityRuleId;
 use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
     ProcurementResponsibilityRuleData, ProcurementResponsibilitySelectorReference,
@@ -47,11 +46,9 @@ impl ProcurementResponsibilityService {
         };
         let page = self
             .db
-            .procurement_responsibility_rules()
-            .search_procurement_responsibility_rules(&filter, &mut NoTransaction)
+            .load_procurement_rule_list_page(&filter, &mut NoTransaction)
             .await?;
-        let mut items = page.items.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.enrich_rule_views(&mut items).await?;
+        let items = to_rule_list_views(page.items, &page.facts);
         Ok(ProcurementResponsibilityRulePageView {
             items,
             total: page.total,
@@ -92,8 +89,12 @@ impl ProcurementResponsibilityService {
         let rule = self
             .persist_created_rule(rule, data, audit, policy_revision)
             .await?;
-        let mut view = rule.into();
-        self.enrich_rule_views(std::slice::from_mut(&mut view)).await?;
+        let facts = self
+            .db
+            .load_procurement_rule_list_facts(std::slice::from_ref(&rule), &mut NoTransaction)
+            .await?;
+        let mut view: ProcurementResponsibilityRuleView = rule.into();
+        apply_rule_list_facts(std::slice::from_mut(&mut view), &facts);
         Ok(view)
     }
 
@@ -129,8 +130,12 @@ impl ProcurementResponsibilityService {
         let rule = self
             .persist_updated_rule(id, version, data, actor.id(), audit, policy_revision)
             .await?;
-        let mut view = rule.into();
-        self.enrich_rule_views(std::slice::from_mut(&mut view)).await?;
+        let facts = self
+            .db
+            .load_procurement_rule_list_facts(std::slice::from_ref(&rule), &mut NoTransaction)
+            .await?;
+        let mut view: ProcurementResponsibilityRuleView = rule.into();
+        apply_rule_list_facts(std::slice::from_mut(&mut view), &facts);
         Ok(view)
     }
 
@@ -250,102 +255,14 @@ impl ProcurementResponsibilityService {
             let line_key = input.line_key.clone();
             let result = self.resolve_strict(std::slice::from_ref(&input)).await;
             lines.push(match result {
-                Ok(plan) => success_preview(plan.lines.into_iter().next().expect("单行解析必须返回单行")),
+                Ok(plan) => {
+                    let resolution = plan.views().into_iter().next().expect("单行解析必须返回单行");
+                    success_preview(resolution)
+                }
                 Err(error) => failed_preview(line_key, error),
             });
         }
         Ok(ProcurementResponsibilityResolveView { lines })
-    }
-
-    /// 批量补全规则管理列表的负责人、SKU 与分类展示名称。
-    ///
-    /// # 参数
-    /// * `views` - 已由规则实体映射的当前页视图
-    ///
-    /// # 返回
-    /// 原地补全可解析的展示字段后返回 `Ok(())`；引用已删除时保留空展示。
-    ///
-    /// # 错误
-    /// 账号或目录仓储批量查询失败时返回错误。
-    async fn enrich_rule_views(&self, views: &mut [ProcurementResponsibilityRuleView]) -> Result<()> {
-        let owner_ids = views
-            .iter()
-            .map(|view| view.owner_user_id.clone())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let sku_ids = views
-            .iter()
-            .filter_map(|view| view.sku_id.clone())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let category_ids = views
-            .iter()
-            .filter_map(|view| view.category_id.clone())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        let owners = self
-            .db
-            .accounts()
-            .list_procurement_responsibility_owners(&owner_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect::<HashMap<_, _>>();
-        let skus = self
-            .db
-            .skus()
-            .list_procurement_responsibility_skus(&sku_ids, &mut NoTransaction)
-            .await?;
-        let sku_revision_ids = skus
-            .iter()
-            .filter_map(|sku| sku.stable.current_revision_id.as_deref().map(SkuRevisionId::new))
-            .collect::<Vec<_>>();
-        let sku_revisions = self
-            .db
-            .sku_revisions()
-            .list_procurement_responsibility_sku_revisions(&sku_revision_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|revision| (revision.base.id, revision.name))
-            .collect::<HashMap<_, _>>();
-        let skus = skus
-            .into_iter()
-            .map(|sku| {
-                let name = sku
-                    .stable
-                    .current_revision_id
-                    .as_ref()
-                    .and_then(|revision_id| sku_revisions.get(revision_id))
-                    .cloned();
-                (sku.base.id, (sku.sku_no, name))
-            })
-            .collect::<HashMap<_, _>>();
-        let categories = self
-            .db
-            .product_categories()
-            .list_procurement_responsibility_categories(&category_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|category| (category.base.id, category.name))
-            .collect::<HashMap<_, _>>();
-
-        for view in views {
-            view.owner_name = owners.get(&view.owner_user_id).cloned();
-            if let Some(sku_id) = view.sku_id.as_ref() {
-                if let Some((sku_no, sku_name)) = skus.get(sku_id.as_ref()) {
-                    view.sku_no = Some(sku_no.clone());
-                    view.sku_name = sku_name.clone();
-                }
-            }
-            if let Some(category_id) = view.category_id.as_ref() {
-                view.category_name = categories.get(category_id.as_ref()).cloned();
-            }
-        }
-        Ok(())
     }
 
     /// 校验规则选择器引用的目录实体存在。

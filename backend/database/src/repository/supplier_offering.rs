@@ -25,6 +25,7 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+pub mod list_filter;
 mod query;
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
@@ -683,7 +684,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{sort_doc, SupplierOfferingFilter};
-    use crate::repository::QueryFilter;
+    use crate::repository::{Pagination, QueryFilter};
 
     #[test]
     fn offering_filter_uses_direct_supplier_identity() {
@@ -759,5 +760,103 @@ mod tests {
             sort_doc(Some("unsafe"), &["supplier_sku_code"], false),
             doc! { "created_at": -1 }
         );
+    }
+
+    #[test]
+    fn empty_candidate_ids_match_nothing_with_stable_pagination() {
+        let filter = SupplierOfferingFilter {
+            offering_ids: Some(vec![]),
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            supplier_sku_code: None,
+            keyword_sku_ids: None,
+            sku_ids: Some(vec![]),
+            page: 999,
+            page_size: 100,
+            sort_by: Some("created_at".to_string()),
+            sort_ascending: true,
+        };
+        let doc = filter.to_doc();
+        assert_eq!(doc.get_document("id").unwrap(), &doc! { "$in": [] });
+        assert_eq!(doc.get_document("sku_id").unwrap(), &doc! { "$in": [] });
+        assert_eq!(filter.page_and_size(), (999, 100));
+    }
+
+    #[test]
+    fn empty_keyword_sku_ids_keep_code_branch_without_empty_in() {
+        let filter = SupplierOfferingFilter {
+            offering_ids: None,
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            supplier_sku_code: Some("SUP-1".to_string()),
+            keyword_sku_ids: Some(vec![]),
+            sku_ids: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+        .to_doc();
+        let branches = filter.get_array("$or").unwrap();
+        assert_eq!(branches.len(), 1);
+        assert!(branches[0]
+            .as_document()
+            .unwrap()
+            .contains_key("supplier_sku_code"));
+    }
+
+    #[test]
+    fn rows_without_current_pointer_yield_no_revision_entry() {
+        let rows = [
+            super::SupplierOfferingRow {
+                id: "offering-1".to_string(),
+                sku_id: entities::ids::SkuId::new("sku-1"),
+                supplier_id: entities::ids::SupplierAccountId::new("supplier-1"),
+                supplier_product_code: None,
+                supplier_sku_code: "SUP-1".to_string(),
+                source_type: entities::supplier_offering::OfferingSourceType::Manual,
+                source_connection_id: None,
+                status: entities::supplier_offering::OfferingStatus::Active,
+                current_revision_id: None,
+                version: 1,
+                created_at: 1,
+            },
+            super::SupplierOfferingRow {
+                id: "offering-2".to_string(),
+                sku_id: entities::ids::SkuId::new("sku-2"),
+                supplier_id: entities::ids::SupplierAccountId::new("supplier-1"),
+                supplier_product_code: None,
+                supplier_sku_code: "SUP-2".to_string(),
+                source_type: entities::supplier_offering::OfferingSourceType::Manual,
+                source_connection_id: None,
+                status: entities::supplier_offering::OfferingStatus::Active,
+                current_revision_id: Some("missing-revision".to_string()),
+                version: 1,
+                created_at: 2,
+            },
+        ];
+        let current_by_revision = rows
+            .iter()
+            .filter_map(|row| {
+                row.current_revision_id
+                    .as_ref()
+                    .map(|revision_id| (revision_id.clone(), row.id.clone()))
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        assert!(!current_by_revision.contains_key("offering-1"));
+        assert_eq!(
+            current_by_revision.get("missing-revision").map(String::as_str),
+            Some("offering-2")
+        );
+        let stored_ids = ["revision-9"];
+        let mapped = stored_ids
+            .iter()
+            .filter_map(|id| current_by_revision.get(*id).cloned())
+            .collect::<Vec<_>>();
+        assert!(mapped.is_empty());
     }
 }

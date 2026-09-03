@@ -63,8 +63,19 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 }
 
 /// 返回 `party` 的身份约束和列表查询索引。
+///
+/// `uk_parties_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10：
+/// `current_legal_names_by_party_ids` 经 `list_by_ids` 按 `id $in` 批量取主体，
+/// 默认 `_id` 索引不能覆盖业务字段 `id`，此前只能集合扫描）。
+/// 迁移：先按 `id` 分组审计重复值（`$group`/`$match: {count: {$gt: 1}}` 为空
+/// 才可继续），再执行幂等 `ensure` 创建索引，最后用 `explain` 验证 `$in`
+/// 命中 `uk_parties_id` 且无 `COLLSCAN`。
+/// 回滚：删除 `uk_parties_id`，批量查询退化为集合扫描，不改变数据。
+/// 失败关闭：存量存在重复 `id` 时 `ensure` 返回唯一冲突错误，部署必须中止，
+/// 先按审计诊断清理重复后再重跑，禁止跳过审计强行建索引。
 fn party_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_parties_id", doc! { "id": 1 }),
         unique_index("uk_parties_party_no", doc! { "party_no": 1 }),
         partial_unique_index(
             "uk_parties_credit_code",
@@ -174,6 +185,22 @@ mod tests {
     fn party_identity_indexes_are_globally_unique_with_partial_credit_code() {
         let indexes = party_indexes();
 
+        for name in ["uk_parties_id", "uk_parties_party_no"] {
+            let index = indexes
+                .iter()
+                .find(|index| {
+                    index.options.as_ref().and_then(|options| options.name.as_deref()) == Some(name)
+                })
+                .unwrap();
+            assert_eq!(index.options.as_ref().unwrap().unique, Some(true));
+            assert!(index
+                .options
+                .as_ref()
+                .unwrap()
+                .partial_filter_expression
+                .is_none());
+        }
+
         let party_no = indexes
             .iter()
             .find(|index| {
@@ -182,13 +209,6 @@ mod tests {
             })
             .unwrap();
         assert_eq!(party_no.keys, doc! { "party_no": 1 });
-        assert_eq!(party_no.options.as_ref().unwrap().unique, Some(true));
-        assert!(party_no
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
 
         let credit_code = indexes
             .iter()
@@ -205,6 +225,21 @@ mod tests {
             partial.get("unified_credit_code"),
             Some(Bson::Document(_))
         ));
+    }
+
+    #[test]
+    fn party_id_index_covers_batch_lookups() {
+        let index = party_indexes()
+            .into_iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref()) == Some("uk_parties_id")
+            })
+            .unwrap();
+        assert_eq!(index.keys, doc! { "id": 1 });
+        assert_eq!(
+            index.options.as_ref().and_then(|options| options.unique),
+            Some(true)
+        );
     }
 
     #[test]
@@ -238,5 +273,156 @@ mod tests {
                 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+    }
+}
+
+/// PROC-R10 主体业务主键索引的真实 MongoDB 验收（隔离库，Quality 单独执行）。
+#[cfg(test)]
+mod proc_r10_mongo_tests {
+    use mongodb::bson::{doc, Document};
+    use serde::Deserialize;
+    use test_support::{require_mongo, TestDb};
+
+    use super::{ensure, PARTIES};
+
+    /// 重复 `id` 审计行。
+    #[derive(Debug, Deserialize, PartialEq, Eq)]
+    struct DuplicatePartyId {
+        /// 重复的业务主键。
+        id: String,
+        /// 该主键出现次数。
+        count: i64,
+    }
+
+    /// 插入仅携带索引相关字段的主体原始文档。
+    ///
+    /// # 参数
+    /// * `db` - 隔离测试库
+    /// * `id` - 业务主键（可故意重复）
+    /// * `party_no` - 主体编号（保持唯一，避免干扰其他唯一索引）
+    ///
+    /// # 错误
+    /// 写入失败时 panic。
+    async fn insert_raw_party(db: &mongodb::Database, id: &str, party_no: &str) {
+        db.collection::<Document>(PARTIES)
+            .insert_one(doc! { "id": id, "party_no": party_no })
+            .await
+            .expect("原始主体写入失败");
+    }
+
+    /// 按 `id` 分组审计重复值，与部署前检查共用同一语义。
+    ///
+    /// # 参数
+    /// * `db` - 隔离测试库
+    ///
+    /// # 返回
+    /// 按 `id` 字典序排列的重复主键及出现次数。
+    ///
+    /// # 错误
+    /// 聚合执行失败时 panic。
+    async fn audit_duplicate_party_ids(db: &mongodb::Database) -> Vec<DuplicatePartyId> {
+        use futures_util::TryStreamExt;
+        db.collection::<Document>(PARTIES)
+            .aggregate(vec![
+                doc! { "$group": { "_id": "$id", "count": { "$sum": 1 } } },
+                doc! { "$match": { "count": { "$gt": 1 } } },
+                doc! { "$sort": { "_id": 1 } },
+                doc! { "$project": { "_id": 0, "id": "$_id", "count": 1 } },
+            ])
+            .with_type::<DuplicatePartyId>()
+            .await
+            .expect("重复审计聚合失败")
+            .try_collect::<Vec<_>>()
+            .await
+            .expect("重复审计游标读取失败")
+    }
+
+    /// 重复 `id` 必须先被审计报出，再拒绝索引迁移并输出冲突索引诊断。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库。
+    ///
+    /// # 返回
+    /// 审计命中重复主键且迁移失败关闭时通过。
+    ///
+    /// # 错误
+    /// 审计漏报或迁移未拒绝时测试失败。
+    ///
+    /// # 约束
+    /// 仅验证 `parties` 集合；`#[ignore]` 由 Quality 在隔离副本集执行。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn duplicate_party_ids_are_audited_and_refuse_migration() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_r10_party_id_dup")
+                .await
+                .expect("测试数据库创建失败");
+            insert_raw_party(fixture.db(), "dup-1", "P-DUP-1").await;
+            insert_raw_party(fixture.db(), "dup-1", "P-DUP-2").await;
+
+            let duplicates = audit_duplicate_party_ids(fixture.db()).await;
+            assert_eq!(
+                duplicates,
+                vec![DuplicatePartyId {
+                    id: "dup-1".to_string(),
+                    count: 2
+                }],
+                "部署前审计必须报出重复 id"
+            );
+
+            let err = ensure(fixture.db()).await.expect_err("重复 id 必须拒绝建索引");
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("uk_parties_id"),
+                "诊断必须包含冲突索引名：{rendered}"
+            );
+        });
+    }
+
+    /// `id $in` 批量查询的执行计划必须命中唯一索引且无集合扫描。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库。
+    ///
+    /// # 返回
+    /// `explain` 命中 `uk_parties_id` 的 `IXSCAN` 且无 `COLLSCAN` 时通过。
+    ///
+    /// # 错误
+    /// 索引未命中或出现集合扫描时测试失败。
+    ///
+    /// # 约束
+    /// 不使用 `hint`；`#[ignore]` 由 Quality 在隔离副本集执行。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn party_id_in_queries_use_unique_id_index() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_r10_party_id_explain")
+                .await
+                .expect("测试数据库创建失败");
+            ensure(fixture.db()).await.expect("索引创建失败");
+            insert_raw_party(fixture.db(), "pty-1", "P-1").await;
+
+            let explain = fixture
+                .db()
+                .run_command(doc! {
+                    "explain": {
+                        "find": PARTIES,
+                        "filter": { "id": { "$in": ["pty-1", "pty-missing"] } },
+                    },
+                    "verbosity": "executionStats",
+                })
+                .await
+                .expect("主体 id 查询 explain 失败");
+            let rendered = format!("{explain:?}");
+            assert!(rendered.contains("IXSCAN"), "explain 未使用 IXSCAN：{rendered}");
+            assert!(
+                rendered.contains("uk_parties_id"),
+                "explain 未命中 uk_parties_id：{rendered}"
+            );
+            assert!(
+                !rendered.contains("COLLSCAN"),
+                "explain 出现 COLLSCAN：{rendered}"
+            );
+        });
     }
 }

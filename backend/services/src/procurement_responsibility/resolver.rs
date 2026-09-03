@@ -22,13 +22,93 @@ const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 /// 内部批量解析输入；实体负责行键与区域规范化。
 pub(crate) type ResolutionInput = ProcurementResponsibilityResolutionLine;
 
-/// 已授权的批量解析计划。
+/// 已授权的批量解析行：领域身份与展示姓名分离持有.
+///
+/// # 参数
+/// * `identity` - 忽略展示姓名的稳定责任身份
+/// * `owner_name` - 负责人当前展示姓名，仅用于最后一跳视图映射
+///
+/// # 返回
+/// 返回可生成视图但身份不受姓名影响的授权行.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 姓名变化不得影响计划身份；行顺序、负责人、规则 ID 或规则类型任一变化必须拒绝.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AuthorizedResolutionLine {
+    /// 忽略展示姓名的稳定责任身份.
+    pub identity: ProcurementResponsibilityResolutionIdentity,
+    /// 负责人当前展示姓名.
+    pub owner_name: String,
+}
+
+/// 已授权的批量解析计划.
+///
+/// # 参数
+/// * `lines` - 按输入顺序排列的授权行，直接持有领域身份
+/// * `policy_revision` - 校验负责人权限使用的策略版本
+///
+/// # 返回
+/// 返回逐行具体负责人身份及授权策略版本.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 计划直接持有 `ProcurementResponsibilityResolutionIdentity`；展示姓名和 API View 只在最后一跳映射.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AuthorizedResolutionPlan {
-    /// 按输入顺序排列的逐行结果。
-    pub lines: Vec<ProcurementResponsibilityResolutionView>,
-    /// 校验负责人权限使用的策略版本。
+    /// 按输入顺序排列的逐行授权结果.
+    pub lines: Vec<AuthorizedResolutionLine>,
+    /// 校验负责人权限使用的策略版本.
     pub policy_revision: u64,
+}
+
+impl AuthorizedResolutionPlan {
+    /// 将授权计划映射为 API 预览视图.
+    ///
+    /// # 参数
+    /// 无，消费计划行的身份与展示姓名.
+    ///
+    /// # 返回
+    /// 返回与输入顺序一致的解析视图；这是展示姓名进入 View 的唯一位置.
+    ///
+    /// # 错误
+    /// 无；纯内存映射.
+    ///
+    /// # 约束
+    /// 仅在 Service 最后一跳调用；重验比较必须使用 `identities` 而非本方法结果.
+    pub(crate) fn views(&self) -> Vec<ProcurementResponsibilityResolutionView> {
+        self.lines
+            .iter()
+            .map(|line| ProcurementResponsibilityResolutionView {
+                line_key: line.identity.line_key.clone(),
+                owner_user_id: line.identity.owner_user_id.clone(),
+                owner_name: line.owner_name.clone(),
+                rule_id: line.identity.rule_id.clone(),
+                rule_type: line.identity.rule_type,
+            })
+            .collect()
+    }
+
+    /// 返回保持输入顺序的稳定责任身份集合.
+    ///
+    /// # 参数
+    /// 无.
+    ///
+    /// # 返回
+    /// 返回忽略展示姓名的稳定责任身份集合.
+    ///
+    /// # 错误
+    /// 无；纯内存克隆.
+    ///
+    /// # 约束
+    /// 姓名变化不得影响结果；顺序、负责人、规则 ID 或规则类型任一变化必须体现在返回值差异中.
+    pub(crate) fn identities(&self) -> Vec<ProcurementResponsibilityResolutionIdentity> {
+        self.lines.iter().map(|line| line.identity.clone()).collect()
+    }
 }
 
 /// 尚未经过 RBAC 校验的候选结果。
@@ -79,10 +159,9 @@ impl ProcurementResponsibilityService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let candidates = self.resolve_candidates(inputs, executor).await?;
-        let actual = candidates.into_iter().map(candidate_view).collect::<Vec<_>>();
-        let actual_identity = resolution_identities(&actual)?;
-        let expected_identity = resolution_identities(&expected.lines)?;
-        if actual_identity != expected_identity {
+        let actual = plan_identities(&candidates)?;
+        let expected_identity = expected.identities();
+        if actual != expected_identity {
             return Err(Error::ConflictError(
                 "采购责任规则或目录事实已变化，请重新提交审批".to_string(),
             ));
@@ -218,11 +297,72 @@ impl ProcurementResponsibilityService {
                 "采购负责人授权策略正在变化，请重试".to_string(),
             ));
         }
+        let mut lines = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            lines.push(authorized_line(candidate)?);
+        }
         Ok(AuthorizedResolutionPlan {
-            lines: candidates.into_iter().map(candidate_view).collect(),
+            lines,
             policy_revision,
         })
     }
+}
+
+/// 将候选责任转换为直接持有领域身份的授权行.
+///
+/// # 参数
+/// * `candidate` - 已完成目录与账号资格校验的候选责任
+///
+/// # 返回
+/// 返回持有稳定责任身份与展示姓名的授权行.
+///
+/// # 错误
+/// 行键、负责人或规则 ID 非法时返回实体错误.
+///
+/// # 约束
+/// 身份经由领域构造函数生成，不经过 API View；展示姓名仅随行携带.
+fn authorized_line(candidate: CandidateResolution) -> Result<AuthorizedResolutionLine> {
+    let identity = ProcurementResponsibilityResolutionIdentity::new(
+        candidate.line_key,
+        candidate.owner_user_id,
+        candidate.rule_id,
+        candidate.rule_type,
+    )
+    .map_err(Error::Logic)?;
+    Ok(AuthorizedResolutionLine {
+        identity,
+        owner_name: candidate.owner_name,
+    })
+}
+
+/// 将候选责任集合转换为稳定责任身份集合.
+///
+/// # 参数
+/// * `candidates` - 已完成目录与账号资格校验的候选责任
+///
+/// # 返回
+/// 返回保持输入顺序的稳定责任身份集合.
+///
+/// # 错误
+/// 任一候选行键、负责人或规则 ID 非法时返回实体错误.
+///
+/// # 约束
+/// 经由领域构造函数直接生成，不经过 API View；姓名变化不得影响结果.
+fn plan_identities(
+    candidates: &[CandidateResolution],
+) -> Result<Vec<ProcurementResponsibilityResolutionIdentity>> {
+    candidates
+        .iter()
+        .map(|candidate| {
+            ProcurementResponsibilityResolutionIdentity::new(
+                candidate.line_key.clone(),
+                candidate.owner_user_id.clone(),
+                candidate.rule_id.clone(),
+                candidate.rule_type,
+            )
+            .map_err(Error::Logic)
+        })
+        .collect()
 }
 
 /// 对解析输入去重并保持首次出现顺序收集 SKU。
@@ -449,49 +589,180 @@ fn purchase_create_permission() -> Result<Permission> {
     Permission::parse("purchase_order:create").map_err(Error::Logic)
 }
 
-/// 把解析视图转换为忽略展示姓名的稳定责任身份.
-///
-/// # 参数
-/// * `views` - 待比对的采购责任解析视图
-///
-/// # 返回
-/// 返回保持输入顺序的稳定责任身份集合。
-///
-/// # 错误
-/// 任一视图缺少合法行键、负责人或规则 ID 时返回实体错误。
-fn resolution_identities(
-    views: &[ProcurementResponsibilityResolutionView],
-) -> Result<Vec<ProcurementResponsibilityResolutionIdentity>> {
-    views
-        .iter()
-        .map(|view| {
-            ProcurementResponsibilityResolutionIdentity::new(
-                view.line_key.clone(),
-                view.owner_user_id.clone(),
-                view.rule_id.clone(),
-                view.rule_type,
-            )
-            .map_err(Error::Logic)
-        })
-        .collect()
-}
+#[cfg(test)]
+mod tests {
+    use entities::procurement_responsibility::ProcurementResponsibilityRuleType;
 
-/// 将候选责任转换为稳定授权视图.
-///
-/// # 参数
-/// * `candidate` - 已完成目录与账号资格校验的候选责任
-///
-/// # 返回
-/// 返回用于授权计划和 API 预览的解析视图。
-///
-/// # 错误
-/// 无。
-fn candidate_view(candidate: CandidateResolution) -> ProcurementResponsibilityResolutionView {
-    ProcurementResponsibilityResolutionView {
-        line_key: candidate.line_key,
-        owner_user_id: candidate.owner_user_id,
-        owner_name: candidate.owner_name,
-        rule_id: candidate.rule_id,
-        rule_type: candidate.rule_type,
+    use super::*;
+
+    fn test_candidate(line_key: &str, owner: &str, owner_name: &str, rule_id: &str) -> CandidateResolution {
+        test_candidate_with_type(
+            line_key,
+            owner,
+            owner_name,
+            rule_id,
+            ProcurementResponsibilityRuleType::Sku,
+        )
+    }
+
+    /// 构造指定规则类型的测试候选责任.
+    ///
+    /// # 参数
+    /// * `line_key` - 调用方稳定行键
+    /// * `owner` - 负责人账号 ID
+    /// * `owner_name` - 负责人展示姓名
+    /// * `rule_id` - 命中规则 ID
+    /// * `rule_type` - 命中规则类型
+    ///
+    /// # 返回
+    /// 返回目录与账号资格已假设通过的候选责任.
+    ///
+    /// # 错误
+    /// 无.
+    ///
+    /// # 约束
+    /// 仅测试使用；不访问数据库.
+    fn test_candidate_with_type(
+        line_key: &str,
+        owner: &str,
+        owner_name: &str,
+        rule_id: &str,
+        rule_type: ProcurementResponsibilityRuleType,
+    ) -> CandidateResolution {
+        CandidateResolution {
+            line_key: line_key.to_string(),
+            owner_user_id: owner.to_string(),
+            owner_name: owner_name.to_string(),
+            rule_id: rule_id.to_string(),
+            rule_type,
+        }
+    }
+
+    /// 授权行直接持有领域身份，视图映射只在最后一跳发生.
+    ///
+    /// # 参数
+    /// 无.
+    ///
+    /// # 返回
+    /// 断言身份字段与视图字段一致且计划不再持有 View.
+    ///
+    /// # 错误
+    /// 身份构造回归时测试失败.
+    ///
+    /// # 约束
+    /// 不得再由 API View 反向构造领域身份.
+    #[test]
+    fn authorized_plan_holds_identity_and_maps_view_last_hop() {
+        let line = authorized_line(test_candidate("line-1", "owner-1", "张三", "rule-1")).unwrap();
+        assert_eq!(line.identity.line_key, "line-1");
+        assert_eq!(line.identity.owner_user_id, "owner-1");
+        assert_eq!(line.identity.rule_id, "rule-1");
+        assert_eq!(line.owner_name, "张三");
+        let plan = AuthorizedResolutionPlan {
+            lines: vec![line],
+            policy_revision: 7,
+        };
+        let views = plan.views();
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].owner_name, "张三");
+        assert_eq!(plan.identities().len(), 1);
+    }
+
+    /// 展示姓名变化不影响计划身份比较.
+    ///
+    /// # 参数
+    /// 无.
+    ///
+    /// # 返回
+    /// 断言不同姓名的候选生成相同身份.
+    ///
+    /// # 错误
+    /// 身份误纳展示字段时测试失败.
+    ///
+    /// # 约束
+    /// 姓名变化不得制造无效冲突.
+    #[test]
+    fn owner_name_change_does_not_change_identity() {
+        let left = plan_identities(&[test_candidate("line-1", "owner-1", "张三", "rule-1")]).unwrap();
+        let right = plan_identities(&[test_candidate("line-1", "owner-1", "李四", "rule-1")]).unwrap();
+        assert_eq!(left, right);
+    }
+
+    /// 行顺序、负责人、规则 ID 任一变化必须体现在身份差异中.
+    ///
+    /// # 参数
+    /// 无.
+    ///
+    /// # 返回
+    /// 断言三类变化均导致身份不等.
+    ///
+    /// # 错误
+    /// 身份遗漏关键字段时测试失败.
+    ///
+    /// # 约束
+    /// 顺序变化必须拒绝；负责人或规则变化必须拒绝.
+    #[test]
+    fn order_owner_or_rule_change_changes_identity() {
+        let base = test_candidate("line-1", "owner-1", "张三", "rule-1");
+        let second = test_candidate("line-2", "owner-1", "张三", "rule-2");
+        let ordered = plan_identities(&[base.clone(), second.clone()]).unwrap();
+        let reordered = plan_identities(&[second, base]).unwrap();
+        assert_ne!(ordered, reordered);
+
+        let owner_changed =
+            plan_identities(&[test_candidate("line-1", "owner-2", "张三", "rule-1")]).unwrap();
+        assert_ne!(ordered[..1], owner_changed);
+
+        let rule_changed = plan_identities(&[test_candidate("line-1", "owner-1", "张三", "rule-9")]).unwrap();
+        assert_ne!(ordered[..1], rule_changed);
+    }
+
+    /// 规则类型变化必须导致身份差异，重验比较必须拒绝.
+    ///
+    /// # 参数
+    /// 无.
+    ///
+    /// # 返回
+    /// 断言同行键同负责人同规则 ID 下 Sku 与 Category 生成不同身份，且授权计划的身份向量同样不等.
+    ///
+    /// # 错误
+    /// 身份遗漏规则类型时测试失败.
+    ///
+    /// # 约束
+    /// `revalidate_plan` 直接比较身份向量，身份不等即走 Conflict 回滚；展示姓名差异仍必须相等.
+    #[test]
+    fn rule_type_change_changes_identity_and_rejects_revalidation() {
+        let sku = test_candidate_with_type(
+            "line-1",
+            "owner-1",
+            "张三",
+            "rule-1",
+            ProcurementResponsibilityRuleType::Sku,
+        );
+        let category = test_candidate_with_type(
+            "line-1",
+            "owner-1",
+            "张三",
+            "rule-1",
+            ProcurementResponsibilityRuleType::Category,
+        );
+        assert_ne!(
+            plan_identities(std::slice::from_ref(&sku)).unwrap(),
+            plan_identities(std::slice::from_ref(&category)).unwrap(),
+            "规则类型变化必须拒绝"
+        );
+        let expected = AuthorizedResolutionPlan {
+            lines: vec![authorized_line(sku).unwrap()],
+            policy_revision: 7,
+        };
+        let actual = plan_identities(std::slice::from_ref(&test_candidate_with_type(
+            "line-1",
+            "owner-1",
+            "张三",
+            "rule-1",
+            ProcurementResponsibilityRuleType::Category,
+        )))
+        .unwrap();
+        assert_ne!(expected.identities(), actual, "重验身份向量不等必须触发 Conflict");
     }
 }

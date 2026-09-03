@@ -13,8 +13,9 @@ use entities::supplier::{
 use mongodb::Database;
 
 use super::super::supplier::{
-    SupplierAccountFilter, SupplierCapabilityFilter, SupplierCommercialProfileFilter,
-    SupplierQualificationFilter, SupplierRepository,
+    SupplierAccountFilter, SupplierCapabilityFilter, SupplierCommercialProfileFilter, SupplierDetailBundle,
+    SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,
+    SupplierQualificationHealthFilter, SupplierRepository,
 };
 use crate::Repository;
 
@@ -47,6 +48,14 @@ pub trait SupplierExt {
     type SupplierCapabilityFilter;
     /// 资质列表筛选条件类型（定义见 `repository::supplier`）。
     type SupplierQualificationFilter;
+    /// 供应商列表事实束搜索输入类型（定义见 `repository::supplier`）。
+    type SupplierListSearchInput;
+    /// 供应商列表事实束类型（定义见 `repository::supplier`）。
+    type SupplierListBundle;
+    /// 供应商详情事实束类型（定义见 `repository::supplier`）。
+    type SupplierDetailBundle;
+    /// 供应商列表资质健康筛选类型（定义见 `repository::supplier`）。
+    type SupplierQualificationHealthFilter;
 
     /// 获取 `supplier_account` 集合的 Repository。
     ///
@@ -111,6 +120,10 @@ impl SupplierExt for Database {
     type SupplierCommercialProfileFilter = SupplierCommercialProfileFilter;
     type SupplierCapabilityFilter = SupplierCapabilityFilter;
     type SupplierQualificationFilter = SupplierQualificationFilter;
+    type SupplierListSearchInput = SupplierListSearchInput;
+    type SupplierListBundle = SupplierListBundle;
+    type SupplierDetailBundle = SupplierDetailBundle;
+    type SupplierQualificationHealthFilter = SupplierQualificationHealthFilter;
 
     fn supplier_accounts(&self) -> Repository<'_, SupplierAccount> {
         Repository::new(self, Self::SUPPLIER_ACCOUNTS)

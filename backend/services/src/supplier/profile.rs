@@ -21,17 +21,21 @@ use entities::{
     },
     party::{
         AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
-        PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyKind, PartyRevision,
-        PartyRevisionData, PartyStatus, PartyTaxProfile, PartyTaxProfileData,
+        PartyBankAccountData, PartyContact, PartyContactData, PartyRevision, PartyTaxProfile,
+        PartyTaxProfileData,
     },
     supplier::{
+        creation_plan::{
+            SupplierCreationIds, SupplierCreationInputs, SupplierCreationQualificationIds,
+            SupplierCreationQualificationInput, SupplierCreationRatingInput,
+        },
         next_supplier_revision_no, profile_change, qualification_identity_key, validate_profile_selection,
-        QualificationAttachmentSensitivity, QualificationStatus, SupplierAccount, SupplierAccountData,
-        SupplierAccountStatus, SupplierCapability, SupplierCapabilityRevision, SupplierCapabilityUpdate,
-        SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData, SupplierProfileCommand,
-        SupplierProfileCommandData, SupplierProfileUpdateViolation, SupplierQualification,
-        SupplierQualificationCapability, SupplierQualificationRevision, SupplierQualificationSelection,
-        SupplierQualificationUpdate, SupplierRatingRevision, SupplierRatingRevisionData,
+        QualificationAttachmentSensitivity, QualificationStatus, SupplierAccount, SupplierCapability,
+        SupplierCapabilityRevision, SupplierCapabilityUpdate, SupplierCommercialProfileRevision,
+        SupplierProfileCommand, SupplierProfileCommandData, SupplierProfileUpdateViolation,
+        SupplierQualification, SupplierQualificationCapability, SupplierQualificationRevision,
+        SupplierQualificationSelection, SupplierQualificationUpdate, SupplierRatingRevision,
+        SupplierRatingRevisionData,
     },
 };
 use id_generator::next_id;
@@ -448,23 +452,21 @@ impl SupplierProfileService {
         let party_id = PartyId::new(next_id());
         let supplier_id = SupplierAccountId::new(next_id());
         let profile_id = SupplierCommercialProfileRevisionId::new(next_id());
-        let (party, party_revision) = create_party_entities(&req, &party_id, party_no, actor.id())?;
-        let (supplier, commercial_profile) = create_supplier_entities(
+        let (ids, inputs) = allocate_creation_plan(
             &req,
-            &supplier_id,
-            &party_id,
-            &profile_id,
+            party_no,
             supplier_no,
+            &party_id,
+            &supplier_id,
+            &profile_id,
             actor.id(),
         )?;
+        let plan = entities::supplier::creation_plan::plan_supplier_creation(ids, inputs)
+            .map_err(|e| Error::ValidationError(e.to_string()))?;
         let contact = self.create_contact(&req, &party_id, actor.id())?;
         let address = self.create_address(&req, &party_id, actor.id())?;
         let tax_profile = create_tax_profile(&req, &party_id, actor.id())?;
         let bank_account = self.create_bank_account(&req, &party_id, actor.id())?;
-        let capabilities = create_capabilities(&req, &supplier_id, actor.id())?;
-        let (qualifications, qualification_revisions, qualification_links) =
-            create_qualifications(&req, &supplier_id, &capabilities.ids, actor.id())?;
-        let rating = create_rating(&req, &supplier_id)?;
         let command = SupplierProfileCommand::new(
             next_id(),
             SupplierProfileCommandData {
@@ -472,10 +474,10 @@ impl SupplierProfileService {
                 operation: "create".to_string(),
                 request_fingerprint,
                 supplier_id: supplier_id.to_string(),
-                supplier_no: supplier.supplier_no.clone(),
+                supplier_no: plan.supplier.supplier_no.clone(),
                 revision_id: profile_id.to_string(),
                 revision_no: 1,
-                supplier_version: supplier.base.version,
+                supplier_version: plan.supplier.base.version,
                 effective_from: req.effective_from,
                 change_reason: req.change_reason,
             },
@@ -487,20 +489,20 @@ impl SupplierProfileService {
             supplier_id.to_string(),
         )?;
         Ok(PreparedCreate {
-            party,
-            party_revision,
-            supplier,
-            commercial_profile,
+            party: plan.party,
+            party_revision: plan.party_revision,
+            supplier: plan.supplier,
+            commercial_profile: plan.commercial_profile,
             contact,
             address,
             tax_profile,
             bank_account,
-            capabilities: capabilities.items,
-            capability_revisions: capabilities.revisions,
-            qualifications,
-            qualification_revisions,
-            qualification_links,
-            rating,
+            capabilities: plan.capabilities,
+            capability_revisions: plan.capability_revisions,
+            qualifications: plan.qualifications,
+            qualification_revisions: plan.qualification_revisions,
+            qualification_links: plan.qualification_links,
+            rating: plan.rating,
             command,
             audit,
             result,
@@ -1568,75 +1570,117 @@ fn ensure_sensitive_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
     Ok(())
 }
 
-/// 创建 Party 与首版名称修订。
-fn create_party_entities(
+/// 分配根资料创建所需的全部主键并组织领域工厂输入（保留在 Service）。
+///
+/// Service 负责 ID 生成、审计操作人与 DTO 到领域输入的映射；纯构造与校验
+/// 由 `entities::supplier::creation_plan` 承担。
+///
+/// # 参数
+/// * `req` - 已校验的根资料创建请求
+/// * `party_no` - 已规范化的主体编号
+/// * `supplier_no` - 已规范化的供应商编号
+/// * `party_id` - 已分配的主体主键
+/// * `supplier_id` - 已分配的供应商角色主键
+/// * `profile_id` - 已分配的首版商务资料主键
+/// * `actor_id` - 操作人 ID
+///
+/// # 返回
+/// 返回已分配主键与领域工厂输入。
+///
+/// # 错误
+/// 无；ID 分配不失败，字段校验由领域工厂返回。
+///
+/// # 约束
+/// 本函数可分配 ID、读取 DTO 与操作人；不得实现实体不变式。
+#[allow(clippy::too_many_arguments)]
+fn allocate_creation_plan(
     req: &SaveSupplierProfileRequest,
-    party_id: &PartyId,
     party_no: String,
-    actor_id: &str,
-) -> Result<(Party, PartyRevision)> {
-    let revision_id = PartyRevisionId::new(next_id());
-    let mut party = Party::new(
-        party_id.clone(),
-        PartyData {
-            party_no,
-            party_kind: PartyKind::Enterprise,
-            unified_credit_code: req.unified_credit_code.clone(),
-            status: PartyStatus::Active,
-        },
-        actor_id,
-    )?;
-    party.stable.current_revision_id = Some(revision_id.to_string());
-    let revision = PartyRevision::new(
-        revision_id,
-        PartyRevisionData {
-            party_id: party_id.clone(),
-            revision_no: 1,
-            legal_name: req.legal_name.clone(),
-            short_name: req.short_name.clone(),
-            change_reason: req.change_reason.clone(),
-        },
-    )?;
-    Ok((party, revision))
-}
-
-/// 创建 Supplier 与首版商务资料。
-fn create_supplier_entities(
-    req: &SaveSupplierProfileRequest,
-    supplier_id: &SupplierAccountId,
-    party_id: &PartyId,
-    profile_id: &SupplierCommercialProfileRevisionId,
     supplier_no: String,
+    party_id: &PartyId,
+    supplier_id: &SupplierAccountId,
+    profile_id: &SupplierCommercialProfileRevisionId,
     actor_id: &str,
-) -> Result<(SupplierAccount, SupplierCommercialProfileRevision)> {
-    let supplier = SupplierAccount::new(
-        supplier_id.clone(),
-        SupplierAccountData {
-            party_id: party_id.clone(),
-            supplier_no,
-            default_payment_term_id: None,
-            current_commercial_profile_revision_id: Some(profile_id.clone()),
-            status: SupplierAccountStatus::Active,
-        },
-        actor_id,
-    )?;
-    let profile = SupplierCommercialProfileRevision::new(
-        profile_id.clone(),
-        SupplierCommercialProfileRevisionData {
-            supplier_id: supplier_id.clone(),
-            revision_no: 1,
-            settlement_mode: req.settlement_mode,
-            reconciliation_cycle: req.reconciliation_cycle,
-            payment_term_snapshot: req.payment_term_snapshot.clone(),
-            business_category: req.business_category.clone(),
-            invoice_type: req.invoice_type,
-            invoice_tax_rate: req.invoice_tax_rate,
-            signing_entity_party_id: req.signing_entity_party_id.clone(),
-            payment_entity_party_id: req.payment_entity_party_id.clone(),
-            change_reason: req.change_reason.clone(),
-        },
-    )?;
-    Ok((supplier, profile))
+) -> Result<(SupplierCreationIds, SupplierCreationInputs)> {
+    let capability_ids = req
+        .capability_codes
+        .iter()
+        .copied()
+        .map(|code| {
+            (
+                code,
+                SupplierCapabilityId::new(next_id()),
+                SupplierCapabilityRevisionId::new(next_id()),
+            )
+        })
+        .collect();
+    let qualification_ids = req
+        .qualifications
+        .iter()
+        .map(|input| SupplierCreationQualificationIds {
+            qualification_id: SupplierQualificationId::new(next_id()),
+            revision_id: SupplierQualificationRevisionId::new(next_id()),
+            link_ids: input
+                .capability_codes
+                .iter()
+                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
+                .collect(),
+        })
+        .collect();
+    let rating_id = req
+        .rating
+        .as_ref()
+        .map(|_| SupplierRatingRevisionId::new(next_id()));
+    let qualifications = req
+        .qualifications
+        .iter()
+        .map(|input| SupplierCreationQualificationInput {
+            qualification_type: input.qualification_type,
+            certificate_no: input.certificate_no.clone(),
+            issuer: input.issuer.clone(),
+            valid_from: input.valid_from,
+            valid_to: input.valid_to,
+            attachment_id: input.attachment_id.clone(),
+            capability_codes: input.capability_codes.clone(),
+        })
+        .collect();
+    let rating = req.rating.as_ref().map(|input| SupplierCreationRatingInput {
+        initial_score: input.initial_score,
+        rating: input.rating,
+        current_score: input.current_score,
+        valid_from: input.valid_from,
+    });
+    let ids = SupplierCreationIds {
+        party_id: party_id.clone(),
+        party_revision_id: PartyRevisionId::new(next_id()),
+        supplier_id: supplier_id.clone(),
+        commercial_profile_id: profile_id.clone(),
+        capability_ids,
+        qualification_ids,
+        rating_id,
+    };
+    let inputs = SupplierCreationInputs {
+        party_no,
+        supplier_no,
+        legal_name: req.legal_name.clone(),
+        short_name: req.short_name.clone(),
+        unified_credit_code: req.unified_credit_code.clone(),
+        settlement_mode: req.settlement_mode,
+        reconciliation_cycle: req.reconciliation_cycle,
+        payment_term_snapshot: req.payment_term_snapshot.clone(),
+        business_category: req.business_category.clone(),
+        invoice_type: req.invoice_type,
+        invoice_tax_rate: req.invoice_tax_rate,
+        signing_entity_party_id: req.signing_entity_party_id.clone(),
+        payment_entity_party_id: req.payment_entity_party_id.clone(),
+        capability_codes: req.capability_codes.clone(),
+        qualifications,
+        rating,
+        effective_from: req.effective_from,
+        change_reason: req.change_reason.clone(),
+        actor_id: actor_id.to_string(),
+    };
+    Ok((ids, inputs))
 }
 
 /// 创建可选税务事实。
@@ -1664,111 +1708,6 @@ fn create_tax_profile(
             status: EffectiveRecordStatus::Active,
         },
         actor_id,
-    )?))
-}
-
-/// 创建场景中的能力实体、首版快照与代码索引。
-struct CreatedCapabilities {
-    items: Vec<SupplierCapability>,
-    revisions: Vec<SupplierCapabilityRevision>,
-    ids: HashMap<String, SupplierCapabilityId>,
-}
-
-/// 创建能力及首版快照，并返回代码到能力 ID 的映射。
-fn create_capabilities(
-    req: &SaveSupplierProfileRequest,
-    supplier_id: &SupplierAccountId,
-    actor_id: &str,
-) -> Result<CreatedCapabilities> {
-    let mut capabilities = Vec::with_capacity(req.capability_codes.len());
-    let mut revisions = Vec::with_capacity(req.capability_codes.len());
-    let mut ids = HashMap::new();
-    for code in &req.capability_codes {
-        let capability_id = SupplierCapabilityId::new(next_id());
-        let revision_id = SupplierCapabilityRevisionId::new(next_id());
-        let (capability, revision) = profile_change::new_capability(
-            supplier_id,
-            *code,
-            req.effective_from,
-            actor_id,
-            capability_id.clone(),
-            revision_id,
-        )?;
-        ids.insert(code.as_str().to_string(), capability_id);
-        capabilities.push(capability);
-        revisions.push(revision);
-    }
-    Ok(CreatedCapabilities {
-        items: capabilities,
-        revisions,
-        ids,
-    })
-}
-
-/// 创建资质、首版快照与适用能力关联；委托领域工厂保证修订快照与实体一致。
-fn create_qualifications(
-    req: &SaveSupplierProfileRequest,
-    supplier_id: &SupplierAccountId,
-    capability_ids: &HashMap<String, SupplierCapabilityId>,
-    actor_id: &str,
-) -> Result<(
-    Vec<SupplierQualification>,
-    Vec<SupplierQualificationRevision>,
-    Vec<SupplierQualificationCapability>,
-)> {
-    let mut qualifications = Vec::with_capacity(req.qualifications.len());
-    let mut revisions = Vec::with_capacity(req.qualifications.len());
-    let mut links = Vec::new();
-    for input in &req.qualifications {
-        let qualification_id = SupplierQualificationId::new(next_id());
-        let revision_id = SupplierQualificationRevisionId::new(next_id());
-        let link_ids = input
-            .capability_codes
-            .iter()
-            .map(|_| SupplierQualificationCapabilityId::new(next_id()))
-            .collect();
-        let (qualification, revision, new_links) = profile_change::new_qualification(
-            supplier_id,
-            input.qualification_type,
-            input.certificate_no.clone(),
-            input.issuer.clone(),
-            input.valid_from,
-            input.valid_to,
-            input.attachment_id.clone(),
-            &input.capability_codes,
-            capability_ids,
-            actor_id,
-            qualification_id,
-            revision_id,
-            link_ids,
-        )?;
-        qualifications.push(qualification);
-        revisions.push(revision);
-        links.extend(new_links);
-    }
-    Ok((qualifications, revisions, links))
-}
-
-/// 创建首版供应商评级。
-fn create_rating(
-    req: &SaveSupplierProfileRequest,
-    supplier_id: &SupplierAccountId,
-) -> Result<Option<SupplierRatingRevision>> {
-    let Some(input) = &req.rating else {
-        return Ok(None);
-    };
-    Ok(Some(SupplierRatingRevision::new(
-        SupplierRatingRevisionId::new(next_id()),
-        SupplierRatingRevisionData {
-            supplier_id: supplier_id.clone(),
-            revision_no: 1,
-            initial_score: input.initial_score,
-            rating: input.rating,
-            current_score: input.current_score,
-            valid_from: input.valid_from,
-            valid_to: None,
-            change_reason: req.change_reason.clone(),
-        },
     )?))
 }
 

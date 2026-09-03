@@ -8,6 +8,7 @@ mod availability;
 mod command;
 mod offering;
 mod types;
+pub mod write_data;
 
 pub use availability::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
 pub use command::{SupplierOfferingCommand, SupplierOfferingCommandData};

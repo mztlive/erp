@@ -1,6 +1,12 @@
-//! 供应商供给 HTTP DTO；Handler 直接复用本文件类型。
+//! 供应商供给 HTTP DTO；Handler 直接复用本文件类型.
 
-use entities::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
+use entities::common::time::Instant;
+use entities::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
+use entities::money::Quantity;
+use entities::supplier_offering::{
+    AvailabilityStatus, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
+    SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevisionData,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
@@ -450,6 +456,270 @@ pub struct CompleteSupplierSupplyExceptionTaskResult {
     pub message: String,
 }
 
+/// 供给列表查询参数的类型化 ID 转换与写入 DTO 的领域数据转换。
+///
+/// 本扩展把字符串规整（去空白、空值缺省）与数值/日期解析收敛在 DTO 层，
+/// 实体层 `supplier_offering::write_data` 负责无 I/O 的解析边界；
+/// Service 只分配 ID、计算时钟时间戳、执行资格检查并组织事务。
+impl SupplierOfferingListParams {
+    /// 返回规整后的公司 SKU 主键。
+    ///
+    /// # 参数
+    /// 无，读取 `self.sku_id`。
+    ///
+    /// # 返回
+    /// 去空白后非空时返回类型化主键，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 永不失败；非法形态由后续仓储精确过滤处理。
+    ///
+    /// # 约束
+    /// 纯内存转换，不触碰 I/O、时钟或密钥。
+    pub fn typed_sku_id(&self) -> Option<SkuId> {
+        typed_id(self.sku_id.as_deref(), SkuId::new)
+    }
+
+    /// 返回规整后的供应商主键。
+    ///
+    /// # 参数
+    /// 无，读取 `self.supplier_id`。
+    ///
+    /// # 返回
+    /// 去空白后非空时返回类型化主键，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 永不失败；非法形态由后续仓储精确过滤处理。
+    ///
+    /// # 约束
+    /// 纯内存转换，不触碰 I/O、时钟或密钥。
+    pub fn typed_supplier_id(&self) -> Option<SupplierAccountId> {
+        typed_id(self.supplier_id.as_deref(), SupplierAccountId::new)
+    }
+}
+
+/// 规整可选 ID 字符串。
+///
+/// # 参数
+/// * `value` - 原始字符串
+/// * `constructor` - 类型化主键构造器
+///
+/// # 返回
+/// 去空白后非空时返回类型化主键，否则返回 `None`。
+///
+/// # 错误
+/// 永不失败。
+///
+/// # 约束
+/// 纯内存转换，不触碰 I/O、时钟或密钥。
+fn typed_id<T>(value: Option<&str>, constructor: impl Fn(String) -> T) -> Option<T> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| constructor(value.to_string()))
+}
+
+impl SupplierOfferingTermsWrite {
+    /// 将写入条款转换为供给修订领域数据。
+    ///
+    /// # 参数
+    /// * `offering_id` - 所属供给主键，由 Service 分配
+    /// * `revision_no` - 修订号，首版为 1，后续由领域版本规则推进
+    ///
+    /// # 返回
+    /// 返回含税/不含税换算后的修订数据。
+    ///
+    /// # 错误
+    /// 空白、非法数值、非法日期时返回 `ValidationError`，文案与历史 Service
+    /// helper 逐字一致（`非法进项税率/供给价/起订量/金额/业务日期`）。
+    ///
+    /// # 约束
+    /// 纯内存转换；不分配 ID、不读取时钟、不触碰 I/O 或密钥。
+    pub fn try_into_revision_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        revision_no: u32,
+    ) -> Result<SupplierOfferingRevisionData> {
+        use entities::supplier_offering::write_data;
+        let rate = write_data::parse_input_tax_rate(&self.input_tax_rate)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let dropship_gross =
+            write_data::parse_unit_price(&self.dropship_supply_price_gross, "一件代发供给价")
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let bulk_gross = write_data::parse_unit_price(&self.bulk_supply_price_gross, "集采供给价")
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let freight = write_data::parse_optional_amount(self.freight_amount.as_deref())
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let service_fee = write_data::parse_optional_amount(self.service_fee_amount.as_deref())
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let moq = write_data::parse_minimum_order_quantity(&self.bulk_minimum_order_quantity)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let valid_from = write_data::parse_business_date(&self.valid_from)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let valid_to = self
+            .valid_to
+            .as_deref()
+            .map(write_data::parse_business_date)
+            .transpose()
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        Ok(SupplierOfferingRevisionData::from_gross_prices(
+            offering_id,
+            revision_no,
+            dropship_gross,
+            bulk_gross,
+            rate,
+            self.dropship_express.clone(),
+            freight,
+            service_fee,
+            moq,
+            self.supply_region.clone(),
+            self.product_capabilities.clone(),
+            valid_from,
+            valid_to,
+            PrefillSourceRefs::default(),
+        ))
+    }
+}
+
+impl CreateSupplierOfferingRequest {
+    /// 将创建请求转换为供给稳定身份数据。
+    ///
+    /// # 参数
+    /// 无，读取请求内的 SKU、供应商与来源字段。
+    ///
+    /// # 返回
+    /// 返回规整后的供给身份数据；ID 分配与实体构造由 Service 继续完成。
+    ///
+    /// # 错误
+    /// 当前仅做去空白与空值缺省，不做数值解析，故永不失败；
+    /// 编码超长与来源约束由供给实体构造时拒绝。
+    ///
+    /// # 约束
+    /// 纯内存转换，不分配 ID、不读取时钟、不触碰 I/O 或密钥。
+    pub fn try_into_offering_data(&self) -> Result<SupplierOfferingData> {
+        Ok(SupplierOfferingData {
+            sku_id: SkuId::new(self.sku_id.trim().to_string()),
+            supplier_id: SupplierAccountId::new(self.supplier_id.trim().to_string()),
+            supplier_product_code: self.supplier_product_code.clone(),
+            supplier_sku_code: self.supplier_sku_code.clone(),
+            source_type: self.source_type,
+            source_connection_id: self
+                .source_connection_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| SupplierApiConnectionId::new(value.to_string())),
+        })
+    }
+
+    /// 将创建请求转换为初始可供投影数据。
+    ///
+    /// # 参数
+    /// * `offering_id` - 所属供给主键，由 Service 分配
+    /// * `source_updated_at` - 来源更新时间，由 Service 解析或取接收时间
+    /// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
+    /// * `updated_by` - 更新人，由 Service 传入审计身份
+    ///
+    /// # 返回
+    /// 返回可供投影数据；实体构造由 Service 继续完成。
+    ///
+    /// # 错误
+    /// 数量非法时返回 `ValidationError`，文案为 `非法数量: {value}`。
+    ///
+    /// # 约束
+    /// 纯内存转换；时钟时间戳由调用方传入，本方法不读取全局时钟。
+    pub fn try_into_availability_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        source_updated_at: Instant,
+        received_at: Instant,
+        updated_by: String,
+    ) -> Result<SupplierOfferingAvailabilityData> {
+        let available_quantity = parse_availability_quantity(self.available_quantity.as_deref())?;
+        Ok(SupplierOfferingAvailabilityData {
+            supplier_offering_id: offering_id,
+            availability_status: self.availability_status,
+            available_quantity,
+            source_updated_at,
+            received_at,
+            source_revision_token: self.source_revision_token.clone(),
+            updated_by,
+        })
+    }
+}
+
+impl UpdateSupplierOfferingAvailabilityRequest {
+    /// 将更新请求转换为可供投影数据。
+    ///
+    /// # 参数
+    /// * `offering_id` - 所属供给主键，由 Service 从路径解析
+    /// * `source_updated_at` - 来源更新时间，由 Service 解析或取接收时间
+    /// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
+    /// * `updated_by` - 更新人，由 Service 传入审计身份
+    ///
+    /// # 返回
+    /// 返回可供投影数据；版本校验与时间倒退拒绝由可供实体 `apply` 负责。
+    ///
+    /// # 错误
+    /// 数量非法时返回 `ValidationError`，文案为 `非法数量: {value}`。
+    ///
+    /// # 约束
+    /// 纯内存转换；时钟时间戳由调用方传入，本方法不读取全局时钟。
+    pub fn try_into_availability_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        source_updated_at: Instant,
+        received_at: Instant,
+        updated_by: String,
+    ) -> Result<SupplierOfferingAvailabilityData> {
+        let available_quantity = parse_availability_quantity(self.available_quantity.as_deref())?;
+        Ok(SupplierOfferingAvailabilityData {
+            supplier_offering_id: offering_id,
+            availability_status: self.availability_status,
+            available_quantity,
+            source_updated_at,
+            received_at,
+            source_revision_token: self.source_revision_token.clone(),
+            updated_by,
+        })
+    }
+}
+
+/// 解析可供数量字符串。
+///
+/// # 参数
+/// * `value` - 原始数量字符串；`None` 或空白表示缺省
+///
+/// # 返回
+/// 缺省时返回 `None`，否则返回类型化数量。
+///
+/// # 错误
+/// 非法数值时返回 `ValidationError`，文案为 `非法数量: {value}`。
+///
+/// # 约束
+/// 纯内存转换，不触碰 I/O、时钟或密钥。
+fn parse_availability_quantity(value: Option<&str>) -> Result<Option<Quantity>> {
+    use entities::supplier_offering::write_data;
+    write_data::parse_optional_quantity(value).map_err(|error| Error::ValidationError(error.to_string()))
+}
+
+/// 解析来源更新时间，缺省时回退到接收时间。
+///
+/// # 参数
+/// * `requested` - 请求携带的来源 Unix 秒；`None` 表示来源未提供时间
+/// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
+///
+/// # 返回
+/// 来源提供时返回其时间，否则返回接收时间。
+///
+/// # 错误
+/// 永不失败。
+///
+/// # 约束
+/// 纯内存转换；时钟读取由调用方完成，本方法不触碰全局时钟。
+pub(crate) fn resolve_source_updated_at(requested: Option<i64>, received_at: Instant) -> Instant {
+    requested.map(Instant::from_unix_secs).unwrap_or(received_at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -665,5 +935,180 @@ mod tests {
             change_reason: "库存更新".to_string(),
             idempotency_key: "key-1".to_string(),
         }
+    }
+
+    #[test]
+    fn typed_list_ids_trim_and_omit_blank() {
+        let params = SupplierOfferingListParams {
+            q: None,
+            sku_id: Some("  ".to_string()),
+            sku_no: None,
+            product_no: None,
+            supplier_id: Some(" supplier-1 ".to_string()),
+            status: None,
+            source_type: None,
+            availability_status: None,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+        assert!(params.typed_sku_id().is_none());
+        assert_eq!(params.typed_supplier_id().unwrap().to_string(), "supplier-1");
+    }
+
+    #[test]
+    fn terms_try_into_revision_data_covers_first_and_next_revision() {
+        use entities::ids::SupplierOfferingId;
+        let req = create_request();
+        let first = req
+            .terms
+            .try_into_revision_data(SupplierOfferingId::new("offering-1"), 1)
+            .unwrap();
+        assert_eq!(first.revision_no, 1);
+        let next = req
+            .terms
+            .try_into_revision_data(SupplierOfferingId::new("offering-1"), 2)
+            .unwrap();
+        assert_eq!(next.revision_no, 2);
+        assert_eq!(first.valid_from, next.valid_from);
+    }
+
+    #[test]
+    fn terms_try_into_revision_data_rejects_blank_and_illegal() {
+        use entities::ids::SupplierOfferingId;
+        let mut bad = terms();
+        bad.input_tax_rate = "  ".to_string();
+        assert!(bad
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .is_err());
+        let mut bad_price = terms();
+        bad_price.dropship_supply_price_gross = "abc".to_string();
+        let err = bad_price
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap_err();
+        assert!(err.to_string().contains("非法一件代发供给价"));
+        let mut bad_moq = terms();
+        bad_moq.bulk_minimum_order_quantity = "0".to_string();
+        assert!(bad_moq
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .is_ok());
+        let mut bad_window = terms();
+        bad_window.valid_from = "not-a-date".to_string();
+        assert!(bad_window
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .is_err());
+        let mut bad_amount = terms();
+        bad_amount.freight_amount = Some("abc".to_string());
+        let err = bad_amount
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap_err();
+        assert!(err.to_string().contains("非法金额"));
+    }
+
+    #[test]
+    fn availability_try_into_data_keeps_nullable_quantity_and_caller_timestamps() {
+        use entities::common::time::Instant;
+        use entities::ids::SupplierOfferingId;
+        let req = create_request();
+        let source = Instant::from_unix_secs(1_700_000_000);
+        let received = Instant::from_unix_secs(1_700_000_010);
+        let data = req
+            .try_into_availability_data(
+                SupplierOfferingId::new("offering-1"),
+                source,
+                received,
+                "actor-1".to_string(),
+            )
+            .unwrap();
+        assert_eq!(data.source_updated_at, source);
+        assert_eq!(data.received_at, received);
+        assert!(data.available_quantity.is_some());
+        let mut missing = req.clone();
+        missing.available_quantity = Some("  ".to_string());
+        let data = missing
+            .try_into_availability_data(
+                SupplierOfferingId::new("offering-1"),
+                source,
+                received,
+                "actor-1".to_string(),
+            )
+            .unwrap();
+        assert!(data.available_quantity.is_none());
+        let mut illegal = req.clone();
+        illegal.available_quantity = Some("abc".to_string());
+        assert!(illegal
+            .try_into_availability_data(
+                SupplierOfferingId::new("offering-1"),
+                source,
+                received,
+                "actor-1".to_string()
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn terms_reject_illegal_valid_to_and_blank_nullable_amounts() {
+        use entities::ids::SupplierOfferingId;
+        let mut bad_to = terms();
+        bad_to.valid_to = Some("abc".to_string());
+        let err = bad_to
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap_err();
+        assert!(err.to_string().contains("非法业务日期"));
+        let mut blank_amounts = terms();
+        blank_amounts.freight_amount = Some("  ".to_string());
+        blank_amounts.service_fee_amount = Some(String::new());
+        let data = blank_amounts
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap();
+        assert!(data.freight_amount.is_none());
+        assert!(data.service_fee_amount.is_none());
+    }
+
+    #[test]
+    fn inverted_validity_window_fails_closed_at_entity_construction() {
+        use entities::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
+        use entities::supplier_offering::SupplierOfferingRevision;
+        let mut window = terms();
+        window.valid_from = "2026-02-01".to_string();
+        window.valid_to = Some("2026-01-01".to_string());
+        let data = window
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap();
+        let err = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r1"), data).unwrap_err();
+        assert!(err.to_string().contains("有效期结束必须晚于开始"));
+    }
+
+    #[test]
+    fn revision_parse_reports_first_error_in_documented_order() {
+        use entities::ids::SupplierOfferingId;
+        let mut multi = terms();
+        multi.input_tax_rate = "abc".to_string();
+        multi.dropship_supply_price_gross = "abc".to_string();
+        multi.bulk_minimum_order_quantity = "abc".to_string();
+        multi.valid_from = "abc".to_string();
+        let err = multi
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap_err();
+        assert!(err.to_string().contains("非法进项税率"));
+        let mut second = terms();
+        second.dropship_supply_price_gross = "abc".to_string();
+        second.bulk_supply_price_gross = "abc".to_string();
+        let err = second
+            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
+            .unwrap_err();
+        assert!(err.to_string().contains("非法一件代发供给价"));
+    }
+
+    #[test]
+    fn missing_source_time_falls_back_to_received_time() {
+        use entities::common::time::Instant;
+        let received = Instant::from_unix_secs(1_700_000_010);
+        assert_eq!(super::resolve_source_updated_at(None, received), received);
+        assert_eq!(
+            super::resolve_source_updated_at(Some(1_700_000_000), received),
+            Instant::from_unix_secs(1_700_000_000)
+        );
     }
 }

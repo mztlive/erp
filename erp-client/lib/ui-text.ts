@@ -146,61 +146,6 @@ export function goToWorkspaceLabel(id: WorkspaceId): string {
     return `前往${workspaceLabel(id)}`
 }
 
-// ─── 任务类型 → 主操作按钮 ──────────────────────────────────────────────────
-
-const actionLabels = {
-    confirmProcurement: "去确认采购计划",
-    reviewCardFunds: "去复核卡券票款",
-    handleMappingException: "去处理映射异常",
-    reconcileReceipt: "去核对回款",
-    handleFulfillment: "去处理",
-} as const
-
-const WORK_ITEM_ACTION_BY_TYPE_LABEL: Record<string, string> = {
-    采购二次确认: actionLabels.confirmProcurement,
-    待采购建单: "打开单据",
-    待供给分配: "去分配供给",
-    卡券票款复核: actionLabels.reviewCardFunds,
-    卡券票款差异复核: "去复核票款差额",
-    映射异常处理: actionLabels.handleMappingException,
-    主数据映射任务: actionLabels.handleMappingException,
-    回款事实复核: actionLabels.reconcileReceipt,
-    回款核对: actionLabels.reconcileReceipt,
-    低毛利销售审批: "去审批低毛利订单",
-    销售变更履约影响复核: "去复核履约影响",
-    销售变更财务复核: "去复核财务影响",
-    采购单财务审核: "去审核采购单",
-    卡券销售领导审批: "去审批卡券销售",
-    卡券运营审批: "去审批卡券运营",
-    归属迁移销售确认: "去确认归属迁移",
-    归属迁移财务确认: "去确认财务归属",
-    库存调整复核: "去复核库存调整",
-    财务纠错复核: "去复核财务纠错",
-    供应商结算复核: "去复核供应商结算",
-    导入业务确认: "去确认导入范围",
-    供应商履约异常调查: "去调查履约异常",
-    供应商供给异常: "去处理供给异常",
-    集成结果待确认: "去确认集成结果",
-    业务异常: "去处理业务异常",
-    履约作业: actionLabels.handleFulfillment,
-    收货与发货: actionLabels.handleFulfillment,
-    交付与代发: actionLabels.handleFulfillment,
-    电子履约: actionLabels.handleFulfillment,
-    实物履约: actionLabels.handleFulfillment,
-    服务履约: actionLabels.handleFulfillment,
-}
-
-/** 按任务类型中文名生成主按钮文案；未登记类型兜底「前往处理」。 */
-export function actionLabelForWorkItemType(
-    workItemTypeLabel: string | null | undefined,
-): string {
-    if (!workItemTypeLabel) return sequentialText.goProcess
-    return (
-        WORK_ITEM_ACTION_BY_TYPE_LABEL[workItemTypeLabel] ??
-        sequentialText.goProcess
-    )
-}
-
 const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。",
     待采购建单: "打开采购单页，按销售明细剩余数量选择本次采购数量并创建草稿。",

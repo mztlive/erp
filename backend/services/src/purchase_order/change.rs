@@ -2,7 +2,7 @@
 
 use database::{
     AccessControlExt, CostExt, DocumentRegistryExt, NoTransaction, PayableExt, PurchaseOrderExt,
-    SalesOrderExt, Transactional,
+    SalesOrderExt, SupplierExt, Transactional,
 };
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
@@ -540,9 +540,14 @@ impl PurchaseOrderService {
                 .change_lines_from_base_revision(&change.base_revision_id)
                 .await?;
         }
-        let supplier_name = self
-            .resolve_supplier_name(&order.supplier_id)
-            .await?
+        let supplier_names = self
+            .db
+            .supplier()
+            .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), &mut NoTransaction)
+            .await?;
+        let supplier_name = supplier_names
+            .get(&order.supplier_id.to_string())
+            .cloned()
             .unwrap_or_else(|| order.supplier_id.to_string());
         let submission = self
             .build_change_submission(change, order, &base_revision, &supplier_name, &normalized_request)

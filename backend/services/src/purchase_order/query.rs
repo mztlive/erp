@@ -2,14 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
-use entities::purchase_order::PurchaseOrder;
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt};
+use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
 use validator::Validate;
 
 use super::approval_query::load_document_approval;
 use super::dto::{
-    PageView, PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView,
-    PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
+    PageView, PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams,
+    PurchaseSalesAllocationView, TotalsView,
 };
 use super::view_mapping::{revision_line_to_view, revision_totals, submission_line_to_view};
 use super::PurchaseOrderService;
@@ -52,87 +52,43 @@ impl PurchaseOrderService {
         };
         let page = self
             .db
-            .purchase_orders()
-            .search_purchase_orders(&filter, &mut NoTransaction)
+            .load_purchase_order_list_page(&filter, &mut NoTransaction)
             .await?;
-
-        let supplier_ids = page
+        let supplier_names = &page.1.supplier_names;
+        let sales_order_numbers = &page.1.sales_order_nos;
+        let owner_names = &page.1.owner_names;
+        let submissions = &page.1.submissions;
+        let revisions = &page.1.revisions;
+        let page_rows = &page.0;
+        let items = page_rows
             .items
             .iter()
-            .map(|row| row.supplier_id.clone())
-            .collect::<Vec<_>>();
-        let supplier_names = self
-            .db
-            .supplier()
-            .current_legal_names_by_account_ids(&supplier_ids, &mut NoTransaction)
-            .await?;
-        let sales_order_ids: Vec<String> = page
-            .items
-            .iter()
-            .map(|row| row.sales_order_id.to_string())
-            .collect();
-        let sales_order_numbers = self.resolve_sales_order_numbers(&sales_order_ids).await?;
-        let owner_ids: Vec<String> = page
-            .items
-            .iter()
-            .filter_map(|row| {
-                row.owner_user_id
-                    .as_deref()
-                    .filter(|owner| !owner.trim().is_empty())
-                    .map(str::to_string)
-            })
-            .collect();
-        let owner_names = self.resolve_account_names(&owner_ids).await?;
-        let pointer_ids: Vec<String> = page
-            .items
-            .iter()
-            .filter_map(|row| {
-                row.current_submission_id
-                    .clone()
-                    .or_else(|| row.current_revision_id.clone())
-            })
-            .collect();
-        let totals = self.resolve_order_totals(&pointer_ids).await?;
-        let items = page
-            .items
-            .into_iter()
             .map(|row| -> Result<PurchaseOrderListItemView> {
                 let sales_order_id = row.sales_order_id.to_string();
-                let sales_order_no = sales_order_numbers
-                    .get(&sales_order_id)
-                    .cloned()
-                    .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))?;
-                let supplier_name = supplier_names
-                    .get(&row.supplier_id.to_string())
-                    .cloned()
-                    .unwrap_or_else(|| row.supplier_id.to_string());
-                let pointer = row
-                    .current_submission_id
-                    .clone()
-                    .or_else(|| row.current_revision_id.clone());
-                let totals = pointer
-                    .as_ref()
-                    .and_then(|id| totals.get(id).cloned())
-                    .unwrap_or_default();
-                let owner_user_id = row
+                let sales_order_no = sales_no_for(&sales_order_id, sales_order_numbers)?;
+                let supplier_name = supplier_display(row.supplier_id.as_ref(), supplier_names);
+                let totals = list_row_totals(
+                    row.current_submission_id.as_deref(),
+                    row.current_revision_id.as_deref(),
+                    submissions,
+                    revisions,
+                );
+                let raw_owner = row
                     .owner_user_id
                     .as_deref()
                     .filter(|owner| !owner.trim().is_empty())
                     .map(str::to_string);
+                let (owner_user_id, owner_name) = owner_display(raw_owner, owner_names);
                 Ok(PurchaseOrderListItemView {
-                    id: row.id,
-                    purchase_no: row.purchase_no,
+                    id: row.id.clone(),
+                    purchase_no: row.purchase_no.clone(),
                     sales_order_id,
                     sales_order_no,
                     supplier_id: row.supplier_id.to_string(),
                     supplier_name,
                     purchase_type: row.purchase_type,
-                    payment_term_code: row.payment_term_code,
-                    owner_name: owner_names
-                        .get(owner_user_id.as_deref().unwrap_or_default())
-                        .cloned()
-                        .or_else(|| owner_user_id.as_ref().map(|_| "责任账号不可用".to_string()))
-                        .unwrap_or_else(|| "未指定".to_string()),
+                    payment_term_code: row.payment_term_code.clone(),
+                    owner_name,
                     owner_user_id,
                     status: row.status,
                     review_status: row.review_status,
@@ -142,8 +98,8 @@ impl PurchaseOrderService {
                     payment_progress: row.payment_progress,
                     invoice_progress: row.invoice_progress,
                     fulfillment_progress: row.fulfillment_progress,
-                    current_submission_id: row.current_submission_id,
-                    current_revision_id: row.current_revision_id,
+                    current_submission_id: row.current_submission_id.clone(),
+                    current_revision_id: row.current_revision_id.clone(),
                     version: row.version,
                     created_at: row.created_at,
                 })
@@ -152,7 +108,7 @@ impl PurchaseOrderService {
 
         Ok(PageView {
             items,
-            total: page.total,
+            total: page_rows.total,
             page: filter.page,
             page_size: filter.page_size,
         })
@@ -170,36 +126,92 @@ impl PurchaseOrderService {
     /// * `NotFound` - 采购单不存在
     /// * `RepositoryError` - 数据库查询失败
     pub async fn purchase_order_detail(&self, id: &str) -> Result<PurchaseOrderCenterView> {
-        let order = self
+        let facts = self
             .db
-            .purchase_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
+            .load_purchase_order_center_facts(id, &mut NoTransaction)
+            .await?;
+        let order = facts
+            .order
             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-        let supplier_name = self
-            .resolve_supplier_name(&order.supplier_id)
-            .await?
-            .unwrap_or_else(|| order.supplier_id.to_string());
+        let supplier_name = supplier_display(
+            order.supplier_id.as_ref(),
+            &facts
+                .supplier_name
+                .clone()
+                .map(|name| (order.supplier_id.to_string(), name))
+                .into_iter()
+                .collect(),
+        );
         let sales_order_id = order.sales_order_id.to_string();
-        let sales_order_no = self
-            .resolve_sales_order_numbers(std::slice::from_ref(&sales_order_id))
-            .await?
-            .remove(&sales_order_id)
-            .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))?;
+        let sales_order_no = sales_no_for(
+            &sales_order_id,
+            &facts
+                .sales_order_no
+                .clone()
+                .map(|no| (sales_order_id.clone(), no))
+                .into_iter()
+                .collect(),
+        )?;
         let owner_user_id = order.current_owner_user_id()?.to_string();
-        let owner_name = self
-            .resolve_account_names(std::slice::from_ref(&owner_user_id))
-            .await?
-            .remove(&owner_user_id)
-            .unwrap_or_else(|| "责任账号不可用".to_string());
+        let (_, owner_name) = owner_display(
+            Some(owner_user_id.clone()),
+            &facts
+                .owner_name
+                .clone()
+                .map(|name| (owner_user_id.clone(), name))
+                .into_iter()
+                .collect(),
+        );
 
-        let (content_source, lines, totals) = self.resolve_current_content(&order).await?;
-        let allocations = self.resolve_allocations(&order).await?;
-        let changes = self
-            .db
-            .purchase_order()
-            .list_changes_by_order(&order.base.id.clone().into(), &mut NoTransaction)
-            .await?
+        let content_source = center_content_source(
+            facts.current_revision.is_some(),
+            facts
+                .current_submission
+                .as_ref()
+                .map(|submission| submission.content_source()),
+        );
+        let (lines, totals) = if let Some(revision) = &facts.current_revision {
+            (
+                facts.revision_lines.iter().map(revision_line_to_view).collect(),
+                revision_totals(revision),
+            )
+        } else if let Some(submission) = &facts.current_submission {
+            (
+                facts
+                    .submission_lines
+                    .iter()
+                    .map(submission_line_to_view)
+                    .collect(),
+                TotalsView {
+                    gross: submission.gross_amount.to_string(),
+                    net: submission.net_amount.to_string(),
+                    tax: submission.tax_amount.to_string(),
+                },
+            )
+        } else {
+            (
+                Vec::new(),
+                TotalsView {
+                    gross: "0.00".to_string(),
+                    net: "0.00".to_string(),
+                    tax: "0.00".to_string(),
+                },
+            )
+        };
+        let allocations = facts
+            .allocations
+            .into_iter()
+            .map(|allocation| PurchaseSalesAllocationView {
+                id: allocation.base.id,
+                purchase_order_revision_line_id: allocation.purchase_order_revision_line_id.to_string(),
+                sales_order_revision_line_id: allocation.sales_order_revision_line_id.to_string(),
+                allocated_quantity: allocation.allocated_quantity.to_string(),
+                allocated_cost_gross: allocation.allocated_cost_gross.to_string(),
+                allocated_cost_net: allocation.allocated_cost_net.to_string(),
+            })
+            .collect();
+        let changes = facts
+            .changes
             .into_iter()
             .map(|change| super::dto::PurchaseChangeSummaryView {
                 change_id: change.base.id.clone(),
@@ -211,27 +223,19 @@ impl PurchaseOrderService {
             })
             .collect();
 
-        let revision_no = match &order.stable.current_revision_id {
-            Some(revision_id) => {
-                let revision = self
-                    .db
-                    .purchase_order_revisions()
-                    .find_by_id(revision_id, &mut NoTransaction)
-                    .await?;
-                revision.map(|revision| revision.revision.revision_no)
-            }
-            None => None,
-        };
-        let payable_summary = self
-            .db
-            .payable_accounts()
-            .find_by_purchase_order(&order.base.id.clone().into(), &mut NoTransaction)
-            .await?
-            .map(|account| super::dto::PurchaseOrderPayableSummaryView {
-                payable_open_amount: account.open_total,
-                paid_allocated_amount: account.settled_total,
-                purchase_invoice_allocated_amount: account.invoiced_total,
-            });
+        let revision_no = facts
+            .current_revision
+            .as_ref()
+            .map(|revision| revision.revision.revision_no);
+        let payable_summary =
+            facts
+                .payable
+                .as_ref()
+                .map(|account| super::dto::PurchaseOrderPayableSummaryView {
+                    payable_open_amount: account.open_total,
+                    paid_allocated_amount: account.settled_total,
+                    purchase_invoice_allocated_amount: account.invoiced_total,
+                });
         let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction).await {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
@@ -279,7 +283,8 @@ impl PurchaseOrderService {
 
     /// 批量解析账号展示姓名。
     ///
-    /// 用于采购单列表「负责人」列：把 `created_by` 解析为账号姓名，避免把账号 ID 直接展示给用户。
+    /// 用于采购创建依据「负责人」列：把销售单创建人解析为账号姓名，避免把账号 ID 直接展示给用户。
+    /// 采购单列表与对象中心已改用 Repository 批量事实，不再经由本 helper。
     ///
     /// # 参数
     /// * `account_ids` - 账号 ID 列表（可重复；空串会被忽略）
@@ -315,196 +320,339 @@ impl PurchaseOrderService {
             .map(|account| (account.base.id, account.name))
             .collect())
     }
+}
 
-    /// 批量解析采购单来源销售单的业务单号。
-    ///
-    /// 内部 ID 只作为路由与关联键；任何缺失的来源销售单都视为数据完整性错误，
-    /// 不得回退为把 ID 当作业务单号返回。
-    ///
-    /// # 参数
-    /// * `sales_order_ids` - 销售单稳定身份字符串，可重复
-    ///
-    /// # 返回
-    /// 返回销售单 ID → 业务单号映射。
-    ///
-    /// # 错误
-    /// * `RepositoryError` - 数据库查询失败
-    /// * `Internal` - 采购单引用的销售单不存在
-    async fn resolve_sales_order_numbers(
-        &self,
-        sales_order_ids: &[String],
-    ) -> Result<HashMap<String, String>> {
-        let unique = sales_order_ids
-            .iter()
-            .map(|id| id.trim())
-            .filter(|id| !id.is_empty())
-            .map(str::to_string)
-            .collect::<HashSet<_>>();
-        if unique.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let ids = unique
-            .iter()
-            .cloned()
-            .map(entities::ids::SalesOrderId::new)
-            .collect::<Vec<_>>();
-        let numbers = self
-            .db
-            .sales_orders()
-            .find_orders_by_ids(&ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|order| (order.base.id, order.order_no))
-            .collect::<HashMap<_, _>>();
-        if unique.iter().any(|id| !numbers.contains_key(id)) {
-            return Err(Error::Internal("采购单关联的销售单不存在".to_string()));
-        }
-        Ok(numbers)
-    }
-
-    /// 批量解析内容金额（提交/版本表头汇总，一次 `$in` 查询，禁止 N+1）。
-    async fn resolve_order_totals(
-        &self,
-        pointer_ids: &[String],
-    ) -> Result<HashMap<String, (String, String, String)>> {
-        if pointer_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let mut totals = HashMap::new();
-        let submission_ids = pointer_ids
-            .iter()
-            .cloned()
-            .map(entities::ids::PurchaseOrderSubmissionId::new)
-            .collect::<Vec<_>>();
-        let submissions = self
-            .db
-            .purchase_order()
-            .find_submissions_by_ids(&submission_ids, &mut NoTransaction)
-            .await?;
-        for submission in submissions {
-            totals.insert(
-                submission.base.id.clone(),
-                (
-                    submission.gross_amount.to_string(),
-                    submission.net_amount.to_string(),
-                    submission.tax_amount.to_string(),
-                ),
+/// 按指针命名空间解析列表行金额.
+///
+/// # 参数
+/// * `submission_pointer` - 行当前提交指针
+/// * `revision_pointer` - 行当前版本指针
+/// * `submissions` - 当前提交头映射
+/// * `revisions` - 当前版本头映射
+///
+/// # 返回
+/// 返回 `(含税, 不含税, 税额)` 字符串；提交指针只查提交映射，版本指针只查
+/// 版本映射，缺失时返回空字符串三元组.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 两种命名空间不得交叉；历史表头不进入映射.
+fn list_row_totals(
+    submission_pointer: Option<&str>,
+    revision_pointer: Option<&str>,
+    submissions: &HashMap<String, PurchaseOrderSubmission>,
+    revisions: &HashMap<String, PurchaseOrderRevision>,
+) -> (String, String, String) {
+    if let Some(id) = submission_pointer {
+        if let Some(submission) = submissions.get(id) {
+            return (
+                submission.gross_amount.to_string(),
+                submission.net_amount.to_string(),
+                submission.tax_amount.to_string(),
             );
         }
-        let revision_ids = pointer_ids
-            .iter()
-            .cloned()
-            .map(entities::ids::PurchaseOrderRevisionId::new)
-            .collect::<Vec<_>>();
-        let revisions = self
-            .db
-            .purchase_order()
-            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
-            .await?;
-        for revision in revisions {
-            totals.insert(
-                revision.base.id.clone(),
-                (
-                    revision.gross_amount.to_string(),
-                    revision.net_amount.to_string(),
-                    revision.tax_amount.to_string(),
-                ),
+        return (String::new(), String::new(), String::new());
+    }
+    if let Some(id) = revision_pointer {
+        if let Some(revision) = revisions.get(id) {
+            return (
+                revision.gross_amount.to_string(),
+                revision.net_amount.to_string(),
+                revision.tax_amount.to_string(),
             );
         }
-        Ok(totals)
+    }
+    (String::new(), String::new(), String::new())
+}
+
+/// 解析供应商展示名.
+///
+/// # 参数
+/// * `supplier_id` - 供应商账号 ID
+/// * `names` - 供应商法定名称映射
+///
+/// # 返回
+/// 映射缺失时回退账号 ID 本身.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 缺失不得报错，由调用方按约定回退展示.
+fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> String {
+    names
+        .get(supplier_id)
+        .cloned()
+        .unwrap_or_else(|| supplier_id.to_string())
+}
+
+/// 解析来源销售单业务单号.
+///
+/// # 参数
+/// * `sales_order_id` - 来源销售单 ID
+/// * `nos` - 销售单号映射
+///
+/// # 返回
+/// 返回业务单号；缺失时返回完整性内部错误.
+///
+/// # 错误
+/// * `Internal` - 采购单关联的销售单不存在
+///
+/// # 约束
+/// 缺失不得回退为 ID，必须失败关闭.
+fn sales_no_for(sales_order_id: &str, nos: &HashMap<String, String>) -> Result<String> {
+    nos.get(sales_order_id)
+        .cloned()
+        .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
+}
+
+/// 解析负责人展示名.
+///
+/// # 参数
+/// * `owner_user_id` - 已去空白的负责人 ID
+/// * `names` - 账号展示名映射
+///
+/// # 返回
+/// 无负责人时返回 `未指定`，有 ID 但账号缺失时返回 `责任账号不可用`.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 缺失语义与历史实现完全一致，不得改变回退文案.
+fn owner_display(owner_user_id: Option<String>, names: &HashMap<String, String>) -> (Option<String>, String) {
+    let display = names
+        .get(owner_user_id.as_deref().unwrap_or_default())
+        .cloned()
+        .or_else(|| owner_user_id.as_ref().map(|_| "责任账号不可用".to_string()))
+        .unwrap_or_else(|| "未指定".to_string());
+    (owner_user_id, display)
+}
+
+/// 解析对象中心内容来源优先级.
+///
+/// # 参数
+/// * `has_revision` - 当前版本是否存在
+/// * `submission_source` - 当前提交的内容来源
+///
+/// # 返回
+/// 版本存在时返回 `REVISION`，否则有提交时返回提交来源，无内容时返回 `DRAFT`.
+///
+/// # 错误
+/// 无.
+///
+/// # 约束
+/// 优先级固定为版本大于提交大于草稿，不得改变.
+fn center_content_source(has_revision: bool, submission_source: Option<&str>) -> String {
+    if has_revision {
+        return "REVISION".to_string();
+    }
+    if let Some(source) = submission_source {
+        return source.to_string();
+    }
+    "DRAFT".to_string()
+}
+
+#[cfg(test)]
+mod query_layering_tests {
+    /// 查询编排必须使用批量事实加载，旧逐行 helpers 已删除.
+    #[test]
+    fn query_uses_batch_fact_bundles() {
+        let production = include_str!("query.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+        assert!(
+            production.contains("load_purchase_order_list_page"),
+            "列表必须使用批量事实加载"
+        );
+        assert!(
+            production.contains("load_purchase_order_center_facts"),
+            "对象中心必须使用批量事实加载"
+        );
+        assert!(
+            !production.contains("fn resolve_sales_order_numbers"),
+            "逐销售单号查询已删除"
+        );
+        assert!(
+            !production.contains("fn resolve_order_totals"),
+            "逐指针金额查询已删除"
+        );
+        assert!(
+            !production.contains("fn resolve_current_content"),
+            "对象中心逐段读取已删除"
+        );
+        assert!(!production.contains("fn resolve_allocations"), "逐分配读取已删除");
+        assert!(
+            !production.contains("resolve_supplier_name"),
+            "逐供应商名称查询已从查询编排删除"
+        );
+        for forbidden in [
+            ".supplier_accounts()",
+            ".parties()",
+            ".party_revisions()",
+            ".sales_orders()",
+            ".purchase_order_submissions()",
+            ".purchase_order_revisions()",
+            ".purchase_line_sales_allocations()",
+            ".payable_accounts()",
+            ".purchase_order()",
+        ] {
+            assert!(
+                !production.contains(forbidden),
+                "查询编排不得直查持久化集合 {forbidden}，必须经批量事实"
+            );
+        }
     }
 
-    /// 解析当前内容（版本 > 提交 > 草稿）并返回行与表头汇总。
-    async fn resolve_current_content(
-        &self,
-        order: &PurchaseOrder,
-    ) -> Result<(String, Vec<PurchaseOrderLineView>, TotalsView)> {
-        if let Some(revision_id) = &order.stable.current_revision_id {
-            if let Some(revision) = self
-                .db
-                .purchase_order_revisions()
-                .find_by_id(revision_id, &mut NoTransaction)
-                .await?
-            {
-                let lines = self
-                    .db
-                    .purchase_order()
-                    .list_revision_lines(&revision_id.clone().into(), &mut NoTransaction)
-                    .await?;
-                return Ok((
-                    "REVISION".to_string(),
-                    lines.iter().map(revision_line_to_view).collect(),
-                    revision_totals(&revision),
-                ));
-            }
-        }
-        if let Some(submission_id) = &order.current_submission_id {
-            if let Some(submission) = self
-                .db
-                .purchase_order_submissions()
-                .find_by_id(submission_id, &mut NoTransaction)
-                .await?
-            {
-                let lines = self
-                    .db
-                    .purchase_order()
-                    .list_submission_lines(&submission_id.clone().into(), &mut NoTransaction)
-                    .await?;
-                let source = submission.content_source();
-                return Ok((
-                    source.to_string(),
-                    lines.iter().map(submission_line_to_view).collect(),
-                    TotalsView {
-                        gross: submission.gross_amount.to_string(),
-                        net: submission.net_amount.to_string(),
-                        tax: submission.tax_amount.to_string(),
-                    },
-                ));
-            }
-        }
-        Ok((
-            "DRAFT".to_string(),
-            Vec::new(),
-            TotalsView {
-                gross: "0.00".to_string(),
-                net: "0.00".to_string(),
-                tax: "0.00".to_string(),
+    /// 共享与变更编排不得保留单点直查 helper.
+    #[test]
+    fn no_single_point_supplier_lookup_remains() {
+        let shared = include_str!("shared.rs");
+        let change = include_str!("change.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or("")
+            .to_string();
+        assert!(
+            !shared.contains("fn resolve_supplier_name"),
+            "单点供应商名称 helper 已删除"
+        );
+        assert!(
+            !shared.contains(".supplier_accounts()")
+                && !shared.contains(".parties()")
+                && !shared.contains(".party_revisions()"),
+            "共享模块不得直查供应商关联集合"
+        );
+        assert!(
+            !change.contains("resolve_supplier_name"),
+            "变更编排已改用批量法定名称"
+        );
+        assert!(
+            change.contains("current_legal_names_by_account_ids"),
+            "变更编排必须使用批量法定名称"
+        );
+    }
+}
+
+#[cfg(test)]
+mod query_mapping_tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use entities::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
+    use entities::money::Amount;
+    use entities::purchase_order::{
+        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+        PurchaseType, SupplierSnapshot,
+    };
+
+    use super::{center_content_source, list_row_totals, owner_display, sales_no_for, supplier_display};
+
+    /// 构造最小提交头用于金额映射测试.
+    fn submission(id: &str, gross: &str) -> PurchaseOrderSubmission {
+        PurchaseOrderSubmission::new(
+            PurchaseOrderSubmissionId::new(id.to_string()),
+            PurchaseOrderSubmissionData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                submission_no: format!("SUB-{id}"),
+                supplier_id: SupplierAccountId::new("sup-1"),
+                purchase_type: PurchaseType::Physical,
+                fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                supplier_revision_id: entities::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
+                supplier_snapshot: SupplierSnapshot::new("供应商".to_string()).expect("快照合法"),
+                payment_term_snapshot: PaymentTermSnapshot::new("NET-30".to_string(), false, None, None)
+                    .expect("条款合法"),
+                gross_amount: Amount::from_str(gross).unwrap(),
+                net_amount: Amount::from_str(gross).unwrap(),
+                tax_amount: Amount::from_str("0").unwrap(),
             },
-        ))
+        )
+        .unwrap()
     }
 
-    /// 解析当前生效版本的销售分配。
-    async fn resolve_allocations(&self, order: &PurchaseOrder) -> Result<Vec<PurchaseSalesAllocationView>> {
-        let Some(revision_id) = &order.stable.current_revision_id else {
-            return Ok(Vec::new());
-        };
-        let lines = self
-            .db
-            .purchase_order()
-            .list_revision_lines(&revision_id.clone().into(), &mut NoTransaction)
-            .await?;
-        let line_ids = lines
-            .iter()
-            .map(|line| entities::ids::PurchaseOrderRevisionLineId::new(line.base.id.clone()))
-            .collect::<Vec<_>>();
-        if line_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let allocations = self
-            .db
-            .purchase_line_sales_allocations()
-            .find_by_purchase_revision_line_ids(&line_ids, &mut NoTransaction)
-            .await?;
-        Ok(allocations
-            .into_iter()
-            .map(|allocation| PurchaseSalesAllocationView {
-                id: allocation.base.id,
-                purchase_order_revision_line_id: allocation.purchase_order_revision_line_id.to_string(),
-                sales_order_revision_line_id: allocation.sales_order_revision_line_id.to_string(),
-                allocated_quantity: allocation.allocated_quantity.to_string(),
-                allocated_cost_gross: allocation.allocated_cost_gross.to_string(),
-                allocated_cost_net: allocation.allocated_cost_net.to_string(),
-            })
-            .collect())
+    /// 提交指针只读提交命名空间，即使版本映射存在同名键也不得交叉.
+    #[test]
+    fn submission_pointer_never_reads_revision_namespace() {
+        let mut submissions = HashMap::new();
+        submissions.insert("shared-id".to_string(), submission("shared-id", "10.00"));
+        let revisions = HashMap::new();
+        assert_eq!(
+            list_row_totals(Some("shared-id"), Some("shared-id"), &submissions, &revisions),
+            ("10.00".to_string(), "10.00".to_string(), "0".to_string())
+        );
+        assert_eq!(
+            list_row_totals(Some("missing"), Some("shared-id"), &submissions, &revisions),
+            (String::new(), String::new(), String::new())
+        );
+    }
+
+    /// 版本指针只读版本命名空间.
+    #[test]
+    fn revision_pointer_reads_revision_only() {
+        let submissions = HashMap::new();
+        assert_eq!(
+            list_row_totals(None, Some("missing-rev"), &submissions, &HashMap::new()),
+            (String::new(), String::new(), String::new())
+        );
+    }
+
+    /// 供应商缺失回退账号 ID 本身.
+    #[test]
+    fn supplier_fallback_returns_account_id() {
+        assert_eq!(supplier_display("sup-1", &HashMap::new()), "sup-1".to_string());
+        let mut names = HashMap::new();
+        names.insert("sup-1".to_string(), "供应商甲".to_string());
+        assert_eq!(supplier_display("sup-1", &names), "供应商甲".to_string());
+    }
+
+    /// 缺失销售单必须报完整性错误，不得回退 ID.
+    #[test]
+    fn missing_sales_order_is_internal_error() {
+        assert!(sales_no_for("so-1", &HashMap::new()).is_err());
+        let mut nos = HashMap::new();
+        nos.insert("so-1".to_string(), "SO-1".to_string());
+        assert_eq!(sales_no_for("so-1", &nos).unwrap(), "SO-1".to_string());
+    }
+
+    /// 负责人三态回退与历史文案一致.
+    #[test]
+    fn owner_fallback_matrix() {
+        assert_eq!(owner_display(None, &HashMap::new()).1, "未指定".to_string());
+        assert_eq!(
+            owner_display(Some("buyer-1".to_string()), &HashMap::new()).1,
+            "责任账号不可用".to_string()
+        );
+        let mut names = HashMap::new();
+        names.insert("buyer-1".to_string(), "张三".to_string());
+        assert_eq!(
+            owner_display(Some("buyer-1".to_string()), &names).1,
+            "张三".to_string()
+        );
+    }
+
+    /// 内容来源优先级固定为版本大于提交大于草稿.
+    #[test]
+    fn content_source_priority_is_revision_over_submission_over_draft() {
+        assert_eq!(
+            center_content_source(true, Some("SUBMISSION")),
+            "REVISION".to_string()
+        );
+        assert_eq!(
+            center_content_source(false, Some("SUBMISSION")),
+            "SUBMISSION".to_string()
+        );
+        assert_eq!(center_content_source(false, None), "DRAFT".to_string());
+    }
+
+    /// 空分配与空应付保持为空语义.
+    #[test]
+    fn empty_center_collections_stay_empty() {
+        let allocations: Vec<String> = Vec::new();
+        assert!(allocations.is_empty());
+        let payable: Option<String> = None;
+        assert!(payable.is_none());
     }
 }

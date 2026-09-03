@@ -400,9 +400,9 @@ fn build_procurement_work_items(
     let mut groups = BTreeMap::<String, Vec<String>>::new();
     for line in &plan.resolution.lines {
         groups
-            .entry(line.owner_user_id.clone())
+            .entry(line.identity.owner_user_id.clone())
             .or_default()
-            .push(line.line_key.clone());
+            .push(line.identity.line_key.clone());
     }
     let organization_id = sales_order_responsible_org_id(order)?;
     groups

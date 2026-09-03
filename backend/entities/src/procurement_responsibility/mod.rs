@@ -6,6 +6,7 @@
 mod catalog;
 mod resolution;
 mod rule;
+mod rule_list;
 
 pub use catalog::{
     build_catalog_facts, category_chain, current_revision_ids, dedup_sorted_ids, ProcurementCatalogBundle,
@@ -20,3 +21,4 @@ pub use rule::{
     normalize_service_region, ProcurementResponsibilityRule, ProcurementResponsibilityRuleData,
     ProcurementResponsibilityRuleType, ProcurementResponsibilitySelectorReference,
 };
+pub use rule_list::{collect_rule_list_ids, ProcurementRuleListDisplayFacts, ProcurementRuleListPage};

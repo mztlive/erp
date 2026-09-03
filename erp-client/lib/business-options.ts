@@ -80,16 +80,6 @@ export const CARRIER_OPTIONS: readonly ComboboxOption[] = [
     { value: "供应商自送", label: "供应商自送" },
 ] as const
 
-/** 接口错误转交角色（值为展示名，与任务转交 API 一致）。 */
-export const TRANSFER_ROLE_OPTIONS: readonly ComboboxOption[] = [
-    { value: "采购", label: "采购" },
-    { value: "财务", label: "财务" },
-    { value: "运营", label: "运营" },
-    { value: "对接", label: "对接" },
-    { value: "研发运维", label: "研发运维" },
-    { value: "主管", label: "主管" },
-] as const
-
 /** 把稳定代码、展示名称或历史别名规范为付款条件代码。 */
 export function paymentTermCode(value: string): string | undefined {
     const trimmed = value.trim()

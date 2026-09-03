@@ -158,6 +158,53 @@ pub trait PurchaseOrderExt: Sized {
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
     ) -> Result<CreationBasisFacts>;
+
+    /// 批量加载采购单列表页与关联事实。
+    ///
+    /// # 参数
+    /// * `filter` - 采购单列表筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回当前页投影行、总数与同一 executor 下批量取回的关联事实；关联缺失
+    /// 以缺键形式表达，由 Service 按完整性错误或约定回退解释。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或反序列化失败时返回错误；不负责缺失校验。
+    ///
+    /// # 约束
+    /// 查询次数与页大小无关：列表分页、供应商名称、销售单、负责人、当前提交
+    /// 与当前版本各一次批量读取，不得出现逐行 N+1。只沿当前指针读取表头。
+    async fn load_purchase_order_list_page(
+        &self,
+        filter: &PurchaseOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<(
+        crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
+        super::super::purchase_order::PurchaseOrderListFacts,
+    )>;
+
+    /// 批量加载采购单对象中心事实。
+    ///
+    /// # 参数
+    /// * `order_id` - 采购单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
+    ///
+    /// # 返回
+    /// 返回单个采购单的全部当前指针事实；采购单不存在时 `order` 为空，由
+    /// Service 映射为 `NotFound`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误；不负责缺失校验。
+    ///
+    /// # 约束
+    /// 查询次数固定有界，不随行数增长；只沿当前提交或当前版本指针读取，不读
+    /// 历史提交与历史版本；不读取审批运行时，不做事务或审批政策判断。
+    async fn load_purchase_order_center_facts(
+        &self,
+        order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<super::super::purchase_order::PurchaseOrderCenterFacts>;
 }
 
 impl PurchaseOrderExt for Database {
@@ -261,5 +308,52 @@ impl PurchaseOrderExt for Database {
         executor: &mut dyn Executor,
     ) -> Result<CreationBasisFacts> {
         super::super::purchase_order::load_creation_basis_facts(self, sku_ids, executor).await
+    }
+
+    /// 批量加载采购单列表页与关联事实。
+    ///
+    /// # 参数
+    /// * `filter` - 采购单列表筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回当前页投影行、总数与关联事实；关联缺失以缺键表达。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 查询次数与页大小无关，不得出现逐行 N+1；只沿当前指针读取表头。
+    async fn load_purchase_order_list_page(
+        &self,
+        filter: &PurchaseOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<(
+        crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
+        super::super::purchase_order::PurchaseOrderListFacts,
+    )> {
+        super::super::purchase_order::load_purchase_order_list_page(self, filter, executor).await
+    }
+
+    /// 批量加载采购单对象中心事实。
+    ///
+    /// # 参数
+    /// * `order_id` - 采购单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回单个采购单的全部当前指针事实；不存在时 `order` 为空。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 查询次数固定有界；只沿当前指针读取；不读取审批运行时。
+    async fn load_purchase_order_center_facts(
+        &self,
+        order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<super::super::purchase_order::PurchaseOrderCenterFacts> {
+        super::super::purchase_order::load_purchase_order_center_facts(self, order_id, executor).await
     }
 }

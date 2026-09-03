@@ -94,8 +94,20 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 }
 
 /// 返回 `supplier_account` 的身份约束和列表查询索引。
+///
+/// `uk_supplier_accounts_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取
+/// （PROC-R10：`current_legal_names_by_account_ids` 经 `supplier_party_refs`
+/// 的 `active_ids_filter` 按 `id $in` 批量取关联，默认 `_id` 索引不能覆盖
+/// 业务字段 `id`，此前只能集合扫描）。
+/// 迁移：先运行 `SupplierRepository::duplicate_supplier_account_ids` 确认无重复
+/// `id`，再执行幂等 `ensure` 创建索引，最后用 `explain` 验证 `$in` 命中
+/// `uk_supplier_accounts_id` 且无 `COLLSCAN`。
+/// 回滚：删除 `uk_supplier_accounts_id`，批量查询退化为集合扫描，不改变数据。
+/// 失败关闭：存量存在重复 `id` 时 `ensure` 返回唯一冲突错误，部署必须中止，
+/// 先按审计诊断清理重复后再重跑，禁止跳过审计强行建索引。
 fn supplier_account_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_accounts_id", doc! { "id": 1 }),
         unique_index("uk_supplier_accounts_party", doc! { "party_id": 1 }),
         unique_index("uk_supplier_accounts_supplier_no", doc! { "supplier_no": 1 }),
         named_index("idx_supplier_accounts_status", doc! { "status": 1 }),
@@ -233,7 +245,11 @@ mod tests {
     fn supplier_account_identity_indexes_are_globally_unique() {
         let indexes = supplier_account_indexes();
 
-        for name in ["uk_supplier_accounts_party", "uk_supplier_accounts_supplier_no"] {
+        for name in [
+            "uk_supplier_accounts_id",
+            "uk_supplier_accounts_party",
+            "uk_supplier_accounts_supplier_no",
+        ] {
             let index = indexes
                 .iter()
                 .find(|index| {
@@ -244,6 +260,22 @@ mod tests {
             assert_eq!(options.unique, Some(true));
             assert!(options.partial_filter_expression.is_none());
         }
+    }
+
+    #[test]
+    fn supplier_account_id_index_covers_batch_lookups() {
+        let index = supplier_account_indexes()
+            .into_iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_supplier_accounts_id")
+            })
+            .unwrap();
+        assert_eq!(index.keys, doc! { "id": 1 });
+        assert_eq!(
+            index.options.as_ref().and_then(|options| options.unique),
+            Some(true)
+        );
     }
 
     #[test]

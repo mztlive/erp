@@ -4,16 +4,11 @@
 //! 提供列表、完整详情和停用入口，不保留拆分的供应商、商务版本、能力、资质
 //! 或评级写接口。
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
-use database::{NoTransaction, PartyExt, SupplierExt};
-use entities::supplier::{
-    SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
-};
-use entities::{common::time::BusinessDate, ids::PartyId};
+use database::{NoTransaction, SupplierExt};
+use entities::common::time::BusinessDate;
+use entities::supplier::{SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision};
 use mongodb::Database;
 use validator::Validate;
 
@@ -36,8 +31,47 @@ pub use self::dto::{
 
 use self::dto::{SortDir, SupplierListQuery};
 
-/// 供应商角色列表筛选条件类型（经 `SupplierExt` 关联类型跨 crate 可达）。
-type SupplierAccountFilter = <mongodb::Database as SupplierExt>::SupplierAccountFilter;
+/// 供应商列表业务查询参数的仓储搜索输入组织（保留在 Service）。
+///
+/// # 参数
+/// * `query` - 已校验的供应商列表业务筛选条件
+/// * `as_of` - 当前业务日字符串
+///
+/// # 返回
+/// 返回仓储侧列表事实束搜索输入。
+///
+/// # 错误
+/// 无；仅做枚举与分页映射。
+///
+/// # 约束
+/// Service 拥有查询参数组织，仓储拥有持久化过滤与分页执行。
+fn supplier_list_search_input(
+    query: &SupplierListQuery,
+    as_of: String,
+) -> <mongodb::Database as SupplierExt>::SupplierListSearchInput {
+    type HealthFilter = <mongodb::Database as SupplierExt>::SupplierQualificationHealthFilter;
+    type SearchInput = <mongodb::Database as SupplierExt>::SupplierListSearchInput;
+    let qualification_health = match query.qualification_health {
+        None => None,
+        Some(SupplierQualificationHealth::Valid) => Some(HealthFilter::Valid),
+        Some(SupplierQualificationHealth::Expiring30) => Some(HealthFilter::Expiring30),
+        Some(SupplierQualificationHealth::Expired) => Some(HealthFilter::Expired),
+        Some(SupplierQualificationHealth::NotRegistered) => Some(HealthFilter::NotRegistered),
+    };
+    SearchInput {
+        keyword: query.keyword.clone(),
+        party_id: query.party_id.clone(),
+        status: query.status,
+        capability_codes: query.capability_codes.clone(),
+        qualification_types: query.qualification_types.clone(),
+        qualification_health,
+        as_of,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    }
+}
 /// 供应商服务。
 ///
 /// 提供供应商列表、完整详情与停用；所有资料创建和修订统一走根级资料服务。
@@ -84,161 +118,27 @@ impl SupplierService {
     pub async fn supplier_list(&self, params: &SupplierListParams) -> Result<PageView<SupplierView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let party_ids = match query.keyword.as_deref() {
-            Some(keyword) => Some(self.matching_party_ids(keyword).await?),
-            None => None,
-        };
-        let (supplier_ids, excluded_supplier_ids) = self.supplier_id_constraints(&query).await?;
-        let filter = SupplierAccountFilter {
-            keyword: query.keyword,
-            party_id: query.party_id,
-            party_ids,
-            status: query.status,
-            supplier_ids,
-            excluded_supplier_ids,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
+        let as_of = BusinessDate::today().to_string();
+        let input = supplier_list_search_input(&query, as_of);
+        let bundle = self
             .db
-            .supplier_accounts()
-            .search_supplier_accounts(&filter, &mut NoTransaction)
+            .supplier()
+            .load_supplier_list_bundle(&input, &mut NoTransaction)
             .await?;
-        let items = self.hydrate_supplier_rows(page.items).await?;
+        let total = bundle.page.total;
+        let items = assemble_supplier_views(
+            bundle.page.items,
+            bundle.parties,
+            bundle.revisions,
+            bundle.profiles,
+        );
 
         Ok(PageView {
             items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            total,
+            page: input.page,
+            page_size: input.page_size,
         })
-    }
-
-    /// 组装供应商能力和资质条件对应的角色 ID 约束。
-    ///
-    /// # 参数
-    /// * `query` - 已校验的供应商列表业务筛选条件
-    ///
-    /// # 返回
-    /// 返回必须命中的候选 ID 与必须排除的 ID 集合。
-    ///
-    /// # 错误
-    /// 业务日期或任一仓储查询失败时返回错误。
-    async fn supplier_id_constraints(
-        &self,
-        query: &SupplierListQuery,
-    ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
-        let as_of = BusinessDate::today().to_string();
-        let capability_ids = self.matching_capability_supplier_ids(query, &as_of).await?;
-        let (qualification_ids, excluded_qualification_ids) =
-            self.matching_qualification_supplier_ids(query, &as_of).await?;
-        Ok((
-            intersect_supplier_ids(capability_ids, qualification_ids),
-            excluded_qualification_ids,
-        ))
-    }
-
-    /// 查询命中任一当前有效供应能力的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `query` - 包含能力代码的供应商列表条件
-    /// * `as_of` - 当前业务日字符串
-    ///
-    /// # 返回
-    /// 未筛选能力时返回 `None`，否则返回匹配供应商 ID。
-    ///
-    /// # 错误
-    /// 仓储查询或反序列化失败时返回错误。
-    async fn matching_capability_supplier_ids(
-        &self,
-        query: &SupplierListQuery,
-        as_of: &str,
-    ) -> Result<Option<Vec<SupplierAccountId>>> {
-        if query.capability_codes.is_empty() {
-            return Ok(None);
-        }
-        let ids = self
-            .db
-            .supplier()
-            .list_supplier_ids_by_active_capability_codes(&query.capability_codes, as_of, &mut NoTransaction)
-            .await?;
-        Ok(Some(ids))
-    }
-
-    /// 查询资质类型和资料状态对应的供应商角色 ID 约束。
-    ///
-    /// # 参数
-    /// * `query` - 包含资质类型与健康状态的列表条件
-    /// * `as_of` - 当前业务日字符串
-    ///
-    /// # 返回
-    /// 返回应命中与应排除的供应商 ID 集合；未筛选资质时均为 `None`。
-    ///
-    /// # 错误
-    /// 到期窗口计算或任一仓储查询失败时返回错误。
-    async fn matching_qualification_supplier_ids(
-        &self,
-        query: &SupplierListQuery,
-        as_of: &str,
-    ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
-        if query.qualification_types.is_empty() && query.qualification_health.is_none() {
-            return Ok((None, None));
-        }
-        let repository = self.db.supplier();
-        let included = match query.qualification_health {
-            None => Some(
-                repository
-                    .list_supplier_ids_by_qualification_types(&query.qualification_types, &mut NoTransaction)
-                    .await?,
-            ),
-            Some(SupplierQualificationHealth::Valid) => Some(
-                repository
-                    .list_supplier_ids_by_valid_qualifications(
-                        &query.qualification_types,
-                        as_of,
-                        &mut NoTransaction,
-                    )
-                    .await?,
-            ),
-            Some(SupplierQualificationHealth::Expiring30) => {
-                let expires_by = qualification_expiry_cutoff(as_of)?;
-                Some(
-                    repository
-                        .list_supplier_ids_by_expiring_qualifications(
-                            &query.qualification_types,
-                            as_of,
-                            &expires_by,
-                            &mut NoTransaction,
-                        )
-                        .await?,
-                )
-            }
-            Some(SupplierQualificationHealth::Expired) => Some(
-                repository
-                    .list_supplier_ids_by_expired_qualifications(
-                        &query.qualification_types,
-                        as_of,
-                        &mut NoTransaction,
-                    )
-                    .await?,
-            ),
-            Some(SupplierQualificationHealth::NotRegistered) => None,
-        };
-        let excluded = if matches!(
-            query.qualification_health,
-            Some(SupplierQualificationHealth::NotRegistered)
-        ) {
-            Some(
-                repository
-                    .list_supplier_ids_by_qualification_types(&query.qualification_types, &mut NoTransaction)
-                    .await?,
-            )
-        } else {
-            None
-        };
-        Ok((included, excluded))
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
@@ -252,91 +152,81 @@ impl SupplierService {
     /// # 错误
     /// * `NotFound` - 供应商角色不存在
     pub async fn supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
-        let supplier = self.load_supplier(id).await?;
-        let party = self
+        let supplier_id = SupplierAccountId::new(id);
+        let bundle = self
             .db
-            .party()
-            .party(&supplier.party_id, &mut NoTransaction)
+            .supplier()
+            .load_supplier_detail_bundle(&supplier_id, &mut NoTransaction)
             .await?
+            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+        let party = bundle
+            .party
+            .as_ref()
             .ok_or_else(|| Error::NotFound("供应商关联的企业主体不存在".to_string()))?;
         let row = database::repository::SupplierAccountRow {
-            id: supplier.base.id,
-            party_id: supplier.party_id.to_string(),
-            supplier_no: supplier.supplier_no,
-            default_payment_term_id: supplier.default_payment_term_id,
-            current_commercial_profile_revision_id: supplier
+            id: bundle.supplier.base.id.clone(),
+            party_id: bundle.supplier.party_id.to_string(),
+            supplier_no: bundle.supplier.supplier_no.clone(),
+            default_payment_term_id: bundle.supplier.default_payment_term_id.clone(),
+            current_commercial_profile_revision_id: bundle
+                .supplier
                 .current_commercial_profile_revision_id
-                .map(|id| id.to_string()),
-            status: supplier.stable.status,
-            version: supplier.base.version,
-            created_at: supplier.base.created_at,
+                .as_ref()
+                .map(ToString::to_string),
+            status: bundle.supplier.stable.status,
+            version: bundle.supplier.base.version,
+            created_at: bundle.supplier.base.created_at,
         };
-        let mut account = self
-            .hydrate_supplier_rows(vec![row])
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        let supplier_id = SupplierAccountId::new(id);
-        let contacts: Vec<crate::party::PartyContactView> = self
-            .db
-            .party_contacts()
-            .list_by_party(&supplier.party_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let addresses: Vec<crate::party::PartyAddressView> = self
-            .db
-            .party_addresses()
-            .list_by_party(&supplier.party_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let tax_profiles = self
-            .db
-            .party_tax_profiles()
-            .list_by_party(&supplier.party_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let bank_accounts: Vec<crate::party::PartyBankAccountView> = self
-            .db
-            .party_bank_accounts()
-            .list_by_party(&supplier.party_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let capabilities: Vec<SupplierCapabilityView> = self
-            .db
-            .supplier()
-            .list_capabilities(&supplier_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let qualifications = self.supplier_qualification_views(&supplier_id).await?;
-        let ratings = self
-            .db
-            .supplier()
-            .list_ratings_latest_first(&supplier_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let mut commercial_profiles: Vec<CommercialProfileView> = self
-            .db
-            .supplier()
-            .list_commercial_profiles_latest_first(&supplier_id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        self.hydrate_commercial_party_names(&mut commercial_profiles)
-            .await?;
+        let party_for_view = party.clone();
+        let revision_for_view = bundle.party_revision.clone();
+        let mut account = assemble_supplier_views(
+            vec![row],
+            bundle.party.into_iter().collect(),
+            revision_for_view.into_iter().collect(),
+            bundle
+                .commercial_profiles
+                .iter()
+                .find(|profile| {
+                    Some(profile.base.id.as_str())
+                        == bundle
+                            .supplier
+                            .current_commercial_profile_revision_id
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .as_deref()
+                })
+                .cloned()
+                .into_iter()
+                .collect(),
+        )
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+        let contacts: Vec<crate::party::PartyContactView> =
+            bundle.contacts.into_iter().map(Into::into).collect();
+        let addresses: Vec<crate::party::PartyAddressView> =
+            bundle.addresses.into_iter().map(Into::into).collect();
+        let tax_profiles = bundle.tax_profiles.into_iter().map(Into::into).collect();
+        let bank_accounts: Vec<crate::party::PartyBankAccountView> =
+            bundle.bank_accounts.into_iter().map(Into::into).collect();
+        let capabilities: Vec<SupplierCapabilityView> =
+            bundle.capabilities.into_iter().map(Into::into).collect();
+        let qualifications = assemble_qualification_views(bundle.qualifications, bundle.qualification_links);
+        let ratings = bundle.ratings.into_iter().map(Into::into).collect();
+        let mut commercial_profiles: Vec<CommercialProfileView> =
+            bundle.commercial_profiles.into_iter().map(Into::into).collect();
+        for profile in &mut commercial_profiles {
+            profile.signing_entity_name = profile
+                .signing_entity_party_id
+                .as_ref()
+                .and_then(|party_id| bundle.commercial_party_names.get(party_id))
+                .cloned();
+            profile.payment_entity_name = profile
+                .payment_entity_party_id
+                .as_ref()
+                .and_then(|party_id| bundle.commercial_party_names.get(party_id))
+                .cloned();
+        }
         if let Some(current_id) = account.current_commercial_profile_revision_id.as_deref() {
             account.current_profile = commercial_profiles
                 .iter()
@@ -346,8 +236,8 @@ impl SupplierService {
         let sensitive_fields = self.sensitive_field_views(id, &contacts, &addresses, &bank_accounts)?;
         Ok(SupplierDetailView {
             account,
-            party_status: party.stable.status,
-            unified_credit_code: party.unified_credit_code,
+            party_status: party_for_view.stable.status,
+            unified_credit_code: party_for_view.unified_credit_code,
             contacts,
             addresses,
             tax_profiles,
@@ -464,202 +354,43 @@ impl SupplierService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
     }
-
-    /// 查找当前法定名称或简称命中的主体 ID。
-    ///
-    /// # 参数
-    /// * `keyword` - 供应商统一关键词中的名称片段
-    ///
-    /// # 返回
-    /// 返回当前名称命中的去重主体 ID，用于与供应商编号合并筛选。
-    ///
-    /// # 错误
-    /// 仓储查询或反序列化失败时返回错误。
-    async fn matching_party_ids(&self, keyword: &str) -> Result<Vec<PartyId>> {
-        Ok(self
-            .db
-            .party()
-            .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-            .await?)
-    }
-
-    /// 批量补齐当前主体名称与商务资料，避免逐供应商 N+1。
-    ///
-    /// # 参数
-    /// * `rows` - 供应商列表最小投影行
-    ///
-    /// # 返回
-    /// 返回补齐当前主体修订和商务资料后的供应商视图。
-    ///
-    /// # 错误
-    /// 任一批量仓储查询失败时返回错误。
-    async fn hydrate_supplier_rows(
-        &self,
-        rows: Vec<database::repository::SupplierAccountRow>,
-    ) -> Result<Vec<SupplierView>> {
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
-        let party_ids: Vec<PartyId> = rows.iter().map(|row| PartyId::new(&row.party_id)).collect();
-        let (parties, revisions) = self
-            .db
-            .party()
-            .list_with_current_revisions(&party_ids, &mut NoTransaction)
-            .await?;
-        let profile_ids: Vec<String> = rows
-            .iter()
-            .filter_map(|row| row.current_commercial_profile_revision_id.clone())
-            .collect();
-        let profiles = self
-            .db
-            .supplier()
-            .list_commercial_profiles_by_ids(&profile_ids, &mut NoTransaction)
-            .await?;
-        Ok(assemble_supplier_views(rows, parties, revisions, profiles))
-    }
-
-    /// 批量装配供应商资质与适用能力，避免逐资质查询关联集合。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    ///
-    /// # 返回
-    /// 返回带适用能力 ID 的资质视图集合。
-    ///
-    /// # 错误
-    /// 资质或关联集合查询失败时返回错误。
-    async fn supplier_qualification_views(
-        &self,
-        supplier_id: &SupplierAccountId,
-    ) -> Result<Vec<SupplierQualificationView>> {
-        let qualifications = self
-            .db
-            .supplier()
-            .list_qualifications(supplier_id, &mut NoTransaction)
-            .await?;
-        let qualification_ids: Vec<entities::ids::SupplierQualificationId> = qualifications
-            .iter()
-            .map(|qualification| entities::ids::SupplierQualificationId::new(&qualification.base.id))
-            .collect();
-        let links = self
-            .db
-            .supplier_qualification_capabilities()
-            .list_by_qualification_ids(&qualification_ids, &mut NoTransaction)
-            .await?;
-        let mut links_by_qualification: HashMap<String, Vec<entities::ids::SupplierCapabilityId>> =
-            HashMap::new();
-        for link in links {
-            links_by_qualification
-                .entry(link.qualification_id.to_string())
-                .or_default()
-                .push(link.capability_id);
-        }
-        Ok(qualifications
-            .into_iter()
-            .map(|qualification| {
-                let id = qualification.base.id.clone();
-                let mut view: SupplierQualificationView = qualification.into();
-                view.capability_ids = links_by_qualification.remove(&id).unwrap_or_default();
-                view
-            })
-            .collect())
-    }
-
-    /// 批量补齐商务版本引用的签约与付款主体当前名称。
-    ///
-    /// # 参数
-    /// * `profiles` - 待原地补齐主体名称的商务资料视图
-    ///
-    /// # 返回
-    /// 名称补齐完成后返回 `Ok(())`；缺少当前修订时保留空名称。
-    ///
-    /// # 错误
-    /// 主体或当前修订批量查询失败时返回错误。
-    async fn hydrate_commercial_party_names(&self, profiles: &mut [CommercialProfileView]) -> Result<()> {
-        let party_ids: Vec<PartyId> = profiles
-            .iter()
-            .flat_map(|profile| {
-                [
-                    profile.signing_entity_party_id.as_deref(),
-                    profile.payment_entity_party_id.as_deref(),
-                ]
-            })
-            .flatten()
-            .map(PartyId::new)
-            .collect();
-        let (parties, revisions) = self
-            .db
-            .party()
-            .list_with_current_revisions(&party_ids, &mut NoTransaction)
-            .await?;
-        let revisions: HashMap<String, entities::party::PartyRevision> = revisions
-            .into_iter()
-            .map(|revision| (revision.base.id.clone(), revision))
-            .collect();
-        let names: HashMap<String, String> = parties
-            .into_iter()
-            .filter_map(|party| {
-                let revision_id = party.stable.current_revision_id?;
-                let name = revisions.get(&revision_id)?.legal_name.clone();
-                Some((party.base.id, name))
-            })
-            .collect();
-        for profile in profiles {
-            profile.signing_entity_name = profile
-                .signing_entity_party_id
-                .as_ref()
-                .and_then(|id| names.get(id))
-                .cloned();
-            profile.payment_entity_name = profile
-                .payment_entity_party_id
-                .as_ref()
-                .and_then(|id| names.get(id))
-                .cloned();
-        }
-        Ok(())
-    }
 }
 
-/// 合并两个供应商角色候选集合；两个条件同时存在时取交集。
+/// 将详情事实束中的资质与适用能力关联装配为视图（纯 View 映射）。
 ///
 /// # 参数
-/// * `current` - 已有筛选条件命中的候选集合
-/// * `matched` - 新筛选条件命中的候选集合
+/// * `qualifications` - 仓储事实束中的资质集合
+/// * `links` - 仓储事实束中的适用能力关联集合
 ///
 /// # 返回
-/// 两者均存在时返回交集，仅一者存在时原样返回，均不存在时返回 `None`。
-fn intersect_supplier_ids(
-    current: Option<Vec<SupplierAccountId>>,
-    matched: Option<Vec<SupplierAccountId>>,
-) -> Option<Vec<SupplierAccountId>> {
-    let (current, matched) = match (current, matched) {
-        (Some(current), Some(matched)) => (current, matched),
-        (Some(current), None) => return Some(current),
-        (None, Some(matched)) => return Some(matched),
-        (None, None) => return None,
-    };
-    let matched: HashSet<String> = matched.into_iter().map(|id| id.to_string()).collect();
-    Some(
-        current
-            .into_iter()
-            .filter(|id| matched.contains(&id.to_string()))
-            .collect(),
-    )
-}
-
-/// 计算“30 天内到期”筛选窗口的结束业务日。
-///
-/// # 参数
-/// * `as_of` - 窗口起始业务日字符串
-///
-/// # 返回
-/// 返回起始日后第三十个自然日的稳定日期字符串。
+/// 返回带适用能力 ID 的资质视图集合。
 ///
 /// # 错误
-/// 日期格式非法或计算溢出时返回错误。
-fn qualification_expiry_cutoff(as_of: &str) -> Result<String> {
-    let as_of = as_of.parse::<BusinessDate>()?;
-    Ok(SupplierQualification::expiry_cutoff(as_of, 30)?.to_string())
+/// 无。
+///
+/// # 约束
+/// 纯内存映射，不触及 I/O；关联缺失时视为空集合。
+fn assemble_qualification_views(
+    qualifications: Vec<entities::supplier::SupplierQualification>,
+    links: Vec<entities::supplier::SupplierQualificationCapability>,
+) -> Vec<SupplierQualificationView> {
+    let mut links_by_qualification: HashMap<String, Vec<entities::ids::SupplierCapabilityId>> =
+        HashMap::new();
+    for link in links {
+        links_by_qualification
+            .entry(link.qualification_id.to_string())
+            .or_default()
+            .push(link.capability_id);
+    }
+    qualifications
+        .into_iter()
+        .map(|qualification| {
+            let id = qualification.base.id.clone();
+            let mut view: SupplierQualificationView = qualification.into();
+            view.capability_ids = links_by_qualification.remove(&id).unwrap_or_default();
+            view
+        })
+        .collect()
 }
 
 /// 将批量读取结果按稳定 ID 装配为供应商列表/详情统一视图。
