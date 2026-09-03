@@ -15,16 +15,16 @@ use entities::ids::{
 };
 use entities::money::Amount;
 use entities::projection::{
-    CardForm as ProjectionCardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection,
-    SalesOrderProjectionData, SalesOrderProjectionDelivery, SalesOrderProjectionDeliveryData,
-    SalesOrderProjectionRevision, SalesOrderProjectionRevisionData,
+    ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection, SalesOrderProjectionData,
+    SalesOrderProjectionDelivery, SalesOrderProjectionDeliveryData, SalesOrderProjectionRevision,
+    SalesOrderProjectionRevisionData,
 };
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
 };
 use entities::sales_order::{
-    procurement_responsibility_key, CardForm, FormalRevisionContext, FormalRevisionIdentities,
+    procurement_responsibility_key, FormalRevisionContext, FormalRevisionIdentities,
     FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder,
     SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
@@ -43,7 +43,6 @@ use crate::errors::{Error, Result};
 use crate::procurement_responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
 };
-use crate::projection::projection_content_hash;
 use crate::purchase_order::sync_procurement_tasks_for_sales_order;
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
@@ -639,7 +638,7 @@ fn build_voucher_execution_projection(
         },
     )?;
     let projection_revision_id = SalesOrderProjectionRevisionId::new(next_id());
-    let mut projection_revision = SalesOrderProjectionRevision::new(
+    let projection_revision = SalesOrderProjectionRevision::new(
         projection_revision_id.clone(),
         1,
         SalesOrderProjectionRevisionData {
@@ -661,15 +660,10 @@ fn build_voucher_execution_projection(
                 .ok_or_else(|| Error::BusinessLogicError("卡券销售提交缺少冻结履约期限".to_string()))?,
             face_value: voucher.face_value,
             card_count: voucher.card_count,
-            card_form: match voucher.card_form {
-                CardForm::Electronic => ProjectionCardForm::Electronic,
-                CardForm::Physical => ProjectionCardForm::Physical,
-            },
+            card_form: voucher.card_form.into(),
             effective_at: at,
-            content_hash: "pending".to_string(),
         },
     )?;
-    projection_revision.content_hash = projection_content_hash(&projection_revision);
     let delivery = SalesOrderProjectionDelivery::new(
         SalesOrderProjectionDeliveryId::new(next_id()),
         SalesOrderProjectionDeliveryData {

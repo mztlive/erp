@@ -19,12 +19,16 @@
 
 mod amount_validation;
 mod approval_quantity;
+mod closure;
+mod content_hash;
+mod draft_working_copy;
 mod entity;
 pub(crate) mod formal_revision;
 mod procurement;
 pub mod revision;
 pub mod snapshot;
 pub mod submission;
+mod submission_from_working_copy;
 pub mod types;
 pub mod working_copy;
 mod working_copy_line;
@@ -32,6 +36,11 @@ mod working_copy_line;
 mod working_copy_test_support;
 mod working_copy_types;
 
+pub use closure::{
+    SalesOrderClosureAssessment, SalesOrderClosureFacts, SalesOrderClosureTerminal,
+    SalesOrderFulfillmentBlocker,
+};
+pub use content_hash::SalesContentHash;
 pub use entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
     ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,

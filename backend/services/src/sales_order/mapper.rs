@@ -6,10 +6,10 @@ use entities::ids::{
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
 };
 use entities::sales_order::{
-    SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision, SalesOrderRevisionLine,
-    SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine, SalesOrderSubmissionLineData,
-    SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,
-    SalesOrderWorkingCopyLineData, WorkingPurpose,
+    SalesContentHash, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
+    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
+    SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
 };
 use id_generator::next_id;
 
@@ -95,7 +95,7 @@ pub(super) fn build_working_copy(
             sales_change_order_id: None,
             base_revision_id: None,
             draft_version,
-            content_hash: draft_hash(&order.base.id, draft_version),
+            content_hash: SalesContentHash::draft(&order.base.id, draft_version)?.into_wire(),
             editor_user_id: draft.editor_user_id.clone(),
             business_type: order.business_type,
             customer_id: order.customer_id.clone(),
@@ -228,19 +228,9 @@ pub(super) fn header_snapshot(
     })
 }
 
-/// 生成草稿内容指纹（服务端确定性派生，供幂等与历史查询）。
-///
-/// # 参数
-/// * `id` - 业务对象 ID
-/// * `version` - 草稿版本
-///
-/// # 返回
-/// 返回 128 字符内的内容指纹。
-pub(super) fn draft_hash(id: &str, version: u32) -> String {
-    format!("draft:{id}:{version}")
-}
-
 /// 从工作副本构建提交快照。
+///
+/// 字段、快照、金额和字段组复制由实体工厂完成；本方法只注入 ID、提交时间与提交人。
 ///
 /// # 参数
 /// * `working_copy` - 已迁移到 `Submitted` 的工作副本
@@ -263,72 +253,21 @@ pub(super) fn build_submission(
     customer_external_identity: Option<&str>,
     voucher_category_external_identity: Option<&str>,
 ) -> Result<SalesOrderSubmission> {
-    let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(lines);
-    // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
-    let mut line_datas = Vec::with_capacity(lines.len());
-    for line in lines {
-        line_datas.push(SalesOrderSubmissionLineData {
-            sales_order_line_id: line.sales_order_line_id.clone(),
-            line_no: line.line_no,
-            line_type: line.line_type,
-            sales_tax_rate: line.sales_tax_rate,
-            item_name_snapshot: line.item_name_snapshot.clone(),
-            spec_snapshot: line.spec_snapshot.clone(),
-            unit_snapshot: line.unit_snapshot.clone(),
-            goods: line
-                .goods_fields()
-                .map_err(|error| Error::ValidationError(error.to_string()))?,
-            voucher: line
-                .voucher_fields()
-                .map_err(|error| Error::ValidationError(error.to_string()))?,
-        });
-    }
-    SalesOrderSubmission::new(
-        SalesOrderSubmissionId::new(next_id()),
-        SalesOrderSubmissionData {
-            sales_order_id: working_copy.sales_order_id.clone(),
-            submission_no,
-            working_copy_id: working_copy.base.id.clone().into(),
-            working_copy_version: working_copy.draft_version,
-            business_type: working_copy.business_type,
-            customer_id: working_copy.customer_id.clone(),
-            contract_revision_id: working_copy.contract_revision_id.clone(),
-            settlement_party_id: working_copy.settlement_party_id.clone(),
-            snapshot: entities::sales_order::HeaderSnapshotData {
-                customer_name: working_copy.customer_snapshot.customer_name.clone(),
-                contract_no: working_copy
-                    .contract_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.contract_no.clone()),
-                settlement_party_name: working_copy
-                    .settlement_party_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.settlement_party_name.clone()),
-                payment_term_code: working_copy.payment_term_snapshot.payment_term_code.clone(),
-                payment_term_name: working_copy.payment_term_snapshot.payment_term_name.clone(),
-                invoice_type: working_copy.invoice_requirement_snapshot.invoice_type.clone(),
-                tax_point: working_copy.invoice_requirement_snapshot.tax_point.clone(),
-            },
-            project_name: working_copy.project_name.clone(),
-            business_remark: working_copy.business_remark.clone(),
-            voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
-            voucher_expiry_at: working_copy.voucher_expiry_at,
-            target_mall_id: working_copy.target_mall_id.clone(),
-            customer_external_identity: customer_external_identity.map(str::to_string),
-            voucher_category_external_identity: voucher_category_external_identity.map(str::to_string),
-            receivable_due_date: working_copy.receivable_due_date,
-            gross_amount: gross,
-            net_amount: net,
-            tax_amount: tax,
-            submitted_at: Instant::now(),
-            submitted_by: actor.id().to_string(),
-            lines: line_datas,
-        },
-    )
-    .map_err(Error::Logic)
+    let data = SalesOrderSubmissionData::from_working_copy(
+        working_copy,
+        lines,
+        submission_no,
+        Instant::now(),
+        actor.id(),
+        customer_external_identity,
+        voucher_category_external_identity,
+    )?;
+    SalesOrderSubmission::new(SalesOrderSubmissionId::new(next_id()), data).map_err(Error::Logic)
 }
 
 /// 从工作副本行构建提交快照明细。
+///
+/// 行字段组复制由实体工厂完成；本方法只注入提交行 ID。
 ///
 /// # 参数
 /// * `submission` - 提交快照
@@ -345,26 +284,10 @@ pub(super) fn build_submission_lines(
 ) -> Result<Vec<SalesOrderSubmissionLine>> {
     let mut built = Vec::with_capacity(lines.len());
     for line in lines {
-        let goods = line
-            .goods_fields()
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let voucher = line
-            .voucher_fields()
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
         built.push(SalesOrderSubmissionLine::new(
             SalesOrderSubmissionLineId::new(next_id()),
             submission.base.id.clone().into(),
-            SalesOrderSubmissionLineData {
-                sales_order_line_id: line.sales_order_line_id.clone(),
-                line_no: line.line_no,
-                line_type: line.line_type,
-                sales_tax_rate: line.sales_tax_rate,
-                item_name_snapshot: line.item_name_snapshot.clone(),
-                spec_snapshot: line.spec_snapshot.clone(),
-                unit_snapshot: line.unit_snapshot.clone(),
-                goods,
-                voucher,
-            },
+            SalesOrderSubmissionLineData::from_working_copy_line(line)?,
         )?);
     }
     Ok(built)

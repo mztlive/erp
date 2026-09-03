@@ -313,11 +313,7 @@ impl ContractService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        if contract.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
+        conflict_if_stale_version(contract.matches_version(req.version))?;
         let current_revision_no = self
             .db
             .contract_revisions()
@@ -394,11 +390,7 @@ impl ContractService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        if contract.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
+        conflict_if_stale_version(contract.matches_version(req.version))?;
         contract.terminate(actor.id())?;
         let audit = actor
             .clone()
@@ -417,5 +409,68 @@ impl ContractService {
             .await?;
 
         self.contract_detail(id).await
+    }
+}
+
+/// 将实体版本匹配结果映射为稳定 409 语义。
+///
+/// # 参数
+/// * `matched` - `Contract::matches_version(expected)` 的结果
+///
+/// # 返回
+/// 匹配时返回 `Ok(())`。
+///
+/// # 错误
+/// 不匹配时返回 `ConflictError`（HTTP 409）。
+///
+/// # 约束
+/// 不比较版本号；调用方必须先调用实体 `matches_version`。
+fn conflict_if_stale_version(matched: bool) -> Result<()> {
+    if matched {
+        return Ok(());
+    }
+    Err(Error::ConflictError(
+        "数据已被其他请求修改，请刷新后重试".to_string(),
+    ))
+}
+
+#[cfg(test)]
+mod version_lock_tests {
+    use super::conflict_if_stale_version;
+    use crate::errors::Error;
+    use entities::contract::{Contract, ContractData, ContractId};
+    use entities::ids::{CustomerAccountId, PartyId};
+
+    /// 归档与终止必须使用实体 matches_version，禁止字段级直接比较。
+    #[test]
+    fn archive_and_terminate_use_entity_matches_version() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("conflict_if_stale_version(contract.matches_version(req.version))"));
+        assert!(!production.contains("contract.base.version != req.version"));
+        assert!(!production.contains("contract.base.version == req.version"));
+    }
+
+    #[test]
+    fn stale_version_returns_conflict_with_stable_retry_message() {
+        let contract = Contract::new(
+            ContractId::new("c-1"),
+            ContractData {
+                contract_no: "HT-1".into(),
+                customer_id: CustomerAccountId::new("cust-1"),
+                settlement_party_id: PartyId::new("party-1"),
+            },
+            "admin-1",
+        )
+        .expect("合同必须可构造");
+        assert!(conflict_if_stale_version(contract.matches_version(contract.base.version)).is_ok());
+        match conflict_if_stale_version(contract.matches_version(0)) {
+            Err(Error::ConflictError(message)) => {
+                assert_eq!(message, "数据已被其他请求修改，请刷新后重试");
+            }
+            other => panic!("必须映射为 ConflictError，得到 {other:?}"),
+        }
     }
 }

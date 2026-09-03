@@ -206,6 +206,40 @@ impl ContractRevision {
             .checked_add(1)
             .ok_or_else(|| Error::from("合同版本号溢出"))
     }
+
+    /// 判断本版本是否属于给定合同。
+    ///
+    /// # 参数
+    /// * `contract_id` - 调用方选择的合同稳定身份
+    ///
+    /// # 返回
+    /// 版本所属合同一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 只比较合同身份；不读取当前可用版本或结算主体。
+    pub fn belongs_to_contract(&self, contract_id: &ContractId) -> bool {
+        &self.contract_id == contract_id
+    }
+
+    /// 判断本版本结算主体是否与给定主体一致。
+    ///
+    /// # 参数
+    /// * `settlement_party_id` - 合同当前结算主体
+    ///
+    /// # 返回
+    /// 结算主体一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 结算主体漂移由调用方映射为冲突；本方法不做跨聚合读取。
+    pub fn matches_settlement_party(&self, settlement_party_id: &PartyId) -> bool {
+        &self.settlement_party_id == settlement_party_id
+    }
 }
 
 #[cfg(test)]
@@ -300,6 +334,22 @@ mod tests {
         )
         .unwrap();
         assert!(revision.update(data()).is_err());
+    }
+
+    #[test]
+    fn belongs_to_contract_and_settlement_party_detect_drift() {
+        let revision = ContractRevision::new(
+            ContractRevisionId::new("rev-1"),
+            ContractId::new("c-1"),
+            1,
+            data(),
+        )
+        .unwrap();
+
+        assert!(revision.belongs_to_contract(&ContractId::new("c-1")));
+        assert!(!revision.belongs_to_contract(&ContractId::new("c-other")));
+        assert!(revision.matches_settlement_party(&PartyId::new("party-1")));
+        assert!(!revision.matches_settlement_party(&PartyId::new("party-other")));
     }
 
     #[test]

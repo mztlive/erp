@@ -1,18 +1,21 @@
 use super::adapter::{
     build_customer_refund_snapshot, customer_refund_adapter, customer_refund_object_readable,
     customer_refund_responsible_org_id, customer_refund_start_command, customer_refund_subject_ref,
-    document_approval_view, ensure_final_approve_posting, execute_customer_refund_domain_action,
-    require_frozen_binding, start_approval_command_kind, start_customer_refund_approval,
-    RECENT_HISTORY_LIMIT,
+    ensure_final_approve_posting, execute_customer_refund_domain_action, require_frozen_binding,
+    start_approval_command_kind, start_customer_refund_approval, RECENT_HISTORY_LIMIT,
 };
 use super::cancel_approval::{
     build_customer_refund_cancel_input, load_cancel_runtime, persist_customer_refund_cancel,
     CustomerRefundCancelPersistInput,
 };
+use super::customer_refund_list::{
+    customer_refund_view_from_facts, map_customer_refund_list_page, CustomerRefundListFacts,
+};
 use super::dto::{
     CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
     CustomerRefundListParams, CustomerRefundView, PageView, SortDir, SubmitCustomerRefundRequest,
 };
+use super::offset_batch::load_receivable_offset_facts;
 use super::start_approval::{
     build_customer_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_bound_definition_graph,
@@ -20,6 +23,7 @@ use super::start_approval::{
     persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
     CustomerRefundStartInput, CustomerRefundStartPersistInput,
 };
+use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -92,10 +96,35 @@ impl ReturnsService {
             .customer_refunds()
             .search_customer_refunds(&filter, &mut NoTransaction)
             .await?;
-        let mut items = Vec::with_capacity(page.items.len());
-        for row in page.items {
-            items.push(self.customer_refund_view(row.id).await?);
-        }
+        let document_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let documents = self
+            .db
+            .business_documents()
+            .find_documents_by_ids(&document_ids, &mut NoTransaction)
+            .await?;
+        let items = map_customer_refund_list_page(
+            page.items
+                .into_iter()
+                .map(|row| CustomerRefundListFacts {
+                    id: row.id,
+                    refund_no: row.refund_no,
+                    status: row.status,
+                    sales_return_case_id: row.sales_return_case_id,
+                    customer_id: row.customer_id,
+                    original_receipt_id: row.original_receipt_id,
+                    original_receivable_entry_id: row.original_receivable_entry_id,
+                    reason_code: row.reason_code,
+                    reason_text: row.reason_text,
+                    amount: row.amount,
+                    handled_by: row.handled_by,
+                    reviewed_by: row.reviewed_by,
+                    occurred_at: row.occurred_at,
+                    version: row.version,
+                    created_at: row.created_at,
+                })
+                .collect(),
+            documents,
+        );
         Ok(PageView {
             items,
             total: page.total,
@@ -334,7 +363,7 @@ impl ReturnsService {
         }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.load_customer_refund(id).await?;
-        ensure_expected_version(refund.base.version, req.expected_version)?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_customer_refund_approval(&mut refund)?;
         self.dispatch_customer_refund_start(id, refund, req.idempotency_key, actor, adapter)
             .await
@@ -363,7 +392,7 @@ impl ReturnsService {
     ) -> Result<CustomerRefundView> {
         req.validate()?;
         let mut refund = self.load_customer_refund(id).await?;
-        ensure_expected_version(refund.base.version, req.expected_version)?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_customer_refund(id, &mut refund, &req, actor)
             .await?;
         self.customer_refund_detail(id).await
@@ -716,24 +745,10 @@ impl ReturnsService {
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
         };
-        Ok(CustomerRefundView {
-            id: refund.base.id.clone(),
-            refund_no: refund.refund_no,
-            status: refund.status,
-            sales_return_case_id: refund.sales_return_case_id.map(|id| id.to_string()),
-            customer_id: refund.customer_id.to_string(),
-            original_receipt_id: refund.original_receipt_id.map(|id| id.to_string()),
-            original_receivable_entry_id: refund.original_receivable_entry_id.map(|id| id.to_string()),
-            reason_code: refund.reason_code,
-            reason_text: refund.reason_text,
-            amount: refund.amount,
-            handled_by: refund.handled_by,
-            reviewed_by: refund.reviewed_by,
-            occurred_at: refund.occurred_at,
-            version: refund.base.version,
-            created_at: refund.base.created_at,
-            approval: document_approval_view(binding.as_ref(), None, refund.status),
-        })
+        Ok(customer_refund_view_from_facts(
+            CustomerRefundListFacts::from_refund(&refund),
+            binding.as_ref(),
+        ))
     }
 }
 
@@ -770,19 +785,6 @@ pub(super) async fn apply_customer_refund_final_post(
             .resource_log("customer_refund.post", "customer_refund", refund.base.id.clone())?;
     db.audit_logs().create(&audit, session).await?;
     Ok(())
-}
-
-/// 校验乐观锁版本。
-///
-/// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
 }
 
 /// 在创建事务内写入退款单、绑定发布定义并登记单据。
@@ -990,68 +992,113 @@ async fn create_decrease_offsets(
     chunks: &[entities::receivable::ReceiptReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<ReceivableEntry>> {
+    let facts = load_receivable_offset_facts(
+        db,
+        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
+        session,
+    )
+    .await?;
     let mut decrease_entry: Option<ReceivableEntry> = None;
     for (offset_index, chunk) in chunks.iter().enumerate() {
-        let entry = db
-            .receivable_entries()
-            .find_by_id(&chunk.increase_entry_id, session)
-            .await?
+        let entry = facts
+            .entries
+            .get(chunk.increase_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        let account = db
-            .receivable_accounts()
-            .find_by_id(&entry.receivable_account_id, session)
-            .await?
+        let account = facts
+            .accounts
+            .get(entry.receivable_account_id.as_ref())
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
         if account.counterparty_party_id != receipt.counterparty_party_id {
             return Err(Error::BusinessLogicError("禁止跨往来主体退款".to_string()));
         }
-        let reverted = db
-            .receivable_accounts()
-            .revert_settlement(&entry.receivable_account_id, &chunk.amount, actor_id, session)
-            .await?;
-        if !reverted {
-            return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
-        }
+        revert_customer_refund_settlement(db, entry, chunk, actor_id, session).await?;
         if decrease_entry.is_none() {
-            decrease_entry = Some(ReceivableEntry::new(
-                ReceivableEntryId::new(next_id()),
-                ReceivableEntryData {
-                    receivable_account_id: entry.receivable_account_id.clone(),
-                    entry_type: ReceivableEntryType::Refund,
-                    direction: ReceivableEntryDirection::Decrease,
-                    amount: refund.amount,
-                    due_date: entities::common::time::BusinessDate::today(),
-                    source_fact_type: "customer_refund".to_string(),
-                    source_document_id: refund.base.id.clone(),
-                    source_revision_id: refund.base.id.clone(),
-                    source_sequence: 1,
-                    posted_at: refund.occurred_at,
-                },
-            )?);
+            decrease_entry = Some(build_customer_refund_decrease_entry(refund, entry)?);
         }
-        let decrease_id = decrease_entry
-            .as_ref()
-            .ok_or_else(|| Error::Internal("退款减少分录未创建".to_string()))?
-            .base
-            .id
-            .clone()
-            .into();
-        db.receivable_entry_offsets()
-            .create(
-                &ReceivableEntryOffset::new(
-                    ReceivableEntryOffsetId::new(next_id()),
-                    ReceivableEntryOffsetData {
-                        decrease_entry_id: decrease_id,
-                        increase_entry_id: chunk.increase_entry_id.clone(),
-                        offset_sequence: offset_index as u32 + 1,
-                        offset_amount: chunk.amount,
-                    },
-                )?,
-                session,
-            )
+        persist_customer_refund_decrease_offset(db, decrease_entry.as_ref(), chunk, offset_index, session)
             .await?;
     }
     Ok(decrease_entry)
+}
+
+/// 原子回冲应收子账已核销进度。
+///
+/// # 错误
+/// 超额冲减或仓储失败时返回错误。
+async fn revert_customer_refund_settlement(
+    db: &Database,
+    entry: &ReceivableEntry,
+    chunk: &entities::receivable::ReceiptReverseChunk,
+    actor_id: &str,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let reverted = db
+        .receivable_accounts()
+        .revert_settlement(&entry.receivable_account_id, &chunk.amount, actor_id, session)
+        .await?;
+    if !reverted {
+        return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
+    }
+    Ok(())
+}
+
+/// 构造客户退款减少应收分录。
+///
+/// # 错误
+/// 分录字段校验失败时返回错误。
+fn build_customer_refund_decrease_entry(
+    refund: &CustomerRefund,
+    entry: &ReceivableEntry,
+) -> Result<ReceivableEntry> {
+    Ok(ReceivableEntry::new(
+        ReceivableEntryId::new(next_id()),
+        ReceivableEntryData {
+            receivable_account_id: entry.receivable_account_id.clone(),
+            entry_type: ReceivableEntryType::Refund,
+            direction: ReceivableEntryDirection::Decrease,
+            amount: refund.amount,
+            due_date: entities::common::time::BusinessDate::today(),
+            source_fact_type: "customer_refund".to_string(),
+            source_document_id: refund.base.id.clone(),
+            source_revision_id: refund.base.id.clone(),
+            source_sequence: 1,
+            posted_at: refund.occurred_at,
+        },
+    )?)
+}
+
+/// 写入一条客户退款减少分录抵销。
+///
+/// # 错误
+/// 减少分录缺失或仓储失败时返回错误。
+async fn persist_customer_refund_decrease_offset(
+    db: &Database,
+    decrease_entry: Option<&ReceivableEntry>,
+    chunk: &entities::receivable::ReceiptReverseChunk,
+    offset_index: usize,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let decrease_id = decrease_entry
+        .ok_or_else(|| Error::Internal("退款减少分录未创建".to_string()))?
+        .base
+        .id
+        .clone()
+        .into();
+    db.receivable_entry_offsets()
+        .create(
+            &ReceivableEntryOffset::new(
+                ReceivableEntryOffsetId::new(next_id()),
+                ReceivableEntryOffsetData {
+                    decrease_entry_id: decrease_id,
+                    increase_entry_id: chunk.increase_entry_id.clone(),
+                    offset_sequence: offset_index as u32 + 1,
+                    offset_amount: chunk.amount,
+                },
+            )?,
+            session,
+        )
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1161,5 +1208,33 @@ mod customer_refund_approval_tests {
         assert!(!production.contains("CustomerRefundStatus::PendingReview"));
         assert!(!production.contains("Draft =>"));
         assert!(!production.contains("pending_review"));
+    }
+
+    /// 列表必须批量读取注册行，不得对每个分页行再读详情。
+    #[test]
+    fn list_batches_document_bindings_and_keeps_missing_registry_rows() {
+        let production = include_str!("customer_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("find_documents_by_ids"));
+        assert!(production.contains("map_customer_refund_list_page"));
+        assert!(!production.contains("customer_refund_view(row.id)"));
+        assert!(production.contains("refund.matches_version(req.expected_version)"));
+        assert!(production.contains("conflict_if_stale_version"));
+        assert!(!production.contains("fn ensure_expected_version"));
+    }
+
+    /// 冲减块必须批量读取分录与账户，逐账户原子回冲仍留在 Service。
+    #[test]
+    fn decrease_offsets_batch_entry_and_account_reads() {
+        let production = include_str!("customer_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("load_receivable_offset_facts"));
+        assert!(production.contains("revert_settlement"));
+        assert!(!production.contains("find_by_id(&chunk.increase_entry_id"));
+        assert!(!production.contains("find_by_id(&entry.receivable_account_id"));
     }
 }

@@ -15,6 +15,7 @@ use super::dto::{
 };
 use std::str::FromStr;
 
+use super::offset_batch::load_payable_offset_facts;
 use super::start_approval::{
     build_supplier_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_bound_definition_graph,
@@ -22,6 +23,7 @@ use super::start_approval::{
     persist_supplier_refund_runtime, persist_supplier_refund_start, replay_return_start_with_executor,
     replay_subject_versions, SupplierRefundStartInput, SupplierRefundStartPersistInput,
 };
+use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -288,7 +290,7 @@ impl ReturnsService {
         }
         let adapter = supplier_refund_adapter()?;
         let mut refund = self.load_supplier_refund(id).await?;
-        ensure_expected_version(refund.base.version, req.expected_version)?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_supplier_refund_approval(&mut refund)?;
         self.dispatch_supplier_refund_start(id, refund, req.idempotency_key, actor, adapter)
             .await
@@ -317,7 +319,7 @@ impl ReturnsService {
     ) -> Result<SupplierRefundView> {
         req.validate()?;
         let mut refund = self.load_supplier_refund(id).await?;
-        ensure_expected_version(refund.base.version, req.expected_version)?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_supplier_refund(id, &mut refund, &req, actor)
             .await?;
         self.supplier_refund_detail(id).await
@@ -703,19 +705,6 @@ impl ReturnsService {
     }
 }
 
-/// 校验乐观锁版本。
-///
-/// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
-}
-
 /// 在创建事务内写入退款单、绑定发布定义并登记单据。
 ///
 /// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
@@ -950,34 +939,53 @@ async fn create_decrease_offsets(
     chunks: &[entities::payable::PaymentReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<PayableEntry>> {
+    let facts = load_payable_offset_facts(
+        db,
+        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
+        session,
+    )
+    .await?;
     let mut decrease_entry: Option<PayableEntry> = None;
     for (offset_index, chunk) in chunks.iter().enumerate() {
-        let entry = db
-            .payable_entries()
-            .find_by_id(&chunk.increase_entry_id, session)
-            .await?
+        let entry = facts
+            .entries
+            .get(chunk.increase_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
-        let account = db
-            .payable_accounts()
-            .find_by_id(&entry.payable_account_id, session)
-            .await?
+        let account = facts
+            .accounts
+            .get(entry.payable_account_id.as_ref())
             .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
         if account.supplier_id != payment.supplier_id {
             return Err(Error::BusinessLogicError("禁止跨供应商退款".to_string()));
         }
-        let reverted = db
-            .payable_accounts()
-            .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
-            .await?;
-        if !reverted {
-            return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
-        }
+        revert_supplier_refund_settlement(db, entry, chunk, actor_id, session).await?;
         if decrease_entry.is_none() {
             decrease_entry = Some(build_decrease_entry(refund, &entry.payable_account_id)?);
         }
         persist_decrease_offset(db, decrease_entry.as_ref(), chunk, offset_index, session).await?;
     }
     Ok(decrease_entry)
+}
+
+/// 原子回冲应付子账已核销进度。
+///
+/// # 错误
+/// 超额冲减或仓储失败时返回错误。
+async fn revert_supplier_refund_settlement(
+    db: &Database,
+    entry: &PayableEntry,
+    chunk: &entities::payable::PaymentReverseChunk,
+    actor_id: &str,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let reverted = db
+        .payable_accounts()
+        .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
+        .await?;
+    if !reverted {
+        return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
+    }
+    Ok(())
 }
 
 /// 构造供应商退款减少应付分录。
@@ -1146,5 +1154,30 @@ mod supplier_refund_approval_tests {
         assert!(!production.contains("SupplierRefundStatus::PendingReview"));
         assert!(!production.contains("Draft =>"));
         assert!(!production.contains("pending_review"));
+    }
+
+    /// 提交/撤回必须使用实体 matches_version，并删除旧 helper。
+    #[test]
+    fn version_lock_uses_entity_matches_version() {
+        let production = include_str!("supplier_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("refund.matches_version(req.expected_version)"));
+        assert!(production.contains("conflict_if_stale_version"));
+        assert!(!production.contains("fn ensure_expected_version"));
+    }
+
+    /// 冲减块必须批量读取分录与账户，逐账户原子回冲仍留在 Service。
+    #[test]
+    fn decrease_offsets_batch_entry_and_account_reads() {
+        let production = include_str!("supplier_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("load_payable_offset_facts"));
+        assert!(production.contains("revert_settlement"));
+        assert!(!production.contains("find_by_id(&chunk.increase_entry_id"));
+        assert!(!production.contains("find_by_id(&entry.payable_account_id"));
     }
 }

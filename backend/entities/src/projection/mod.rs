@@ -30,11 +30,13 @@
 //! - 存量单切换时以当时 ERP 当前销售单版本作为第一份执行投影版本，不单独登记
 //!   基线（phase-2 §8.5.4）。
 
+pub mod content_identity;
 pub mod delivery;
 pub mod delivery_guard;
 pub mod revision;
 pub mod sales_order_projection;
 
+pub use content_identity::{ProjectionContentFingerprint, ProjectionContentSnapshot};
 pub use delivery::{
     ProjectionDeliveryStatus, SalesOrderProjectionDelivery, SalesOrderProjectionDeliveryData,
     SalesOrderProjectionDeliveryUpdate,

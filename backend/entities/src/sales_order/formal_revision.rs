@@ -265,14 +265,14 @@ impl FormalRevisionHeader {
     /// 返回正式版本表头输入。
     ///
     /// # 错误
-    /// 无。
+    /// 提交主键无法派生历史 `sub:{id}` 指纹时返回错误。
     ///
     /// # 关键业务约束
     /// 指纹保持历史 `sub:{id}` 形态，不在本批更换算法。
-    pub(crate) fn from_sales_order_submission(submission: &SalesOrderSubmission) -> Self {
-        Self {
+    pub(crate) fn from_sales_order_submission(submission: &SalesOrderSubmission) -> Result<Self> {
+        Ok(Self {
             sales_order_id: submission.sales_order_id.clone(),
-            content_hash: submission_content_hash(&submission.base.id),
+            content_hash: super::content_hash::SalesContentHash::submission(&submission.base.id)?.into_wire(),
             contract_revision_id: submission.contract_revision_id.clone(),
             snapshot: submission.header_snapshot_data(),
             project_name: submission.project_name.clone(),
@@ -282,7 +282,7 @@ impl FormalRevisionHeader {
             gross_amount: submission.gross_amount,
             net_amount: submission.net_amount,
             tax_amount: submission.tax_amount,
-        }
+        })
     }
 }
 
@@ -383,7 +383,7 @@ impl SalesOrderRevisionAggregate {
         Self::from_prepared(
             identities,
             context,
-            FormalRevisionHeader::from_sales_order_submission(submission),
+            FormalRevisionHeader::from_sales_order_submission(submission)?,
             prepared,
         )
     }
@@ -467,23 +467,6 @@ fn line_summaries(lines: &[PreparedRevisionLine]) -> Vec<LineSummary> {
             line_type: line.line_type,
         })
         .collect()
-}
-
-/// 由提交主键生成正式版本内容指纹。
-///
-/// # 参数
-/// * `submission_id` - 首次提交或变更提交主键
-///
-/// # 返回
-/// 返回 `sub:{id}` 历史形态指纹。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 本批不得改写已持久化 `sub:` 前缀合同。
-pub(crate) fn submission_content_hash(submission_id: &str) -> String {
-    format!("sub:{submission_id}")
 }
 
 /// 构造正式版本头。

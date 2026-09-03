@@ -3,9 +3,8 @@
 //! 变更路径只负责 D14→D13 字段组转换，公共行、快照和卡券单行约束复用销售单域工厂。
 
 use crate::errors::{Error, Result};
-use crate::sales_order::formal_revision::{
-    submission_content_hash, FormalRevisionHeader, PreparedRevisionLine,
-};
+use crate::sales_order::formal_revision::{FormalRevisionHeader, PreparedRevisionLine};
+use crate::sales_order::SalesContentHash;
 use crate::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, LineType as SalesLineType, SalesOrderRevisionAggregate,
 };
@@ -23,14 +22,14 @@ impl FormalRevisionHeader {
     /// 返回销售单域正式版本表头输入。
     ///
     /// # 错误
-    /// 无。
+    /// 变更提交主键无法派生历史 `sub:{id}` 指纹时返回错误。
     ///
     /// # 关键业务约束
     /// 指纹与首次提交共用 `sub:{id}` 形态，来源提交主键为变更提交 ID。
-    fn from_sales_change_submission(submission: &SalesChangeSubmission) -> Self {
-        Self {
+    fn from_sales_change_submission(submission: &SalesChangeSubmission) -> Result<Self> {
+        Ok(Self {
             sales_order_id: submission.sales_order_id.clone(),
-            content_hash: submission_content_hash(&submission.base.id),
+            content_hash: SalesContentHash::submission(&submission.base.id)?.into_wire(),
             contract_revision_id: submission.contract_revision_id.clone(),
             snapshot: submission.sales_order_header_snapshot(),
             project_name: submission.project_name.clone(),
@@ -40,7 +39,7 @@ impl FormalRevisionHeader {
             gross_amount: submission.gross_amount,
             net_amount: submission.net_amount,
             tax_amount: submission.tax_amount,
-        }
+        })
     }
 }
 
@@ -113,7 +112,7 @@ impl SalesOrderRevisionAggregate {
         Self::from_prepared(
             identities,
             context,
-            FormalRevisionHeader::from_sales_change_submission(submission),
+            FormalRevisionHeader::from_sales_change_submission(submission)?,
             prepared,
         )
     }

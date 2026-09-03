@@ -335,6 +335,23 @@ impl PaymentReversal {
     pub fn is_posted(&self) -> bool {
         self.status == PaymentReversalStatus::Posted
     }
+
+    /// 判断乐观锁版本是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取后携带的期望版本
+    ///
+    /// # 返回
+    /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 只比较 `base.version`；不读取时钟、不产生 Service Error。
+    pub fn matches_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
 }
 
 #[cfg(test)]
@@ -366,6 +383,14 @@ mod tests {
         assert_eq!(reversal.handled_by, "handler-1");
         assert_eq!(reversal.status, PaymentReversalStatus::Draft);
         assert!(!reversal.is_posted());
+    }
+
+    #[test]
+    fn matches_version_accepts_current_and_rejects_stale() {
+        let reversal = PaymentReversal::new(PaymentReversalId::new("prr-1"), data(), "creator-1").unwrap();
+        assert!(reversal.matches_version(reversal.base.version));
+        assert!(!reversal.matches_version(0));
+        assert!(!reversal.matches_version(reversal.base.version.saturating_add(1)));
     }
 
     #[test]

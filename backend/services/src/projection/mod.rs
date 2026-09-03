@@ -26,7 +26,6 @@ mod service;
 pub use self::connector::{
     ClassifiedError, DeliverAck, MallConnector, QueryProjectionResult, UnavailableMallConnector,
 };
-pub(crate) use self::dto::projection_content_hash;
 pub use self::dto::{
     CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
     DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,

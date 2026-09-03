@@ -356,6 +356,23 @@ impl SupplierRefund {
     pub fn is_posted(&self) -> bool {
         self.status == SupplierRefundStatus::Posted
     }
+
+    /// 判断乐观锁版本是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取后携带的期望版本
+    ///
+    /// # 返回
+    /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 只比较 `base.version`；不读取时钟、不产生 Service Error。
+    pub fn matches_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
 }
 
 /// 校验退款原事实二选一。
@@ -414,6 +431,14 @@ mod tests {
         assert_eq!(refund.handled_by, "handler-1");
         assert_eq!(refund.status, SupplierRefundStatus::Draft);
         assert!(!refund.is_posted());
+    }
+
+    #[test]
+    fn matches_version_accepts_current_and_rejects_stale() {
+        let refund = SupplierRefund::new(SupplierRefundId::new("srf-1"), data(), "creator-1").unwrap();
+        assert!(refund.matches_version(refund.base.version));
+        assert!(!refund.matches_version(0));
+        assert!(!refund.matches_version(refund.base.version.saturating_add(1)));
     }
 
     #[test]

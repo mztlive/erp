@@ -313,9 +313,9 @@ mod tests {
     use crate::repository::extensions::ReceivableExt;
     use crate::repository::receivable::SettlementBatchResult;
     use crate::repository::Repository;
-    use entities::ids::ReceivableAccountId;
+    use entities::ids::{ReceivableAccountId, ReceivableEntryId};
     use entities::money::Amount;
-    use entities::receivable::ReceivableAccount;
+    use entities::receivable::{ReceivableAccount, ReceivableEntry};
     use mongodb::bson::Bson;
     use std::str::FromStr;
 
@@ -340,6 +340,90 @@ mod tests {
             vec!["b".to_string(), "a".to_string()]
         );
         assert!(unique_ids(Vec::<String>::new()).is_empty());
+    }
+
+    #[test]
+    fn find_entries_by_ids_uniques_before_query() {
+        let source = include_str!("receivable_card_funds.rs");
+        assert!(source.contains("pub async fn find_entries_by_ids"));
+        assert!(source.contains("unique_ids(entry_ids.iter().map(ToString::to_string))"));
+    }
+
+    fn test_entry(id: &str, sequence: u32) -> ReceivableEntry {
+        use entities::common::time::{BusinessDate, Instant};
+        use entities::receivable::{
+            EntryDirection, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
+        };
+        ReceivableEntry::new(
+            ReceivableEntryId::new(id),
+            ReceivableEntryData {
+                receivable_account_id: ReceivableAccountId::new("ra-batch"),
+                entry_type: ReceivableEntryType::Original,
+                direction: EntryDirection::Increase,
+                amount: Amount::from_str("10.00").unwrap(),
+                due_date: BusinessDate::from_ymd(2026, 9, 30).unwrap(),
+                source_fact_type: "sales_order".to_string(),
+                source_document_id: format!("so-{id}"),
+                source_revision_id: "sor-1".to_string(),
+                source_sequence: sequence,
+                posted_at: Instant::from_unix_secs(1_700_000_000),
+            },
+        )
+        .unwrap()
+    }
+
+    /// 批量按 ID 读取：空输入、去重、乱序结果、缺项与软删排除。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn find_entries_by_ids_dedups_unordered_missing_and_excludes_soft_deleted() {
+        use std::collections::HashSet;
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("recv_entries_by_ids")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let entries = fixture.db().receivable_entries();
+            assert!(entries
+                .find_entries_by_ids(&[], &mut NoTransaction)
+                .await
+                .expect("空输入必须成功")
+                .is_empty());
+
+            entries
+                .create(&test_entry("e-1", 1), &mut NoTransaction)
+                .await
+                .expect("分录写入失败");
+            entries
+                .create(&test_entry("e-2", 2), &mut NoTransaction)
+                .await
+                .expect("分录写入失败");
+            let mut deleted = test_entry("e-del", 3);
+            deleted.base.deleted_at = 1;
+            entries
+                .create(&deleted, &mut NoTransaction)
+                .await
+                .expect("软删分录写入失败");
+
+            let duplicated = [
+                ReceivableEntryId::new("e-2"),
+                ReceivableEntryId::new("e-1"),
+                ReceivableEntryId::new("e-2"),
+                ReceivableEntryId::new("missing"),
+                ReceivableEntryId::new("e-del"),
+            ];
+            let rows = entries
+                .find_entries_by_ids(&duplicated, &mut NoTransaction)
+                .await
+                .expect("批量读取必须成功");
+            let ids = rows.iter().map(|row| row.base.id.clone()).collect::<HashSet<_>>();
+            assert_eq!(ids.len(), 2, "重复 ID 不得放大结果");
+            assert!(ids.contains("e-1"));
+            assert!(ids.contains("e-2"));
+            assert!(!ids.contains("missing"), "缺项由调用方解释，仓储不得伪造");
+            assert!(!ids.contains("e-del"), "软删分录必须排除");
+        });
     }
 
     #[tokio::test]

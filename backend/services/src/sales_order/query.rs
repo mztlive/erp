@@ -23,10 +23,8 @@ use super::dto::{
     WorkingCopyView,
 };
 use super::mapper::{revision_view, submission_view, working_copy_line_view};
-use super::pricing::zero_amount;
 use super::status::{
-    compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id, stage_code_label_tone,
-    CloseEligibilityInputs,
+    close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
 };
 use super::SalesOrderService;
 use crate::document_registry::find_approval_binding;
@@ -379,31 +377,18 @@ impl SalesOrderService {
             order.fulfillment_progress,
         );
 
-        let receivable_accounts = self
+        let receivable_summary = self
             .db
             .receivable_accounts()
-            .list_by_sales_order(&order_id, &mut NoTransaction)
+            .sales_order_amount_summary(&order_id, &mut NoTransaction)
             .await?;
-        let (settled_total, invoiced_total, gross_total) = receivable_accounts.iter().fold(
-            (zero_amount(), zero_amount(), zero_amount()),
-            |(settled, invoiced, gross), account| {
-                (
-                    settled.checked_add(account.settled_total),
-                    invoiced.checked_add(account.invoiced_total),
-                    gross.checked_add(account.gross_total),
-                )
-            },
-        );
-        let close_eligibility = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: order.business_type,
-            commercial: order.commercial_status,
-            close: order.close_status,
-            fulfillment: order.fulfillment_progress,
-            collection: order.collection_progress,
-            invoice: order.invoice_progress,
-            settled_total,
-            gross_total,
-        });
+        let settled_total = receivable_summary.settled_total;
+        let invoiced_total = receivable_summary.invoiced_total;
+        let close_eligibility = close_eligibility_view(order.closure_facts().assess(
+            receivable_summary.has_accounts(),
+            receivable_summary.settled_total,
+            receivable_summary.gross_total,
+        ));
 
         let has_active_change_order = match order.current_revision_id() {
             Some(revision_id) => {

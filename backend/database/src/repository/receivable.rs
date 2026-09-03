@@ -1576,6 +1576,9 @@ fn invoice_projection() -> Document {
 #[path = "receivable_card_funds.rs"]
 mod card_funds;
 
+#[path = "receivable_sales_order_summary.rs"]
+mod sales_order_summary;
+
 #[cfg(test)]
 mod tests {
     use super::{

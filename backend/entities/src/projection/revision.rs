@@ -17,10 +17,10 @@ use crate::ids::{SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOr
 use crate::money::Amount;
 use crate::validation::normalize_required_text;
 
+use super::content_identity::{ProjectionContentFingerprint, ProjectionContentSnapshot};
+
 /// 商城客户标识最大长度。
 const EXTERNAL_IDENTITY_MAX_LEN: usize = 256;
-/// 投影内容指纹最大长度。
-const HASH_MAX_LEN: usize = 128;
 
 /// 投影来源（数据模型 §6.16：存量单切换时的当前 ERP 销售版本或后续 ERP 销售版本；
 /// 固定枚举）。
@@ -92,7 +92,45 @@ impl CardForm {
     }
 }
 
-/// 执行投影版本创建数据（不含系统字段）。
+impl From<crate::sales_order::CardForm> for CardForm {
+    /// 将销售单卡形态转为投影卡形态。
+    ///
+    /// # 参数
+    /// * `value` - 销售单卡形态
+    ///
+    /// # 返回
+    /// 返回投影卡形态。
+    ///
+    /// # 错误
+    /// 无。两枚举同构，转换是全覆盖且无未知值兜底。
+    fn from(value: crate::sales_order::CardForm) -> Self {
+        match value {
+            crate::sales_order::CardForm::Electronic => Self::Electronic,
+            crate::sales_order::CardForm::Physical => Self::Physical,
+        }
+    }
+}
+
+impl From<CardForm> for crate::sales_order::CardForm {
+    /// 将投影卡形态转为销售单卡形态。
+    ///
+    /// # 参数
+    /// * `value` - 投影卡形态
+    ///
+    /// # 返回
+    /// 返回销售单卡形态。
+    ///
+    /// # 错误
+    /// 无。两枚举同构，转换是全覆盖且无未知值兜底。
+    fn from(value: CardForm) -> Self {
+        match value {
+            CardForm::Electronic => Self::Electronic,
+            CardForm::Physical => Self::Physical,
+        }
+    }
+}
+
+/// 执行投影版本创建数据（不含系统字段与内容指纹；指纹由构造一次派生）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesOrderProjectionRevisionData {
     /// 投影稳定身份。
@@ -115,8 +153,6 @@ pub struct SalesOrderProjectionRevisionData {
     pub card_form: CardForm,
     /// ERP 生效时间。
     pub effective_at: Instant,
-    /// 投影内容指纹（P3 形成版本时计算）。
-    pub content_hash: String,
 }
 
 /// 执行投影版本实体（不可变版本，数据模型 §6.16）。
@@ -153,19 +189,23 @@ pub struct SalesOrderProjectionRevision {
 impl SalesOrderProjectionRevision {
     /// 创建执行投影版本。
     ///
-    /// 完成商城客户/卡券类目标识与内容指纹的校验和规范化，并校验唯一明细执行
-    /// 字段（面额大于零、卡张数为正，§4.2 卡张数非负整数上限为业务必需正数）。
+    /// 完成商城客户/卡券类目标识的校验和规范化，校验唯一明细执行字段
+    /// （面额大于零、卡张数为正），并一次派生真实内容指纹。禁止任何占位指纹。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::SalesOrderProjectionRevisionId`）
     /// * `revision_no` - 修订序号（同一投影内从 1 递增）
-    /// * `data` - 创建数据
+    /// * `data` - 创建数据；不含内容指纹
     ///
     /// # 返回
     /// 返回新建的投影版本实体。
     ///
     /// # 错误
-    /// 当商城标识或内容指纹为空/超长、面额不大于零或卡张数为零时返回错误。
+    /// 当商城标识为空/超长、面额不大于零或卡张数为零时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 内容指纹由白名单快照字段的 v1 canonical 文本一次计算，构造完成时必须已
+    /// 是有效十六进制指纹，不得先写 placeholder/pending 再回填。
     pub fn new(
         id: SalesOrderProjectionRevisionId,
         revision_no: u32,
@@ -183,13 +223,18 @@ impl SalesOrderProjectionRevision {
             EXTERNAL_IDENTITY_MAX_LEN,
             "商城卡券类目标识过长",
         )?;
-        let content_hash = normalize_required_text(
-            data.content_hash,
-            "投影内容指纹不能为空",
-            HASH_MAX_LEN,
-            "投影内容指纹过长",
-        )?;
         validate_execution_fields(data.face_value, data.card_count)?;
+        let content_hash = ProjectionContentFingerprint::from_snapshot(&ProjectionContentSnapshot {
+            projection_source: data.projection_source,
+            sales_order_revision_id: data.sales_order_revision_id.as_ref(),
+            customer_external_identity: &customer_external_identity,
+            voucher_category_external_identity: &voucher_category_external_identity,
+            voucher_expiry_at: data.voucher_expiry_at,
+            face_value: data.face_value,
+            card_count: data.card_count,
+            card_form: data.card_form,
+        })
+        .into_wire();
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -271,11 +316,17 @@ fn validate_execution_fields(face_value: Amount, card_count: u32) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::{CardForm, ProjectionSource, SalesOrderProjectionRevision, SalesOrderProjectionRevisionData};
+    use super::{
+        CardForm, ProjectionContentFingerprint, ProjectionContentSnapshot, ProjectionSource,
+        SalesOrderProjectionRevision, SalesOrderProjectionRevisionData,
+    };
     use crate::common::time::Instant;
     use crate::ids::{SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId};
     use crate::money::Amount;
     use std::str::FromStr;
+
+    /// 与既有 DTO helper 样本一致的 v1 golden 指纹。
+    const SAMPLE_V1_GOLDEN: &str = "f5629b90e1e80d37";
 
     fn revision_data() -> SalesOrderProjectionRevisionData {
         SalesOrderProjectionRevisionData {
@@ -289,12 +340,34 @@ mod tests {
             card_count: 100,
             card_form: CardForm::Electronic,
             effective_at: Instant::from_unix_secs(1_700_000_000),
-            content_hash: " 0011aabbccdd ".to_string(),
         }
     }
 
+    fn golden_data() -> SalesOrderProjectionRevisionData {
+        SalesOrderProjectionRevisionData {
+            projection_source: ProjectionSource::CutoverSnapshot,
+            customer_external_identity: "mall-customer-001".to_string(),
+            voucher_category_external_identity: "mall-voucher-001".to_string(),
+            ..revision_data()
+        }
+    }
+
+    fn expected_content_hash(revision: &SalesOrderProjectionRevision) -> String {
+        ProjectionContentFingerprint::from_snapshot(&ProjectionContentSnapshot {
+            projection_source: revision.projection_source,
+            sales_order_revision_id: revision.sales_order_revision_id.as_ref(),
+            customer_external_identity: &revision.customer_external_identity,
+            voucher_category_external_identity: &revision.voucher_category_external_identity,
+            voucher_expiry_at: revision.voucher_expiry_at,
+            face_value: revision.face_value,
+            card_count: revision.card_count,
+            card_form: revision.card_form,
+        })
+        .into_wire()
+    }
+
     #[test]
-    fn revision_new_trims_identities_and_keeps_execution_fields() {
+    fn revision_new_trims_identities_and_derives_content_hash() {
         let revision = SalesOrderProjectionRevision::new(
             SalesOrderProjectionRevisionId::new("proj-rev-1"),
             1,
@@ -304,7 +377,9 @@ mod tests {
 
         assert_eq!(revision.customer_external_identity, "mall-customer-001");
         assert_eq!(revision.voucher_category_external_identity, "mall-voucher-001");
-        assert_eq!(revision.content_hash, "0011aabbccdd");
+        assert_eq!(revision.content_hash, expected_content_hash(&revision));
+        assert_ne!(revision.content_hash, "placeholder");
+        assert_ne!(revision.content_hash, "pending");
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.face_value, Amount::from_str("100.00").unwrap());
         assert_eq!(revision.card_count, 100);
@@ -315,6 +390,53 @@ mod tests {
         );
         assert_eq!(revision.projection_source, ProjectionSource::ErpRevision);
         assert_eq!(revision.voucher_expiry_at.unix_secs(), 1_800_000_000);
+    }
+
+    #[test]
+    fn revision_new_derives_golden_hash_once_without_placeholder() {
+        let revision = SalesOrderProjectionRevision::new(
+            SalesOrderProjectionRevisionId::new("proj-rev-1"),
+            1,
+            golden_data(),
+        )
+        .unwrap();
+        assert_eq!(revision.content_hash, SAMPLE_V1_GOLDEN);
+        assert_eq!(revision.content_hash, expected_content_hash(&revision));
+        assert_eq!(revision.content_hash.len(), 16);
+    }
+
+    #[test]
+    fn content_fields_change_hash_and_non_content_fields_do_not() {
+        let base = SalesOrderProjectionRevision::new(
+            SalesOrderProjectionRevisionId::new("proj-rev-1"),
+            1,
+            golden_data(),
+        )
+        .unwrap()
+        .content_hash;
+
+        let source = SalesOrderProjectionRevision::new(
+            SalesOrderProjectionRevisionId::new("proj-rev-1"),
+            1,
+            SalesOrderProjectionRevisionData {
+                projection_source: ProjectionSource::ErpRevision,
+                ..golden_data()
+            },
+        )
+        .unwrap();
+        assert_ne!(source.content_hash, base);
+
+        let same_non_content = SalesOrderProjectionRevision::new(
+            SalesOrderProjectionRevisionId::new("proj-rev-other"),
+            9,
+            SalesOrderProjectionRevisionData {
+                projection_id: SalesOrderProjectionId::new("proj-other"),
+                effective_at: Instant::from_unix_secs(1_900_000_000),
+                ..golden_data()
+            },
+        )
+        .unwrap();
+        assert_eq!(same_non_content.content_hash, base);
     }
 
     #[test]
@@ -352,21 +474,10 @@ mod tests {
             blank_category
         )
         .is_err());
-
-        let blank_hash = SalesOrderProjectionRevisionData {
-            content_hash: " ".to_string(),
-            ..revision_data()
-        };
-        assert!(SalesOrderProjectionRevision::new(
-            SalesOrderProjectionRevisionId::new("proj-rev-4"),
-            1,
-            blank_hash
-        )
-        .is_err());
     }
 
     #[test]
-    fn revision_new_rejects_overlong_identity_and_hash() {
+    fn revision_new_rejects_overlong_identity() {
         let overlong_customer = SalesOrderProjectionRevisionData {
             customer_external_identity: "c".repeat(257),
             ..revision_data()
@@ -375,17 +486,6 @@ mod tests {
             SalesOrderProjectionRevisionId::new("proj-rev-5"),
             1,
             overlong_customer
-        )
-        .is_err());
-
-        let overlong_hash = SalesOrderProjectionRevisionData {
-            content_hash: "h".repeat(129),
-            ..revision_data()
-        };
-        assert!(SalesOrderProjectionRevision::new(
-            SalesOrderProjectionRevisionId::new("proj-rev-6"),
-            1,
-            overlong_hash
         )
         .is_err());
     }
@@ -458,5 +558,25 @@ mod tests {
         );
         assert_eq!(ProjectionSource::ErpRevision.label(), "ERP 销售版本");
         assert_eq!(CardForm::Electronic.label(), "电子卡");
+    }
+
+    #[test]
+    fn card_form_converts_every_sales_order_variant_without_string_bridge() {
+        let variants = [
+            crate::sales_order::CardForm::Electronic,
+            crate::sales_order::CardForm::Physical,
+        ];
+        for value in variants {
+            let projected = CardForm::from(value);
+            assert_eq!(crate::sales_order::CardForm::from(projected), value);
+            match value {
+                crate::sales_order::CardForm::Electronic => {
+                    assert_eq!(projected, CardForm::Electronic);
+                }
+                crate::sales_order::CardForm::Physical => {
+                    assert_eq!(projected, CardForm::Physical);
+                }
+            }
+        }
     }
 }

@@ -19,8 +19,6 @@ use crate::projection::dto::{
 };
 use crate::projection::service::ProjectionService;
 
-use super::projection_content_hash;
-
 impl ProjectionService {
     /// 建立执行投影及其首个投影版本与下发记录（跨集合事务写入）。
     ///
@@ -63,16 +61,15 @@ impl ProjectionService {
                 sales_order_revision_id: revision.base.id.clone().into(),
                 customer_external_identity: req.customer_external_identity,
                 voucher_category_external_identity: req.voucher_category_external_identity,
-                voucher_expiry_at: voucher_expiry(revision.as_ref())?,
+                voucher_expiry_at: revision
+                    .required_voucher_expiry()
+                    .map_err(|err| Error::ValidationError(err.to_string()))?,
                 face_value: voucher_line.face_value,
                 card_count: voucher_line.card_count,
-                card_form: to_projection_card_form(voucher_line.card_form),
+                card_form: voucher_line.card_form.into(),
                 effective_at: revision.effective_at,
-                content_hash: "placeholder".to_string(),
             },
         )?;
-        let mut projection_revision = projection_revision;
-        projection_revision.content_hash = projection_content_hash(&projection_revision);
         let delivery = SalesOrderProjectionDelivery::new(
             SalesOrderProjectionDeliveryId::new(next_id()),
             SalesOrderProjectionDeliveryData {
@@ -158,16 +155,15 @@ impl ProjectionService {
                 sales_order_revision_id: revision.base.id.clone().into(),
                 customer_external_identity: req.customer_external_identity,
                 voucher_category_external_identity: req.voucher_category_external_identity,
-                voucher_expiry_at: voucher_expiry(revision.as_ref())?,
+                voucher_expiry_at: revision
+                    .required_voucher_expiry()
+                    .map_err(|err| Error::ValidationError(err.to_string()))?,
                 face_value: voucher_line.face_value,
                 card_count: voucher_line.card_count,
-                card_form: to_projection_card_form(voucher_line.card_form),
+                card_form: voucher_line.card_form.into(),
                 effective_at: revision.effective_at,
-                content_hash: "placeholder".to_string(),
             },
         )?;
-        let mut projection_revision = projection_revision;
-        projection_revision.content_hash = projection_content_hash(&projection_revision);
         let delivery = SalesOrderProjectionDelivery::new(
             SalesOrderProjectionDeliveryId::new(next_id()),
             SalesOrderProjectionDeliveryData {
@@ -272,7 +268,9 @@ impl ProjectionService {
             .find_by_id(&revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
-        voucher_expiry(&revision)?;
+        revision
+            .required_voucher_expiry()
+            .map_err(|err| Error::ValidationError(err.to_string()))?;
         let lines = self
             .db
             .sales_order_revision_lines()
@@ -295,42 +293,9 @@ impl ProjectionService {
             _ => {
                 return Err(Error::ValidationError(
                     "卡券销售单必须恰好一条卡券行才能建立执行投影".to_string(),
-                ))
+                ));
             }
         };
         Ok((Box::new(revision), Box::new(voucher_line)))
-    }
-}
-
-/// 校验销售版本为卡券单并返回表头履约期限。
-///
-/// # 参数
-/// * `revision` - 销售版本
-///
-/// # 返回
-/// 返回表头履约期限。
-///
-/// # 错误
-/// 卡券类目与履约期限缺失时返回 `ValidationError`。
-fn voucher_expiry(
-    revision: &entities::sales_order::SalesOrderRevision,
-) -> Result<entities::common::time::Instant> {
-    if revision.voucher_category_sku_id.is_none() || revision.voucher_expiry_at.is_none() {
-        return Err(Error::ValidationError("非卡券销售单无法建立执行投影".to_string()));
-    }
-    Ok(revision.voucher_expiry_at.expect("卡券履约期限必填"))
-}
-
-/// 把销售单卡形态映射为投影卡形态（两枚举同构，投影白名单值对象）。
-///
-/// # 参数
-/// * `form` - 销售单卡形态
-///
-/// # 返回
-/// 返回投影卡形态。
-fn to_projection_card_form(form: entities::sales_order::CardForm) -> entities::projection::CardForm {
-    match form {
-        entities::sales_order::CardForm::Electronic => entities::projection::CardForm::Electronic,
-        entities::sales_order::CardForm::Physical => entities::projection::CardForm::Physical,
     }
 }

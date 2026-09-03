@@ -3,8 +3,8 @@
 use database::{AccessControlExt, NoTransaction, SalesOrderExt, Transactional};
 use entities::ids::{SalesOrderId, SalesOrderLineId};
 use entities::sales_order::{
-    CommercialStatus, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy,
-    SalesOrderWorkingCopyLine, WorkingPurpose,
+    SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
+    WorkingPurpose,
 };
 use id_generator::next_id;
 
@@ -23,28 +23,6 @@ pub(super) struct DraftStableLines {
 }
 
 impl SalesOrderService {
-    /// 确认销售单处于草稿，才允许保存或补开首次提交工作副本。
-    ///
-    /// # 参数
-    /// * `order` - 当前销售单
-    ///
-    /// # 返回
-    /// 草稿态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿（已提交审核、已生效、已作废等）返回冲突。
-    ///
-    /// # 约束
-    /// 采购/销售驳回后主状态必须已是 `DRAFT`；审核中或已生效不得再写首次提交草稿。
-    pub(super) fn assert_draft_allows_working_copy(order: &SalesOrder) -> Result<()> {
-        if order.commercial_status == CommercialStatus::Draft {
-            return Ok(());
-        }
-        Err(Error::ConflictError(
-            "当前销售单不是草稿，不能保存工作副本".to_string(),
-        ))
-    }
-
     /// 按草稿行号补齐稳定明细：已有行复用，缺失行号在内存中新建。
     ///
     /// # 参数
@@ -140,7 +118,9 @@ impl SalesOrderService {
         draft: &SalesOrderDraftRequest,
         actor: &AuditActor,
     ) -> Result<(SalesOrderWorkingCopy, DraftStableLines, bool)> {
-        Self::assert_draft_allows_working_copy(order)?;
+        order
+            .ensure_first_submission_working_copy_editable()
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let stable = self
             .collect_stable_lines_for_draft(&order_id, &draft.lines)
@@ -151,7 +131,7 @@ impl SalesOrderService {
             .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
             .await?
         {
-            if working_copy.base.version != req_version {
+            if !working_copy.matches_version(req_version) {
                 return Err(Error::ConflictError(
                     "数据已被其他请求修改，请刷新后重试".to_string(),
                 ));

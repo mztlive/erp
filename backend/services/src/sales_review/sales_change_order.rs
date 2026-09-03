@@ -15,7 +15,7 @@ use entities::ids::{
     SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
     SalesOrderWorkingCopyId,
 };
-use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingPurpose};
+use entities::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
     SalesChangeSubmissionLine,
@@ -255,7 +255,7 @@ impl SalesReviewService {
                 sales_change_order_id: Some(change_order.base.id.clone().into()),
                 base_revision_id: Some(base_revision_id.clone()),
                 draft_version: 1,
-                content_hash: format!("change:{}:1", change_order.base.id),
+                content_hash: SalesContentHash::change(&change_order.base.id, 1)?.into_wire(),
                 editor_user_id: actor.id().to_string(),
                 business_type: order.business_type,
                 customer_id: order.customer_id.clone(),
@@ -585,7 +585,7 @@ impl SalesReviewService {
         start_sales_change_approval(
             &mut change_order,
             submission.base.id.clone().into(),
-            format!("sub:{}", submission.base.id),
+            SalesContentHash::submission(&submission.base.id)?.into_wire(),
             actor.id(),
         )?;
         let now = Instant::now();

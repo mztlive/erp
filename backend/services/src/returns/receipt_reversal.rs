@@ -15,12 +15,14 @@ use super::dto::{
 };
 use std::str::FromStr;
 
+use super::offset_batch::load_receivable_offset_facts;
 use super::start_approval::{
     build_receipt_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_receipt_reversal_start_receipt,
     persist_receipt_reversal_runtime, persist_receipt_reversal_start, ReceiptReversalStartInput,
     ReceiptReversalStartPersistInput,
 };
+use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -273,7 +275,7 @@ impl ReturnsService {
         req.validate()?;
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.load_receipt_reversal(id).await?;
-        ensure_expected_version(reversal.base.version, req.expected_version)?;
+        conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         start_receipt_reversal_approval(&mut reversal)?;
         self.dispatch_receipt_reversal_start(id, reversal, req.idempotency_key, actor, adapter)
             .await
@@ -302,7 +304,7 @@ impl ReturnsService {
     ) -> Result<ReceiptReversalView> {
         req.validate()?;
         let mut reversal = self.load_receipt_reversal(id).await?;
-        ensure_expected_version(reversal.base.version, req.expected_version)?;
+        conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         self.persist_cancelled_receipt_reversal(id, &mut reversal, &req, actor)
             .await?;
         self.receipt_reversal_detail(id).await
@@ -544,19 +546,6 @@ impl ReturnsService {
     }
 }
 
-/// 校验乐观锁版本。
-///
-/// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
-}
-
 /// 在创建事务内写入冲正单、绑定发布定义并登记单据。
 ///
 /// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
@@ -707,22 +696,7 @@ pub(super) async fn apply_receipt_reversal_final_post(
         .receipt_allocations()
         .find_allocations_by_receipts(&[reversal.original_customer_receipt_id.clone()], session)
         .await?;
-    let mut sales_order_ids = Vec::new();
-    for allocation in &allocations {
-        let entry = db
-            .receivable_entries()
-            .find_by_id(&allocation.receivable_entry_id, session)
-            .await?
-            .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        let account = db
-            .receivable_accounts()
-            .find_by_id(&entry.receivable_account_id, session)
-            .await?
-            .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-        sales_order_ids.push(account.sales_order_id.to_string());
-    }
-    sales_order_ids.sort();
-    sales_order_ids.dedup();
+    let sales_order_ids = sales_order_ids_for_receipt_allocations(db, &allocations, session).await?;
     for sales_order_id in sales_order_ids {
         crate::sales_order::update_sales_order_money_progress(
             db,
@@ -808,12 +782,20 @@ async fn revert_receipt_settlements(
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let facts = load_receivable_offset_facts(
+        db,
+        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
+        session,
+    )
+    .await?;
     for chunk in chunks {
-        let entry = db
-            .receivable_entries()
-            .find_by_id(&chunk.increase_entry_id, session)
-            .await?
+        let entry = facts
+            .entries
+            .get(chunk.increase_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
+        if !facts.accounts.contains_key(entry.receivable_account_id.as_ref()) {
+            return Err(Error::NotFound("应收往来子账不存在".to_string()));
+        }
         let reverted = db
             .receivable_accounts()
             .revert_settlement(&entry.receivable_account_id, &chunk.amount, actor_id, session)
@@ -823,6 +805,51 @@ async fn revert_receipt_settlements(
         }
     }
     Ok(())
+}
+
+/// 由核销分配批量读取分录与账户，收集去重销售单 ID。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `allocations` - 原回款核销分配
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回排序去重后的销售单 ID。
+///
+/// # 错误
+/// 缺任一分录或账户时失败关闭。
+///
+/// # 约束
+/// 固定两次批量读取；进度刷新仍由 Service 逐单编排。
+async fn sales_order_ids_for_receipt_allocations(
+    db: &Database,
+    allocations: &[ReceiptAllocation],
+    session: &mut mongodb::ClientSession,
+) -> Result<Vec<String>> {
+    let facts = load_receivable_offset_facts(
+        db,
+        allocations
+            .iter()
+            .map(|allocation| allocation.receivable_entry_id.clone()),
+        session,
+    )
+    .await?;
+    let mut sales_order_ids = Vec::with_capacity(allocations.len());
+    for allocation in allocations {
+        let entry = facts
+            .entries
+            .get(allocation.receivable_entry_id.as_ref())
+            .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
+        let account = facts
+            .accounts
+            .get(entry.receivable_account_id.as_ref())
+            .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
+        sales_order_ids.push(account.sales_order_id.to_string());
+    }
+    sales_order_ids.sort();
+    sales_order_ids.dedup();
+    Ok(sales_order_ids)
 }
 
 /// 写入反向核销分配。
@@ -959,5 +986,32 @@ mod receipt_reversal_approval_tests {
         assert!(!production.contains("ReceiptReversalStatus::PendingReview"));
         assert!(!production.contains("Draft =>"));
         assert!(!production.contains("pending_review"));
+    }
+
+    /// 提交/撤回必须使用实体 matches_version，并删除旧 helper。
+    #[test]
+    fn version_lock_uses_entity_matches_version() {
+        let production = include_str!("receipt_reversal.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("reversal.matches_version(req.expected_version)"));
+        assert!(production.contains("conflict_if_stale_version"));
+        assert!(!production.contains("fn ensure_expected_version"));
+    }
+
+    /// 过账与冲减必须批量读取分录与账户。
+    #[test]
+    fn reversal_paths_batch_entry_and_account_reads() {
+        let production = include_str!("receipt_reversal.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("load_receivable_offset_facts"));
+        assert!(production.contains("sales_order_ids_for_receipt_allocations"));
+        assert!(production.contains("revert_settlement"));
+        assert!(!production.contains("find_by_id(&allocation.receivable_entry_id"));
+        assert!(!production.contains("find_by_id(&chunk.increase_entry_id"));
+        assert!(!production.contains("find_by_id(&entry.receivable_account_id"));
     }
 }

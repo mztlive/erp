@@ -1,9 +1,8 @@
 //! 销售单阶段判定：阶段 `(code, label, tone)`、结案资格、销售变更发起资格。
 
-use entities::money::Amount;
 use entities::sales_order::{
-    BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress,
-    OriginSystem, ReviewStatus,
+    CloseStatus, CommercialStatus, FulfillmentProgress, OriginSystem, ReviewStatus,
+    SalesOrderClosureAssessment, SalesOrderClosureTerminal, SalesOrderFulfillmentBlocker,
 };
 
 use super::dto;
@@ -58,137 +57,65 @@ pub(super) fn stage_code_label_tone(
     }
 }
 
-/// 结案资格判定所需的状态、进度与金额。
+/// 把实体结案事实映射为中文结案资格视图。
 ///
-/// # 用途
-/// 将商业状态、履约/回款/开票进度与应收合计打包。
-///
-/// # 参数
-/// 无
-///
-/// # 返回
-/// 无
-///
-/// # 错误
-/// 无
-///
-/// # 关键业务约束
-/// 开票进度只展示、不参与是否可结案。
-pub(super) struct CloseEligibilityInputs {
-    /// 业务性质。
-    pub business_type: BusinessType,
-    /// 商业状态。
-    pub commercial: CommercialStatus,
-    /// 结案状态。
-    pub close: CloseStatus,
-    /// 履约进度。
-    pub fulfillment: FulfillmentProgress,
-    /// 回款进度。
-    pub collection: CollectionProgress,
-    /// 开票进度。
-    pub invoice: InvoiceProgress,
-    /// 应收已结算合计。
-    pub settled_total: Amount,
-    /// 应收含税合计。
-    pub gross_total: Amount,
-}
-
-/// 结案资格判定（服务端权威；移植自 erp-client `close-eligibility.ts::computeCloseEligibility`）。
-///
-/// 规则（W05 §5.3/§12）：非卡券以客户验收完成判定交付；卡券以履约期限到期判定
-/// （不因已消费完提前算完成，`FulfillmentProgress::Completed` 由到期任务写入）；
-/// 结案门槛为交付完成且回款收齐，开票进度不参与。回款是否收齐优先看
-/// `collection_progress`，辅以应收子账合计兜底（两者任一满足即视为收齐，
-/// 与前端原实现的双重判断保持一致）。
-///
-/// # 用途
-/// 计算结案资格、阻断原因与说明。
+/// 规则（W05 §5.3/§12）由 `SalesOrderClosureFacts` 承载；本函数只负责阻断原因
+/// 与说明文案。开票进度永不阻断。
 ///
 /// # 参数
-/// * `inputs` - 状态、进度与金额
+/// * `assessment` - 实体结案资格纯事实
 ///
 /// # 返回
 /// 返回结案资格视图。
 ///
 /// # 错误
-/// 无
+/// 无。
 ///
 /// # 关键业务约束
-/// 作废/草稿不可结案；开票进度永不阻断。
-pub(super) fn compute_close_eligibility(inputs: CloseEligibilityInputs) -> dto::CloseEligibilityView {
-    let CloseEligibilityInputs {
-        business_type,
-        commercial,
-        close,
-        fulfillment,
-        collection,
-        invoice,
-        settled_total,
-        gross_total,
-    } = inputs;
-    let invoice_complete = invoice == InvoiceProgress::Completed;
-    let fulfillment_done = fulfillment == FulfillmentProgress::Completed;
-    let collection_settled = collection == CollectionProgress::Settled;
-
-    if close == CloseStatus::Closed
-        || commercial == CommercialStatus::Voided
-        || commercial == CommercialStatus::Draft
-    {
-        let closed = close == CloseStatus::Closed;
-        let (blockers, note) = if closed {
-            (
-                Vec::new(),
-                "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。".to_string(),
-            )
-        } else if commercial == CommercialStatus::Voided {
-            (
-                vec!["本单已作废，不会再结案".to_string()],
-                "作废单只保留历史记录，不能结案，也不能恢复。".to_string(),
-            )
-        } else {
-            (
-                vec!["草稿尚未生效，谈不上结案".to_string()],
-                "草稿还没生效，先完成提交与确认。".to_string(),
-            )
-        };
-        return dto::CloseEligibilityView {
-            fulfillment_complete: closed || fulfillment_done,
-            receivable_settled: closed || collection_settled,
-            invoice_complete,
-            eligible_to_close: closed,
-            blockers,
-            note,
-        };
-    }
-
-    let fulfillment_complete = fulfillment_done;
-    let receivable_settled = collection_settled || settled_total >= gross_total;
-    let mut blockers = Vec::new();
-    if !fulfillment_complete {
-        blockers.push(
-            if business_type == BusinessType::Voucher {
-                "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
-            } else {
-                "客户验收还没做完"
+/// 不得在本函数内比较应收金额或解释终态；无子账零额比较已由实体拒绝。
+pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) -> dto::CloseEligibilityView {
+    let (blockers, note) = match assessment.terminal {
+        Some(SalesOrderClosureTerminal::Closed) => (
+            Vec::new(),
+            "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。".to_string(),
+        ),
+        Some(SalesOrderClosureTerminal::Voided) => (
+            vec!["本单已作废，不会再结案".to_string()],
+            "作废单只保留历史记录，不能结案，也不能恢复。".to_string(),
+        ),
+        Some(SalesOrderClosureTerminal::Draft) => (
+            vec!["草稿尚未生效，谈不上结案".to_string()],
+            "草稿还没生效，先完成提交与确认。".to_string(),
+        ),
+        None => {
+            let mut blockers = Vec::new();
+            if let Some(blocker) = assessment.fulfillment_blocker {
+                blockers.push(
+                    match blocker {
+                        SalesOrderFulfillmentBlocker::VoucherExpiry => {
+                            "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
+                        }
+                        SalesOrderFulfillmentBlocker::CustomerAcceptance => "客户验收还没做完",
+                    }
+                    .to_string(),
+                );
             }
-            .to_string(),
-        );
-    }
-    if !receivable_settled {
-        blockers.push("客户回款还没收齐".to_string());
-    }
-    let eligible_to_close = fulfillment_complete && receivable_settled;
-    let note = if eligible_to_close {
-        "交付和回款都齐了，系统会自动结案。发票开没开完都不挡结案，也无需人工点「关闭」。".to_string()
-    } else {
-        format!("还不能结案：{}。开票进度不参与是否结案。", blockers.join("；"))
+            if assessment.collection_unsettled {
+                blockers.push("客户回款还没收齐".to_string());
+            }
+            let note = if assessment.eligible_to_close {
+                "交付和回款都齐了，系统会自动结案。发票开没开完都不挡结案，也无需人工点「关闭」。".to_string()
+            } else {
+                format!("还不能结案：{}。开票进度不参与是否结案。", blockers.join("；"))
+            };
+            (blockers, note)
+        }
     };
-
     dto::CloseEligibilityView {
-        fulfillment_complete,
-        receivable_settled,
-        invoice_complete,
-        eligible_to_close,
+        fulfillment_complete: assessment.fulfillment_complete,
+        receivable_settled: assessment.receivable_settled,
+        invoice_complete: assessment.invoice_complete,
+        eligible_to_close: assessment.eligible_to_close,
         blockers,
         note,
     }
@@ -238,16 +165,38 @@ pub(super) fn compute_can_start_sales_change(
 mod tests {
     use std::str::FromStr;
 
+    use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use entities::money::Amount;
     use entities::sales_order::{
         BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress,
-        InvoiceProgress, OriginSystem, ReviewStatus,
+        InvoiceProgress, OriginSystem, ReviewStatus, SalesOrder, SalesOrderData,
     };
 
     use super::{
-        compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id,
-        stage_code_label_tone, CloseEligibilityInputs,
+        close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
     };
+
+    fn amt(value: &str) -> Amount {
+        Amount::from_str(value).unwrap()
+    }
+
+    fn order(business_type: BusinessType) -> SalesOrder {
+        SalesOrder::new(
+            SalesOrderId::new("o-1"),
+            SalesOrderData {
+                order_no: "SO-1".to_string(),
+                business_type,
+                origin_system: OriginSystem::Erp,
+                source_identity_id: None,
+                customer_id: CustomerAccountId::new("cust-1"),
+                contract_id: None,
+                settlement_party_id: PartyId::new("party-1"),
+                source_status_code: None,
+            },
+            "admin-1",
+        )
+        .unwrap()
+    }
 
     #[test]
     fn detail_owner_prefers_working_copy_then_latest_submission_then_creator() {
@@ -342,114 +291,66 @@ mod tests {
     }
 
     #[test]
-    fn close_eligibility_closed_branch_is_always_eligible() {
-        let view = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Effective,
-            close: CloseStatus::Closed,
-            fulfillment: FulfillmentProgress::NotStarted,
-            collection: CollectionProgress::NotCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("0").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert!(view.eligible_to_close);
-        assert!(view.fulfillment_complete);
-        assert!(view.receivable_settled);
-        assert!(view.blockers.is_empty());
-    }
+    fn close_eligibility_view_maps_terminal_and_blocker_copy() {
+        let mut closed = order(BusinessType::GoodsService);
+        closed.commercial_status = CommercialStatus::Effective;
+        closed.close_status = CloseStatus::Closed;
+        let closed_view = close_eligibility_view(closed.closure_facts().assess(true, amt("0"), amt("100")));
+        assert!(closed_view.eligible_to_close);
+        assert!(closed_view.blockers.is_empty());
 
-    #[test]
-    fn close_eligibility_voided_and_draft_block_with_reason() {
-        let voided = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Voided,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::NotStarted,
-            collection: CollectionProgress::NotCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("0").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert!(!voided.eligible_to_close);
-        assert_eq!(voided.blockers, vec!["本单已作废，不会再结案".to_string()]);
+        let mut voided = order(BusinessType::GoodsService);
+        voided.commercial_status = CommercialStatus::Voided;
+        let voided_view = close_eligibility_view(voided.closure_facts().assess(false, amt("0"), amt("0")));
+        assert_eq!(voided_view.blockers, vec!["本单已作废，不会再结案".to_string()]);
 
-        let draft = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Draft,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::NotStarted,
-            collection: CollectionProgress::NotCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("0").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert!(!draft.eligible_to_close);
-        assert_eq!(draft.blockers, vec!["草稿尚未生效，谈不上结案".to_string()]);
-    }
+        let draft_view = close_eligibility_view(order(BusinessType::GoodsService).closure_facts().assess(
+            false,
+            amt("0"),
+            amt("0"),
+        ));
+        assert_eq!(draft_view.blockers, vec!["草稿尚未生效，谈不上结案".to_string()]);
 
-    #[test]
-    fn close_eligibility_goods_vs_voucher_blocker_text() {
-        let goods = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Effective,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::NotStarted,
-            collection: CollectionProgress::NotCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("0").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert_eq!(goods.blockers[0], "客户验收还没做完");
+        let mut goods = order(BusinessType::GoodsService);
+        goods.commercial_status = CommercialStatus::Effective;
+        let goods_view = close_eligibility_view(goods.closure_facts().assess(true, amt("0"), amt("100")));
+        assert_eq!(goods_view.blockers[0], "客户验收还没做完");
 
-        let voucher = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::Voucher,
-            commercial: CommercialStatus::Effective,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::NotStarted,
-            collection: CollectionProgress::NotCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("0").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
+        let mut voucher = order(BusinessType::Voucher);
+        voucher.commercial_status = CommercialStatus::Effective;
+        let voucher_view = close_eligibility_view(voucher.closure_facts().assess(true, amt("0"), amt("100")));
         assert_eq!(
-            voucher.blockers[0],
+            voucher_view.blockers[0],
             "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
         );
     }
 
     #[test]
-    fn close_eligibility_receivable_settled_falls_back_to_amount_comparison() {
-        // collection_progress 还没被标记 SETTLED，但应收子账合计已收齐——
-        // 与前端原实现的双重判断保持一致。
-        let view = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Effective,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::Completed,
-            collection: CollectionProgress::PartiallyCollected,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("100").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert!(view.receivable_settled);
-        assert!(view.eligible_to_close);
-    }
+    fn close_eligibility_view_keeps_amount_fallback_and_invoice_copy() {
+        let mut order = order(BusinessType::GoodsService);
+        order.commercial_status = CommercialStatus::Effective;
+        order.fulfillment_progress = FulfillmentProgress::Completed;
+        order.collection_progress = CollectionProgress::PartiallyCollected;
+        let settled = close_eligibility_view(order.closure_facts().assess(true, amt("100"), amt("100")));
+        assert!(settled.receivable_settled);
+        assert!(settled.eligible_to_close);
 
-    #[test]
-    fn close_eligibility_invoice_progress_never_blocks() {
-        let view = compute_close_eligibility(CloseEligibilityInputs {
-            business_type: BusinessType::GoodsService,
-            commercial: CommercialStatus::Effective,
-            close: CloseStatus::NotSatisfied,
-            fulfillment: FulfillmentProgress::Completed,
-            collection: CollectionProgress::Settled,
-            invoice: InvoiceProgress::NotInvoiced,
-            settled_total: Amount::from_str("100").unwrap(),
-            gross_total: Amount::from_str("100").unwrap(),
-        });
-        assert!(view.eligible_to_close);
-        assert!(!view.invoice_complete);
+        let missing = close_eligibility_view(order.closure_facts().assess(false, amt("0"), amt("0")));
+        assert!(!missing.receivable_settled);
+        assert!(!missing.eligible_to_close);
+        assert!(missing.blockers.iter().any(|item| item.contains("回款")));
+
+        let short = close_eligibility_view(order.closure_facts().assess(true, amt("50"), amt("100")));
+        assert!(short.fulfillment_complete);
+        assert!(!short.receivable_settled);
+        assert!(!short.eligible_to_close);
+        assert_eq!(short.blockers, vec!["客户回款还没收齐".to_string()]);
+
+        order.collection_progress = CollectionProgress::Settled;
+        order.invoice_progress = InvoiceProgress::NotInvoiced;
+        let invoicing = close_eligibility_view(order.closure_facts().assess(true, amt("100"), amt("100")));
+        assert!(invoicing.eligible_to_close);
+        assert!(!invoicing.invoice_complete);
     }
 
     #[test]

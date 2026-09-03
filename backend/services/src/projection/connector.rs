@@ -133,7 +133,6 @@ mod tests {
                 card_count: 100,
                 card_form: entities::projection::CardForm::Electronic,
                 effective_at: entities::common::time::Instant::from_unix_secs(1_700_000_000),
-                content_hash: "abc".to_string(),
             },
         )
         .unwrap()

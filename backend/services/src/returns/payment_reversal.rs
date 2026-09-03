@@ -17,12 +17,14 @@ use super::dto::{
 };
 use std::str::FromStr;
 
+use super::offset_batch::load_payable_offset_facts;
 use super::start_approval::{
     build_payment_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
     persist_payment_reversal_runtime, persist_payment_reversal_start, PaymentReversalStartInput,
     PaymentReversalStartPersistInput,
 };
+use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -271,7 +273,7 @@ impl ReturnsService {
         req.validate()?;
         let adapter = payment_reversal_adapter()?;
         let mut reversal = self.load_payment_reversal(id).await?;
-        ensure_expected_version(reversal.base.version, req.expected_version)?;
+        conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         start_payment_reversal_approval(&mut reversal)?;
         self.dispatch_payment_reversal_start(id, reversal, req.idempotency_key, actor, adapter)
             .await
@@ -300,7 +302,7 @@ impl ReturnsService {
     ) -> Result<PaymentReversalView> {
         req.validate()?;
         let mut reversal = self.load_payment_reversal(id).await?;
-        ensure_expected_version(reversal.base.version, req.expected_version)?;
+        conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor)
             .await?;
         self.payment_reversal_detail(id).await
@@ -537,19 +539,6 @@ impl ReturnsService {
     }
 }
 
-/// 校验乐观锁版本。
-///
-/// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
-}
-
 /// 在创建事务内写入冲正单、绑定发布定义并登记单据。
 ///
 /// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
@@ -775,13 +764,21 @@ async fn revert_payment_settlements(
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let facts = load_payable_offset_facts(
+        db,
+        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
+        session,
+    )
+    .await?;
     let mut affected_accounts = HashSet::new();
     for chunk in chunks {
-        let entry = db
-            .payable_entries()
-            .find_by_id(&chunk.increase_entry_id, session)
-            .await?
+        let entry = facts
+            .entries
+            .get(chunk.increase_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
+        if !facts.accounts.contains_key(entry.payable_account_id.as_ref()) {
+            return Err(Error::NotFound("应付往来子账不存在".to_string()));
+        }
         let reverted = db
             .payable_accounts()
             .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
@@ -789,7 +786,7 @@ async fn revert_payment_settlements(
         if !reverted {
             return Err(Error::BusinessLogicError("冲正冲减超过已核销金额".to_string()));
         }
-        affected_accounts.insert(entry.payable_account_id);
+        affected_accounts.insert(entry.payable_account_id.clone());
     }
     for account_id in affected_accounts {
         crate::payable::payment_task::sync_purchase_payment_task(db, &account_id, session).await?;
@@ -931,5 +928,30 @@ mod payment_reversal_approval_tests {
         assert!(!production.contains("PaymentReversalStatus::PendingReview"));
         assert!(!production.contains("Draft =>"));
         assert!(!production.contains("pending_review"));
+    }
+
+    /// 提交/撤回必须使用实体 matches_version，并删除旧 helper。
+    #[test]
+    fn version_lock_uses_entity_matches_version() {
+        let production = include_str!("payment_reversal.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("reversal.matches_version(req.expected_version)"));
+        assert!(production.contains("conflict_if_stale_version"));
+        assert!(!production.contains("fn ensure_expected_version"));
+    }
+
+    /// 冲减必须批量读取分录与账户，任务同步仍留在 Service。
+    #[test]
+    fn revert_settlements_batch_entry_and_account_reads() {
+        let production = include_str!("payment_reversal.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("load_payable_offset_facts"));
+        assert!(production.contains("revert_settlement"));
+        assert!(production.contains("sync_purchase_payment_task"));
+        assert!(!production.contains("find_by_id(&chunk.increase_entry_id"));
     }
 }

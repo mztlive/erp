@@ -86,7 +86,6 @@ mod tests {
                 card_count: 10,
                 card_form: CardForm::Electronic,
                 effective_at: Instant::from_unix_secs(1_700_000_000),
-                content_hash: "hash-1".to_string(),
             },
         )
         .unwrap()

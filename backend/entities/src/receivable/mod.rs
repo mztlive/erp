@@ -28,6 +28,7 @@ pub mod receivable_funds_review;
 pub mod sales_change_delta;
 pub mod sales_invoice_allocation;
 pub mod sales_invoice_allocation_plan;
+pub mod sales_order_amount_summary;
 
 pub use card_funds_receipt::{
     CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
@@ -53,3 +54,4 @@ pub use receivable_funds_review::*;
 pub use sales_change_delta::ReceivableDelta;
 pub use sales_invoice_allocation::*;
 pub use sales_invoice_allocation_plan::*;
+pub use sales_order_amount_summary::SalesOrderReceivableAmountSummary;

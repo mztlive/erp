@@ -34,7 +34,6 @@ mod draft_working_copy;
 mod dto;
 mod formalize;
 mod mapper;
-mod pricing;
 mod procurement;
 mod progress;
 mod query;

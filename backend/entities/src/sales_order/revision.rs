@@ -277,6 +277,25 @@ impl SalesOrderRevision {
             .checked_add(1)
             .ok_or_else(|| Error::from("销售版本号溢出"))
     }
+
+    /// 返回卡券执行投影所需的表头履约期限。
+    ///
+    /// 卡券投影要求类目 SKU 与履约期限同时存在；任一缺失即不可投影。
+    ///
+    /// # 返回
+    /// 返回表头履约期限。
+    ///
+    /// # 错误
+    /// 类目或履约期限缺失时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 唯一卡券行数量由仓储结果决定，不在本方法判定。本方法不触及持久化。
+    pub fn required_voucher_expiry(&self) -> Result<Instant> {
+        match (&self.voucher_category_sku_id, self.voucher_expiry_at) {
+            (Some(_), Some(expiry)) => Ok(expiry),
+            _ => Err(Error::from("非卡券销售单无法建立执行投影")),
+        }
+    }
 }
 
 /// 公共行版本创建数据。
@@ -697,6 +716,43 @@ mod tests {
             ..header_data()
         };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), broken_amount).is_err());
+    }
+
+    #[test]
+    fn required_voucher_expiry_covers_category_and_deadline_matrix() {
+        let both = SalesOrderRevision::new(
+            SalesOrderRevisionId::new("rev-v"),
+            SalesOrderRevisionData {
+                voucher_category_sku_id: Some(SkuId::new("vcat-1")),
+                voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
+                ..header_data()
+            },
+        )
+        .unwrap();
+        assert_eq!(both.required_voucher_expiry().unwrap().unix_secs(), 1_850_000_000);
+
+        let mut missing_expiry = both.clone();
+        missing_expiry.voucher_expiry_at = None;
+        assert_eq!(
+            missing_expiry.required_voucher_expiry().unwrap_err().to_string(),
+            "非卡券销售单无法建立执行投影"
+        );
+
+        let mut missing_category = both.clone();
+        missing_category.voucher_category_sku_id = None;
+        assert_eq!(
+            missing_category
+                .required_voucher_expiry()
+                .unwrap_err()
+                .to_string(),
+            "非卡券销售单无法建立执行投影"
+        );
+
+        let neither = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-g"), header_data()).unwrap();
+        assert_eq!(
+            neither.required_voucher_expiry().unwrap_err().to_string(),
+            "非卡券销售单无法建立执行投影"
+        );
     }
 
     #[test]

@@ -18,13 +18,16 @@
 mod adapter;
 mod cancel_approval;
 mod customer_refund;
+mod customer_refund_list;
 mod dto;
+mod offset_batch;
 mod payment_reversal;
 mod purchase_return;
 mod receipt_reversal;
 mod sales_return;
 mod start_approval;
 mod supplier_refund;
+mod version_conflict;
 
 use database::{AccessControlExt, Executor, ReturnsExt};
 
@@ -235,7 +238,7 @@ pub(crate) async fn cancel_approval_in_transaction(
             return Err(Error::ValidationError(format!(
                 "{} 不属于退货退款审批动作端口",
                 other.label()
-            )))
+            )));
         }
     }
     let audit =

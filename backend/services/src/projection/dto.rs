@@ -11,9 +11,7 @@
 use entities::ids::{SalesOrderId, SourceSystemId};
 use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
-use entities::projection::{
-    CardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection, SalesOrderProjectionRevision,
-};
+use entities::projection::{CardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -523,45 +521,6 @@ impl SalesOrderProjectionDeliveryListParams {
     }
 }
 
-/// 计算投影版本内容指纹（投影内容指纹，§6.16；由白名单快照字段的规范化文本派生）。
-///
-/// # 参数
-/// * `revision` - 待指纹化的投影版本实体
-///
-/// # 返回
-/// 返回 64 位 FNV-1a 十六进制指纹（长度上限 128 内）。
-pub(crate) fn projection_content_hash(revision: &SalesOrderProjectionRevision) -> String {
-    let canonical = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}",
-        revision.projection_source.as_str(),
-        revision.sales_order_revision_id,
-        revision.customer_external_identity,
-        revision.voucher_category_external_identity,
-        revision.voucher_expiry_at.unix_secs(),
-        revision.face_value,
-        revision.card_count,
-        revision.card_form.as_str(),
-    );
-    let hash = fnv1a64(canonical.as_bytes());
-    format!("{hash:016x}")
-}
-
-/// FNV-1a 64 位哈希。
-///
-/// # 参数
-/// * `bytes` - 待哈希字节
-///
-/// # 返回
-/// 返回哈希值。
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
 impl From<SalesOrderProjection> for SalesOrderProjectionView {
     /// 从实体构造响应视图。
     ///
@@ -584,12 +543,8 @@ impl From<SalesOrderProjection> for SalesOrderProjectionView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, projection_content_hash, SalesOrderProjectionListParams, SortDir};
+    use super::{normalize_sort, SalesOrderProjectionListParams, SortDir};
     use entities::ids::{SalesOrderId, SourceSystemId};
-    use entities::projection::{
-        CardForm, ProjectionSource, SalesOrderProjectionRevision, SalesOrderProjectionRevisionData,
-    };
-    use std::str::FromStr;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -627,31 +582,5 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
-    }
-
-    #[test]
-    fn content_hash_is_deterministic_and_bounded() {
-        let revision = SalesOrderProjectionRevision::new(
-            entities::ids::SalesOrderProjectionRevisionId::new("proj-rev-1"),
-            1,
-            SalesOrderProjectionRevisionData {
-                projection_id: entities::ids::SalesOrderProjectionId::new("proj-1"),
-                projection_source: ProjectionSource::CutoverSnapshot,
-                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("so-rev-1"),
-                customer_external_identity: "mall-customer-001".to_string(),
-                voucher_category_external_identity: "mall-voucher-001".to_string(),
-                voucher_expiry_at: entities::common::time::Instant::from_unix_secs(1_800_000_000),
-                face_value: entities::money::Amount::from_str("100.00").unwrap(),
-                card_count: 100,
-                card_form: CardForm::Electronic,
-                effective_at: entities::common::time::Instant::from_unix_secs(1_700_000_000),
-                content_hash: "placeholder".to_string(),
-            },
-        )
-        .unwrap();
-        let first = projection_content_hash(&revision);
-        let second = projection_content_hash(&revision);
-        assert_eq!(first, second, "指纹必须确定");
-        assert!(first.len() <= 128);
     }
 }

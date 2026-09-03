@@ -11,6 +11,7 @@
 //! re-export）。
 
 use entities::common::stable::StableBase;
+use entities::common::time::Instant;
 use entities::ids::{
     CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
 };
@@ -185,6 +186,8 @@ impl Pagination for PurchaseReturnOrderFilter {
 }
 
 /// 客户退款列表投影行。
+///
+/// 覆盖客户退款 View 所需退款事实，但不包含审批 View 或 Service DTO。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CustomerRefundRow {
     /// 实体主键。
@@ -197,12 +200,22 @@ pub struct CustomerRefundRow {
     pub sales_return_case_id: Option<String>,
     /// 客户。
     pub customer_id: String,
+    /// 原回款。
+    pub original_receipt_id: Option<String>,
+    /// 原应收分录。
+    pub original_receivable_entry_id: Option<String>,
+    /// 原因代码。
+    pub reason_code: Option<String>,
     /// 原因说明。
     pub reason_text: String,
     /// 退款金额。
     pub amount: entities::money::Amount,
-    /// 实际退款时间（秒级时间戳）。
-    pub occurred_at: u64,
+    /// 财务经办人。
+    pub handled_by: String,
+    /// 财务复核人。
+    pub reviewed_by: String,
+    /// 实际退款时间。
+    pub occurred_at: Instant,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -660,13 +673,13 @@ impl<'a> ReturnsRepository<'a> {
 /// * `allowed` - 允许的排序字段名集合（防止透传任意字段名）
 ///
 /// # 返回
-/// 返回排序条件文档。
+/// 返回排序条件文档；`id` 作为次键保证同值稳定排序。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by
         .filter(|name| allowed.contains(name))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 销售退货处理单列表投影字段。
@@ -723,8 +736,13 @@ fn customer_refund_projection() -> Document {
         "refund_no": 1,
         "sales_return_case_id": 1,
         "customer_id": 1,
+        "original_receipt_id": 1,
+        "original_receivable_entry_id": 1,
+        "reason_code": 1,
         "reason_text": 1,
         "amount": 1,
+        "handled_by": 1,
+        "reviewed_by": 1,
         "occurred_at": 1,
         "version": 1,
         "created_at": 1,
@@ -734,7 +752,8 @@ fn customer_refund_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        sort_doc, CustomerRefundFilter, PurchaseReturnOrderFilter, QueryFilter, SalesReturnCaseFilter,
+        customer_refund_projection, sort_doc, CustomerRefundFilter, PurchaseReturnOrderFilter, QueryFilter,
+        SalesReturnCaseFilter,
     };
     use entities::returns::{CaseType, CustomerRefundStatus, PurchaseReturnStatus};
     use mongodb::bson::doc;
@@ -793,9 +812,51 @@ mod tests {
         assert_eq!(regex.get_str("$regex").unwrap(), r"RF\-1\.1");
         assert_eq!(
             sort_doc(filter.sort_by.as_deref(), false, &["occurred_at", "amount"]),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
         assert_eq!(filter.to_doc().get_str("status").unwrap(), "posted");
+    }
+
+    #[test]
+    fn sort_doc_appends_id_tiebreaker_for_both_directions() {
+        assert_eq!(
+            sort_doc(
+                Some("occurred_at"),
+                true,
+                &["occurred_at", "amount", "created_at"]
+            ),
+            doc! { "occurred_at": 1, "id": 1 }
+        );
+        assert_eq!(
+            sort_doc(Some("amount"), false, &["occurred_at", "amount", "created_at"]),
+            doc! { "amount": -1, "id": -1 }
+        );
+    }
+
+    #[test]
+    fn customer_refund_projection_covers_view_facts_without_approval() {
+        let projection = customer_refund_projection();
+        for field in [
+            "id",
+            "status",
+            "refund_no",
+            "sales_return_case_id",
+            "customer_id",
+            "original_receipt_id",
+            "original_receivable_entry_id",
+            "reason_code",
+            "reason_text",
+            "amount",
+            "handled_by",
+            "reviewed_by",
+            "occurred_at",
+            "version",
+            "created_at",
+        ] {
+            assert_eq!(projection.get_i32(field).unwrap(), 1, "{field}");
+        }
+        assert!(projection.get("approval").is_none());
+        assert!(projection.get("evidence_attachment_id").is_none());
     }
 
     #[test]
@@ -804,3 +865,7 @@ mod tests {
         assert_eq!(CaseType::Shortage.as_str(), "shortage");
     }
 }
+
+#[cfg(test)]
+#[path = "returns_customer_refund_search.rs"]
+mod customer_refund_search_tests;

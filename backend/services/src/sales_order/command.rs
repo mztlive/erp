@@ -17,8 +17,8 @@ use entities::ids::{
     SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use entities::sales_order::{
-    ExternalIdentityResolution, SalesOrder, SalesOrderData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
-    SalesOrderWorkingCopyUpdate, WorkingPurpose,
+    ExternalIdentityResolution, SalesContentHash, SalesOrder, SalesOrderData, SalesOrderWorkingCopy,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate, WorkingPurpose,
 };
 use entities::source_registry::{ExternalObjectType, SourceSystemType};
 use id_generator::next_id;
@@ -42,7 +42,7 @@ use super::dto::{
 };
 use super::mapper::{
     build_stable_lines, build_submission, build_submission_lines, build_working_copy,
-    build_working_copy_lines, draft_hash, header_snapshot, submission_view,
+    build_working_copy_lines, header_snapshot, submission_view,
 };
 use super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph, load_bound_definition_graph_with_executor,
@@ -263,10 +263,10 @@ impl SalesOrderService {
             )
             .await?
             .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
-        if revision.contract_id.as_ref() != contract_id.as_ref() {
+        if !revision.belongs_to_contract(contract_id) {
             return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
         }
-        if revision.settlement_party_id != contract.settlement_party_id {
+        if !revision.matches_settlement_party(&contract.settlement_party_id) {
             return Err(Error::ConflictError(
                 "合同当前结算主体与所选版本不一致，请刷新后重试".to_string(),
             ));
@@ -712,7 +712,7 @@ impl SalesOrderService {
         let next_version = working_copy.draft_version + 1;
         working_copy.update(
             SalesOrderWorkingCopyUpdate {
-                content_hash: Some(draft_hash(&working_copy.base.id, next_version)),
+                content_hash: Some(SalesContentHash::draft(&working_copy.base.id, next_version)?.into_wire()),
                 customer_id: Some(order.customer_id.clone()),
                 contract_id: order.contract_id.clone(),
                 contract_revision_id: draft.requested_contract_revision_id.clone(),
@@ -733,7 +733,7 @@ impl SalesOrderService {
             actor.id(),
         )?;
         working_copy.save_draft(
-            draft_hash(&working_copy.base.id, next_version),
+            SalesContentHash::draft(&working_copy.base.id, next_version)?.into_wire(),
             draft.editor_user_id.clone(),
         )?;
 
@@ -829,7 +829,9 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        Self::assert_draft_allows_working_copy(&order)?;
+        order
+            .ensure_first_submission_working_copy_editable()
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
         if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
             return Err(Error::ConflictError(
                 "销售单合同归属已变化，请刷新后重试".to_string(),
@@ -863,7 +865,9 @@ impl SalesOrderService {
                 let next_version = working_copy.draft_version + 1;
                 working_copy.update(
                     SalesOrderWorkingCopyUpdate {
-                        content_hash: Some(draft_hash(&working_copy.base.id, next_version)),
+                        content_hash: Some(
+                            SalesContentHash::draft(&working_copy.base.id, next_version)?.into_wire(),
+                        ),
                         customer_id: Some(order.customer_id.clone()),
                         contract_id: order.contract_id.clone(),
                         contract_revision_id: draft.requested_contract_revision_id.clone(),
@@ -884,7 +888,7 @@ impl SalesOrderService {
                     actor.id(),
                 )?;
                 working_copy.save_draft(
-                    draft_hash(&working_copy.base.id, next_version),
+                    SalesContentHash::draft(&working_copy.base.id, next_version)?.into_wire(),
                     draft.editor_user_id.clone(),
                 )?;
                 let plan = SalesOrderWorkingCopyPersistPlan {
