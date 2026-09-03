@@ -96,6 +96,10 @@ fn payable_entry_indexes() -> Vec<IndexModel> {
             doc! { "payable_account_id": 1, "due_date": 1 },
         ),
         named_index(
+            "idx_payable_entries_account_direction_due",
+            doc! { "payable_account_id": 1, "direction": 1, "due_date": 1, "id": 1 },
+        ),
+        named_index(
             "idx_payable_entries_source",
             doc! { "source_fact_type": 1, "source_document_id": 1 },
         ),
@@ -146,6 +150,12 @@ fn payment_allocation_indexes() -> Vec<IndexModel> {
 }
 
 /// 返回 `purchase_invoice_allocation` 的分配序号与账户追溯索引。
+///
+/// `idx_purchase_invoice_allocations_account_page` 与
+/// `idx_purchase_invoice_allocations_invoice_page` 为 FIN-R06 服务端分页的
+/// 复合索引：等值条件前缀 + `(created_at, id)` 稳定排序。同秒记录跨页
+/// 无重复、无遗漏。迁移经 `ensure` 幂等创建；回滚按索引名执行
+/// `drop_index`（先回滚应用代码再移除索引）。
 fn purchase_invoice_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -155,6 +165,14 @@ fn purchase_invoice_allocation_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_purchase_invoice_allocations_account",
             doc! { "payable_account_id": 1 },
+        ),
+        named_index(
+            "idx_purchase_invoice_allocations_account_page",
+            doc! { "payable_account_id": 1, "created_at": 1, "id": 1 },
+        ),
+        named_index(
+            "idx_purchase_invoice_allocations_invoice_page",
+            doc! { "invoice_id": 1, "created_at": 1, "id": 1 },
         ),
         named_index(
             "idx_purchase_invoice_allocations_reverse",
@@ -227,6 +245,15 @@ mod tests {
             }
         );
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
+        let direction_due = indexes
+            .iter()
+            .find(|index| name(index) == Some("idx_payable_entries_account_direction_due"))
+            .unwrap();
+        assert_eq!(
+            direction_due.keys,
+            doc! { "payable_account_id": 1, "direction": 1, "due_date": 1, "id": 1 }
+        );
+        assert_eq!(direction_due.options.as_ref().unwrap().unique, None);
     }
 
     #[test]
@@ -244,6 +271,14 @@ mod tests {
         assert!(purchase_invoice_allocation_indexes()
             .iter()
             .any(|index| index.keys == doc! { "payable_account_id": 1 }));
+        assert!(purchase_invoice_allocation_indexes().iter().any(|index| {
+            name(index) == Some("idx_purchase_invoice_allocations_account_page")
+                && index.keys == doc! { "payable_account_id": 1, "created_at": 1, "id": 1 }
+        }));
+        assert!(purchase_invoice_allocation_indexes().iter().any(|index| {
+            name(index) == Some("idx_purchase_invoice_allocations_invoice_page")
+                && index.keys == doc! { "invoice_id": 1, "created_at": 1, "id": 1 }
+        }));
         assert!(supplier_payment_indexes()
             .iter()
             .any(|index| name(index) == Some("uk_supplier_payments_no")));

@@ -48,7 +48,7 @@ mod warehouse;
 mod work_item;
 mod work_item_fulfillment_queue;
 
-pub use audit_log::AuditLogFilter;
+pub use audit_log::{AuditLogFilter, SeparationAuditFact};
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
 pub use bulk_job::BackgroundJobRegistration;
 pub use card_instance::CardBaselineRegistration;
@@ -63,6 +63,7 @@ pub use procurement_responsibility::ProcurementResponsibilityRuleFilter;
 pub use projection::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
 pub use publication::{PublicationDeliveryEscalation, PublicationDeliveryFailure};
 pub use receivable::customer_center::CustomerCenterReceivableRow;
+pub use receivable::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
 pub use supplier::SupplierAccountRow;
 pub use supplier_offering::SupplierOfferingRow;
 pub use work_item::WorkItemRow;

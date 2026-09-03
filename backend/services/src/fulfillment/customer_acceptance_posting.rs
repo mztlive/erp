@@ -20,7 +20,8 @@ use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt};
 use crate::errors::{Error, Result};
 
 use super::acceptance_eligibility::{build_line_eligibilities, so_line_ids, EligibilityGroupSources};
-use super::customer_acceptance::{build_acceptance_lines, register_created_customer_acceptance_document};
+use super::customer_acceptance::register_created_customer_acceptance_document;
+use super::customer_acceptance_lines::acceptance_line_specs;
 use super::{
     AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
     CustomerAcceptanceView, FulfillmentService, PostAcceptanceLineInput, PostCustomerAcceptanceRequest,
@@ -91,7 +92,11 @@ impl FulfillmentService {
             .as_ref()
             .map(|id| CustomerAcceptanceId::new(id.clone()))
             .unwrap_or_else(|| CustomerAcceptanceId::new(next_id()));
-        let final_lines = build_acceptance_lines(&acceptance_id, &req.lines)?;
+        let final_lines = entities::fulfillment::CustomerAcceptanceLineBatch::build(
+            acceptance_id.clone(),
+            acceptance_line_specs(&req.lines),
+        )
+        .map_err(Error::Logic)?;
         let sales_order_id = req.sales_order_id.clone();
         let actor = actor.clone();
         let db = self.db.clone();

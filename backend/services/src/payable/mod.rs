@@ -74,6 +74,8 @@ use crate::party::SensitiveDataCodec;
 type PayableAccountFilter = <mongodb::Database as PayableExt>::PayableAccountFilter;
 /// 供应商付款单列表筛选条件类型。
 type SupplierPaymentFilter = <mongodb::Database as PayableExt>::SupplierPaymentFilter;
+/// 进项发票分配服务端分页筛选条件类型（FIN-R06）。
+type PurchaseInvoiceAllocationFilter = <mongodb::Database as PayableExt>::PurchaseInvoiceAllocationFilter;
 
 /// 供应商往来服务。
 ///
@@ -485,10 +487,12 @@ impl PayableService {
             .supplier_payments()
             .search_supplier_payments(&filter, &mut NoTransaction)
             .await?;
-        let mut views = Vec::with_capacity(page.items.len());
-        for row in page.items {
-            views.push(self.supplier_payment_view(row.id, false).await?);
-        }
+        let payment_ids: Vec<SupplierPaymentId> = page
+            .items
+            .iter()
+            .map(|row| SupplierPaymentId::new(row.id.clone()))
+            .collect();
+        let mut views = self.assemble_supplier_payment_views(&payment_ids, false).await?;
         self.attach_supplier_payment_reversals(&mut views).await?;
         Ok(PageView {
             items: views,
@@ -989,10 +993,11 @@ impl PayableService {
         })
     }
 
-    /// 分页查询进项发票分配列表（按应付子账筛选）。
+    /// 分页查询进项发票分配列表（按应付子账筛选，FIN-R06 服务端分页）。
     ///
-    /// 账户必填政策与请求校验保留在 Service；仓储复用既有批量读取入口及其
-    /// 未删除过滤，Service 按已验证方向执行稳定排序和分页。
+    /// 账户必填政策与请求校验保留在 Service；过滤、稳定排序
+    /// (`(created_at, id)` 同方向）、`skip/limit` 与总数均由 Repository 在
+    /// 数据库完成，只装载当前页。
     ///
     /// # 参数
     /// * `params` - 应付子账、分页与排序校验参数
@@ -1014,12 +1019,24 @@ impl PayableService {
         let payable_account_id = query
             .payable_account_id
             .ok_or_else(|| Error::ValidationError("按应付子账筛选进项发票分配为必填条件".to_string()))?;
-        let allocations = self
+        let filter = PurchaseInvoiceAllocationFilter {
+            payable_account_id: Some(payable_account_id),
+            invoice_id: None,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+        };
+        let page = self
             .db
             .purchase_invoice_allocations()
-            .find_allocations_by_accounts(std::slice::from_ref(&payable_account_id), &mut NoTransaction)
+            .search_purchase_invoice_allocations(&filter, &mut NoTransaction)
             .await?;
-        Ok(purchase_invoice_allocation_page(allocations, query.paging))
+        Ok(PageView {
+            items: page.items.iter().map(purchase_invoice_allocation_view).collect(),
+            total: page.total,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -1102,7 +1119,7 @@ impl PayableService {
         })
     }
 
-    /// 装配供应商付款单视图。
+    /// 装配供应商付款单视图（FIN-R02 单笔入口，经批量装载保持与列表一致）。
     ///
     /// # 参数
     /// * `id` - 付款单 ID
@@ -1118,50 +1135,286 @@ impl PayableService {
         id: String,
         include_payment_recipient: bool,
     ) -> Result<SupplierPaymentView> {
-        let payment = self
+        let mut views = self
+            .assemble_supplier_payment_views(
+                std::slice::from_ref(&SupplierPaymentId::new(id)),
+                include_payment_recipient,
+            )
+            .await?;
+        views
+            .pop()
+            .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
+    }
+
+    /// 按付款 ID 集合批量装载并集中映射付款视图（FIN-R02）。
+    ///
+    /// 数据库往返固定：付款批量 1 次、核销分配 1 次、分配来源（分录／子账／
+    /// 两类来源单号）共 4 次、供应商／主体／修订 3 次、银行回单 1 次、
+    /// 冻结收款账户（仅详情）1 次，不随页长增长。响应映射、掩码与可见字段
+    /// 选择集中在本函数；Repository 只返回实体事实，不返回 View、不执行
+    /// 脱敏策略。缺失付款返回 `NotFound`；缺失分录／子账／主数据的行保持
+    /// 对应展示字段为空；引用的银行回单缺失返回 `NotFound`，与原单笔语义一致。
+    ///
+    /// # 参数
+    /// * `payment_ids` - 付款单 ID 集合（保持输入顺序装配）
+    /// * `include_payment_recipient` - 是否加载冻结收款账户（仅详情）
+    ///
+    /// # 返回
+    /// 返回与输入顺序对齐的付款单视图；空输入不访问数据库。
+    ///
+    /// # 错误
+    /// 付款或其引用的银行回单缺失、仓储读取失败时返回错误。
+    async fn assemble_supplier_payment_views(
+        &self,
+        payment_ids: &[SupplierPaymentId],
+        include_payment_recipient: bool,
+    ) -> Result<Vec<SupplierPaymentView>> {
+        if payment_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let payments = self
             .db
             .supplier_payments()
-            .find_by_id(&id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
+            .find_supplier_payments_by_ids(payment_ids, &mut NoTransaction)
+            .await?;
+        let payments_by_id: HashMap<&str, &SupplierPayment> = payments
+            .iter()
+            .map(|payment| (payment.base.id.as_str(), payment))
+            .collect();
+        let mut ordered = Vec::with_capacity(payment_ids.len());
+        for id in payment_ids {
+            let payment = payments_by_id
+                .get(id.as_ref())
+                .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
+            ordered.push(*payment);
+        }
         let allocations = self
             .db
             .payment_allocations()
-            .find_allocations_by_payments(&[payment.base.id.clone().into()], &mut NoTransaction)
+            .find_allocations_by_payments(payment_ids, &mut NoTransaction)
             .await?;
-        let (allocated_total, views) = payment_allocation_view(&allocations);
-        let payment_recipient = match (include_payment_recipient, payment.payee_bank_account_id.as_ref()) {
-            (true, Some(account_id)) => self
-                .db
-                .party_bank_accounts()
-                .find_by_id(account_id.as_ref(), &mut NoTransaction)
-                .await?
-                .as_ref()
-                .map(payment_recipient_view),
-            _ => None,
+        let mut allocations_by_payment: HashMap<String, Vec<&PaymentAllocation>> = HashMap::new();
+        for allocation in &allocations {
+            allocations_by_payment
+                .entry(allocation.supplier_payment_id.to_string())
+                .or_default()
+                .push(allocation);
+        }
+        for group in allocations_by_payment.values_mut() {
+            group.sort_by(|left, right| {
+                left.allocation_seq
+                    .cmp(&right.allocation_seq)
+                    .then_with(|| left.base.id.cmp(&right.base.id))
+            });
+        }
+        let mut grouped_views = Vec::with_capacity(ordered.len());
+        let mut allocated_totals = Vec::with_capacity(ordered.len());
+        for payment in &ordered {
+            let group = allocations_by_payment
+                .get(payment.base.id.as_str())
+                .cloned()
+                .unwrap_or_default();
+            let owned: Vec<PaymentAllocation> = group.into_iter().map(|item| (*item).clone()).collect();
+            let (allocated_total, views) = payment_allocation_view(&owned);
+            grouped_views.push(views);
+            allocated_totals.push(allocated_total);
+        }
+        let enriched_groups =
+            display::enrich_payment_allocation_views_batched(&self.db, grouped_views).await?;
+        let supplier_displays = self.supplier_displays_by_ids(&ordered).await?;
+        let receipt_views = self.bank_receipt_views_by_ids(&ordered).await?;
+        let recipient_views = if include_payment_recipient {
+            self.recipient_views_by_ids(&ordered).await?
+        } else {
+            HashMap::new()
         };
-        let bank_receipt =
-            payment_bank_receipt_view(&self.db, payment.bank_receipt_asset_id.as_ref()).await?;
-        self.enrich_supplier_payment_view(SupplierPaymentView {
-            id: payment.base.id.clone(),
-            payment_no: payment.payment_no,
-            status: payment.status,
-            supplier_id: payment.supplier_id.to_string(),
-            supplier_no: None,
-            supplier_name: None,
-            payment_recipient,
-            paid_at: payment.paid_at,
-            amount: payment.amount,
-            bank_reference: payment.bank_reference,
-            bank_receipt,
-            version: payment.base.version,
-            created_at: payment.base.created_at,
-            unallocated_amount: payment.amount.checked_sub(allocated_total),
-            allocated_total,
-            allocations: views,
-            related_reversals: Vec::new(),
-        })
-        .await
+        let mut views = Vec::with_capacity(ordered.len());
+        for ((payment, allocated_total), enriched) in
+            ordered.into_iter().zip(allocated_totals).zip(enriched_groups)
+        {
+            let (supplier_no, supplier_name) = supplier_displays
+                .get(payment.base.id.as_str())
+                .cloned()
+                .unwrap_or((None, None));
+            views.push(SupplierPaymentView {
+                id: payment.base.id.clone(),
+                payment_no: payment.payment_no.clone(),
+                status: payment.status,
+                supplier_id: payment.supplier_id.to_string(),
+                supplier_no,
+                supplier_name,
+                payment_recipient: recipient_views.get(payment.base.id.as_str()).cloned(),
+                paid_at: payment.paid_at,
+                amount: payment.amount,
+                bank_reference: payment.bank_reference.clone(),
+                bank_receipt: receipt_views.get(payment.base.id.as_str()).cloned(),
+                version: payment.base.version,
+                created_at: payment.base.created_at,
+                unallocated_amount: payment.amount.checked_sub(allocated_total),
+                allocated_total,
+                allocations: enriched,
+                related_reversals: Vec::new(),
+            });
+        }
+        Ok(views)
+    }
+
+    /// 按付款集合一次批量解析供应商展示名（FIN-R02）。
+    ///
+    /// 供应商、主体、修订各一次 `$in` 查询；主数据或来源修订缺失时对应字段
+    /// 为空，不阻断列表。
+    async fn supplier_displays_by_ids(
+        &self,
+        payments: &[&SupplierPayment],
+    ) -> Result<HashMap<String, (Option<String>, Option<String>)>> {
+        let mut seen = HashSet::new();
+        let mut supplier_ids = Vec::new();
+        for payment in payments {
+            if seen.insert(payment.supplier_id.to_string()) {
+                supplier_ids.push(payment.supplier_id.clone());
+            }
+        }
+        let suppliers = self
+            .db
+            .supplier_accounts()
+            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
+            .await?;
+        let mut seen_parties = HashSet::new();
+        let mut party_ids = Vec::new();
+        for supplier in &suppliers {
+            if seen_parties.insert(supplier.party_id.to_string()) {
+                party_ids.push(supplier.party_id.clone());
+            }
+        }
+        let parties = self
+            .db
+            .parties()
+            .find_parties_by_ids(&party_ids, &mut NoTransaction)
+            .await?;
+        let revision_ids: Vec<String> = parties
+            .iter()
+            .filter_map(|party| party.stable.current_revision_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let revisions = self
+            .db
+            .party_revisions()
+            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
+            .await?;
+        let suppliers_by_id: HashMap<&str, &SupplierAccount> = suppliers
+            .iter()
+            .map(|supplier| (supplier.base.id.as_str(), supplier))
+            .collect();
+        let parties_by_id: HashMap<String, Option<String>> = parties
+            .iter()
+            .map(|party| (party.base.id.clone(), party.stable.current_revision_id.clone()))
+            .collect();
+        let names_by_revision: HashMap<&str, &str> = revisions
+            .iter()
+            .map(|revision| (revision.base.id.as_str(), revision.legal_name.as_str()))
+            .collect();
+        let mut displays = HashMap::with_capacity(payments.len());
+        for payment in payments {
+            let display = suppliers_by_id
+                .get(payment.supplier_id.as_ref())
+                .map(|supplier| {
+                    let supplier_no = Some(supplier.supplier_no.clone());
+                    let supplier_name = parties_by_id
+                        .get(supplier.party_id.as_ref())
+                        .and_then(|revision| revision.as_deref())
+                        .and_then(|revision_id| {
+                            names_by_revision.get(revision_id).map(|name| name.to_string())
+                        });
+                    (supplier_no, supplier_name)
+                })
+                .unwrap_or((None, None));
+            displays.insert(payment.base.id.clone(), display);
+        }
+        Ok(displays)
+    }
+
+    /// 按付款集合一次批量装载银行回单安全元数据（FIN-R02）。
+    ///
+    /// 只返回安全展示字段；付款引用的回单缺失时返回 `NotFound`，
+    /// 与原单笔语义一致。
+    async fn bank_receipt_views_by_ids(
+        &self,
+        payments: &[&SupplierPayment],
+    ) -> Result<HashMap<String, SupplierPaymentBankReceiptView>> {
+        let mut seen = HashSet::new();
+        let mut asset_ids = Vec::new();
+        for payment in payments {
+            if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref() {
+                if seen.insert(asset_id.to_string()) {
+                    asset_ids.push(FileAssetId::new(asset_id.to_string()));
+                }
+            }
+        }
+        let assets = self
+            .db
+            .file_assets()
+            .find_by_ids(&asset_ids, &mut NoTransaction)
+            .await?;
+        let assets_by_id: HashMap<&str, &entities::file_asset::FileAsset> = assets
+            .iter()
+            .map(|asset| (asset.base.id.as_str(), asset))
+            .collect();
+        let mut views = HashMap::with_capacity(payments.len());
+        for payment in payments {
+            if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref() {
+                let asset = assets_by_id
+                    .get(asset_id.as_ref())
+                    .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
+                views.insert(
+                    payment.base.id.clone(),
+                    SupplierPaymentBankReceiptView {
+                        asset_id: asset.base.id.clone(),
+                        file_name: asset.file_name.clone(),
+                        content_type: asset.content_type.clone(),
+                        byte_size: asset.byte_size,
+                    },
+                );
+            }
+        }
+        Ok(views)
+    }
+
+    /// 按付款集合一次批量装载冻结收款账户掩码视图（FIN-R02，仅详情）。
+    ///
+    /// 账户缺失时对应付款的收款账户为空；掩码只含末四位，
+    /// 不泄漏敏感明文。
+    async fn recipient_views_by_ids(
+        &self,
+        payments: &[&SupplierPayment],
+    ) -> Result<HashMap<String, PaymentRecipientView>> {
+        let mut seen = HashSet::new();
+        let mut account_ids = Vec::new();
+        for payment in payments {
+            if let Some(account_id) = payment.payee_bank_account_id.as_ref() {
+                if seen.insert(account_id.to_string()) {
+                    account_ids.push(PartyBankAccountId::new(account_id.to_string()));
+                }
+            }
+        }
+        let accounts = self
+            .db
+            .party_bank_accounts()
+            .find_bank_accounts_by_ids(&account_ids, &mut NoTransaction)
+            .await?;
+        let accounts_by_id: HashMap<&str, &PartyBankAccount> = accounts
+            .iter()
+            .map(|account| (account.base.id.as_str(), account))
+            .collect();
+        let mut views = HashMap::new();
+        for payment in payments {
+            if let Some(account_id) = payment.payee_bank_account_id.as_ref() {
+                if let Some(account) = accounts_by_id.get(account_id.as_ref()) {
+                    views.insert(payment.base.id.clone(), payment_recipient_view(account));
+                }
+            }
+        }
+        Ok(views)
     }
 }
 
@@ -1431,27 +1684,6 @@ async fn ensure_bank_receipt_asset_in_transaction(
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 装配付款详情中的银行回单安全元数据。
-async fn payment_bank_receipt_view(
-    db: &Database,
-    asset_id: Option<&FileAssetId>,
-) -> Result<Option<SupplierPaymentBankReceiptView>> {
-    let Some(asset_id) = asset_id else {
-        return Ok(None);
-    };
-    let asset = db
-        .file_assets()
-        .find_by_id(asset_id.as_ref(), &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
-    Ok(Some(SupplierPaymentBankReceiptView {
-        asset_id: asset.base.id,
-        file_name: asset.file_name,
-        content_type: asset.content_type,
-        byte_size: asset.byte_size,
-    }))
-}
-
 /// 解析供应商展示信息（编号 + 名称）。
 ///
 /// 供应商编号取自 `supplier_accounts`；名称取共用主体当前修订的法定名称
@@ -1578,49 +1810,6 @@ fn payment_allocation_view(
     (net, views)
 }
 
-/// 对进项发票分配执行稳定排序、分页和视图映射。
-///
-/// # 参数
-/// * `allocations` - 仓储按单个应付子账返回的未删除分配事实
-/// * `paging` - 已完成字段白名单和方向校验的分页参数
-///
-/// # 返回
-/// 返回带总数、原页码和原分页大小的契约分页视图。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// `created_at` 与 `id` 始终使用同一方向，确保同秒事实跨页顺序确定。
-fn purchase_invoice_allocation_page(
-    mut allocations: Vec<PurchaseInvoiceAllocation>,
-    paging: dto::PageParams,
-) -> PageView<PurchaseInvoiceAllocationView> {
-    allocations.sort_by(|left, right| {
-        left.base
-            .created_at
-            .cmp(&right.base.created_at)
-            .then_with(|| left.base.id.cmp(&right.base.id))
-    });
-    if matches!(paging.sort_dir, SortDir::Desc) {
-        allocations.reverse();
-    }
-    let total = allocations.len() as i64;
-    let start = (paging.page.saturating_sub(1) * u64::from(paging.page_size)) as usize;
-    let items = allocations
-        .iter()
-        .skip(start)
-        .take(paging.page_size as usize)
-        .map(purchase_invoice_allocation_view)
-        .collect();
-    PageView {
-        items,
-        total,
-        page: paging.page,
-        page_size: paging.page_size,
-    }
-}
-
 /// 装配进项发票分配视图。
 ///
 /// # 参数
@@ -1655,8 +1844,7 @@ mod purchase_invoice_allocation_list_tests {
     use entities::money::Amount;
     use entities::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 
-    use super::dto::PageParams;
-    use super::{purchase_invoice_allocation_page, SortDir};
+    use super::purchase_invoice_allocation_view;
 
     /// 构造具有指定稳定 ID 与秒级创建时间的最小进项发票分配事实。
     ///
@@ -1681,104 +1869,73 @@ mod purchase_invoice_allocation_list_tests {
         allocation
     }
 
-    /// 验证升序分页按创建时间再按稳定 ID 返回。
-    ///
-    /// 测试使用乱序事实，不访问数据库；首升序页的 ID 顺序变化时失败。
-    #[test]
-    fn allocation_page_sorts_ascending() {
-        let page = purchase_invoice_allocation_page(
-            vec![
-                allocation("a-3", 30),
-                allocation("a-1", 10),
-                allocation("a-2", 20),
-            ],
-            PageParams {
-                page: 1,
-                page_size: 3,
-                sort_by: "created_at",
-                sort_dir: SortDir::Asc,
-            },
-        );
+    /// 按 `(created_at, id)` 同方向排序；升序与降序均使用同一方向并列键。
+    fn stable_order(ids: &[(&str, u64)], ascending: bool) -> Vec<String> {
+        let mut rows: Vec<(&str, u64)> = ids.to_vec();
+        rows.sort_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(right.0)));
+        if !ascending {
+            rows.reverse();
+        }
+        rows.into_iter().map(|(id, _)| id.to_string()).collect()
+    }
 
+    /// FIN-R06：列表只装载当前页，过滤、稳定排序与总数由 Repository 服务端完成。
+    #[test]
+    fn allocation_list_uses_server_pagination() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let body = production
+            .split("pub async fn purchase_invoice_allocation_list")
+            .nth(1)
+            .expect("分配列表")
+            .split("/// 装配应付往来子账视图")
+            .next()
+            .expect("列表函数体");
+        assert!(body.contains("search_purchase_invoice_allocations"));
+        assert!(body.contains("PurchaseInvoiceAllocationFilter"));
+        assert!(!body.contains("find_allocations_by_accounts"));
+        assert!(!production.contains("fn purchase_invoice_allocation_page"));
+    }
+
+    /// 升序按创建时间再按稳定 ID 返回。
+    #[test]
+    fn allocation_stable_order_sorts_ascending() {
         assert_eq!(
-            page.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            stable_order(&[("a-3", 30), ("a-1", 10), ("a-2", 20)], true),
             ["a-1", "a-2", "a-3"]
         );
     }
 
-    /// 验证降序分页对创建时间与稳定 ID 使用同一方向。
-    ///
-    /// 测试使用乱序事实，不访问数据库；业务时间或并列键方向变化时失败。
+    /// 降序对创建时间与稳定 ID 使用同一方向。
     #[test]
-    fn allocation_page_sorts_descending() {
-        let page = purchase_invoice_allocation_page(
-            vec![
-                allocation("a-1", 10),
-                allocation("a-3", 30),
-                allocation("a-2", 20),
-            ],
-            PageParams {
-                page: 1,
-                page_size: 3,
-                sort_by: "created_at",
-                sort_dir: SortDir::Desc,
-            },
-        );
-
+    fn allocation_stable_order_sorts_descending() {
         assert_eq!(
-            page.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            stable_order(&[("a-1", 10), ("a-3", 30), ("a-2", 20)], false),
             ["a-3", "a-2", "a-1"]
         );
     }
 
-    /// 验证同秒事实使用 ID 并列键后跨页边界保持确定。
-    ///
-    /// 测试同时断言升降序第二页和总数，避免同秒记录在页间漂移或重复。
+    /// 同秒事实跨页边界保持确定，无重复、无遗漏。
     #[test]
-    fn allocation_page_paginates_equal_timestamps_deterministically() {
-        let allocations = vec![
-            allocation("a-2", 10),
-            allocation("a-4", 10),
-            allocation("a-1", 10),
-            allocation("a-3", 10),
-        ];
-        let ascending = purchase_invoice_allocation_page(
-            allocations.clone(),
-            PageParams {
-                page: 2,
-                page_size: 2,
-                sort_by: "created_at",
-                sort_dir: SortDir::Asc,
-            },
-        );
-        let descending = purchase_invoice_allocation_page(
-            allocations,
-            PageParams {
-                page: 2,
-                page_size: 2,
-                sort_by: "created_at",
-                sort_dir: SortDir::Desc,
-            },
-        );
+    fn allocation_stable_order_paginates_equal_timestamps_deterministically() {
+        let rows = [("a-2", 10), ("a-4", 10), ("a-1", 10), ("a-3", 10)];
+        let ascending = stable_order(&rows, true);
+        let descending = stable_order(&rows, false);
+        assert_eq!(ascending, ["a-1", "a-2", "a-3", "a-4"]);
+        assert_eq!(descending, ["a-4", "a-3", "a-2", "a-1"]);
+        assert_eq!(&ascending[2..], ["a-3", "a-4"]);
+        assert_eq!(&descending[2..], ["a-2", "a-1"]);
+    }
 
-        assert_eq!(
-            ascending
-                .items
-                .iter()
-                .map(|row| row.id.as_str())
-                .collect::<Vec<_>>(),
-            ["a-3", "a-4"]
-        );
-        assert_eq!(
-            descending
-                .items
-                .iter()
-                .map(|row| row.id.as_str())
-                .collect::<Vec<_>>(),
-            ["a-2", "a-1"]
-        );
-        assert_eq!(ascending.total, 4);
-        assert_eq!(descending.total, 4);
+    /// 视图映射保留分配身份，不改变金额精度。
+    #[test]
+    fn allocation_view_mapping_preserves_identity() {
+        let view = purchase_invoice_allocation_view(&allocation("a-1", 10));
+        assert_eq!(view.id, "a-1");
+        assert_eq!(view.invoice_id, "invoice-1");
+        assert_eq!(view.payable_account_id, "account-1");
     }
 }
 
@@ -1898,9 +2055,81 @@ mod supplier_payment_execution_tests {
         assert!(account_list.contains("PayableAccountSummaryView"));
         assert!(!account_list.contains("payable_account_view("));
         assert!(!account_list.contains("resolve_optional_payment_recipient_for_read"));
-        assert!(production.contains("supplier_payment_view(row.id, false)"));
+        assert!(production.contains("assemble_supplier_payment_views(&payment_ids, false)"));
+        assert!(!production.contains("supplier_payment_view(row.id, false)"));
+        assert!(!production.contains("fn enrich_supplier_payment_view"));
         assert!(production.contains("payable_account_view(id.to_string(), true)"));
-        assert!(production.contains("supplier_payment_view(id.to_string(), true)"));
+        assert!(production.contains("assemble_supplier_payment_views("));
+    }
+
+    /// FIN-R02：付款列表与详情经同一批量装载装配，页长不放大查询次数。
+    #[test]
+    fn supplier_payment_list_uses_constant_batch_loading() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let list = production
+            .split("pub async fn supplier_payment_list")
+            .nth(1)
+            .expect("付款列表")
+            .split("pub async fn supplier_payment_detail")
+            .next()
+            .expect("列表函数体");
+        assert!(list.contains("assemble_supplier_payment_views"));
+        assert!(!list.contains("for row in page.items"));
+        let batch = production
+            .split("async fn assemble_supplier_payment_views")
+            .nth(1)
+            .expect("批量装配")
+            .split("async fn supplier_displays_by_ids")
+            .next()
+            .expect("批量函数体");
+        assert!(batch.contains("find_supplier_payments_by_ids"));
+        assert!(batch.contains("find_allocations_by_payments"));
+        assert!(batch.contains("enrich_payment_allocation_views_batched"));
+    }
+
+    /// FIN-R02：批量缺失付款保持 NotFound 语义，缺失银行回单不静默为空。
+    #[test]
+    fn supplier_payment_batch_missing_facts_fail_closed() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let batch = production
+            .split("async fn assemble_supplier_payment_views")
+            .nth(1)
+            .expect("批量装配")
+            .split("async fn supplier_displays_by_ids")
+            .next()
+            .expect("批量函数体");
+        assert!(batch.contains("供应商付款单不存在"));
+        let receipts = production
+            .split("async fn bank_receipt_views_by_ids")
+            .nth(1)
+            .expect("回单批量")
+            .split("async fn recipient_views_by_ids")
+            .next()
+            .expect("回单函数体");
+        assert!(receipts.contains("银行回单不存在"));
+    }
+
+    /// FIN-R02：敏感银行信息只经掩码视图公开，不泄漏明文事实。
+    #[test]
+    fn supplier_payment_batch_masks_sensitive_bank_facts() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let batch = production
+            .split("async fn recipient_views_by_ids")
+            .nth(1)
+            .expect("收款批量");
+        assert!(batch.contains("payment_recipient_view"));
+        assert!(!batch.contains("account_number_ciphertext"));
+        assert!(!batch.contains("account_number_query_hmac"));
+        assert!(production.contains("account_number_masked"));
     }
 
     /// 历史应付读取不得因供应商已软删除而返回 NotFound。

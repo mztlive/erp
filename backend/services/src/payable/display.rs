@@ -4,14 +4,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{NoTransaction, PayableExt, ReturnsExt};
+use database::{NoTransaction, PayableExt, PurchaseOrderExt, ReturnsExt, SupplierSettlementExt};
 use entities::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use entities::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use entities::returns::PaymentReversal;
 use mongodb::Database;
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
-use super::{resolve_source_document_no, resolve_supplier_display, PayableService};
+use super::PayableService;
 use crate::errors::Result;
 
 /// 付款核销目标的可读来源。
@@ -28,27 +28,6 @@ struct AllocationSource {
 }
 
 impl PayableService {
-    /// 为付款视图补全供应商展示名与核销目标单据。
-    ///
-    /// # 参数
-    /// * `view` - 尚未补全展示字段的付款视图
-    ///
-    /// # 返回
-    /// 返回带供应商名称与核销来源单号的付款视图。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误；主数据或来源单据缺失不视为错误。
-    pub(super) async fn enrich_supplier_payment_view(
-        &self,
-        mut view: SupplierPaymentView,
-    ) -> Result<SupplierPaymentView> {
-        let (supplier_no, supplier_name) = resolve_supplier_display(&self.db, &view.supplier_id).await?;
-        view.supplier_no = supplier_no;
-        view.supplier_name = supplier_name;
-        view.allocations = enrich_payment_allocation_views(&self.db, view.allocations).await?;
-        Ok(view)
-    }
-
     /// 批量把冲正记录挂到原付款视图，避免付款列表逐行查询。
     ///
     /// # 参数
@@ -124,6 +103,39 @@ fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalVi
         occurred_at: reversal.occurred_at,
         created_at: reversal.base.created_at,
     }
+}
+
+/// 批量为多笔付款的核销分配补全应付子账与来源业务单号（FIN-R02）。
+///
+/// 将各笔付款的分配视图拼接后一次装载分录、子账与来源单号，
+/// 再按原分组切回；空输入不访问数据库。缺失分录或子账的行保持
+/// 展示字段为空，与单笔路径语义一致。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `grouped` - 按付款分组的分配视图
+///
+/// # 返回
+/// 返回与输入分组对齐的补全后分配视图。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub(super) async fn enrich_payment_allocation_views_batched(
+    db: &Database,
+    grouped: Vec<Vec<PaymentAllocationView>>,
+) -> Result<Vec<Vec<PaymentAllocationView>>> {
+    let lengths: Vec<usize> = grouped.iter().map(Vec::len).collect();
+    let flat: Vec<PaymentAllocationView> = grouped.into_iter().flatten().collect();
+    if flat.is_empty() {
+        return Ok(lengths.into_iter().map(|_| Vec::new()).collect());
+    }
+    let enriched = enrich_payment_allocation_views(db, flat).await?;
+    let mut iter = enriched.into_iter();
+    let mut batched = Vec::with_capacity(lengths.len());
+    for len in lengths {
+        batched.push(iter.by_ref().take(len).collect());
+    }
+    Ok(batched)
 }
 
 /// 为付款核销分配补全应付子账与来源业务单号。
@@ -255,7 +267,11 @@ async fn load_accounts_for_entries(
         .collect())
 }
 
-/// 解析子账来源业务单号并写入缓存。
+/// 按来源类型分组一次批量解析子账来源业务单号并写入缓存（FIN-R03）。
+///
+/// 采购单来源与结算单来源各至多一次仓储查询；重复来源 ID 去重；来源缺失或
+/// 业务单号为空时保持 `None`，禁止回退泄漏内部 ID。展示合并由
+/// `merge_source_document_nos` 承担，本函数只负责分组批量装载。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -275,14 +291,59 @@ async fn collect_source_document_nos<'a, I>(
 where
     I: IntoIterator<Item = &'a PayableAccount>,
 {
-    for account in accounts {
-        if document_nos.contains_key(&account.base.id) {
-            continue;
-        }
-        let document_no = resolve_source_document_no(db, account).await?;
-        document_nos.insert(account.base.id.clone(), document_no);
+    let pending: Vec<&PayableAccount> = accounts
+        .into_iter()
+        .filter(|account| !document_nos.contains_key(&account.base.id))
+        .collect();
+    if pending.is_empty() {
+        return Ok(());
     }
+    let mut purchase_ids = Vec::new();
+    let mut statement_ids = Vec::new();
+    for account in &pending {
+        match account.source_type {
+            PayableSourceType::PurchaseOrder => purchase_ids.push(account.source_document_id.clone()),
+            PayableSourceType::SupplierSettlement => {
+                statement_ids.push(account.source_document_id.clone());
+            }
+        }
+    }
+    let mut executor = NoTransaction;
+    let purchase_map = db
+        .purchase_order()
+        .purchase_nos_by_ids(&purchase_ids, &mut executor)
+        .await?;
+    let statement_map = db
+        .supplier_settlement_statements()
+        .statement_nos_by_ids(&statement_ids, &mut executor)
+        .await?;
+    document_nos.extend(merge_source_document_nos(&pending, &purchase_map, &statement_map));
     Ok(())
+}
+
+/// 合并已批量装载的来源单号映射为子账展示缓存（FIN-R03 纯合并）。
+///
+/// # 参数
+/// * `accounts` - 待合并的应付子账
+/// * `purchase_map` - 采购单 ID 到业务单号的事实映射
+/// * `statement_map` - 结算单 ID 到业务单号的事实映射
+///
+/// # 返回
+/// 返回以子账 ID 为键的展示单号；缺失来源保持 `None`，不回退内部 ID。
+fn merge_source_document_nos(
+    accounts: &[&PayableAccount],
+    purchase_map: &HashMap<String, String>,
+    statement_map: &HashMap<String, String>,
+) -> HashMap<String, Option<String>> {
+    let mut merged = HashMap::with_capacity(accounts.len());
+    for account in accounts {
+        let document_no = match account.source_type {
+            PayableSourceType::PurchaseOrder => purchase_map.get(&account.source_document_id).cloned(),
+            PayableSourceType::SupplierSettlement => statement_map.get(&account.source_document_id).cloned(),
+        };
+        merged.insert(account.base.id.clone(), document_no);
+    }
+    merged
 }
 
 /// 把分录、子账与业务单号装配为核销来源映射。
@@ -330,7 +391,7 @@ mod tests {
     use entities::money::Amount;
     use entities::returns::{PaymentReversal, PaymentReversalData};
 
-    use super::group_payment_reversals;
+    use super::{group_payment_reversals, merge_source_document_nos};
 
     /// 关联冲正按原付款分组，并稳定展示最近创建记录。
     #[test]
@@ -367,5 +428,97 @@ mod tests {
         .expect("冲正事实合法");
         reversal.base.created_at = created_at;
         reversal
+    }
+
+    /// 构造来源单号合并所需的最小应付子账事实。
+    fn payable_account_fixture(
+        id: &str,
+        source_type: &str,
+        source_document_id: &str,
+    ) -> entities::payable::PayableAccount {
+        use entities::ids::{PayableAccountId, SupplierAccountId};
+        use entities::money::Amount;
+        use entities::payable::{PayableAccount, PayableAccountData, PayableSourceType};
+        let source_type = match source_type {
+            "purchase" => PayableSourceType::PurchaseOrder,
+            _ => PayableSourceType::SupplierSettlement,
+        };
+        PayableAccount::new(
+            PayableAccountId::new(id),
+            PayableAccountData {
+                source_document_id: source_document_id.to_string(),
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                source_type,
+                gross_total: Amount::from_str("100.00").expect("金额合法"),
+                settled_total: Amount::from_str("0.00").expect("金额合法"),
+                invoiceable_total: Amount::from_str("100.00").expect("金额合法"),
+                invoiced_total: Amount::from_str("0.00").expect("金额合法"),
+            },
+            "tester",
+        )
+        .expect("子账事实合法")
+    }
+
+    /// 混合来源按类型合并，缺失来源保持空且不回退内部 ID。
+    #[test]
+    fn source_document_nos_merge_mixed_sources() {
+        use std::collections::{HashMap, HashSet};
+        let purchase = payable_account_fixture("account-po", "purchase", "po-1");
+        let settlement = payable_account_fixture("account-st", "settlement", "st-1");
+        let accounts = [&purchase, &settlement];
+        let purchase_map: HashMap<String, String> = [("po-1".to_string(), "PO-2026-001".to_string())]
+            .into_iter()
+            .collect();
+        let statement_map: HashMap<String, String> = [("st-1".to_string(), "ST-2026-001".to_string())]
+            .into_iter()
+            .collect();
+        let merged = merge_source_document_nos(&accounts, &purchase_map, &statement_map);
+        assert_eq!(merged["account-po"].as_deref(), Some("PO-2026-001"));
+        assert_eq!(merged["account-st"].as_deref(), Some("ST-2026-001"));
+        let leaked: HashSet<&str> = merged.values().flatten().map(String::as_str).collect();
+        assert!(!leaked.contains("po-1"));
+        assert!(!leaked.contains("st-1"));
+    }
+
+    /// 空集合合并为空，不触发仓储查询。
+    #[test]
+    fn source_document_nos_merge_empty() {
+        use std::collections::HashMap;
+        let merged = merge_source_document_nos(&[], &HashMap::new(), &HashMap::new());
+        assert!(merged.is_empty());
+    }
+
+    /// 部分缺失保持空，不回退内部 ID。
+    #[test]
+    fn source_document_nos_merge_partial_missing() {
+        use std::collections::HashMap;
+        let present = payable_account_fixture("account-present", "purchase", "po-1");
+        let missing = payable_account_fixture("account-missing", "purchase", "po-missing");
+        let accounts = [&present, &missing];
+        let purchase_map: HashMap<String, String> = [("po-1".to_string(), "PO-2026-001".to_string())]
+            .into_iter()
+            .collect();
+        let merged = merge_source_document_nos(&accounts, &purchase_map, &HashMap::new());
+        assert_eq!(merged["account-present"].as_deref(), Some("PO-2026-001"));
+        assert_eq!(merged["account-missing"], None);
+    }
+
+    /// 批量装载后不再逐笔解析来源单号。
+    #[test]
+    fn allocation_sources_use_grouped_batch_loading() {
+        let production = include_str!("display.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let batch = production
+            .split("async fn collect_source_document_nos")
+            .nth(1)
+            .expect("批量来源装载")
+            .split("fn merge_source_document_nos")
+            .next()
+            .expect("批量函数体");
+        assert!(batch.contains("purchase_nos_by_ids"));
+        assert!(batch.contains("statement_nos_by_ids"));
+        assert!(!batch.contains("resolve_source_document_no(db, account)"));
     }
 }

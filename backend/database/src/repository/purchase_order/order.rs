@@ -57,6 +57,15 @@ pub struct PurchaseOrderRow {
     pub created_at: u64,
 }
 
+/// 采购单号最小事实行（FIN-R03 来源单号批量映射，只投影单号）。
+#[derive(Debug, Clone, serde::Deserialize)]
+struct PurchaseOrderNoRow {
+    /// 实体主键。
+    id: String,
+    /// 采购业务单号。
+    purchase_no: String,
+}
+
 /// 采购单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct PurchaseOrderFilter {
@@ -133,6 +142,57 @@ impl<'a> PurchaseOrderRepository<'a> {
             .purchase_orders()
             .find_many(in_filter("id", purchase_order_ids.iter().cloned()), executor)
             .await
+    }
+
+    /// 按采购单 ID 集合一次批量返回来源 ID 到采购单号的事实映射（FIN-R03）。
+    ///
+    /// 只投影 `id` 与 `purchase_no`；空输入不访问数据库；仓储内去重后单次
+    /// `$in` 查询。空单号按缺失处理，不进入映射，Service 保持 `None`
+    /// 且不得回退内部 ID。
+    ///
+    /// # 参数
+    /// * `purchase_order_ids` - 采购单 ID 字符串集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回来源 ID 到非空采购单号的映射；缺失来源不上表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn purchase_nos_by_ids(
+        &self,
+        purchase_order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<std::collections::HashMap<String, String>> {
+        use std::collections::{HashMap, HashSet};
+        let mut seen = HashSet::new();
+        let mut deduped = Vec::new();
+        for id in purchase_order_ids {
+            if !id.trim().is_empty() && seen.insert(id.clone()) {
+                deduped.push(id.clone());
+            }
+        }
+        if deduped.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderNoRow>(<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS),
+            in_filter("id", deduped),
+            FindOptions::builder()
+                .projection(mongodb::bson::doc! { "id": 1, "purchase_no": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        let mut map = HashMap::new();
+        for row in rows {
+            if !row.purchase_no.trim().is_empty() {
+                map.insert(row.id, row.purchase_no);
+            }
+        }
+        Ok(map)
     }
 }
 

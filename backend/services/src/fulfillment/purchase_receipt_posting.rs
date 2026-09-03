@@ -6,11 +6,10 @@ use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt,
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::fulfillment::{
-    Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType, PurchaseReceipt,
-    PurchaseReceiptLine,
+    Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
 };
 use entities::ids::{
-    DeliveryId, DeliveryLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
+    DeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
     SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId, StockReservationId,
     WarehouseId,
 };
@@ -532,7 +531,13 @@ async fn ensure_receipt_stock_delivery(
             address_snapshot_fingerprint: None,
         },
     )?;
-    let lines = build_receipt_stock_delivery_lines(&delivery_id, reservations, 1)?;
+    let lines = DeliveryLineBatch::build(
+        delivery_id.clone(),
+        DeliveryType::WarehouseShip,
+        1,
+        super::delivery_lines::receipt_reservation_specs(reservations),
+    )
+    .map_err(Error::Logic)?;
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, session)
         .await?;
@@ -567,38 +572,20 @@ async fn append_receipt_stock_delivery_lines(
         .filter(|reservation| !existing_reservations.contains(&reservation.base.id))
         .collect::<Vec<_>>();
     let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
-    for line in build_receipt_stock_delivery_lines(&delivery_id, &pending, next_line_no)? {
+    for line in DeliveryLineBatch::build(
+        delivery_id.clone(),
+        DeliveryType::WarehouseShip,
+        next_line_no,
+        super::delivery_lines::receipt_reservation_specs(&pending),
+    )
+    .map_err(Error::Logic)?
+    {
         db.delivery_lines().create(&line, session).await?;
     }
     Ok(())
 }
 
-/// 将采购入库预占投影为仓发草稿行。
-fn build_receipt_stock_delivery_lines(
-    delivery_id: &DeliveryId,
-    reservations: &[&StockReservation],
-    first_line_no: u32,
-) -> Result<Vec<DeliveryLine>> {
-    reservations
-        .iter()
-        .enumerate()
-        .map(|(index, reservation)| {
-            DeliveryLine::new(
-                DeliveryLineId::new(next_id()),
-                DeliveryLineData {
-                    delivery_id: delivery_id.clone(),
-                    line_no: first_line_no + index as u32,
-                    sales_order_line_id: reservation.sales_order_line_id.clone(),
-                    quantity: reservation.reserved_quantity,
-                    stock_reservation_id: Some(reservation.base.id.clone().into()),
-                    purchase_line_sales_allocation_id: None,
-                },
-                DeliveryType::WarehouseShip,
-            )
-            .map_err(Error::Logic)
-        })
-        .collect()
-}
+// 入库预占到仓发行字段映射归实体批量工厂（FUL-E01）；旧 Service 编号 helper 已删除。
 
 #[cfg(test)]
 mod tests {

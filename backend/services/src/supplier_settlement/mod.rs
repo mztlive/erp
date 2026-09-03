@@ -208,36 +208,21 @@ impl SupplierSettlementService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SupplierSettlementStatementDetailView> {
-        let statement = self.load_statement(id).await?;
-        let items = self
+        let snapshot = self
             .db
-            .supplier_settlement_items()
-            .list_by_statement(id, &mut NoTransaction)
-            .await?;
-        let item_ids = items
-            .iter()
-            .map(|item| entities::ids::SupplierSettlementItemId::new(item.base.id.as_str()))
-            .collect::<Vec<_>>();
-        let differences = self
-            .db
-            .supplier_settlement_differences()
-            .list_by_statement_item_ids(&item_ids, &mut NoTransaction)
-            .await?;
-        let difference_ids = differences
-            .iter()
-            .map(|difference| difference.base.id.clone())
-            .collect::<Vec<_>>();
-        let evidence = self
-            .db
-            .supplier_settlement_difference_evidence()
-            .find_by_difference_ids(&difference_ids, &mut NoTransaction)
-            .await?;
+            .supplier_settlement()
+            .statement_detail_snapshot(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商结算单不存在".to_string()))?;
+        let statement = snapshot.statement;
+        let items = snapshot.items;
+        let differences = snapshot.differences;
         let mut evidence_by_difference = HashMap::<String, Vec<dto::SettlementDifferenceEvidenceView>>::new();
-        for value in evidence {
-            evidence_by_difference
-                .entry(value.difference_id.to_string())
-                .or_default()
-                .push(evidence::evidence_view(value));
+        for (difference_id, values) in snapshot.evidence_by_difference {
+            evidence_by_difference.insert(
+                difference_id,
+                values.into_iter().map(evidence::evidence_view).collect(),
+            );
         }
         let evidenced_difference_count = evidence_by_difference.len();
         let pending_difference_count = differences
@@ -455,7 +440,7 @@ impl SupplierSettlementService {
     ) -> Result<SettlementReviewDecisionResult> {
         req.validate()?;
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
-        validate_review_decision_reason(&req)?;
+        let reject_reason = req.decision.parsed_reject_reason()?;
         let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
         let action = match req.decision.action {
             dto::SettlementReviewAction::Reject => "supplier_settlement.review_reject",
@@ -520,10 +505,13 @@ impl SupplierSettlementService {
                 } else {
                     SettlementStatus::HasDifference
                 };
+                let Some(reason) = reject_reason else {
+                    return Err(Error::ValidationError("驳回必须携带原因代码".to_string()));
+                };
                 statement.record_review(
                     SettlementReviewDecision::Reject {
                         return_status,
-                        reason_code: req.decision.reason_code.clone().unwrap_or_default(),
+                        reason_code: reason,
                         comment: req.decision.comment.clone(),
                     },
                     actor.id(),
@@ -1206,22 +1194,6 @@ fn settlement_object_actions(
     (actions, blockers, processing_state)
 }
 
-fn validate_review_decision_reason(req: &SettlementReviewCommand) -> Result<()> {
-    match req.decision.action {
-        dto::SettlementReviewAction::Reject => {
-            let reason = normalized_reason_code(req.decision.reason_code.as_deref().unwrap_or_default())?;
-            if !["NEEDS_MORE_EVIDENCE", "AMOUNT_MISMATCH", "OTHER"].contains(&reason.as_str()) {
-                return Err(Error::ValidationError("结算驳回原因代码不受支持".to_string()));
-            }
-        }
-        dto::SettlementReviewAction::Confirm if req.decision.reason_code.is_some() => {
-            return Err(Error::ValidationError("确认结算不得携带驳回原因代码".to_string()));
-        }
-        dto::SettlementReviewAction::Confirm => {}
-    }
-    Ok(())
-}
-
 fn build_settlement_payable(
     statement: &SupplierSettlementStatement,
     amount: Amount,
@@ -1292,26 +1264,6 @@ fn parse_expected_version(value: &str, field: &str) -> Result<u64> {
         return Err(Error::ValidationError(format!("{field}必须大于0")));
     }
     Ok(version)
-}
-
-/// 规范化受控原因代码。
-fn normalized_reason_code(value: &str) -> Result<String> {
-    let value = value.trim().to_ascii_uppercase();
-    if value.is_empty() {
-        return Err(Error::ValidationError("原因代码不能为空".to_string()));
-    }
-    if value.len() > 64 {
-        return Err(Error::ValidationError("原因代码长度不能超过64".to_string()));
-    }
-    if !value
-        .bytes()
-        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.'))
-    {
-        return Err(Error::ValidationError(
-            "原因代码只能包含大写字母、数字、下划线、连字符或点".to_string(),
-        ));
-    }
-    Ok(value)
 }
 
 /// 将 API 差异决定适配为领域结论类别。
@@ -1987,9 +1939,18 @@ fn settlement_difference_view(difference: SupplierSettlementDifference) -> Suppl
 mod tests {
     use super::*;
     use entities::common::time::BusinessDate;
-    use entities::ids::{SupplierAccountId, SupplierSettlementStatementId};
-    use entities::supplier_settlement::SupplierSettlementStatementData;
+    use entities::ids::{
+        SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+    };
+    use entities::money::Quantity;
+    use entities::supplier_settlement::{
+        SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
+        SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData,
+        SupplierSettlementItemData, SupplierSettlementStatementData,
+    };
     use entities::AccountKind;
+    use test_support::{require_mongo, TestDb};
 
     fn sample_statement() -> SupplierSettlementStatement {
         let mut statement = SupplierSettlementStatement::new(
@@ -2190,5 +2151,138 @@ mod tests {
         )
         .unwrap()
         .is_empty());
+    }
+
+    /// 详情明细夹具（订单 100 + 运费 10 + 服务费 5 − 退款 0 = ERP 115）。
+    fn detail_item(id: &str) -> SupplierSettlementItem {
+        SupplierSettlementItem::new(
+            SupplierSettlementItemId::new(id),
+            SupplierSettlementItemData {
+                statement_id: SupplierSettlementStatementId::new("statement-1"),
+                supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(format!("order-{id}")),
+                supplier_fulfillment_item_id: SupplierFulfillmentItemId::new(format!("fulfillment-{id}")),
+                quantity: Quantity::from_str("1").unwrap(),
+                order_amount: Amount::from_str("100.00").unwrap(),
+                freight_amount: Amount::from_str("10.00").unwrap(),
+                service_fee_amount: Amount::from_str("5.00").unwrap(),
+                refund_amount: Amount::from_str("0.00").unwrap(),
+                erp_calculated_amount: Amount::from_str("115.00").unwrap(),
+                erp_calculated_net_amount: Amount::from_str("100.00").unwrap(),
+                erp_calculated_tax_amount: Amount::from_str("15.00").unwrap(),
+                supplier_billed_amount: Amount::from_str("115.00").unwrap(),
+                supplier_billed_net_amount: Amount::from_str("100.00").unwrap(),
+                supplier_billed_tax_amount: Amount::from_str("15.00").unwrap(),
+            },
+        )
+        .unwrap()
+    }
+
+    /// 详情差异夹具（待处理或已认可，不带处理三元组）。
+    fn detail_difference(
+        id: &str,
+        item_id: &str,
+        status: SettlementDifferenceStatus,
+    ) -> SupplierSettlementDifference {
+        SupplierSettlementDifference::new(
+            SupplierSettlementDifferenceId::new(id),
+            SupplierSettlementDifferenceData {
+                statement_item_id: SupplierSettlementItemId::new(item_id),
+                difference_type: SettlementDifferenceType::Amount,
+                difference_amount: Amount::from_str("1.00").unwrap(),
+                status,
+                resolution: None,
+                resolved_by: None,
+                resolved_at: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 缺失的结算单映射为 `NotFound`（快照 `None` 的服务语义）。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn detail_missing_statement_maps_to_not_found() {
+        require_mongo!(async {
+            let fixture = TestDb::new("ful_r07_service_detail_missing")
+                .await
+                .expect("测试数据库创建失败");
+            let service = SupplierSettlementService::new(fixture.db().clone());
+            let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
+            let error = service
+                .supplier_settlement_statement_detail("statement-missing", &actor)
+                .await
+                .expect_err("缺失结算单必须失败");
+            assert!(
+                matches!(error, Error::NotFound(_)),
+                "缺失结算单必须映射为 NotFound"
+            );
+        });
+    }
+
+    /// 详情正确挂载补证并上报已举证/待处理计数。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn detail_attaches_evidence_and_reports_counts() {
+        require_mongo!(async {
+            let fixture = TestDb::new("ful_r07_service_detail_counts")
+                .await
+                .expect("测试数据库创建失败");
+            let db = fixture.db();
+            let statement = sample_statement();
+            let items = vec![detail_item("item-1"), detail_item("item-2")];
+            let differences = vec![
+                detail_difference("difference-1", "item-1", SettlementDifferenceStatus::Pending),
+                detail_difference(
+                    "difference-2",
+                    "item-2",
+                    SettlementDifferenceStatus::SupplierAcknowledged,
+                ),
+            ];
+            db.supplier_settlement()
+                .create_statement_with_items(&statement, &items, &differences, &mut NoTransaction)
+                .await
+                .expect("结算单及明细差异插入失败");
+            let evidence = SupplierSettlementDifferenceEvidence::new(
+                "evidence-1",
+                SupplierSettlementDifferenceEvidenceData {
+                    request_id: "request-1".to_string(),
+                    statement_id: SupplierSettlementStatementId::new("statement-1"),
+                    difference_id: SupplierSettlementDifferenceId::new("difference-1"),
+                    evidence_reference_ids: vec!["ticket://1".to_string()],
+                    opinion_code: None,
+                    comment: None,
+                    provided_by: "preparer-1".to_string(),
+                    provided_at: Instant::from_unix_secs(1_700_000_100),
+                    command_hash: "a".repeat(64),
+                },
+            )
+            .unwrap();
+            db.supplier_settlement_difference_evidence()
+                .create(&evidence, &mut NoTransaction)
+                .await
+                .expect("补证插入失败");
+            let service = SupplierSettlementService::new(db.clone());
+            let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
+            let view = service
+                .supplier_settlement_statement_detail("statement-1", &actor)
+                .await
+                .expect("详情查询失败");
+            assert_eq!(view.stats.item_count, 2, "明细计数必须为 2");
+            assert_eq!(view.stats.difference_count, 2, "差异计数必须为 2");
+            assert_eq!(view.stats.pending_difference_count, 1, "待处理计数必须为 1");
+            assert_eq!(view.stats.evidenced_difference_count, 1, "已举证计数必须为 1");
+            let evidenced = view
+                .differences
+                .iter()
+                .find(|difference| difference.id == "difference-1")
+                .expect("差异 difference-1 必须存在");
+            assert_eq!(evidenced.evidence.len(), 1, "补证只能归入所属差异");
+            let bare = view
+                .differences
+                .iter()
+                .find(|difference| difference.id == "difference-2")
+                .expect("差异 difference-2 必须存在");
+            assert!(bare.evidence.is_empty(), "无补证差异的证据集合为空");
+        });
     }
 }

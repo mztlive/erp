@@ -2,8 +2,8 @@ use database::{
     AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
 };
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
-use entities::ids::{DeliveryId, DeliveryLineId};
+use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
+use entities::ids::DeliveryId;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -19,10 +19,11 @@ use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
+use super::delivery_lines::delivery_line_specs;
 use super::dto::SortDir;
 use super::{
-    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineInput, DeliveryLineView, DeliveryListParams,
-    DeliveryView, FulfillmentService, PageView, UpdateDeliveryRequest,
+    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView,
+    FulfillmentService, PageView, UpdateDeliveryRequest,
 };
 
 /// 发货单列表筛选条件类型。
@@ -166,7 +167,13 @@ impl FulfillmentService {
                 address_snapshot_fingerprint: None,
             },
         )?;
-        let lines = build_delivery_lines(&id, delivery.delivery_type, &req.lines)?;
+        let lines = DeliveryLineBatch::build(
+            id.clone(),
+            delivery.delivery_type,
+            1,
+            delivery_line_specs(&req.lines)?,
+        )
+        .map_err(Error::Logic)?;
         persist_created_delivery(&self.db, &self.rbac, delivery.clone(), lines, actor.clone()).await?;
         Ok(delivery.into())
     }
@@ -237,45 +244,7 @@ impl FulfillmentService {
     }
 }
 
-// ------------------------------------------------------------------ private helpers
-
-/// 构建发货行实体集合（行号从 1 递增）。
-///
-/// # 参数
-/// * `delivery_id` - 发货单主键
-/// * `delivery_type` - 发货类型（决定行级归属校验）
-/// * `inputs` - 行输入
-///
-/// # 返回
-/// 返回行实体集合。
-///
-/// # 错误
-/// 行归属与发货类型不一致或数量非正时返回错误（实体构造）。
-fn build_delivery_lines(
-    delivery_id: &DeliveryId,
-    delivery_type: DeliveryType,
-    inputs: &[DeliveryLineInput],
-) -> Result<Vec<DeliveryLine>> {
-    let mut lines = Vec::with_capacity(inputs.len());
-    for (index, input) in inputs.iter().enumerate() {
-        lines.push(
-            DeliveryLine::new(
-                DeliveryLineId::new(next_id()),
-                DeliveryLineData {
-                    delivery_id: delivery_id.clone(),
-                    line_no: index as u32 + 1,
-                    sales_order_line_id: input.sales_order_line_id.clone(),
-                    quantity: input.quantity,
-                    stock_reservation_id: input.stock_reservation_id.clone(),
-                    purchase_line_sales_allocation_id: input.purchase_line_sales_allocation_id.clone(),
-                },
-                delivery_type,
-            )
-            .map_err(Error::Logic)?,
-        );
-    }
-    Ok(lines)
-}
+// ------------------------------------------------------------------ private helpers (line rules owned by entities)
 
 impl From<Delivery> for DeliveryView {
     /// 从发货单实体构造视图。
@@ -467,38 +436,59 @@ async fn persist_created_delivery(
 
 #[cfg(test)]
 mod tests {
-    use super::build_delivery_lines;
+    use super::delivery_line_specs;
     use crate::fulfillment::DeliveryLineInput;
-    use entities::fulfillment::DeliveryType;
+    use entities::fulfillment::{DeliveryLineBatch, DeliveryType};
     use entities::ids::{DeliveryId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId};
     use entities::money::Quantity;
     use std::str::FromStr;
 
     #[test]
     fn delivery_lines_enforce_type_ownership() {
-        let ok = build_delivery_lines(
-            &DeliveryId::new("d-1"),
+        let ok = DeliveryLineBatch::build(
+            DeliveryId::new("d-1"),
             DeliveryType::WarehouseShip,
-            &[DeliveryLineInput {
+            1,
+            delivery_line_specs(&[DeliveryLineInput {
                 sales_order_line_id: SalesOrderLineId::new("so-line-1"),
                 quantity: Quantity::from_str("2").unwrap(),
                 stock_reservation_id: Some(StockReservationId::new("rsv-1")),
                 purchase_line_sales_allocation_id: None,
-            }],
+            }])
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(ok.len(), 1);
-        let wrong = build_delivery_lines(
-            &DeliveryId::new("d-2"),
+        let wrong = DeliveryLineBatch::build(
+            DeliveryId::new("d-2"),
             DeliveryType::WarehouseShip,
-            &[DeliveryLineInput {
+            1,
+            delivery_line_specs(&[DeliveryLineInput {
                 sales_order_line_id: SalesOrderLineId::new("so-line-1"),
                 quantity: Quantity::from_str("2").unwrap(),
                 stock_reservation_id: None,
                 purchase_line_sales_allocation_id: Some(PurchaseLineSalesAllocationId::new("a-1")),
-            }],
+            }])
+            .unwrap(),
         );
         assert!(wrong.is_err(), "仓发不得携带直发分配");
+    }
+
+    /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
+    #[test]
+    fn delivery_create_uses_entity_batch_factory() {
+        let production = include_str!("delivery.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("fn build_delivery_lines"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            production.contains("DeliveryLineBatch::build"),
+            "创建路径必须调用实体工厂"
+        );
     }
 }
 
@@ -507,13 +497,14 @@ mod delivery_no_approval_tests {
     use super::{
         delivery_bind_command, delivery_create_binding_decision, ensure_delivery_has_no_adapter,
         ensure_delivery_skips_approval_binding, policy_of, BindingDecision, Delivery, DeliveryData,
-        DeliveryType, DocumentApprovalPolicy, DocumentType,
+        DocumentApprovalPolicy, DocumentType,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use entities::common::time::Instant;
+    use entities::fulfillment::DeliveryType;
     use entities::ids::{DeliveryId, SalesOrderId, WarehouseId};
 
     fn draft_delivery() -> Delivery {

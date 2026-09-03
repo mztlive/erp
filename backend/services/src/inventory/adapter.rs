@@ -4,13 +4,9 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式。
 
 use bpm::SubjectRef;
-use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::WarehouseId;
-use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
-use entities::money::Quantity;
+use entities::inventory::{StockAdjustment, StockAdjustmentState};
 
 use crate::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
@@ -116,61 +112,6 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     entities::approval_integration::subject_ref_for(DocumentType::StockAdjustment, business_object_id)
         .map_err(|error| Error::ValidationError(error.to_string()))
-}
-
-/// 按合同 §4.4.5 冻结库存调整快照。
-///
-/// 责任组织取仓库主键；对手方为仓库；数量合计必填。
-///
-/// # 参数
-/// * `adjustment` - 已冻结提交版本的调整单
-/// * `lines` - 调整明细
-/// * `submitted_by` - 提交人
-/// * `submitted_at` - 提交时间
-///
-/// # 错误
-/// 明细为空、数量合计非法或组织为空时返回校验错误。
-pub fn build_stock_adjustment_snapshot(
-    adjustment: &StockAdjustment,
-    lines: &[StockAdjustmentLine],
-    submitted_by: &str,
-    submitted_at: Instant,
-) -> Result<ApprovalSubjectSnapshotPayload> {
-    if lines.is_empty() {
-        return Err(Error::ValidationError(
-            "库存调整单没有明细，无法启动审批".to_string(),
-        ));
-    }
-    Ok(ApprovalSubjectSnapshotPayload {
-        document_no: adjustment.adjustment_no.clone(),
-        responsible_org_id: adjustment.warehouse_id.to_string(),
-        submitted_by: submitted_by.to_string(),
-        submitted_at,
-        counterparty: Some(ApprovalSubjectCounterparty::Warehouse {
-            warehouse_id: WarehouseId::new(adjustment.warehouse_id.to_string()),
-        }),
-        total_amount: None,
-        total_quantity: Some(sum_line_quantity(lines)?),
-        line_count: u32::try_from(lines.len())
-            .map_err(|_| Error::ValidationError("调整明细行数溢出".to_string()))?,
-    })
-}
-
-/// 汇总明细数量。
-///
-/// # 错误
-/// 合计超出数量标度时返回错误。
-fn sum_line_quantity(lines: &[StockAdjustmentLine]) -> Result<Quantity> {
-    let Some(first) = lines.first() else {
-        return Err(Error::ValidationError(
-            "库存调整单没有明细，无法启动审批".to_string(),
-        ));
-    };
-    let mut total = first.quantity.to_decimal();
-    for line in &lines[1..] {
-        total += line.quantity.to_decimal();
-    }
-    Quantity::try_from(total).map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
@@ -329,10 +270,13 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
+    use entities::common::time::Instant;
+    use entities::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
     use entities::inventory::{
-        AdjustmentReasonType, MovementDirection, StockAdjustmentData, StockAdjustmentLineData,
+        AdjustmentReasonType, MovementDirection, StockAdjustmentData, StockAdjustmentLine,
+        StockAdjustmentLineData,
     };
+    use entities::money::Quantity;
     use std::str::FromStr;
 
     fn draft_adjustment() -> StockAdjustment {
@@ -489,7 +433,7 @@ mod tests {
     #[test]
     fn snapshot_freezes_warehouse_and_quantity() {
         let adjustment = draft_adjustment();
-        let payload = build_stock_adjustment_snapshot(
+        let payload = entities::inventory::StockAdjustmentApprovalSnapshot::build(
             &adjustment,
             &[one_line()],
             "user-1",
@@ -500,8 +444,33 @@ mod tests {
         assert_eq!(payload.responsible_org_id, "wh-1");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
         assert!(payload.total_amount.is_none());
+        assert!(entities::inventory::StockAdjustmentApprovalSnapshot::build(
+            &adjustment,
+            &[],
+            "user-1",
+            Instant::from_unix_secs(10)
+        )
+        .is_err());
+    }
+
+    /// 快照规则归实体：旧 adapter helper 已删除，调用点直调实体工厂。
+    #[test]
+    fn snapshot_rule_source_is_entity_owned() {
+        let production = include_str!("adapter.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
         assert!(
-            build_stock_adjustment_snapshot(&adjustment, &[], "user-1", Instant::from_unix_secs(10)).is_err()
+            !production.contains("fn build_stock_adjustment_snapshot"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            !production.contains("fn sum_line_quantity"),
+            "旧求和 helper 必须删除"
+        );
+        assert!(
+            !production.contains("ApprovalSubjectSnapshotPayload {"),
+            "快照组装不得留在 adapter"
         );
     }
 

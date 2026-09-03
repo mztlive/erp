@@ -1,12 +1,8 @@
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
 };
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
-use entities::ids::ServiceFulfillmentId;
-use id_generator::next_id;
+use entities::fulfillment::ServiceFulfillment;
 use mongodb::Database;
 use validator::Validate;
 
@@ -22,6 +18,7 @@ use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
 use super::dto::SortDir;
+use super::service_fulfillment_crypto::service_fulfillment_draft_from_request;
 use super::{
     CreateServiceFulfillmentRequest, FulfillmentService, PageView, ServiceFulfillmentListParams,
     ServiceFulfillmentView,
@@ -162,7 +159,7 @@ impl FulfillmentService {
         actor: &AuditActor,
     ) -> Result<ServiceFulfillmentView> {
         req.validate()?;
-        let record = service_fulfillment_from_request(req, actor, &self.fingerprint_key)?;
+        let record = service_fulfillment_draft_from_request(req, actor, &self.fingerprint_key)?;
         persist_created_service_fulfillment(&self.db, &self.rbac, record.clone(), actor.clone()).await?;
         Ok(record.into())
     }
@@ -185,62 +182,6 @@ impl From<ServiceFulfillment> for ServiceFulfillmentView {
             version: record.base.version,
         }
     }
-}
-
-/// 由创建请求构造线下服务履约草稿。
-///
-/// 服务地点与交付对象快照以不透明值传入，服务端用指纹密钥计算查询指纹后落库。
-///
-/// # 参数
-/// * `req` - 已通过校验的创建请求
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `fingerprint_key` - 查询指纹密钥
-///
-/// # 返回
-/// 返回新建草稿实体。
-///
-/// # 错误
-/// 实体规范化失败时返回校验错误。
-fn service_fulfillment_from_request(
-    req: CreateServiceFulfillmentRequest,
-    actor: &AuditActor,
-    fingerprint_key: &[u8],
-) -> Result<ServiceFulfillment> {
-    let occurred_at = Instant::from_unix_secs(req.occurred_at);
-    let recorded_at = Instant::now();
-    Ok(ServiceFulfillment::new(
-        ServiceFulfillmentId::new(next_id()),
-        ServiceFulfillmentData {
-            fulfillment_no: req.fulfillment_no,
-            sales_order_line_id: req.sales_order_line_id,
-            purchase_order_id: req.purchase_order_id,
-            purchase_line_sales_allocation_id: req.purchase_line_sales_allocation_id,
-            recipient_snapshot: req.recipient_snapshot.clone(),
-            recipient_snapshot_fingerprint: ServiceFulfillment::recipient_snapshot_fingerprint(
-                &req.recipient_snapshot,
-                fingerprint_key,
-            ),
-            quantity: req.quantity,
-            result: req.result,
-            evidence_attachment_id: req.evidence_attachment_id,
-            service_location_encrypted: req.service_location.clone(),
-            service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
-                &req.service_location,
-                fingerprint_key,
-            ),
-            service_started_at: req.service_started_at.map(Instant::from_unix_secs),
-            service_ended_at: req.service_ended_at.map(Instant::from_unix_secs),
-            completion_note: req.completion_note,
-            fact_no: next_id(),
-            occurred_at,
-            recorded_at,
-            recorded_by: actor.id().to_string(),
-            source_type: SourceType::Erp,
-            source_reference: None,
-            reason_code: None,
-            reason_text: None,
-        },
-    )?)
 }
 
 /// 服务履约创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
@@ -402,7 +343,7 @@ mod service_fulfillment_no_approval_tests {
     use super::{
         ensure_service_fulfillment_has_no_adapter, ensure_service_fulfillment_skips_approval_binding,
         policy_of, service_fulfillment_bind_command, service_fulfillment_create_binding_decision,
-        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment, ServiceFulfillmentData,
+        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
@@ -410,7 +351,7 @@ mod service_fulfillment_no_approval_tests {
     use bpm::ProcessKind;
     use entities::common::source::SourceType;
     use entities::common::time::Instant;
-    use entities::fulfillment::FulfillmentResult;
+    use entities::fulfillment::{FulfillmentResult, ServiceFulfillmentData};
     use entities::ids::{
         PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId, ServiceFulfillmentId,
     };
@@ -535,5 +476,33 @@ mod service_fulfillment_no_approval_tests {
         assert!(!create.contains("attach_published_binding"));
         assert!(!create.contains("WorkItem"));
         assert!(!create.contains("start_approval"));
+    }
+
+    /// 创建路径经领域草稿工厂与双指纹 crypto port：旧 Service helper 已删除。
+    #[test]
+    fn create_uses_draft_factory_and_dual_fingerprints() {
+        let production = include_str!("service_fulfillment.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("fn service_fulfillment_from_request"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            production.contains("service_fulfillment_draft_from_request"),
+            "创建路径必须调用草稿编排"
+        );
+        assert!(
+            !production.contains("SourceType::Erp"),
+            "来源默认不得留在 Service"
+        );
+        let crypto = include_str!("service_fulfillment_crypto.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("crypto 生产代码");
+        assert!(crypto.contains("ServiceFulfillmentDraft::build"));
+        assert!(crypto.contains("ServiceRecipientFingerprint"));
+        assert!(crypto.contains("ServiceLocationFingerprint"));
     }
 }

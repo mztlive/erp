@@ -353,6 +353,75 @@ impl Pagination for InvoiceFilter {
     }
 }
 
+/// 回款/发票列表的账户关联作用域（FIN-R08）。
+///
+/// `sales_order_id` 与 `receivable_account_id` 同时给出时取交集；
+/// 两者均为空表示无作用域，不得触发关联扫描。
+#[derive(Debug, Clone, Default)]
+pub struct ReceivableListScope {
+    /// 来源销售单；`None` 表示不按销售单约束。
+    pub sales_order_id: Option<String>,
+    /// 应收子账；`None` 表示不按子账约束。
+    pub receivable_account_id: Option<ReceivableAccountId>,
+}
+
+impl ReceivableListScope {
+    /// 无作用域时返回 `true`（不得触发关联扫描）。
+    pub fn is_empty(&self) -> bool {
+        self.sales_order_id.is_none() && self.receivable_account_id.is_none()
+    }
+}
+
+/// 客户回款单作用域分页查询（FIN-R08）。
+///
+/// 作用域解析与分页搜索合并在仓储内完成；禁止向 Service 返回无界中间 ID。
+#[derive(Debug, Clone)]
+pub struct ScopedCustomerReceiptQuery {
+    /// 回款单号模糊匹配；`None` 表示不筛选。
+    pub receipt_no: Option<String>,
+    /// 实际付款往来主体；`None` 表示不筛选。
+    pub counterparty_party_id: Option<PartyId>,
+    /// 回款单状态；`None` 表示不筛选。
+    pub status: Option<CustomerReceiptStatus>,
+    /// 账户关联作用域；为空时不触发关联扫描。
+    pub scope: ReceivableListScope,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+    /// 排序字段（白名单内有效，默认 `created_at`）。
+    pub sort_by: Option<String>,
+    /// 是否升序；`false` 表示降序（默认）。
+    pub sort_ascending: bool,
+}
+
+/// 发票作用域分页查询（FIN-R08）。
+///
+/// 作用域解析与分页搜索合并在仓储内完成；禁止向 Service 返回无界中间 ID。
+#[derive(Debug, Clone)]
+pub struct ScopedInvoiceQuery {
+    /// 发票方向；`None` 表示不筛选。
+    pub invoice_direction: Option<InvoiceDirection>,
+    /// 蓝红类型；`None` 表示不筛选。
+    pub invoice_kind: Option<InvoiceKind>,
+    /// 客户或供应商；`None` 表示不筛选。
+    pub party_id: Option<PartyId>,
+    /// 发票号码模糊匹配；`None` 表示不筛选。
+    pub invoice_no: Option<String>,
+    /// 发票状态；`None` 表示不筛选。
+    pub status: Option<InvoiceStatus>,
+    /// 账户关联作用域；为空时不触发关联扫描。
+    pub scope: ReceivableListScope,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+    /// 排序字段（白名单内有效，默认 `created_at`）。
+    pub sort_by: Option<String>,
+    /// 是否升序；`false` 表示降序（默认）。
+    pub sort_ascending: bool,
+}
+
 impl<'a> Repository<'a, ReceivableAccount> {
     /// 分页检索应收往来子账列表（投影查询）。
     ///
@@ -632,6 +701,67 @@ impl<'a> Repository<'a, ReceivableAccount> {
             executor,
         )
         .await
+    }
+
+    /// 批量条件开票冲减：按子账聚合增量原子回退开票进度（FIN-R11）。
+    ///
+    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（写条件保证
+    /// `本次红冲 <= invoiced_total`），并按输入顺序报告每个账户的命中情况；
+    /// 调用方（Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚，
+    /// 不产生部分写入。本方法只执行计划，不判断红票业务资格。
+    ///
+    /// # 参数
+    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]（`applied` 为命中，
+    /// `rejected` 为超过已开票进度被拒绝）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    pub async fn revert_invoicings_many(
+        &self,
+        deltas: &[(ReceivableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult> {
+        let mut applied = Vec::new();
+        let mut rejected = Vec::new();
+        for (id, amount) in deltas {
+            let amount = amount_bson(amount)?;
+            let filter = doc! {
+                "id": id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "$expr": {
+                    "$gte": ["$invoiced_total", &amount],
+                },
+            };
+            let hit = self
+                .conditional_update(
+                    filter,
+                    progress_pipeline(
+                        "invoiced_total",
+                        "open_invoiceable_total",
+                        &amount,
+                        false,
+                        updated_by,
+                    ),
+                    executor,
+                )
+                .await?;
+            if hit {
+                applied.push(id.clone());
+            } else {
+                rejected.push(id.clone());
+            }
+        }
+        Ok(InvoicingBatchResult { applied, rejected })
     }
 
     /// 执行单文档条件更新（管道形态）。
@@ -1482,6 +1612,194 @@ impl<'a> ReceivableRepository<'a> {
         )
         .await
     }
+
+    /// 作用域合并的客户回款单分页搜索（FIN-R08）。
+    ///
+    /// 把 account scope（销售单/子账交集）经“账户→分录→核销分配→回款”的
+    /// join-equivalent 批量关联直接表达并合并进分页搜索：无 scope 时不触发
+    /// 关联扫描；有 scope 时中间 ID 只在仓储内流转，空集短路不再发起后续
+    /// `$in` 查询。排序/投影/total 口径与 `search_customer_receipts` 一致，
+    /// Service 只做 view 映射。
+    ///
+    /// # 参数
+    /// * `query` - 基础筛选、作用域与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数；作用域交集为空时返回空页。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// # 约束
+    /// 只做事实读取与确定性归组，不开事务、不做跨聚合决定、不返回 services
+    /// View；软删除过滤与稳定排序保持不变。外键索引：`uk_receivable_accounts_sales_order`
+    ///（销售单前缀）、`idx_receivable_entries_account_due`（账户前缀）、
+    /// `idx_receipt_allocations_entry_time`（分录前缀）覆盖三段关联。
+    pub async fn search_customer_receipts_in_account_scope(
+        &self,
+        query: &ScopedCustomerReceiptQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerReceiptRow>> {
+        let receipt_ids = if query.scope.is_empty() {
+            None
+        } else {
+            Some(self.receipt_ids_for_scope(&query.scope, executor).await?)
+        };
+        let filter = CustomerReceiptFilter {
+            receipt_ids,
+            receipt_no: query.receipt_no.clone(),
+            counterparty_party_id: query.counterparty_party_id.clone(),
+            status: query.status,
+            page: query.page,
+            page_size: query.page_size,
+            sort_by: query.sort_by.clone(),
+            sort_ascending: query.sort_ascending,
+        };
+        Repository::new(self.db, <mongodb::Database as ReceivableExt>::CUSTOMER_RECEIPTS)
+            .search_customer_receipts(&filter, executor)
+            .await
+    }
+
+    /// 作用域合并的发票分页搜索（FIN-R08）。
+    ///
+    /// 把 account scope（销售单/子账交集）经“账户→销项分配→发票”的
+    /// join-equivalent 批量关联直接表达并合并进分页搜索；空集短路语义、
+    /// 排序/投影/total 口径与 `search_invoices` 一致。外键索引：
+    /// `uk_receivable_accounts_sales_order`（销售单前缀）、
+    /// `idx_sales_invoice_allocations_account`（账户）覆盖两段关联。
+    ///
+    /// # 参数
+    /// * `query` - 基础筛选、作用域与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数；作用域交集为空时返回空页。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    pub async fn search_invoices_in_account_scope(
+        &self,
+        query: &ScopedInvoiceQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<InvoiceRow>> {
+        let invoice_ids = if query.scope.is_empty() {
+            None
+        } else {
+            Some(self.invoice_ids_for_scope(&query.scope, executor).await?)
+        };
+        let filter = InvoiceFilter {
+            invoice_ids,
+            invoice_direction: query.invoice_direction,
+            invoice_kind: query.invoice_kind,
+            party_id: query.party_id.clone(),
+            invoice_no: query.invoice_no.clone(),
+            status: query.status,
+            page: query.page,
+            page_size: query.page_size,
+            sort_by: query.sort_by.clone(),
+            sort_ascending: query.sort_ascending,
+        };
+        Repository::new(self.db, <mongodb::Database as ReceivableExt>::INVOICES)
+            .search_invoices(&filter, executor)
+            .await
+    }
+
+    /// 解析作用域内出现过核销分配的回款单主键（仓储内中间事实，不外泄）。
+    ///
+    /// 三段批量关联，任一段为空直接返回空集合，不再发起后续 `$in` 查询；
+    /// 结果排序去重，保持确定性。
+    async fn receipt_ids_for_scope(
+        &self,
+        scope: &ReceivableListScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let account_ids = self.scoped_account_ids(scope, executor).await?;
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let entries: Vec<ReceivableEntry> =
+            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES)
+                .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
+                .await?;
+        if entries.is_empty() {
+            return Ok(Vec::new());
+        }
+        let entry_ids = entries
+            .iter()
+            .map(|entry| entry.base.id.clone())
+            .collect::<Vec<_>>();
+        let allocations: Vec<ReceiptAllocation> =
+            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS)
+                .find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor)
+                .await?;
+        let mut receipt_ids = allocations
+            .into_iter()
+            .map(|allocation| allocation.customer_receipt_id.to_string())
+            .collect::<Vec<_>>();
+        receipt_ids.sort();
+        receipt_ids.dedup();
+        Ok(receipt_ids)
+    }
+
+    /// 解析作用域内出现过分配的销项发票主键（仓储内中间事实，不外泄）。
+    ///
+    /// 两段批量关联，任一段为空直接返回空集合；结果排序去重，保持确定性。
+    async fn invoice_ids_for_scope(
+        &self,
+        scope: &ReceivableListScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let account_ids = self.scoped_account_ids(scope, executor).await?;
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let allocations: Vec<SalesInvoiceAllocation> = Repository::new(
+            self.db,
+            <mongodb::Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
+        )
+        .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
+        .await?;
+        let mut invoice_ids = allocations
+            .into_iter()
+            .map(|allocation| allocation.invoice_id.to_string())
+            .collect::<Vec<_>>();
+        invoice_ids.sort();
+        invoice_ids.dedup();
+        Ok(invoice_ids)
+    }
+
+    /// 解析列表关联作用域的账户主键（销售单/子账交集，仓储内中间事实）。
+    ///
+    /// 未指定范围时返回空集合；子账不存在、已软删除或与销售单不一致时返回
+    /// 空集合（交集语义），调用方据此返回空页而不触发后续关联扫描。
+    async fn scoped_account_ids(
+        &self,
+        scope: &ReceivableListScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let accounts: Repository<'_, ReceivableAccount> =
+            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS);
+        if let Some(account_id) = &scope.receivable_account_id {
+            let account = accounts.find_by_id(account_id.as_ref(), executor).await?;
+            let Some(account) = account else {
+                return Ok(Vec::new());
+            };
+            if let Some(sales_order_id) = &scope.sales_order_id {
+                if account.sales_order_id.as_ref() != sales_order_id.as_str() {
+                    return Ok(Vec::new());
+                }
+            }
+            return Ok(vec![account.base.id]);
+        }
+        if let Some(sales_order_id) = &scope.sales_order_id {
+            let rows = accounts
+                .find_many(doc! { "sales_order_id": sales_order_id }, executor)
+                .await?;
+            return Ok(rows.into_iter().map(|row| row.base.id).collect());
+        }
+        Ok(Vec::new())
+    }
 }
 
 /// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
@@ -1831,5 +2149,42 @@ mod tests {
         assert!(nested[0].as_document().unwrap().get_array("$eq").is_ok());
         assert_eq!(nested[1], Bson::String("open".to_string()), "已核销归零为未结");
         assert_eq!(nested[2], Bson::String("partially_settled".to_string()));
+    }
+
+    #[test]
+    fn list_scope_empty_only_when_both_dimensions_absent() {
+        use super::{ReceivableAccountId, ReceivableListScope};
+        assert!(ReceivableListScope::default().is_empty());
+        assert!(!ReceivableListScope {
+            sales_order_id: Some("so-1".to_string()),
+            receivable_account_id: None,
+        }
+        .is_empty());
+        assert!(!ReceivableListScope {
+            sales_order_id: None,
+            receivable_account_id: Some(ReceivableAccountId::new("acct-1")),
+        }
+        .is_empty());
+    }
+
+    /// 空输入批量回退直接成功且不访问数据库。
+    #[tokio::test]
+    async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
+        use super::ReceivableAccount;
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .expect("客户端句柄创建失败");
+        let database = client.database("unused");
+        let repository = super::Repository::new(
+            &database,
+            <mongodb::Database as crate::repository::extensions::ReceivableExt>::RECEIVABLE_ACCOUNTS,
+        );
+        let repository: super::Repository<'_, ReceivableAccount> = repository;
+        let result = repository
+            .revert_invoicings_many(&[], "tester", &mut crate::NoTransaction)
+            .await
+            .expect("空输入批量红冲必须成功");
+        assert!(result.applied.is_empty());
+        assert!(result.rejected.is_empty());
     }
 }

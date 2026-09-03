@@ -555,7 +555,7 @@ async fn legacy_start_payload_matches_result(
     {
         return Ok(false);
     }
-    let reconstructed_snapshot = super::adapter::build_stock_adjustment_snapshot(
+    let reconstructed_snapshot = entities::inventory::StockAdjustmentApprovalSnapshot::build(
         adjustment,
         &persisted_lines,
         actor.id(),

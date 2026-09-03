@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use database::{
-    AccessControlExt, Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, NoTransaction, PartyExt,
+    AccessControlExt, Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, NoTransaction,
     SupplierApiExt, SupplierExt, SupplierFulfillmentExt, Transactional, WorkItemExt,
 };
 use entities::common::time::Instant;
@@ -355,7 +355,13 @@ impl SupplierFulfillmentService {
             .await?;
         let refund_views = self.refund_views_for_order(&order_id).await?;
 
-        let supplier_name = self.supplier_name(&order).await?;
+        let supplier_id = order.supplier_id.to_string();
+        let supplier_name = self
+            .db
+            .supplier()
+            .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), &mut NoTransaction)
+            .await?
+            .remove(&supplier_id);
         let mall_order_no = self
             .db
             .mall_orders()
@@ -514,35 +520,6 @@ impl SupplierFulfillmentService {
             allowed_actions,
             action_blockers,
         })
-    }
-
-    /// 读取供应商当前主体修订名称。
-    async fn supplier_name(&self, order: &SupplierFulfillmentOrder) -> Result<Option<String>> {
-        let Some(supplier) = self
-            .db
-            .supplier_accounts()
-            .find_by_id(&order.supplier_id, &mut NoTransaction)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let Some(party) = self
-            .db
-            .parties()
-            .find_by_id(&supplier.party_id, &mut NoTransaction)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let Some(revision_id) = party.stable.current_revision_id else {
-            return Ok(None);
-        };
-        Ok(self
-            .db
-            .party_revisions()
-            .find_by_id(&revision_id, &mut NoTransaction)
-            .await?
-            .map(|revision| revision.legal_name))
     }
 
     /// 以原供应商动作、连接能力和最新结构化证据投影 W26 动作。
@@ -2513,6 +2490,9 @@ impl SupplierFulfillmentService {
 
     /// 按子订单加载全部退款事实视图（含分配行）。
     ///
+    /// 归组与排序由 `SupplierFulfillmentRepository::refund_fact_bundles_by_order`
+    /// 承担；本方法只把归组快照映射为响应视图。
+    ///
     /// # 参数
     /// * `order_id` - 供应商子订单 ID
     ///
@@ -2525,30 +2505,14 @@ impl SupplierFulfillmentService {
         &self,
         order_id: &SupplierFulfillmentOrderId,
     ) -> Result<Vec<SupplierRefundFactView>> {
-        let facts = self
+        let bundles = self
             .db
-            .supplier_refund_facts()
-            .find_refund_facts_by_order_ids(std::slice::from_ref(order_id), &mut NoTransaction)
+            .supplier_fulfillment()
+            .refund_fact_bundles_by_order(order_id, &mut NoTransaction)
             .await?;
-        let fact_ids: Vec<SupplierRefundFactId> = facts
-            .iter()
-            .map(|fact| SupplierRefundFactId::new(fact.base.id.as_str()))
-            .collect();
-        let allocations = self
-            .db
-            .supplier_refund_allocations()
-            .find_allocations_by_fact_ids(&fact_ids, &mut NoTransaction)
-            .await?;
-        Ok(facts
+        Ok(bundles
             .into_iter()
-            .map(|fact| {
-                let fact_allocations: Vec<SupplierRefundAllocation> = allocations
-                    .iter()
-                    .filter(|allocation| allocation.supplier_refund_fact_id.as_ref() == fact.base.id)
-                    .cloned()
-                    .collect();
-                refund_fact_view(&fact, &fact_allocations)
-            })
+            .map(|bundle| refund_fact_view(&bundle.fact, &bundle.allocations))
             .collect())
     }
 

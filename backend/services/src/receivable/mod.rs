@@ -41,9 +41,10 @@ use entities::receivable::{
     InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation, ReceivableAccount,
     ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType, ReceivableFundsLedger,
     ReceivableFundsReview, ReceivableFundsReviewChain, ReceivableFundsReviewData, ReceivableFundsSnapshot,
-    RedInvoiceAllocationBasis, RedInvoiceAllocationPlan, RedInvoiceAllocationPlanError,
-    RedInvoiceAllocationReversal, ReviewResult, SalesInvoiceAllocation, SalesInvoiceAllocationData,
-    CARD_FUNDS_INVOICE_REGISTRATION_ACTION, CARD_FUNDS_RECEIPT_REGISTRATION_ACTION, CARD_FUNDS_REVIEW_ACTION,
+    RedInvoiceAllocationBasis, RedInvoiceAllocationLine, RedInvoiceAllocationPlan,
+    RedInvoiceAllocationPlanError, RedInvoiceAllocationReversal, ReviewResult, SalesInvoiceAllocation,
+    SalesInvoiceAllocationData, CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
+    CARD_FUNDS_RECEIPT_REGISTRATION_ACTION, CARD_FUNDS_REVIEW_ACTION,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entities::Permission;
@@ -131,10 +132,6 @@ use self::start_approval::{
 
 /// 应收往来子账列表筛选条件类型（经 `ReceivableExt` 关联类型跨 crate 可达）。
 type ReceivableAccountFilter = <mongodb::Database as ReceivableExt>::ReceivableAccountFilter;
-/// 客户回款单列表筛选条件类型。
-type CustomerReceiptFilter = <mongodb::Database as ReceivableExt>::CustomerReceiptFilter;
-/// 发票列表筛选条件类型。
-type InvoiceFilter = <mongodb::Database as ReceivableExt>::InvoiceFilter;
 
 /// 客户往来服务。
 ///
@@ -1518,17 +1515,14 @@ impl ReceivableService {
     ) -> Result<PageView<CustomerReceiptView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let receipt_ids = self
-            .receipt_ids_for_account_scope(
-                query.sales_order_id.as_deref(),
-                query.receivable_account_id.as_ref(),
-            )
-            .await?;
-        let filter = CustomerReceiptFilter {
-            receipt_ids,
+        let scope_query = database::ScopedCustomerReceiptQuery {
             receipt_no: query.receipt_no,
             counterparty_party_id: query.counterparty_party_id,
             status: query.status,
+            scope: database::ReceivableListScope {
+                sales_order_id: query.sales_order_id,
+                receivable_account_id: query.receivable_account_id,
+            },
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -1536,8 +1530,8 @@ impl ReceivableService {
         };
         let page = self
             .db
-            .customer_receipts()
-            .search_customer_receipts(&filter, &mut NoTransaction)
+            .receivable()
+            .search_customer_receipts_in_account_scope(&scope_query, &mut NoTransaction)
             .await?;
         let receipt_ids = page
             .items
@@ -1593,102 +1587,9 @@ impl ReceivableService {
         Ok(PageView {
             items: views,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: scope_query.page,
+            page_size: scope_query.page_size,
         })
-    }
-
-    /// 解析销售单/子账范围内出现过核销分配的回款单主键。
-    async fn receipt_ids_for_account_scope(
-        &self,
-        sales_order_id: Option<&str>,
-        account_id: Option<&ReceivableAccountId>,
-    ) -> Result<Option<Vec<String>>> {
-        let Some(accounts) = self.accounts_for_list_scope(sales_order_id, account_id).await? else {
-            return Ok(None);
-        };
-        let account_ids = accounts
-            .iter()
-            .map(|account| ReceivableAccountId::new(account.base.id.clone()))
-            .collect::<Vec<_>>();
-        let entries = self
-            .db
-            .receivable_entries()
-            .find_entries_by_accounts(&account_ids, &mut NoTransaction)
-            .await?;
-        let entry_ids = entries
-            .into_iter()
-            .map(|entry| ReceivableEntryId::new(entry.base.id))
-            .collect::<Vec<_>>();
-        let allocations = self
-            .db
-            .receipt_allocations()
-            .find_allocations_by_entries(&entry_ids, &mut NoTransaction)
-            .await?;
-        Ok(Some(
-            allocations
-                .into_iter()
-                .map(|allocation| allocation.customer_receipt_id.to_string())
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect(),
-        ))
-    }
-
-    /// 解析销售单/子账范围内出现过分配的销项发票主键。
-    async fn invoice_ids_for_account_scope(
-        &self,
-        sales_order_id: Option<&str>,
-        account_id: Option<&ReceivableAccountId>,
-    ) -> Result<Option<Vec<String>>> {
-        let Some(accounts) = self.accounts_for_list_scope(sales_order_id, account_id).await? else {
-            return Ok(None);
-        };
-        let account_ids = accounts
-            .iter()
-            .map(|account| ReceivableAccountId::new(account.base.id.clone()))
-            .collect::<Vec<_>>();
-        let allocations = self
-            .db
-            .sales_invoice_allocations()
-            .find_allocations_by_accounts(&account_ids, &mut NoTransaction)
-            .await?;
-        Ok(Some(
-            allocations
-                .into_iter()
-                .map(|allocation| allocation.invoice_id.to_string())
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect(),
-        ))
-    }
-
-    /// 读取列表关联范围；未指定范围时返回 `None`，不得触发全量关联扫描。
-    async fn accounts_for_list_scope(
-        &self,
-        sales_order_id: Option<&str>,
-        account_id: Option<&ReceivableAccountId>,
-    ) -> Result<Option<Vec<ReceivableAccount>>> {
-        if sales_order_id.is_none() && account_id.is_none() {
-            return Ok(None);
-        }
-        let mut accounts = if let Some(account_id) = account_id {
-            self.db
-                .receivable_accounts()
-                .find_by_id(account_id.as_ref(), &mut NoTransaction)
-                .await?
-                .into_iter()
-                .collect::<Vec<_>>()
-        } else {
-            self.db
-                .receivable_accounts()
-                .find_accounts_by_sales_order_id(sales_order_id.unwrap_or_default(), &mut NoTransaction)
-                .await?
-        };
-        if let Some(sales_order_id) = sales_order_id {
-            accounts.retain(|account| account.sales_order_id.as_ref() == sales_order_id);
-        }
-        Ok(Some(accounts))
     }
 
     /// 查询客户回款单详情（含核销分配行）。
@@ -2249,19 +2150,16 @@ impl ReceivableService {
     pub async fn invoice_list(&self, params: &InvoiceListParams) -> Result<PageView<InvoiceView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let invoice_ids = self
-            .invoice_ids_for_account_scope(
-                query.sales_order_id.as_deref(),
-                query.receivable_account_id.as_ref(),
-            )
-            .await?;
-        let filter = InvoiceFilter {
-            invoice_ids,
+        let scope_query = database::ScopedInvoiceQuery {
             invoice_direction: query.invoice_direction,
             invoice_kind: query.invoice_kind,
             party_id: query.party_id,
             invoice_no: query.invoice_no,
             status: query.status,
+            scope: database::ReceivableListScope {
+                sales_order_id: query.sales_order_id,
+                receivable_account_id: query.receivable_account_id,
+            },
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -2269,8 +2167,8 @@ impl ReceivableService {
         };
         let page = self
             .db
-            .invoices()
-            .search_invoices(&filter, &mut NoTransaction)
+            .receivable()
+            .search_invoices_in_account_scope(&scope_query, &mut NoTransaction)
             .await?;
         let invoice_ids = page
             .items
@@ -2344,8 +2242,8 @@ impl ReceivableService {
         Ok(PageView {
             items: views,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: scope_query.page,
+            page_size: scope_query.page_size,
         })
     }
 
@@ -2941,76 +2839,85 @@ impl ReceivableService {
                     }
 
                     let mut sales_order_account_ids = Vec::new();
-                    for (index, line) in allocation_plan.lines().iter().enumerate() {
-                        match original_mut.invoice_direction {
-                            InvoiceDirection::Sales => {
-                                let account_id = ReceivableAccountId::new(line.account_id.clone());
-                                let reverted = db
-                                    .receivable_accounts()
-                                    .revert_invoicing(&account_id, &line.gross, &actor_id, session)
-                                    .await?;
-                                if !reverted {
-                                    return Err(Error::BusinessLogicError(
-                                        "红冲金额超过已开票进度".to_string(),
-                                    ));
-                                }
-                                db.sales_invoice_allocations()
-                                    .create(
-                                        &SalesInvoiceAllocation::new(
-                                            SalesInvoiceAllocationId::new(next_id()),
-                                            SalesInvoiceAllocationData {
-                                                invoice_id: red_invoice_id.clone(),
-                                                receivable_account_id: account_id,
-                                                allocation_seq: (index as u32) + 1,
-                                                allocation_action: AllocationAction::Reverse,
-                                                allocated_gross_amount: line.gross,
-                                                allocated_net_amount: line.net,
-                                                allocated_tax_amount: line.tax,
-                                                reverses_allocation_id: Some(SalesInvoiceAllocationId::new(
-                                                    line.original_allocation_id.clone(),
-                                                )),
-                                            },
-                                        )?,
-                                        session,
-                                    )
-                                    .await?;
-                                sales_order_account_ids.push(line.account_id.clone());
+                    // FIN-R11：按 direction 与 account 聚合 reversal delta 后批量
+                    // 条件更新与批量插入；同一 account 多行只更新一次。
+                    let reversal_deltas = aggregate_reversal_deltas(allocation_plan.lines());
+                    match original_mut.invoice_direction {
+                        InvoiceDirection::Sales => {
+                            let deltas = reversal_deltas
+                                .iter()
+                                .map(|(account_id, gross)| {
+                                    (ReceivableAccountId::new(account_id.clone()), *gross)
+                                })
+                                .collect::<Vec<_>>();
+                            let reverted = db
+                                .receivable_accounts()
+                                .revert_invoicings_many(&deltas, &actor_id, session)
+                                .await?;
+                            if !reverted.rejected.is_empty() {
+                                return Err(Error::BusinessLogicError("红冲金额超过已开票进度".to_string()));
                             }
-                            InvoiceDirection::Purchase => {
-                                let account_id = PayableAccountId::new(line.account_id.clone());
-                                let reverted = db
-                                    .payable_accounts()
-                                    .revert_invoicing(&account_id, &line.gross, &actor_id, session)
-                                    .await?;
-                                if !reverted {
-                                    return Err(Error::BusinessLogicError(
-                                        "红冲金额超过已收票进度".to_string(),
-                                    ));
-                                }
-                                db.purchase_invoice_allocations()
-                                    .create(
-                                        &PurchaseInvoiceAllocation::new(
-                                            PurchaseInvoiceAllocationId::new(next_id()),
-                                            PurchaseInvoiceAllocationData {
-                                                invoice_id: red_invoice_id.clone(),
-                                                payable_account_id: account_id,
-                                                allocation_seq: (index as u32) + 1,
-                                                allocation_action:
-                                                    entities::payable::AllocationAction::Reverse,
-                                                allocated_gross_amount: line.gross,
-                                                allocated_net_amount: line.net,
-                                                allocated_tax_amount: line.tax,
-                                                reverses_allocation_id: Some(
-                                                    PurchaseInvoiceAllocationId::new(
-                                                        line.original_allocation_id.clone(),
-                                                    ),
-                                                ),
-                                            },
-                                        )?,
-                                        session,
-                                    )
-                                    .await?;
+                            let mut new_allocations = Vec::with_capacity(allocation_plan.lines().len());
+                            for (index, line) in allocation_plan.lines().iter().enumerate() {
+                                new_allocations.push(SalesInvoiceAllocation::new(
+                                    SalesInvoiceAllocationId::new(next_id()),
+                                    SalesInvoiceAllocationData {
+                                        invoice_id: red_invoice_id.clone(),
+                                        receivable_account_id: ReceivableAccountId::new(
+                                            line.account_id.clone(),
+                                        ),
+                                        allocation_seq: (index as u32) + 1,
+                                        allocation_action: AllocationAction::Reverse,
+                                        allocated_gross_amount: line.gross,
+                                        allocated_net_amount: line.net,
+                                        allocated_tax_amount: line.tax,
+                                        reverses_allocation_id: Some(SalesInvoiceAllocationId::new(
+                                            line.original_allocation_id.clone(),
+                                        )),
+                                    },
+                                )?);
                             }
+                            db.receivable()
+                                .create_sales_invoice_allocations_many(&new_allocations, session)
+                                .await?;
+                            sales_order_account_ids
+                                .extend(reversal_deltas.iter().map(|(account_id, _)| account_id.clone()));
+                        }
+                        InvoiceDirection::Purchase => {
+                            let deltas = reversal_deltas
+                                .iter()
+                                .map(|(account_id, gross)| {
+                                    (PayableAccountId::new(account_id.clone()), *gross)
+                                })
+                                .collect::<Vec<_>>();
+                            let reverted = db
+                                .payable_accounts()
+                                .revert_invoicings_many(&deltas, &actor_id, session)
+                                .await?;
+                            if !reverted.rejected.is_empty() {
+                                return Err(Error::BusinessLogicError("红冲金额超过已收票进度".to_string()));
+                            }
+                            let mut new_allocations = Vec::with_capacity(allocation_plan.lines().len());
+                            for (index, line) in allocation_plan.lines().iter().enumerate() {
+                                new_allocations.push(PurchaseInvoiceAllocation::new(
+                                    PurchaseInvoiceAllocationId::new(next_id()),
+                                    PurchaseInvoiceAllocationData {
+                                        invoice_id: red_invoice_id.clone(),
+                                        payable_account_id: PayableAccountId::new(line.account_id.clone()),
+                                        allocation_seq: (index as u32) + 1,
+                                        allocation_action: entities::payable::AllocationAction::Reverse,
+                                        allocated_gross_amount: line.gross,
+                                        allocated_net_amount: line.net,
+                                        allocated_tax_amount: line.tax,
+                                        reverses_allocation_id: Some(PurchaseInvoiceAllocationId::new(
+                                            line.original_allocation_id.clone(),
+                                        )),
+                                    },
+                                )?);
+                            }
+                            db.payable()
+                                .create_purchase_invoice_allocations_many(&new_allocations, session)
+                                .await?;
                         }
                     }
                     let audit = actor_owned.clone().resource_log_with_message(
@@ -3853,6 +3760,9 @@ fn match_card_funds_command_snapshot(
 }
 
 /// 重验责任资格，并对已登记票款事实执行可证明的经办/复核岗位分离。
+///
+/// 审计事实经 `list_separation_facts_by_resources` 单次批量装载（数量增长时
+/// 查询保持常数），SoD 政策解释仍在本函数与 `check_fact_separation` 中。
 async fn validate_card_funds_reviewer_separation(
     db: &Database,
     account: &ReceivableAccount,
@@ -3864,7 +3774,6 @@ async fn validate_card_funds_reviewer_separation(
     let _ = (work_item, actor_id);
 
     for receipt in &snapshot.receipts {
-        let receipt_id = receipt.base.id.as_str();
         if !matches!(
             receipt.status,
             CustomerReceiptStatus::Posted | CustomerReceiptStatus::Reversed
@@ -3874,20 +3783,9 @@ async fn validate_card_funds_reviewer_separation(
                 "复核引用的回款事实未正式过账或往来主体不一致".to_string(),
             ));
         }
-        ensure_fact_separation(
-            db,
-            "customer_receipt",
-            receipt_id,
-            actor_id,
-            &["customer_receipt.create", "customer_receipt.post:"],
-            &["customer_receipt.post:"],
-            executor,
-        )
-        .await?;
     }
 
     for invoice in &snapshot.invoices {
-        let invoice_id = invoice.base.id.as_str();
         if invoice.invoice_direction != InvoiceDirection::Sales
             || !matches!(
                 invoice.stable.status(),
@@ -3899,47 +3797,79 @@ async fn validate_card_funds_reviewer_separation(
                 "复核引用的销项发票未正式登记或往来主体不一致".to_string(),
             ));
         }
-        ensure_fact_separation(
-            db,
-            "invoice",
-            invoice_id,
+    }
+
+    let mut pairs = Vec::with_capacity(snapshot.receipts.len() + snapshot.invoices.len());
+    for receipt in &snapshot.receipts {
+        pairs.push(("customer_receipt".to_string(), receipt.base.id.clone()));
+    }
+    for invoice in &snapshot.invoices {
+        pairs.push(("invoice".to_string(), invoice.base.id.clone()));
+    }
+    let facts = db
+        .audit_logs()
+        .list_separation_facts_by_resources(&pairs, executor)
+        .await?;
+    let mut by_resource: HashMap<(String, String), Vec<&database::SeparationAuditFact>> = HashMap::new();
+    for fact in &facts {
+        if let Some(resource_id) = fact.resource_id.as_deref() {
+            by_resource
+                .entry((fact.resource_type.clone(), resource_id.to_string()))
+                .or_default()
+                .push(fact);
+        }
+    }
+
+    for receipt in &snapshot.receipts {
+        let key = ("customer_receipt".to_string(), receipt.base.id.clone());
+        let empty = Vec::new();
+        let resource_facts = by_resource.get(&key).unwrap_or(&empty);
+        check_fact_separation(
+            resource_facts,
+            actor_id,
+            &["customer_receipt.create", "customer_receipt.post:"],
+            &["customer_receipt.post:"],
+        )?;
+    }
+
+    for invoice in &snapshot.invoices {
+        let key = ("invoice".to_string(), invoice.base.id.clone());
+        let empty = Vec::new();
+        let resource_facts = by_resource.get(&key).unwrap_or(&empty);
+        check_fact_separation(
+            resource_facts,
             actor_id,
             &["invoice.create", "invoice.post", "invoice.red_issue"],
             &["invoice.post", "invoice.red_issue"],
-            executor,
-        )
-        .await?;
+        )?;
     }
     Ok(())
 }
 
-/// 从审计事实证明票款已正式登记且当前复核人不是其经办人。
-async fn ensure_fact_separation(
-    db: &Database,
-    resource_type: &str,
-    resource_id: &str,
+/// 从批量装载的最小审计事实证明票款已正式登记且当前复核人不是其经办人。
+///
+/// 纯策略解释：缺正式证据 fail closed；同 actor 经办冲突拒绝；仅非正式或
+/// 失败事件（调用方批量查询已限定成功）不算证据。SoD 规则、当前 actor、
+/// 拒绝文案与授权决定保留 Service，不得下沉。
+fn check_fact_separation(
+    facts: &[&database::SeparationAuditFact],
     actor_id: &str,
     operator_actions: &[&str],
     formal_actions: &[&str],
-    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let audits = db
-        .audit_logs()
-        .list_successful_by_resource(resource_type, resource_id, executor)
-        .await?;
     let matches_action =
         |action: &str, prefixes: &[&str]| prefixes.iter().any(|prefix| action.starts_with(prefix));
-    if !audits
+    if !facts
         .iter()
-        .any(|audit| matches_action(&audit.action, formal_actions))
+        .any(|fact| matches_action(&fact.action, formal_actions))
     {
         return Err(Error::Forbidden(
             "无法从审计事实证明票款已经正式登记，岗位分离校验失败关闭".to_string(),
         ));
     }
-    if audits
+    if facts
         .iter()
-        .any(|audit| audit.actor_id == actor_id && matches_action(&audit.action, operator_actions))
+        .any(|fact| fact.actor_id == actor_id && matches_action(&fact.action, operator_actions))
     {
         return Err(Error::Forbidden(
             "票款事实经办人与最终复核人必须岗位分离".to_string(),
@@ -4295,6 +4225,36 @@ fn sales_red_invoice_allocation_reversals(
                     net: line.allocated_net_amount,
                     tax: line.allocated_tax_amount,
                 })
+        })
+        .collect()
+}
+
+/// 按账户聚合红票 reversal 含税增量（FIN-R11）。
+///
+/// 同一账户多行求和为一条 delta，保持首次出现顺序；聚合总额与计划行合计
+/// 守恒。方向决策、事务与写入仍由 Service 持有，Repository 只执行返回的计划。
+///
+/// # 参数
+/// * `lines` - 本次红票计划的反向分配行
+///
+/// # 返回
+/// 返回按账户去重、首次出现顺序的 `(account_id, gross合计)`。
+fn aggregate_reversal_deltas(lines: &[RedInvoiceAllocationLine]) -> Vec<(String, Amount)> {
+    let mut order = Vec::new();
+    let mut sums: HashMap<String, Amount> = HashMap::new();
+    for line in lines {
+        sums.entry(line.account_id.clone())
+            .and_modify(|total| *total = total.checked_add(line.gross))
+            .or_insert_with(|| {
+                order.push(line.account_id.clone());
+                line.gross
+            });
+    }
+    order
+        .into_iter()
+        .map(|account_id| {
+            let total = sums.remove(&account_id).expect("聚合账户必须存在");
+            (account_id, total)
         })
         .collect()
 }
@@ -5245,5 +5205,115 @@ mod invoice_no_approval_tests {
         assert!(!invoice_create.contains("attach_published_binding"));
         assert!(!invoice_create.contains("WorkItem"));
         assert!(!invoice_create.contains("start_approval"));
+    }
+}
+
+#[cfg(test)]
+mod fact_separation_tests {
+    use super::check_fact_separation;
+    use database::SeparationAuditFact;
+
+    fn fact(actor: &str, action: &str) -> SeparationAuditFact {
+        SeparationAuditFact {
+            resource_type: "customer_receipt".to_string(),
+            resource_id: Some("cr-1".to_string()),
+            actor_id: actor.to_string(),
+            action: action.to_string(),
+        }
+    }
+
+    const OPERATOR: &[&str] = &["customer_receipt.create", "customer_receipt.post:"];
+    const FORMAL: &[&str] = &["customer_receipt.post:"];
+
+    /// 正式证据存在且经办人不同时通过。
+    #[test]
+    fn formal_evidence_by_other_actor_passes() {
+        let facts = [
+            fact("creator-1", "customer_receipt.create"),
+            fact("poster-1", "customer_receipt.post:registered"),
+        ];
+        let refs = facts.iter().collect::<Vec<_>>();
+        assert!(check_fact_separation(&refs, "reviewer-1", OPERATOR, FORMAL).is_ok());
+    }
+
+    /// 缺正式证据 fail closed。
+    #[test]
+    fn missing_formal_evidence_fails_closed() {
+        let facts = [fact("creator-1", "customer_receipt.create")];
+        let refs = facts.iter().collect::<Vec<_>>();
+        assert!(check_fact_separation(&refs, "reviewer-1", OPERATOR, FORMAL).is_err());
+        let empty: Vec<&SeparationAuditFact> = Vec::new();
+        assert!(check_fact_separation(&empty, "reviewer-1", OPERATOR, FORMAL).is_err());
+    }
+
+    /// 同 actor 经办冲突拒绝。
+    #[test]
+    fn same_actor_operator_conflict_is_rejected() {
+        let facts = [
+            fact("reviewer-1", "customer_receipt.create"),
+            fact("poster-1", "customer_receipt.post:registered"),
+        ];
+        let refs = facts.iter().collect::<Vec<_>>();
+        assert!(check_fact_separation(&refs, "reviewer-1", OPERATOR, FORMAL).is_err());
+    }
+
+    /// 仅非正式事件不算证据。
+    #[test]
+    fn informal_only_events_do_not_count_as_evidence() {
+        let facts = [
+            fact("creator-1", "customer_receipt.draft_saved"),
+            fact("creator-1", "customer_receipt.preview"),
+        ];
+        let refs = facts.iter().collect::<Vec<_>>();
+        assert!(check_fact_separation(&refs, "reviewer-1", OPERATOR, FORMAL).is_err());
+    }
+}
+
+#[cfg(test)]
+mod red_invoice_reversal_tests {
+    use super::aggregate_reversal_deltas;
+    use entities::money::Amount;
+    use entities::receivable::RedInvoiceAllocationLine;
+    use std::str::FromStr;
+
+    fn line(account: &str, gross: &str) -> RedInvoiceAllocationLine {
+        RedInvoiceAllocationLine {
+            original_allocation_id: format!("base-{account}-{gross}"),
+            account_id: account.to_string(),
+            gross: Amount::from_str(gross).unwrap(),
+            net: Amount::from_str("0").unwrap(),
+            tax: Amount::from_str("0").unwrap(),
+        }
+    }
+
+    /// 同账户多行聚合为一条并保持首次出现顺序，总额守恒。
+    #[test]
+    fn same_account_lines_aggregate_with_stable_order_and_conservation() {
+        let lines = [
+            line("acc-a", "100.00"),
+            line("acc-b", "50.00"),
+            line("acc-a", "30.00"),
+        ];
+        let deltas = aggregate_reversal_deltas(&lines);
+        assert_eq!(deltas.len(), 2);
+        assert_eq!(deltas[0].0, "acc-a");
+        assert_eq!(deltas[0].1, Amount::from_str("130.00").unwrap());
+        assert_eq!(deltas[1].0, "acc-b");
+        assert_eq!(deltas[1].1, Amount::from_str("50.00").unwrap());
+        let plan_total: Amount = lines.iter().fold(Amount::from_str("0").unwrap(), |sum, line| {
+            sum.checked_add(line.gross)
+        });
+        let delta_total = deltas
+            .iter()
+            .fold(Amount::from_str("0").unwrap(), |sum, (_, gross)| {
+                sum.checked_add(*gross)
+            });
+        assert_eq!(plan_total, delta_total);
+    }
+
+    /// 空计划聚合为空，不触发写入。
+    #[test]
+    fn empty_plan_aggregates_to_empty() {
+        assert!(aggregate_reversal_deltas(&[]).is_empty());
     }
 }

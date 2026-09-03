@@ -39,6 +39,8 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+pub mod detail_snapshot;
+
 /// `supplier_settlement_statement` 集合名（单一来源：`SupplierSettlementExt` 关联常量）。
 const SUPPLIER_SETTLEMENT_STATEMENTS: &str =
     <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS;
@@ -134,6 +136,15 @@ pub struct SupplierSettlementStatementRow {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 结算单号最小事实行（FIN-R03 来源单号批量映射，只投影单号）。
+#[derive(Debug, Clone, Deserialize)]
+struct SupplierSettlementNoRow {
+    /// 实体主键。
+    id: String,
+    /// 结算业务单号。
+    statement_no: String,
 }
 
 /// 供应商结算单列表筛选条件。
@@ -371,6 +382,55 @@ impl<'a> Repository<'a, SupplierSettlementStatement> {
         }
         self.find_many(doc! { "id": { "$in": statement_ids } }, executor)
             .await
+    }
+
+    /// 按结算单 ID 集合一次批量返回来源 ID 到结算单号的事实映射（FIN-R03）。
+    ///
+    /// 只投影 `id` 与 `statement_no`；空输入不访问数据库；仓储内去重后单次
+    /// `$in` 查询。空单号按缺失处理，不进入映射，Service 保持 `None`
+    /// 且不得回退内部 ID。
+    ///
+    /// # 参数
+    /// * `statement_ids` - 结算单 ID 字符串集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回来源 ID 到非空结算单号的映射；缺失来源不上表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn statement_nos_by_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<std::collections::HashMap<String, String>> {
+        use std::collections::{HashMap, HashSet};
+        let mut seen = HashSet::new();
+        let mut deduped = Vec::new();
+        for id in statement_ids {
+            if !id.trim().is_empty() && seen.insert(id.clone()) {
+                deduped.push(id.clone());
+            }
+        }
+        if deduped.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SupplierSettlementNoRow>(),
+            doc! { "id": { "$in": deduped } },
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "statement_no": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        let mut map = HashMap::new();
+        for row in rows {
+            if !row.statement_no.trim().is_empty() {
+                map.insert(row.id, row.statement_no);
+            }
+        }
+        Ok(map)
     }
 
     /// 分页检索供应商结算单列表（投影查询）。

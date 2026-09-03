@@ -11,8 +11,8 @@ use entities::ids::{
 };
 use entities::money::Amount;
 use entities::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
-    SupplierSettlementSourceEvidence, SupplierSettlementStatement,
+    SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewRejectReason,
+    SettlementReviewResult, SettlementStatus, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
 use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
@@ -517,6 +517,40 @@ pub struct SettlementReviewDecisionData {
     /// 决定说明。
     #[validate(length(max = 512, message = "决定说明长度不能超过512"))]
     pub comment: Option<String>,
+}
+
+impl SettlementReviewDecisionData {
+    /// 解析复核决定附带的原因代码并执行命令协议校验。
+    ///
+    /// 驳回必须携带可解析为 [`SettlementReviewRejectReason`] 的原因代码；
+    /// 确认不得携带任何原因代码。线上传输字符串的规范化与 allowlist 由
+    /// 领域值对象独占，本方法只做协议分支。
+    ///
+    /// # 参数
+    /// 无显式参数（方法接收者为已反序列化的决定载荷）。
+    ///
+    /// # 返回
+    /// 驳回时返回解析后的强类型原因；确认时返回 `None`。
+    ///
+    /// # 错误
+    /// 驳回缺失、非法或未知原因，以及确认携带原因时返回错误。
+    ///
+    /// # 约束
+    /// 不改变线上传输形态；原因语义以领域值对象三元集合为准。
+    pub fn parsed_reject_reason(&self) -> Result<Option<SettlementReviewRejectReason>> {
+        match self.action {
+            SettlementReviewAction::Reject => {
+                let raw = self.reason_code.as_deref().ok_or_else(|| {
+                    crate::errors::Error::ValidationError("驳回必须携带原因代码".to_string())
+                })?;
+                Ok(Some(SettlementReviewRejectReason::parse(raw)?))
+            }
+            SettlementReviewAction::Confirm if self.reason_code.is_some() => Err(
+                crate::errors::Error::ValidationError("确认结算不得携带驳回原因代码".to_string()),
+            ),
+            SettlementReviewAction::Confirm => Ok(None),
+        }
+    }
 }
 
 /// 供应商结算复核唯一强类型命令。
@@ -1126,5 +1160,74 @@ mod tests {
             serde_json::to_value(command).unwrap()["decision"]["action"],
             "CONFIRM"
         );
+    }
+
+    #[test]
+    fn review_reject_reason_parses_and_enforces_command_protocol() {
+        use entities::supplier_settlement::SettlementReviewRejectReason;
+
+        let decision = SettlementReviewDecisionData {
+            statement_id: "statement-1".to_string(),
+            expected_lock_version: 1,
+            action: SettlementReviewAction::Reject,
+            operation_id: "review-1".to_string(),
+            reason_code: Some("  amount_mismatch ".to_string()),
+            comment: None,
+        };
+        assert_eq!(
+            decision.parsed_reject_reason().unwrap(),
+            Some(SettlementReviewRejectReason::AmountMismatch)
+        );
+
+        for code in ["NEEDS_MORE_EVIDENCE", "AMOUNT_MISMATCH", "OTHER"] {
+            let decision = SettlementReviewDecisionData {
+                statement_id: "statement-1".to_string(),
+                expected_lock_version: 1,
+                action: SettlementReviewAction::Reject,
+                operation_id: "review-1".to_string(),
+                reason_code: Some(code.to_string()),
+                comment: None,
+            };
+            let reason = decision.parsed_reject_reason().unwrap().unwrap();
+            assert_eq!(reason.as_str(), code);
+        }
+
+        for bad in [
+            None,
+            Some("   ".to_string()),
+            Some("A".repeat(65)),
+            Some("AMOUNT_UNRESOLVED".to_string()),
+            Some("NEEDS MORE".to_string()),
+        ] {
+            let decision = SettlementReviewDecisionData {
+                statement_id: "statement-1".to_string(),
+                expected_lock_version: 1,
+                action: SettlementReviewAction::Reject,
+                operation_id: "review-1".to_string(),
+                reason_code: bad,
+                comment: None,
+            };
+            assert!(decision.parsed_reject_reason().is_err());
+        }
+
+        let confirm_with_reason = SettlementReviewDecisionData {
+            statement_id: "statement-1".to_string(),
+            expected_lock_version: 1,
+            action: SettlementReviewAction::Confirm,
+            operation_id: "confirm-1".to_string(),
+            reason_code: Some("OTHER".to_string()),
+            comment: None,
+        };
+        assert!(confirm_with_reason.parsed_reject_reason().is_err());
+
+        let confirm = SettlementReviewDecisionData {
+            statement_id: "statement-1".to_string(),
+            expected_lock_version: 1,
+            action: SettlementReviewAction::Confirm,
+            operation_id: "confirm-1".to_string(),
+            reason_code: None,
+            comment: None,
+        };
+        assert_eq!(confirm.parsed_reject_reason().unwrap(), None);
     }
 }

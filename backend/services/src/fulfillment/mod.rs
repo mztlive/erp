@@ -27,18 +27,23 @@ use crate::party::SensitiveDataCodec;
 
 mod acceptance_eligibility;
 mod customer_acceptance;
+mod customer_acceptance_lines;
 mod customer_acceptance_posting;
 mod customer_acceptance_task;
 mod delivery;
+mod delivery_lines;
 mod delivery_posting;
 pub(crate) mod document_number;
 mod dto;
 mod electronic_delivery;
+mod electronic_delivery_crypto;
 mod purchase_context;
 mod purchase_receipt;
+mod purchase_receipt_lines;
 mod purchase_receipt_posting;
 mod service_fulfillment;
 mod service_fulfillment_confirm;
+mod service_fulfillment_crypto;
 pub(crate) mod task;
 
 pub use self::dto::{

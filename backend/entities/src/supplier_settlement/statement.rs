@@ -20,6 +20,7 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 
 use super::difference::{SettlementDifferenceStatus, SupplierSettlementDifference};
 use super::item::{SettlementCostDelta, SupplierSettlementItem};
+use super::review_reason::SettlementReviewRejectReason;
 
 /// 结算单号最大长度。
 const STATEMENT_NO_MAX_LEN: usize = 64;
@@ -31,8 +32,6 @@ const ACTOR_MAX_LEN: usize = 128;
 const HASH_LEN: usize = 64;
 /// 冻结策略标识/版本最大长度。
 const POLICY_VALUE_MAX_LEN: usize = 128;
-/// 复核原因代码最大长度。
-const REVIEW_REASON_CODE_MAX_LEN: usize = 64;
 /// 复核说明最大长度。
 const REVIEW_COMMENT_MAX_LEN: usize = 512;
 
@@ -60,8 +59,8 @@ pub enum SettlementReviewDecision {
     Reject {
         /// 驳回后的可编辑状态，只允许草稿或有差异。
         return_status: SettlementStatus,
-        /// 结构化驳回原因代码。
-        reason_code: String,
+        /// 结构化驳回原因（固定三元值对象，绕过 Service 也不能写入未知原因）。
+        reason_code: SettlementReviewRejectReason,
         /// 补充说明。
         comment: Option<String>,
     },
@@ -803,12 +802,7 @@ impl SupplierSettlementStatement {
                 (
                     SettlementReviewResult::Rejected,
                     return_status,
-                    Some(normalize_required_text(
-                        reason_code,
-                        "驳回原因代码不能为空",
-                        REVIEW_REASON_CODE_MAX_LEN,
-                        "驳回原因代码过长",
-                    )?),
+                    Some(reason_code.as_str().to_string()),
                     normalize_optional_text(comment, "复核说明", REVIEW_COMMENT_MAX_LEN)?,
                     None,
                 )
@@ -1145,22 +1139,13 @@ mod tests {
         .unwrap();
         statement.submit_review().unwrap();
 
-        assert!(statement
-            .record_review(
-                SettlementReviewDecision::Reject {
-                    return_status: SettlementStatus::Draft,
-                    reason_code: "   ".to_string(),
-                    comment: None,
-                },
-                "复核人-b",
-                Instant::from_unix_secs(1_700_000_100),
-            )
-            .is_err());
+        assert!(SettlementReviewRejectReason::parse("   ").is_err());
+        assert!(SettlementReviewRejectReason::parse("AMOUNT_UNRESOLVED").is_err());
         statement
             .record_review(
                 SettlementReviewDecision::Reject {
                     return_status: SettlementStatus::HasDifference,
-                    reason_code: "AMOUNT_UNRESOLVED".to_string(),
+                    reason_code: SettlementReviewRejectReason::AmountMismatch,
                     comment: Some("差异证据不足".to_string()),
                 },
                 "复核人-b",
@@ -1170,7 +1155,7 @@ mod tests {
 
         assert_eq!(statement.status, SettlementStatus::HasDifference);
         assert_eq!(statement.review_result, Some(SettlementReviewResult::Rejected));
-        assert_eq!(statement.review_reason_code.as_deref(), Some("AMOUNT_UNRESOLVED"));
+        assert_eq!(statement.review_reason_code.as_deref(), Some("AMOUNT_MISMATCH"));
     }
 
     #[test]

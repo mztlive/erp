@@ -164,6 +164,25 @@ pub struct CustomerReceipt {
     pub pending_allocations: Vec<PendingReceiptAllocation>,
 }
 
+/// 客户回款单审批事实快照（FIN-E09）。
+///
+/// 由 `CustomerReceipt` 唯一生成的稳定 approval facts：责任组织、对手方、
+/// 金额与分配行数。提交人/提交时间由 Service 显式注入，不进入本结构；
+/// 到 BPM action 的映射仍由 Service adapter 负责。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomerReceiptApprovalFacts {
+    /// 回款单号（`document_no` 稳定来源）。
+    pub document_no: String,
+    /// 责任组织（往来主体，非空）。
+    pub responsible_org_id: String,
+    /// 对手方客户（可选，不参与核销相等判断）。
+    pub customer_id: Option<CustomerAccountId>,
+    /// 含税到账金额。
+    pub total_amount: Amount,
+    /// 冻结核销分配行数。
+    pub line_count: u32,
+}
+
 impl CustomerReceipt {
     /// 创建客户回款单（初始状态为草稿）。
     ///
@@ -212,6 +231,46 @@ impl CustomerReceipt {
             bank_reference,
             approval_subject_version: 0,
             pending_allocations: Vec::new(),
+        })
+    }
+
+    /// 返回审批责任组织（FIN-E09）。
+    ///
+    /// 取往来主体，不得用空串或当前登录人组织补位。
+    ///
+    /// # 返回
+    /// 返回非空责任组织。
+    ///
+    /// # 错误
+    /// 往来主体为空时返回错误。
+    pub fn approval_responsible_org_id(&self) -> Result<String> {
+        let org = self.counterparty_party_id.to_string();
+        if org.trim().is_empty() {
+            return Err(Error::from("客户回款单缺少往来主体，无法冻结责任组织"));
+        }
+        Ok(org)
+    }
+
+    /// 生成稳定的审批事实快照（FIN-E09）。
+    ///
+    /// 同一实体重复生成结果确定；空分配、空组织与行数溢出失败关闭。
+    ///
+    /// # 返回
+    /// 返回文档号、责任组织、对手方、金额与行数事实。
+    ///
+    /// # 错误
+    /// 无冻结分配、往来主体为空或行数溢出 `u32` 时返回错误。
+    pub fn approval_facts(&self) -> Result<CustomerReceiptApprovalFacts> {
+        if self.pending_allocations.is_empty() {
+            return Err(Error::from("客户回款单没有核销分配，无法启动审批"));
+        }
+        Ok(CustomerReceiptApprovalFacts {
+            document_no: self.receipt_no.clone(),
+            responsible_org_id: self.approval_responsible_org_id()?,
+            customer_id: self.customer_id.clone(),
+            total_amount: self.amount,
+            line_count: u32::try_from(self.pending_allocations.len())
+                .map_err(|_| Error::from("回款核销分配行数溢出"))?,
         })
     }
 
@@ -539,5 +598,69 @@ mod tests {
         assert_eq!(CustomerReceiptStatus::Posted.label(), "已过账");
         assert_eq!(CustomerReceiptStatus::Reversed.as_str(), "reversed");
         assert_eq!(CustomerReceiptStatus::Draft.as_str(), "draft");
+    }
+
+    fn approved_receipt() -> CustomerReceipt {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("cr-approval"), data(), "creator-1").unwrap();
+        receipt
+            .start_approval(vec![PendingReceiptAllocation::new(
+                crate::ids::ReceivableEntryId::new("re-1"),
+                Amount::from_str("100.00").unwrap(),
+            )
+            .unwrap()])
+            .unwrap();
+        receipt
+    }
+
+    #[test]
+    fn approval_facts_freeze_document_no_org_customer_amount_and_line_count() {
+        let receipt = approved_receipt();
+        let facts = receipt.approval_facts().unwrap();
+        assert_eq!(facts.document_no, "RC-2026-001");
+        assert_eq!(facts.responsible_org_id, "party-1");
+        assert_eq!(
+            facts.customer_id.as_ref().map(ToString::to_string),
+            Some("cust-1".to_string())
+        );
+        assert_eq!(facts.total_amount, Amount::from_str("1000.00").unwrap());
+        assert_eq!(facts.line_count, 1);
+    }
+
+    #[test]
+    fn approval_facts_are_deterministic_across_repeated_generation() {
+        let receipt = approved_receipt();
+        assert_eq!(
+            receipt.approval_facts().unwrap(),
+            receipt.approval_facts().unwrap()
+        );
+    }
+
+    #[test]
+    fn approval_facts_allow_missing_customer_but_reject_empty_allocations() {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("cr-no-cust"), data(), "creator-1").unwrap();
+        receipt.customer_id = None;
+        receipt
+            .start_approval(vec![PendingReceiptAllocation::new(
+                crate::ids::ReceivableEntryId::new("re-1"),
+                Amount::from_str("100.00").unwrap(),
+            )
+            .unwrap()])
+            .unwrap();
+        let facts = receipt.approval_facts().unwrap();
+        assert!(facts.customer_id.is_none());
+        assert_eq!(facts.document_no, "RC-2026-001");
+
+        let draft = CustomerReceipt::new(CustomerReceiptId::new("cr-empty"), data(), "creator-1").unwrap();
+        assert!(draft.approval_facts().is_err());
+    }
+
+    #[test]
+    fn approval_responsible_org_rejects_blank_counterparty() {
+        let mut receipt = approved_receipt();
+        receipt.counterparty_party_id = PartyId::new("   ");
+        assert!(receipt.approval_responsible_org_id().is_err());
+        assert!(receipt.approval_facts().is_err());
     }
 }

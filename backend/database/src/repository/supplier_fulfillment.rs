@@ -675,6 +675,19 @@ pub struct RefundFinancialSnapshot {
     pub refunded_total: Amount,
 }
 
+/// 单个退款事实头及其分配行的原始快照（FUL-R04）。
+///
+/// 只承载持久化实体与存储无关的归组关系：事实头保留软删除过滤后的
+/// 原始实体，分配行按所属事实头归组并按主键稳定排序；不携带 services
+/// response DTO、HTTP View 或授权结论，响应映射仍由 Service 承担。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SupplierRefundFactBundle {
+    /// 退款事实头实体。
+    pub fact: SupplierRefundFact,
+    /// 归属该事实头的未软删除分配行，按主键稳定排序；无分配行时为空。
+    pub allocations: Vec<SupplierRefundAllocation>,
+}
+
 /// 履约明细主键投影行（FUL-R03）。
 #[derive(Debug, Deserialize)]
 struct FulfillmentItemIdRow {
@@ -947,6 +960,46 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             order_cost_gross,
             refunded_total,
         })
+    }
+
+    /// 按订单读取退款事实及其分配行的归组快照（FUL-R04）。
+    ///
+    /// 先按订单主键批量读取未删除退款事实头，再以事实头主键集合一次
+    /// `$in` 取回全部未删除分配行，最后在内存中按事实头归组并保持主键
+    /// 稳定排序。固定两次数据库访问，不随事实头数量增长；无事实头时
+    /// 直接返回空集合且不发送空 `$in`；有事实头但无分配行时保留事实头
+    /// 并返回空分配集合。全部使用调用方执行器，事务内调用看到同一事务
+    /// 的未提交写入，本方法不自行开启或提交事务。最终响应映射仍由
+    /// Service 承担，本方法不返回 services DTO 或授权结论。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商子订单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按事实头主键稳定排序的归组快照；无事实头时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn refund_fact_bundles_by_order(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierRefundFactBundle>> {
+        let facts = Repository::<SupplierRefundFact>::new(self.db, SUPPLIER_REFUND_FACTS)
+            .find_refund_facts_by_order_ids(std::slice::from_ref(order_id), executor)
+            .await?;
+        if facts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let fact_ids: Vec<SupplierRefundFactId> = facts
+            .iter()
+            .map(|fact| SupplierRefundFactId::new(fact.base.id.as_str()))
+            .collect();
+        let allocations = Repository::<SupplierRefundAllocation>::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
+            .find_allocations_by_fact_ids(&fact_ids, executor)
+            .await?;
+        Ok(group_refund_allocations(facts, allocations))
     }
 
     /// 读取订单合法履约明细主键集合（FUL-R03）。
@@ -1266,6 +1319,37 @@ fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
 
+/// 按事实头主键把分配行归组为退款事实快照（FUL-R04）。
+///
+/// 事实头与分配行均已由调用方按主键稳定排序；本函数保持该顺序，只做
+/// 线性归组，不跨事实头泄漏分配行。无分配行的事实头保留为空集合。
+///
+/// # 参数
+/// * `facts` - 已按主键稳定排序的退款事实头
+/// * `allocations` - 已按主键稳定排序的全部未软删除分配行
+///
+/// # 返回
+/// 返回与事实头一一对应的归组快照，顺序与输入事实头一致。
+fn group_refund_allocations(
+    facts: Vec<SupplierRefundFact>,
+    allocations: Vec<SupplierRefundAllocation>,
+) -> Vec<SupplierRefundFactBundle> {
+    let mut by_fact: HashMap<String, Vec<SupplierRefundAllocation>> = HashMap::new();
+    for allocation in allocations {
+        by_fact
+            .entry(allocation.supplier_refund_fact_id.to_string())
+            .or_default()
+            .push(allocation);
+    }
+    facts
+        .into_iter()
+        .map(|fact| {
+            let allocations = by_fact.remove(fact.base.id.as_str()).unwrap_or_default();
+            SupplierRefundFactBundle { fact, allocations }
+        })
+        .collect()
+}
+
 /// 供应商履约订单列表投影字段（不含敏感地址快照）。
 ///
 /// # 返回
@@ -1341,6 +1425,103 @@ mod tests {
             order_sort_doc(Some("completed_at"), false),
             doc! { "completed_at": -1 }
         );
+    }
+}
+
+#[cfg(test)]
+mod refund_bundle_tests {
+    use std::str::FromStr;
+
+    use super::group_refund_allocations;
+    use entities::common::time::Instant;
+    use entities::ids::{
+        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
+        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierRefundAllocationId, SupplierRefundFactId,
+    };
+    use entities::money::{Amount, Quantity};
+    use entities::supplier_fulfillment::{
+        AllocationAction, SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact,
+        SupplierRefundFactData,
+    };
+
+    fn sample_fact(id: &str) -> SupplierRefundFact {
+        SupplierRefundFact::new(
+            SupplierRefundFactId::new(id),
+            SupplierRefundFactData {
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                connection_id: SupplierApiConnectionId::new("connection-1"),
+                supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
+                external_refund_no: format!("refund-{id}"),
+                external_refund_version: "1".to_string(),
+                refund_amount: Amount::from_str("10.00").unwrap(),
+                refunded_at: Instant::from_unix_secs(1_700_000_000),
+                source_event_id: format!("event-{id}"),
+                inbox_message_id: InboxMessageId::new(format!("message-{id}")),
+            },
+        )
+        .unwrap()
+    }
+
+    fn sample_allocation(id: &str, fact_id: &str, allocation_no: u32) -> SupplierRefundAllocation {
+        SupplierRefundAllocation::new(
+            SupplierRefundAllocationId::new(id),
+            SupplierRefundAllocationData {
+                supplier_refund_fact_id: SupplierRefundFactId::new(fact_id),
+                allocation_no,
+                supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("item-1"),
+                original_cost_entry_id: CostEntryId::new("cost-entry-1"),
+                original_cost_allocation_id: CostAllocationId::new("cost-allocation-1"),
+                original_payable_entry_id: PayableEntryId::new("payable-entry-1"),
+                original_payment_allocation_id: None,
+                refund_quantity: Quantity::from_str("1").unwrap(),
+                gross_amount: Amount::from_str("10.00").unwrap(),
+                net_amount: Amount::from_str("8.00").unwrap(),
+                tax_amount: Amount::from_str("2.00").unwrap(),
+                payable_reduction_amount: Amount::from_str("6.00").unwrap(),
+                cash_refund_amount: Amount::from_str("4.00").unwrap(),
+                cash_supplier_refund_id: None,
+                allocation_action: AllocationAction::Apply,
+                reverses_allocation_id: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn empty_facts_group_to_empty_bundles() {
+        assert!(group_refund_allocations(Vec::new(), Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn facts_without_allocations_keep_empty_groups() {
+        let bundles = group_refund_allocations(vec![sample_fact("fact-1")], Vec::new());
+        assert_eq!(bundles.len(), 1);
+        assert_eq!(bundles[0].fact.base.id.as_str(), "fact-1");
+        assert!(bundles[0].allocations.is_empty());
+    }
+
+    #[test]
+    fn multiple_facts_group_without_cross_fact_leakage() {
+        let bundles = group_refund_allocations(
+            vec![sample_fact("fact-1"), sample_fact("fact-2")],
+            vec![
+                sample_allocation("allocation-2", "fact-2", 1),
+                sample_allocation("allocation-1", "fact-1", 1),
+                sample_allocation("allocation-3", "fact-1", 2),
+            ],
+        );
+        assert_eq!(bundles.len(), 2);
+        assert_eq!(bundles[0].fact.base.id.as_str(), "fact-1");
+        assert_eq!(bundles[1].fact.base.id.as_str(), "fact-2");
+        let first_ids: Vec<&str> = bundles[0]
+            .allocations
+            .iter()
+            .map(|allocation| allocation.base.id.as_str())
+            .collect();
+        assert_eq!(first_ids, vec!["allocation-1", "allocation-3"]);
+        assert_eq!(bundles[1].allocations.len(), 1);
+        assert_eq!(bundles[1].allocations[0].base.id.as_str(), "allocation-2");
     }
 }
 

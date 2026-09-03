@@ -1,27 +1,21 @@
 //! 应收子账与 W11 销项开票执行任务的原子生命周期编排。
-
-use std::str::FromStr;
+//!
+//! 任务身份、摘要与终态口径唯一来源为 `entities::work_item::finance_task`；
+//! 本文件只解析责任人/组织、调用 factory 并持久化（FIN-E06）。
 
 use database::{Executor, ReceivableExt, WorkItemExt};
 use entities::common::time::Instant;
 use entities::ids::{PartyId, ReceivableAccountId, WorkItemId};
-use entities::money::Amount;
 use entities::receivable::ReceivableAccount;
 use entities::work_item::{
-    AssignmentSource, FinanceResponsibilityOperation, WorkItem, WorkItemData, WorkItemPriority,
-    WorkItemStatus, WorkItemType,
+    is_zero_amount, matches_sales_invoice_identity, new_sales_invoice_task, sales_invoice_impact_summary,
+    FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
 };
 use id_generator::next_id;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
-
-const INVOICE_OWNER_ROLE: &str = "role-finance";
-const INVOICE_REASON: &str = "RECEIVABLE_INVOICE_REQUIRED";
-const INVOICE_REOPENED_REASON: &str = "INVOICEABLE_REOPENED_BY_RED_INVOICE";
-const INVOICE_REOPENED_BY_CHANGE_REASON: &str = "INVOICEABLE_REOPENED_BY_SALES_CHANGE";
-const RECEIVABLE_OBJECT_TYPE: &str = "receivable_account";
 
 /// 触发应收可开票额度变化的正式业务事实。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,13 +37,15 @@ pub(crate) async fn ensure_sales_invoice_task(
     account: &ReceivableAccount,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if is_zero(account.open_invoiceable_total) {
+    if is_zero_amount(account.open_invoiceable_total) {
         return Ok(());
     }
     let tasks = sales_invoice_tasks(db, &account.base.id, executor).await?;
     let open = open_tasks(&tasks);
     match open.as_slice() {
-        [] if tasks.is_empty() => create_invoice_task(db, account, INVOICE_REASON, executor).await,
+        [] if tasks.is_empty() => {
+            create_invoice_task(db, account, SalesInvoiceTaskReason::Initial, executor).await
+        }
         [task] => ensure_task_identity(task, account),
         [] => Err(Error::BusinessLogicError(
             "应收子账已存在开票任务历史，不能重复建立初始任务".to_string(),
@@ -83,21 +79,21 @@ pub(crate) async fn sync_sales_invoice_task(
     if open.len() > 1 {
         return Err(duplicate_open_task_error());
     }
-    if is_zero(account.open_invoiceable_total) {
+    if is_zero_amount(account.open_invoiceable_total) {
         return complete_open_task(db, open.into_iter().next(), &account, executor).await;
     }
     if let Some(task) = open.into_iter().next() {
         return update_open_task_summary(db, task, &account, executor).await;
     }
     let reason = match (tasks.is_empty(), change) {
-        (true, SalesInvoiceTaskChange::ReceivableChanged) => INVOICE_REASON,
+        (true, SalesInvoiceTaskChange::ReceivableChanged) => SalesInvoiceTaskReason::Initial,
         (true, _) => {
             return Err(Error::BusinessLogicError(
                 "应收子账缺少销项开票任务历史，请联系管理员修复后重试".to_string(),
             ));
         }
-        (false, SalesInvoiceTaskChange::RedInvoiceIssued) => INVOICE_REOPENED_REASON,
-        (false, SalesInvoiceTaskChange::ReceivableChanged) => INVOICE_REOPENED_BY_CHANGE_REASON,
+        (false, SalesInvoiceTaskChange::RedInvoiceIssued) => SalesInvoiceTaskReason::ReopenedByRedInvoice,
+        (false, SalesInvoiceTaskChange::ReceivableChanged) => SalesInvoiceTaskReason::ReopenedBySalesChange,
         (false, SalesInvoiceTaskChange::InvoicePosted) => {
             return Err(Error::BusinessLogicError(
                 "销项开票后仍有可开票额度但原任务已关闭，请联系管理员处理".to_string(),
@@ -166,7 +162,7 @@ pub(crate) async fn record_invoice_execution(
 async fn create_invoice_task(
     db: &mongodb::Database,
     account: &ReceivableAccount,
-    reason_code: &str,
+    reason: SalesInvoiceTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let responsibility = WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
@@ -176,21 +172,15 @@ async fn create_invoice_task(
             executor,
         )
         .await?;
-    let task = WorkItem::new_with_responsibility_key(
+    let task = new_sales_invoice_task(
         WorkItemId::new(next_id()),
-        WorkItemData {
-            work_item_type: WorkItemType::SalesInvoiceExecution,
-            business_object_type: RECEIVABLE_OBJECT_TYPE.to_string(),
-            business_object_id: account.base.id.clone(),
+        SalesInvoiceTaskSpec {
+            account_id: account.base.id.clone(),
             subject_version: account.base.version.to_string(),
-            owner_role: INVOICE_OWNER_ROLE.to_string(),
             owner_organization_id: account.counterparty_party_id.to_string(),
             owner_user_id: responsibility.owner_user_id,
-            assignment_source: AssignmentSource::SystemRule,
-            priority: WorkItemPriority::Normal,
-            due_at: None,
-            reason_code: Some(reason_code.to_string()),
-            impact_summary: Some(invoice_impact_summary(account)),
+            reason,
+            open_invoiceable_total: account.open_invoiceable_total,
         },
         responsibility.responsibility_key,
     )
@@ -223,7 +213,7 @@ async fn update_open_task_summary(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     ensure_task_identity(task, account)?;
-    let impact = invoice_impact_summary(account);
+    let impact = sales_invoice_impact_summary(account.open_invoiceable_total);
     let subject_version = account.base.version.to_string();
     if task.impact_summary.as_deref() == Some(impact.as_str()) && task.subject_version == subject_version {
         return Ok(());
@@ -254,18 +244,7 @@ fn open_tasks(tasks: &[WorkItem]) -> Vec<&WorkItem> {
 }
 
 fn ensure_task_identity(task: &WorkItem, account: &ReceivableAccount) -> Result<()> {
-    let matches = task.work_item_type == WorkItemType::SalesInvoiceExecution
-        && task.business_object_type == RECEIVABLE_OBJECT_TYPE
-        && task.business_object_id == account.base.id
-        && task.owner_role == INVOICE_OWNER_ROLE
-        && task
-            .responsibility_key()
-            .is_some_and(|key| key.starts_with("finance:SALES_INVOICE:"))
-        && matches!(
-            task.reason_code.as_deref(),
-            Some(INVOICE_REASON | INVOICE_REOPENED_REASON | INVOICE_REOPENED_BY_CHANGE_REASON)
-        );
-    if matches {
+    if matches_sales_invoice_identity(task, &account.base.id) {
         return Ok(());
     }
     Err(Error::BusinessLogicError(
@@ -273,32 +252,6 @@ fn ensure_task_identity(task: &WorkItem, account: &ReceivableAccount) -> Result<
     ))
 }
 
-fn invoice_impact_summary(account: &ReceivableAccount) -> String {
-    format!(
-        "待开票金额 ¥{}，请登记销项发票并完成分配",
-        account.open_invoiceable_total
-    )
-}
-
-fn is_zero(amount: Amount) -> bool {
-    amount == Amount::from_str("0.00").expect("静态零金额必须合法")
-}
-
 fn duplicate_open_task_error() -> Error {
     Error::BusinessLogicError("同一应收子账存在多个开放销项开票任务，请联系管理员处理".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use entities::money::Amount;
-
-    use super::is_zero;
-
-    #[test]
-    fn zero_invoiceable_amount_is_terminal() {
-        assert!(is_zero(Amount::from_str("0.00").unwrap()));
-        assert!(!is_zero(Amount::from_str("0.01").unwrap()));
-    }
 }

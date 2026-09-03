@@ -14,7 +14,9 @@ use entities::payable::{
 };
 use mongodb::Database;
 
-use super::super::payable::{PayableAccountFilter, PayableRepository, SupplierPaymentFilter};
+use super::super::payable::{
+    PayableAccountFilter, PayableRepository, PurchaseInvoiceAllocationFilter, SupplierPaymentFilter,
+};
 use crate::Repository;
 
 /// 域 D19 仓储访问器。
@@ -37,6 +39,9 @@ pub trait PayableExt {
 
     /// 供应商付款单列表筛选条件类型（定义见 `repository::payable`）。
     type SupplierPaymentFilter;
+
+    /// 进项发票分配服务端分页筛选条件类型（定义见 `repository::payable`）。
+    type PurchaseInvoiceAllocationFilter;
 
     /// 获取 `payable_account` 集合的 Repository。
     ///
@@ -84,6 +89,7 @@ pub trait PayableExt {
 impl PayableExt for Database {
     type PayableAccountFilter = PayableAccountFilter;
     type SupplierPaymentFilter = SupplierPaymentFilter;
+    type PurchaseInvoiceAllocationFilter = PurchaseInvoiceAllocationFilter;
 
     fn payable_accounts(&self) -> Repository<'_, PayableAccount> {
         Repository::new(self, Self::PAYABLE_ACCOUNTS)

@@ -4,7 +4,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
-    CustomerAcceptanceLineData,
+    CustomerAcceptanceLineBatch,
 };
 use entities::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId};
 use id_generator::next_id;
@@ -22,11 +22,12 @@ use crate::document_registry::{new_registered_document, persist_registered_docum
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
+use super::customer_acceptance_lines::acceptance_line_specs;
 use super::dto::SortDir;
 use super::{
-    AcceptanceAllocationView, AcceptanceLineInput, CreateCustomerAcceptanceRequest,
-    CustomerAcceptanceDetailView, CustomerAcceptanceLineView, CustomerAcceptanceListParams,
-    CustomerAcceptanceView, FulfillmentService, PageView,
+    AcceptanceAllocationView, CreateCustomerAcceptanceRequest, CustomerAcceptanceDetailView,
+    CustomerAcceptanceLineView, CustomerAcceptanceListParams, CustomerAcceptanceView, FulfillmentService,
+    PageView,
 };
 
 /// 客户验收单列表筛选条件类型。
@@ -186,48 +187,12 @@ impl FulfillmentService {
                 result: req.result,
             },
         )?;
-        let lines = build_acceptance_lines(&id, &req.lines)?;
+        let lines = CustomerAcceptanceLineBatch::build(id.clone(), acceptance_line_specs(&req.lines))
+            .map_err(Error::Logic)?;
         persist_created_customer_acceptance(&self.db, &self.rbac, acceptance.clone(), lines, actor.clone())
             .await?;
         Ok(acceptance.into())
     }
-}
-
-/// 构建验收行实体集合（行号从 1 递增）。
-///
-/// # 参数
-/// * `acceptance_id` - 验收单主键
-/// * `inputs` - 行输入
-///
-/// # 返回
-/// 返回行实体集合。
-///
-/// # 错误
-/// 行数量为负或说明超长时返回错误（实体构造）。
-pub(super) fn build_acceptance_lines(
-    acceptance_id: &CustomerAcceptanceId,
-    inputs: &[AcceptanceLineInput],
-) -> Result<Vec<CustomerAcceptanceLine>> {
-    let mut lines = Vec::with_capacity(inputs.len());
-    for (index, input) in inputs.iter().enumerate() {
-        lines.push(
-            CustomerAcceptanceLine::new(
-                CustomerAcceptanceLineId::new(next_id()),
-                CustomerAcceptanceLineData {
-                    customer_acceptance_id: acceptance_id.clone(),
-                    line_no: index as u32 + 1,
-                    sales_order_line_id: input.sales_order_line_id.clone(),
-                    accepted_quantity: input.accepted_quantity,
-                    short_quantity: input.short_quantity,
-                    rejected_quantity: input.rejected_quantity,
-                    reason: input.reason.clone(),
-                    evidence_attachment_id: None,
-                },
-            )
-            .map_err(Error::Logic)?,
-        );
-    }
-    Ok(lines)
 }
 
 impl From<CustomerAcceptance> for CustomerAcceptanceView {
@@ -474,27 +439,45 @@ async fn persist_created_customer_acceptance(
 
 #[cfg(test)]
 mod tests {
-    use super::build_acceptance_lines;
+    use super::acceptance_line_specs;
     use crate::fulfillment::AcceptanceLineInput;
+    use entities::fulfillment::CustomerAcceptanceLineBatch;
     use entities::ids::{CustomerAcceptanceId, SalesOrderLineId};
     use entities::money::Quantity;
     use std::str::FromStr;
 
     #[test]
     fn acceptance_lines_are_built_and_validated() {
-        let lines = build_acceptance_lines(
-            &CustomerAcceptanceId::new("acc-1"),
-            &[AcceptanceLineInput {
+        let lines = CustomerAcceptanceLineBatch::build(
+            CustomerAcceptanceId::new("acc-1"),
+            acceptance_line_specs(&[AcceptanceLineInput {
                 sales_order_line_id: SalesOrderLineId::new("so-line-1"),
                 accepted_quantity: Quantity::from_str("9").unwrap(),
                 short_quantity: Quantity::from_str("1").unwrap(),
                 rejected_quantity: Quantity::from_str("0").unwrap(),
                 reason: None,
                 allocations: vec![],
-            }],
+            }]),
         )
         .unwrap();
         assert_eq!(lines[0].accepted_quantity, Quantity::from_str("9").unwrap());
+    }
+
+    /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
+    #[test]
+    fn acceptance_create_uses_entity_batch_factory() {
+        let production = include_str!("customer_acceptance.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("fn build_acceptance_lines"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            production.contains("CustomerAcceptanceLineBatch::build"),
+            "创建路径必须调用实体工厂"
+        );
     }
 }
 
@@ -598,7 +581,7 @@ mod customer_acceptance_no_approval_tests {
         let create = production
             .split("pub async fn create_customer_acceptance")
             .nth(1)
-            .and_then(|rest| rest.split("fn build_acceptance_lines").next())
+            .and_then(|rest| rest.split("pub async fn update_customer_acceptance").next())
             .expect("create_customer_acceptance 生产片段");
         assert!(create.contains("persist_created_customer_acceptance"));
         assert!(!create.contains("prepare_start"));

@@ -153,6 +153,32 @@ impl<'a> Repository<'a, PartyBankAccount> {
         self.find_by_id(id, executor).await
     }
 
+    /// 按银行账户 ID 集合批量取回未删除账户事实（FIN-R02，`$in` 一次取回）。
+    ///
+    /// 只返回实体事实；掩码与可见字段选择由 Service 集中完成，
+    /// 本方法不执行脱敏策略。空集合直接返回空列表，不发送空 `$in`。
+    ///
+    /// # 参数
+    /// * `ids` - 银行账户事实 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配账户事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_bank_accounts_by_ids(
+        &self,
+        ids: &[entities::ids::PartyBankAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 读取指定日期生效的主体银行账户。
     ///
     /// # 参数

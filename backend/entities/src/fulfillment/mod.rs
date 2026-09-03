@@ -19,12 +19,17 @@
 pub mod acceptance_eligibility;
 pub mod acceptance_fulfillment_allocation;
 pub mod customer_acceptance;
+pub mod customer_acceptance_line_batch;
 pub mod delivery;
+pub mod delivery_line_batch;
 pub mod electronic_delivery;
+pub mod electronic_delivery_draft;
 mod fingerprint;
 pub mod purchase_receipt;
+pub mod purchase_receipt_line_batch;
 pub mod service_evidence;
 pub mod service_fulfillment;
+pub mod service_fulfillment_draft;
 
 pub use crate::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId,
@@ -39,19 +44,31 @@ pub use customer_acceptance::{
     AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
     CustomerAcceptanceLineData, CustomerAcceptanceState, CustomerAcceptanceUpdate,
 };
+pub use customer_acceptance_line_batch::{
+    CustomerAcceptanceLineBatch, CustomerAcceptanceLineSpec, ACCEPTANCE_LINE_BATCH_MAX,
+};
 pub use delivery::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType, DeliveryUpdate,
 };
+pub use delivery_line_batch::{DeliveryLineBatch, DeliveryLineSpec};
 pub use electronic_delivery::{
     ElectronicDelivery, ElectronicDeliveryData, ElectronicDeliveryState, ElectronicDeliveryUpdate,
     FulfillmentResult,
+};
+pub use electronic_delivery_draft::{
+    ElectronicDeliveryDraft, ElectronicDeliveryDraftData, ElectronicRecipientFingerprint,
 };
 pub use purchase_receipt::{
     PurchaseFulfillmentEligibility, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,
     PurchaseReceiptLineData, PurchaseReceiptState, PurchaseReceiptUpdate, QualityResult,
 };
+pub use purchase_receipt_line_batch::{PurchaseReceiptLineBatch, PurchaseReceiptLineSpec};
 pub use service_evidence::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
 pub use service_fulfillment::{
     ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentData, ServiceFulfillmentState,
     ServiceFulfillmentUpdate,
+};
+pub use service_fulfillment_draft::{
+    ServiceFulfillmentDraft, ServiceFulfillmentDraftData, ServiceLocationFingerprint,
+    ServiceRecipientFingerprint,
 };

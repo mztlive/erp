@@ -137,7 +137,83 @@ impl<'a> Repository<'a, AuditLog> {
         )
         .await
     }
+}
 
+/// 职责分离校验的最小审计事实投影（FIN-R13）。
+///
+/// 只携带策略解释所需的 actor/action/资源三元组；调用方 Service 继续解释
+/// SoD 政策、当前 actor 与拒绝文案。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SeparationAuditFact {
+    /// 资源类型稳定代码。
+    pub resource_type: String,
+    /// 资源业务 ID。
+    pub resource_id: Option<String>,
+    /// 经办人账号 ID。
+    pub actor_id: String,
+    /// 审计动作（含版本化后缀，如 `customer_receipt.post:`）。
+    pub action: String,
+}
+
+impl<'a> Repository<'a, AuditLog> {
+    /// 按资源 pair 集合批量返回最小职责分离事实（FIN-R13）。
+    ///
+    /// 单次 `$or` 查询全部 `(resource_type, resource_id)` 的成功审计，
+    /// 只投影 actor/action/资源三元组；空输入不访问数据库。仅成功事件计入
+    /// 证据，非正式动作由 Service 按前缀判定，本方法不解释 SoD 政策。
+    ///
+    /// # 参数
+    /// * `pairs` - 资源 pair 集合，每项为 `(resource_type, resource_id)`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中资源的最小事实；无命中返回空集合（调用方 fail closed）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_separation_facts_by_resources(
+        &self,
+        pairs: &[(String, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SeparationAuditFact>> {
+        if pairs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut sorted = pairs.to_vec();
+        sorted.sort();
+        sorted.dedup();
+        let alternatives = sorted
+            .into_iter()
+            .map(|(resource_type, resource_id)| {
+                doc! {
+                    "resource_type": resource_type,
+                    "resource_id": resource_id,
+                }
+            })
+            .collect::<Vec<_>>();
+        let collection = self.collection().clone_with_type::<SeparationAuditFact>();
+        mongo_ops::find_many(
+            &collection,
+            doc! {
+                "$or": alternatives,
+                "success": true,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! {
+                    "resource_type": 1,
+                    "resource_id": 1,
+                    "actor_id": 1,
+                    "action": 1,
+                })
+                .build(),
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, AuditLog> {
     /// 查询映射任务的不可变审计时间线。
     ///
     /// # 参数
@@ -310,5 +386,22 @@ mod tests {
             filter.get_document("action").unwrap().get_str("$regex").unwrap(),
             r"audit\.create\+"
         );
+    }
+
+    /// 空资源集合直接返回空且不访问数据库。
+    #[tokio::test]
+    async fn separation_facts_empty_input_returns_empty_without_db() {
+        use entities::AuditLog;
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .expect("客户端句柄创建失败");
+        let database = client.database("unused");
+        let repository = super::Repository::new(&database, "audit_logs");
+        let repository: super::Repository<'_, AuditLog> = repository;
+        let facts = repository
+            .list_separation_facts_by_resources(&[], &mut crate::NoTransaction)
+            .await
+            .expect("空输入批量查询必须成功");
+        assert!(facts.is_empty());
     }
 }

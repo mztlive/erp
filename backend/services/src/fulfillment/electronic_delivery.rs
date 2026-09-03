@@ -2,12 +2,9 @@ use database::{
     AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, PurchaseOrderExt,
     Transactional,
 };
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::fulfillment::{ElectronicDelivery, ElectronicDeliveryData};
+use entities::fulfillment::ElectronicDelivery;
 use entities::ids::ElectronicDeliveryId;
-use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
 
@@ -23,6 +20,7 @@ use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
 use super::dto::SortDir;
+use super::electronic_delivery_crypto::electronic_delivery_draft_from_request;
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::{
     CreateElectronicDeliveryRequest, ElectronicDeliveryListParams, ElectronicDeliveryView,
@@ -164,7 +162,7 @@ impl FulfillmentService {
         actor: &AuditActor,
     ) -> Result<ElectronicDeliveryView> {
         req.validate()?;
-        let record = electronic_delivery_from_request(req, actor, &self.fingerprint_key)?;
+        let record = electronic_delivery_draft_from_request(req, actor, &self.fingerprint_key)?;
         persist_created_electronic_delivery(&self.db, &self.rbac, record.clone(), actor.clone()).await?;
         Ok(record.into())
     }
@@ -278,54 +276,6 @@ impl From<ElectronicDelivery> for ElectronicDeliveryView {
             version: record.base.version,
         }
     }
-}
-
-/// 由创建请求构造电子交付草稿。
-///
-/// 交付对象快照以不透明值传入，服务端用指纹密钥计算查询指纹后落库。
-///
-/// # 参数
-/// * `req` - 已通过校验的创建请求
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `fingerprint_key` - 查询指纹密钥
-///
-/// # 返回
-/// 返回新建草稿实体。
-///
-/// # 错误
-/// 实体规范化失败时返回校验错误。
-fn electronic_delivery_from_request(
-    req: CreateElectronicDeliveryRequest,
-    actor: &AuditActor,
-    fingerprint_key: &[u8],
-) -> Result<ElectronicDelivery> {
-    let occurred_at = Instant::from_unix_secs(req.occurred_at);
-    let recorded_at = Instant::now();
-    Ok(ElectronicDelivery::new(
-        ElectronicDeliveryId::new(next_id()),
-        ElectronicDeliveryData {
-            fulfillment_no: req.fulfillment_no,
-            sales_order_line_id: req.sales_order_line_id,
-            purchase_order_id: req.purchase_order_id,
-            purchase_line_sales_allocation_id: req.purchase_line_sales_allocation_id,
-            recipient_snapshot: req.recipient_snapshot.clone(),
-            recipient_snapshot_fingerprint: ElectronicDelivery::recipient_snapshot_fingerprint(
-                &req.recipient_snapshot,
-                fingerprint_key,
-            ),
-            quantity: req.quantity,
-            result: req.result,
-            evidence_attachment_id: req.evidence_attachment_id,
-            fact_no: next_id(),
-            occurred_at,
-            recorded_at,
-            recorded_by: actor.id().to_string(),
-            source_type: SourceType::Erp,
-            source_reference: None,
-            reason_code: None,
-            reason_text: None,
-        },
-    )?)
 }
 
 /// 电子交付创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
@@ -488,7 +438,6 @@ mod electronic_delivery_no_approval_tests {
         electronic_delivery_bind_command, electronic_delivery_create_binding_decision,
         ensure_electronic_delivery_has_no_adapter, ensure_electronic_delivery_skips_approval_binding,
         policy_of, BindingDecision, DocumentApprovalPolicy, DocumentType, ElectronicDelivery,
-        ElectronicDeliveryData,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
@@ -496,7 +445,7 @@ mod electronic_delivery_no_approval_tests {
     use bpm::ProcessKind;
     use entities::common::source::SourceType;
     use entities::common::time::Instant;
-    use entities::fulfillment::FulfillmentResult;
+    use entities::fulfillment::{ElectronicDeliveryData, FulfillmentResult};
     use entities::ids::{
         ElectronicDeliveryId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
     };
@@ -613,5 +562,32 @@ mod electronic_delivery_no_approval_tests {
         assert!(!create.contains("attach_published_binding"));
         assert!(!create.contains("WorkItem"));
         assert!(!create.contains("start_approval"));
+    }
+
+    /// 创建路径经领域草稿工厂与 crypto port：旧 Service helper 已删除。
+    #[test]
+    fn create_uses_draft_factory_and_typed_fingerprint() {
+        let production = include_str!("electronic_delivery.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("fn electronic_delivery_from_request"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            production.contains("electronic_delivery_draft_from_request"),
+            "创建路径必须调用草稿编排"
+        );
+        assert!(
+            !production.contains("SourceType::Erp"),
+            "来源默认不得留在 Service"
+        );
+        let crypto = include_str!("electronic_delivery_crypto.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("crypto 生产代码");
+        assert!(crypto.contains("ElectronicDeliveryDraft::build"));
+        assert!(crypto.contains("ElectronicRecipientFingerprint"));
     }
 }

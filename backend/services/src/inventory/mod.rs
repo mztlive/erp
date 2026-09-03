@@ -49,10 +49,9 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 
 use self::adapter::{
-    build_stock_adjustment_snapshot, document_approval_view_with_history,
-    execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,
-    stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
-    RECENT_HISTORY_LIMIT,
+    document_approval_view_with_history, execute_stock_adjustment_domain_action, require_frozen_binding,
+    start_approval_command_kind, stock_adjustment_adapter, stock_adjustment_start_command,
+    stock_adjustment_subject_ref, RECENT_HISTORY_LIMIT,
 };
 use self::authorization::inventory_authorization_with_executor;
 use self::dto::DocumentApprovalHistoryPageView;
@@ -953,7 +952,12 @@ impl InventoryService {
         adjustment.apply_line_updates(&mut lines, &line_updates, true)?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
         let now = Instant::now();
-        let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), now)?;
+        let snapshot = entities::inventory::StockAdjustmentApprovalSnapshot::build(
+            &adjustment,
+            &lines,
+            actor.id(),
+            now,
+        )?;
         let start = stock_adjustment_start_command(
             id,
             adjustment.approval_subject_version,

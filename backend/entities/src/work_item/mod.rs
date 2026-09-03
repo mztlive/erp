@@ -7,6 +7,7 @@ mod card_funds_command;
 mod due;
 mod entity;
 mod finance_responsibility;
+mod finance_task;
 mod fulfillment_responsibility;
 mod queue_context;
 
@@ -25,6 +26,14 @@ pub use entity::{
 pub use finance_responsibility::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
+};
+pub use finance_task::{
+    card_funds_impact_summary, card_funds_task_kind, is_purchase_payable, is_zero_amount,
+    matches_card_funds_identity, matches_sales_invoice_identity, matches_supplier_payment_identity,
+    new_card_funds_task, new_sales_invoice_task, new_supplier_payment_task, payment_due_at,
+    sales_invoice_impact_summary, supplier_payment_impact_summary, CardFundsTaskKind, CardFundsTaskSpec,
+    SalesInvoiceTaskReason, SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
+    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, RECEIVABLE_OBJECT_TYPE,
 };
 pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
 pub use queue_context::{QueueContextField, QueueContextIdentity};

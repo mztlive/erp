@@ -270,6 +270,9 @@ pub fn customer_receipt_object_readable(organization_id: &str, assignee_user_id:
 
 /// 责任组织取往来主体，不得用空串或当前登录人组织补位。
 ///
+/// 唯一规则源为 `CustomerReceipt::approval_responsible_org_id`；本函数只做
+/// 错误适配，不复制取值与缺省规则。
+///
 /// # 参数
 /// * `receipt` - 回款单
 ///
@@ -279,18 +282,15 @@ pub fn customer_receipt_object_readable(organization_id: &str, assignee_user_id:
 /// # 错误
 /// 往来主体为空时返回校验错误。
 pub fn customer_receipt_responsible_org_id(receipt: &CustomerReceipt) -> Result<String> {
-    let org = receipt.counterparty_party_id.to_string();
-    if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "客户回款单缺少往来主体，无法冻结责任组织".to_string(),
-        ));
-    }
-    Ok(org)
+    receipt
+        .approval_responsible_org_id()
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 按合同 §4.4.5 冻结客户回款快照。
 ///
-/// 对手方为客户（可空）；金额合计必填。`document_no` 取回款单号。
+/// 领域事实唯一来源为 `CustomerReceipt::approval_facts`；本函数只把领域
+/// facts 映射到 BPM action 载荷（注入提交人/提交时间），不复制取值与缺省规则。
 ///
 /// # 参数
 /// * `receipt` - 已冻结提交版本的回款单
@@ -304,26 +304,22 @@ pub fn build_customer_receipt_snapshot(
     submitted_by: &str,
     submitted_at: Instant,
 ) -> Result<ApprovalSubjectSnapshotPayload> {
-    if receipt.pending_allocations.is_empty() {
-        return Err(Error::ValidationError(
-            "客户回款单没有核销分配，无法启动审批".to_string(),
-        ));
-    }
+    let facts = receipt
+        .approval_facts()
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(ApprovalSubjectSnapshotPayload {
-        document_no: receipt.receipt_no.clone(),
-        responsible_org_id: customer_receipt_responsible_org_id(receipt)?,
+        document_no: facts.document_no,
+        responsible_org_id: facts.responsible_org_id,
         submitted_by: submitted_by.to_string(),
         submitted_at,
-        counterparty: receipt
+        counterparty: facts
             .customer_id
-            .as_ref()
             .map(|customer_id| ApprovalSubjectCounterparty::Customer {
                 customer_id: CustomerAccountId::new(customer_id.to_string()),
             }),
-        total_amount: Some(receipt.amount),
+        total_amount: Some(facts.total_amount),
         total_quantity: None,
-        line_count: u32::try_from(receipt.pending_allocations.len())
-            .map_err(|_| Error::ValidationError("回款核销分配行数溢出".to_string()))?,
+        line_count: facts.line_count,
     })
 }
 

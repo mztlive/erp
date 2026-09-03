@@ -2,9 +2,9 @@ use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transa
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
-    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData, QualityResult,
+    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
 };
-use entities::ids::{PurchaseReceiptId, PurchaseReceiptLineId};
+use entities::ids::PurchaseReceiptId;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -21,10 +21,10 @@ use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
 use super::dto::SortDir;
+use super::purchase_receipt_lines::receipt_line_specs;
 use super::{
     CreatePurchaseReceiptRequest, FulfillmentService, PageView, PurchaseReceiptDetailView,
-    PurchaseReceiptLineInput, PurchaseReceiptLineView, PurchaseReceiptListParams, PurchaseReceiptView,
-    UpdatePurchaseReceiptRequest,
+    PurchaseReceiptLineView, PurchaseReceiptListParams, PurchaseReceiptView, UpdatePurchaseReceiptRequest,
 };
 
 /// 采购入库单列表筛选条件类型（经 `FulfillmentExt` 关联类型跨 crate 可达）。
@@ -171,7 +171,8 @@ impl FulfillmentService {
                 warehouse_id: req.warehouse_id,
             },
         )?;
-        let lines = build_receipt_lines(&id, &req.lines)?;
+        let lines = PurchaseReceiptLineBatch::build(id.clone(), receipt_line_specs(&req.lines))
+            .map_err(Error::Logic)?;
         persist_created_purchase_receipt(&self.db, &self.rbac, receipt.clone(), lines, actor.clone()).await?;
         Ok(receipt.into())
     }
@@ -254,45 +255,6 @@ impl FulfillmentService {
             .await?;
         Ok(updated.into())
     }
-}
-
-/// 构建入库行实体集合（行号从 1 递增，质量结果按数量派生）。
-///
-/// # 参数
-/// * `receipt_id` - 入库单主键
-/// * `inputs` - 行输入
-///
-/// # 返回
-/// 返回行实体集合。
-///
-/// # 错误
-/// 行数量约束不合法时返回错误（实体构造）。
-fn build_receipt_lines(
-    receipt_id: &PurchaseReceiptId,
-    inputs: &[PurchaseReceiptLineInput],
-) -> Result<Vec<PurchaseReceiptLine>> {
-    let mut lines = Vec::with_capacity(inputs.len());
-    for (index, input) in inputs.iter().enumerate() {
-        let line_no = index as u32 + 1;
-        let quality_result =
-            QualityResult::from_quantities(input.qualified_quantity, input.rejected_quantity);
-        lines.push(
-            PurchaseReceiptLine::new(
-                PurchaseReceiptLineId::new(next_id()),
-                PurchaseReceiptLineData {
-                    purchase_receipt_id: receipt_id.clone(),
-                    line_no,
-                    purchase_order_revision_line_id: input.purchase_order_revision_line_id.clone(),
-                    received_quantity: input.received_quantity,
-                    qualified_quantity: input.qualified_quantity,
-                    rejected_quantity: input.rejected_quantity,
-                    quality_result,
-                },
-            )
-            .map_err(Error::Logic)?,
-        );
-    }
-    Ok(lines)
 }
 
 impl From<PurchaseReceipt> for PurchaseReceiptView {
@@ -528,9 +490,9 @@ async fn persist_created_purchase_receipt(
 
 #[cfg(test)]
 mod tests {
-    use super::build_receipt_lines;
+    use super::receipt_line_specs;
     use crate::fulfillment::PurchaseReceiptLineInput;
-    use entities::fulfillment::{PurchaseReceiptLineData, QualityResult};
+    use entities::fulfillment::{PurchaseReceiptLineBatch, PurchaseReceiptLineData, QualityResult};
     use entities::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
     use entities::money::Quantity;
     use std::str::FromStr;
@@ -573,9 +535,9 @@ mod tests {
 
     #[test]
     fn receipt_lines_are_built_with_incrementing_line_no_and_validation() {
-        let lines = build_receipt_lines(
-            &PurchaseReceiptId::new("r-1"),
-            &[
+        let lines = PurchaseReceiptLineBatch::build(
+            PurchaseReceiptId::new("r-1"),
+            receipt_line_specs(&[
                 passed_line(),
                 PurchaseReceiptLineInput {
                     purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("porl-2"),
@@ -583,7 +545,7 @@ mod tests {
                     qualified_quantity: Quantity::from_str("5").unwrap(),
                     rejected_quantity: Quantity::from_str("0").unwrap(),
                 },
-            ],
+            ]),
         )
         .unwrap();
         assert_eq!(lines.len(), 2);
@@ -594,7 +556,11 @@ mod tests {
             rejected_quantity: Quantity::from_str("1").unwrap(),
             ..passed_line()
         };
-        assert!(build_receipt_lines(&PurchaseReceiptId::new("r-2"), &[over_sum]).is_err());
+        assert!(PurchaseReceiptLineBatch::build(
+            PurchaseReceiptId::new("r-2"),
+            receipt_line_specs(&[over_sum])
+        )
+        .is_err());
         let _ = PurchaseReceiptLineData {
             purchase_receipt_id: PurchaseReceiptId::new("r-1"),
             line_no: 1,
@@ -604,6 +570,27 @@ mod tests {
             rejected_quantity: Quantity::from_str("1").unwrap(),
             quality_result: QualityResult::Partial,
         };
+    }
+
+    /// 创建路径经实体批量工厂派生质量：旧 Service helper 已删除。
+    #[test]
+    fn receipt_create_uses_entity_batch_factory() {
+        let production = include_str!("purchase_receipt.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("fn build_receipt_lines"),
+            "旧 helper 必须删除"
+        );
+        assert!(
+            production.contains("PurchaseReceiptLineBatch::build"),
+            "创建路径必须调用实体工厂"
+        );
+        assert!(
+            !production.contains("QualityResult::from_quantities"),
+            "质量派生不得留在 Service"
+        );
     }
 }
 

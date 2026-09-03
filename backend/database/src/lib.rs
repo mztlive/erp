@@ -18,6 +18,7 @@ pub use repository::{
     CustomerCenterReceivableRow, CustomerCenterRelatedRow, CustomerCenterSalesOrderRow,
     FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow,
     FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow, ProcurementResponsibilityRuleFilter,
-    Repository, SkuRow, SupplierOfferingRow, WorkItemRow,
+    ReceivableListScope, Repository, ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SeparationAuditFact,
+    SkuRow, SupplierOfferingRow, WorkItemRow,
 };
 pub use transaction::Transactional;

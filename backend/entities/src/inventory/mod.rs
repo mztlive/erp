@@ -14,6 +14,7 @@
 //! - 状态机按 §6.7/§7.5：`stock_adjustment` 为草稿 → 待仓储复核 → 待财务确认
 //!   → 已过账 → 已冲正（复核/确认可驳回退回草稿），`REVERSED` 为不可逆终态。
 
+pub mod approval_snapshot;
 pub mod stock_adjustment;
 pub mod stock_balance;
 pub mod stock_movement;
@@ -23,6 +24,7 @@ pub use crate::ids::{
     StockAdjustmentId, StockAdjustmentLineId, StockBalanceId, StockMovementId, StockReservationEntryId,
     StockReservationId,
 };
+pub use approval_snapshot::StockAdjustmentApprovalSnapshot;
 pub use stock_adjustment::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentLineUpdate, StockAdjustmentState, StockAdjustmentUpdate,

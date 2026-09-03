@@ -15,6 +15,7 @@ pub mod difference;
 pub mod draft_snapshot;
 pub mod evidence;
 pub mod item;
+pub mod review_reason;
 pub mod source_evidence;
 pub mod statement;
 
@@ -29,6 +30,7 @@ pub use difference::{
 pub use draft_snapshot::SupplierSettlementDraftSnapshot;
 pub use evidence::{SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData};
 pub use item::{SettlementCostDelta, SupplierSettlementItem, SupplierSettlementItemData};
+pub use review_reason::SettlementReviewRejectReason;
 pub use source_evidence::{
     SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
     SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
