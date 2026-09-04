@@ -162,6 +162,30 @@ pub struct InboxMessageData {
     pub processed_at: Option<Instant>,
 }
 
+/// 入站消息登记数据（登记态专用）。
+///
+/// 与 [`InboxMessageData`] 的区别：处理状态固定为已接收，不携带处理完成时间；
+/// 接收时间由调用方显式注入，实体不读取全局时钟。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InboxMessageReceivedData {
+    /// 来源系统 ID。
+    pub source_system_id: SourceSystemId,
+    /// 来源事件 ID（消息层幂等身份，与 `source_system_id` 组合唯一）。
+    pub source_event_id: String,
+    /// 消息类型。
+    pub message_type: MessageType,
+    /// 业务事实键（业务事实层幂等身份）。
+    pub business_fact_key: String,
+    /// 来源契约版本。
+    pub payload_schema_version: String,
+    /// 规范化内容引用。
+    pub payload_reference: Option<String>,
+    /// 来源系统发送时间。
+    pub source_sent_at: Option<Instant>,
+    /// ERP 接收时间（调用方注入，缺省值由 Service 取当前时间）。
+    pub received_at: Instant,
+}
+
 /// 入站消息更新数据（只允许更新处理状态与处理完成时间，消息身份与幂等键不可修改）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct InboxMessageUpdate {
@@ -199,6 +223,38 @@ pub struct InboxMessage {
 }
 
 impl InboxMessage {
+    /// 登记入站消息（登记态：状态固定为已接收，无处理完成时间）。
+    ///
+    /// 字段校验与规范化规则与 [`InboxMessage::new`] 一致；来源系统发送时间与
+    /// 接收时间由调用方注入，实体不读取全局时钟。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::InboxMessageId`）
+    /// * `data` - 登记数据（不含处理状态与处理完成时间）
+    ///
+    /// # 返回
+    /// 返回状态为已接收的新建入站消息实体。
+    ///
+    /// # 错误
+    /// 当来源事件 ID/业务事实键/契约版本为空或超长、内容引用超长时返回错误。
+    pub fn received(id: InboxMessageId, data: InboxMessageReceivedData) -> Result<Self> {
+        Self::new(
+            id,
+            InboxMessageData {
+                source_system_id: data.source_system_id,
+                source_event_id: data.source_event_id,
+                message_type: data.message_type,
+                business_fact_key: data.business_fact_key,
+                payload_schema_version: data.payload_schema_version,
+                payload_reference: data.payload_reference,
+                status: InboxMessageStatus::Received,
+                source_sent_at: data.source_sent_at,
+                received_at: data.received_at,
+                processed_at: None,
+            },
+        )
+    }
+
     /// 创建入站消息记录。
     ///
     /// 完成 `source_event_id`、`business_fact_key`、`payload_schema_version` 的校验与
@@ -456,6 +512,59 @@ mod tests {
         assert_eq!(MessageType::MallActionRequest.label(), "商城动作请求");
         assert_eq!(InboxMessageStatus::Duplicate.label(), "重复");
         assert_eq!(InboxMessageStatus::Received.as_str(), "received");
+    }
+
+    #[test]
+    fn received_factory_fixes_initial_state_and_time() {
+        use super::InboxMessageReceivedData;
+
+        let message = InboxMessage::received(
+            InboxMessageId::new("msg-received-1"),
+            InboxMessageReceivedData {
+                source_system_id: SourceSystemId::new("sys-mall-1"),
+                source_event_id: " evt-2001 ".to_string(),
+                message_type: MessageType::OrderCanceled,
+                business_fact_key: "mall-1|ORDER_CANCELED|SO-2026-002|v3".to_string(),
+                payload_schema_version: "v1".to_string(),
+                payload_reference: None,
+                source_sent_at: None,
+                received_at: Instant::from_unix_secs(RECEIVED_AT),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(message.status, InboxMessageStatus::Received);
+        assert!(message.processed_at.is_none());
+        assert_eq!(message.received_at.unix_secs(), RECEIVED_AT);
+        assert_eq!(message.source_event_id, "evt-2001");
+    }
+
+    #[test]
+    fn received_factory_rejects_invalid_envelope() {
+        use super::InboxMessageReceivedData;
+
+        let envelope = || InboxMessageReceivedData {
+            source_system_id: SourceSystemId::new("sys-mall-1"),
+            source_event_id: "evt-2002".to_string(),
+            message_type: MessageType::PaymentSucceeded,
+            business_fact_key: "mall-1|PAYMENT_SUCCEEDED|SO-2026-003|v3".to_string(),
+            payload_schema_version: "v1".to_string(),
+            payload_reference: None,
+            source_sent_at: None,
+            received_at: Instant::from_unix_secs(RECEIVED_AT),
+        };
+
+        let blank_event = InboxMessageReceivedData {
+            source_event_id: "  ".to_string(),
+            ..envelope()
+        };
+        assert!(InboxMessage::received(InboxMessageId::new("msg-received-2"), blank_event).is_err());
+
+        let overlong_key = InboxMessageReceivedData {
+            business_fact_key: "k".repeat(257),
+            ..envelope()
+        };
+        assert!(InboxMessage::received(InboxMessageId::new("msg-received-3"), overlong_key).is_err());
     }
 
     #[test]

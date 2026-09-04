@@ -9,6 +9,8 @@
 mod common;
 mod error_task;
 mod inbox_message;
+mod prepared_decision;
+mod prepared_inbox;
 mod reconciliation_difference;
 mod task_decision;
 
@@ -27,6 +29,8 @@ pub use inbox_message::{
 };
 #[allow(unused_imports)]
 pub(crate) use inbox_message::{InboxMessageListQuery, INBOX_MESSAGE_SORT_FIELDS};
+pub use prepared_decision::{PreparedDirectDecisionTarget, PreparedWorkItemTarget};
+pub use prepared_inbox::PreparedWriteBackOutcome;
 pub use reconciliation_difference::{
     CreateDifferenceRequest, DifferenceDetailView, DifferenceListParams, DifferenceView, ResolutionView,
 };

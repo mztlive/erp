@@ -7,39 +7,22 @@ use database::{
     Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, ReturnsExt, SupplierFulfillmentExt,
 };
 use entities::integration_ops::{
-    CanonicalEvidenceReference, EvidenceRecordRef, EvidenceReferenceSet, EvidenceSubjectBindings,
-    InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask, MessageType, ReconciliationDifference,
-    ReplayOriginalReference, ResolutionAction,
+    difference_terminal_policy, error_terminal_policy,
+    reconciliation_reason_registry as domain_reason_registry, CanonicalEvidenceReference, DirectConclusion,
+    EvidenceRecordRef, EvidenceReferenceSet, EvidenceSubjectBindings, InboxMessageStatus, InboxMessageUpdate,
+    IntegrationErrorTask, MessageType, ReconciliationDifference, ReplayOriginalReference,
+    RequiredEvidenceKind, ResolutionAction, TerminalEvidencePolicy,
 };
 use entities::mall_order::ProcessingStatus;
 use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
 use mongodb::Database;
 
 use super::{
-    ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode, DirectReconciliationConclusion,
-    EvidencePolicyKey, ReconciliationReasonRegistryView, RegisteredReconciliationReasonView,
-    ResolutionEvidencePolicyView, ReviewerSeparation,
+    ActionBlockerView, ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode,
+    DirectReconciliationConclusion, EvidencePolicyKey, ReconciliationReasonRegistryView,
+    RegisteredReconciliationReasonView, ResolutionEvidencePolicyView, ReviewerSeparation,
 };
 use crate::errors::{Error, Result};
-
-const ERROR_POLICY_ID: &str = "w29-error-terminal-evidence";
-const DIFFERENCE_POLICY_ID: &str = "w29-difference-terminal-evidence";
-const EVIDENCE_POLICY_VERSION: u64 = 1;
-const REASON_REGISTRY_ID: &str = "w29-reconciliation-reasons";
-const REASON_REGISTRY_VERSION: u64 = 1;
-
-const ERROR_EXTERNAL_RESULT: &[ControlledEvidenceKind] = &[ControlledEvidenceKind::ExternalCaseResult];
-const ERROR_BUSINESS_REPAIR: &[ControlledEvidenceKind] =
-    &[ControlledEvidenceKind::BusinessObjectVerification];
-const DIFFERENCE_REPAIR: &[ControlledEvidenceKind] = &[ControlledEvidenceKind::BusinessObjectVerification];
-const DIFFERENCE_COMPENSATION: &[ControlledEvidenceKind] = &[
-    ControlledEvidenceKind::CompensationResult,
-    ControlledEvidenceKind::FinancialReconciliation,
-];
-const NO_ERROR_REVIEW: &[ControlledEvidenceKind] = &[
-    ControlledEvidenceKind::BusinessObjectVerification,
-    ControlledEvidenceKind::DistinctReview,
-];
 
 /// W29 当前业务项的证据上下文；只包含关联校验所需的稳定身份。
 #[derive(Debug, Clone)]
@@ -573,71 +556,163 @@ impl IntegrationEvidenceAuthority for Database {
     }
 }
 
-/// 返回错误任务当前固定证据策略。
+/// 返回错误任务当前固定证据策略视图（规则归领域，此处只做 view 映射）。
+///
+/// # 参数
+/// * `task` - 集成错误任务
+///
+/// # 返回
+/// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub(super) fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidencePolicyView {
-    let required = if task.message_id.is_some() {
-        ERROR_EXTERNAL_RESULT
-    } else {
-        ERROR_BUSINESS_REPAIR
-    };
-    ResolutionEvidencePolicyView {
-        evidence_policy_id: ERROR_POLICY_ID.to_string(),
-        evidence_policy_version: EVIDENCE_POLICY_VERSION,
-        key: EvidencePolicyKey {
-            error_type: task.error_class.as_str().to_string(),
-            funds_impact: "NONE".to_string(),
-        },
-        required_evidence_kinds: required.to_vec(),
-        reviewer_separation: ReviewerSeparation::None,
-    }
+    policy_view(&error_terminal_policy(task))
 }
 
-/// 返回对账差异当前固定证据策略。
+/// 返回对账差异当前固定证据策略视图（规则归领域，此处只做 view 映射）。
+///
+/// # 参数
+/// * `difference` - 对账差异
+///
+/// # 返回
+/// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub(super) fn difference_evidence_policy(
     difference: &ReconciliationDifference,
 ) -> ResolutionEvidencePolicyView {
-    let financial = difference.has_financial_impact();
+    policy_view(&difference_terminal_policy(difference))
+}
+
+/// 返回无任务直接对账固定原因注册表视图（注册表归领域，此处只做 view 映射）。
+///
+/// # 返回
+/// 返回响应视图；原因、结论与类型要求来自领域注册表。
+pub(super) fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
+    let registry = domain_reason_registry();
+    ReconciliationReasonRegistryView {
+        reason_registry_id: registry.id.to_string(),
+        reason_registry_version: registry.version,
+        registered_reasons: registry
+            .reasons
+            .iter()
+            .map(|reason| RegisteredReconciliationReasonView {
+                registered_reason_id: reason.id.to_string(),
+                registered_reason_version: reason.version,
+                conclusion: dto_conclusion(reason.conclusion),
+                label: reason.label.to_string(),
+                required_evidence_kinds: reason
+                    .required
+                    .iter()
+                    .map(|kind| ControlledEvidenceKind::from(*kind))
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+/// 将领域终态证据策略映射为响应视图。
+///
+/// # 参数
+/// * `policy` - 领域终态证据策略
+///
+/// # 返回
+/// 返回响应视图；岗位分离要求恒为无（领域当前无复核分离规则）。
+///
+/// # 约束
+/// 只做词汇映射，不维护第二份类型要求。
+fn policy_view(policy: &TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
     ResolutionEvidencePolicyView {
-        evidence_policy_id: DIFFERENCE_POLICY_ID.to_string(),
-        evidence_policy_version: EVIDENCE_POLICY_VERSION,
+        evidence_policy_id: policy.policy_id.to_string(),
+        evidence_policy_version: policy.version,
         key: EvidencePolicyKey {
-            error_type: difference.difference_type.clone(),
-            funds_impact: if financial { "POTENTIAL" } else { "NONE" }.to_string(),
+            error_type: policy.error_type.clone(),
+            funds_impact: policy.funds_impact.as_str().to_string(),
         },
-        required_evidence_kinds: if financial {
-            DIFFERENCE_COMPENSATION.to_vec()
-        } else {
-            DIFFERENCE_REPAIR.to_vec()
-        },
+        required_evidence_kinds: policy
+            .required
+            .iter()
+            .map(|kind| ControlledEvidenceKind::from(*kind))
+            .collect(),
         reviewer_separation: ReviewerSeparation::None,
     }
 }
 
-/// 返回无任务直接对账固定原因注册表。
-pub(super) fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
-    ReconciliationReasonRegistryView {
-        reason_registry_id: REASON_REGISTRY_ID.to_string(),
-        reason_registry_version: REASON_REGISTRY_VERSION,
-        registered_reasons: vec![
-            reason_view(
-                DifferenceReasonCode::SourceCorrectedAndReattributed,
-                DirectReconciliationConclusion::ConfirmValidDifference,
-                "来源已更正并重新归集",
-                DIFFERENCE_REPAIR,
-            ),
-            reason_view(
-                DifferenceReasonCode::BusinessConfirmedNoError,
-                DirectReconciliationConclusion::ConfirmNoError,
-                "业务确认无误",
-                NO_ERROR_REVIEW,
-            ),
-            reason_view(
-                DifferenceReasonCode::CompensationClosed,
-                DirectReconciliationConclusion::ConfirmValidDifference,
-                "补偿已闭环",
-                DIFFERENCE_COMPENSATION,
-            ),
-        ],
+/// 将受控证据引用投影为领域证据类型集合。
+///
+/// # 参数
+/// * `refs` - 客户端提交或服务端发现的受控证据引用
+///
+/// # 返回
+/// 返回领域证据类型集合（顺序保留提交顺序，不去重）。
+pub(super) fn domain_kinds(refs: &[ControlledEvidenceRef]) -> Vec<RequiredEvidenceKind> {
+    refs.iter()
+        .map(|evidence| RequiredEvidenceKind::from(evidence.kind))
+        .collect()
+}
+
+/// 将领域动作阻断映射为响应视图。
+///
+/// # 参数
+/// * `blocker` - 领域动作阻断
+///
+/// # 返回
+/// 返回阻断响应视图；稳定代码与说明来自领域。
+pub(super) fn blocker_view(blocker: &entities::integration_ops::ActionBlocker) -> ActionBlockerView {
+    ActionBlockerView {
+        action: blocker.action.as_str().to_string(),
+        code: blocker.code.to_string(),
+        message: blocker.message.to_string(),
+    }
+}
+
+/// 将领域终态结论映射为服务 DTO 结论。
+///
+/// # 参数
+/// * `conclusion` - 领域终态结论
+///
+/// # 返回
+/// 返回一一对应的服务 DTO 结论。
+fn dto_conclusion(conclusion: DirectConclusion) -> DirectReconciliationConclusion {
+    match conclusion {
+        DirectConclusion::ConfirmNoError => DirectReconciliationConclusion::ConfirmNoError,
+        DirectConclusion::ConfirmValidDifference => DirectReconciliationConclusion::ConfirmValidDifference,
+    }
+}
+
+/// 受控证据类型与领域证据类型的双向映射（1:1，wire 代码不变）。
+impl From<ControlledEvidenceKind> for RequiredEvidenceKind {
+    /// 将服务受控证据类型转换为领域证据类型。
+    ///
+    /// # 参数
+    /// * `kind` - 服务受控证据类型
+    ///
+    /// # 返回
+    /// 返回一一对应的领域证据类型。
+    fn from(kind: ControlledEvidenceKind) -> Self {
+        match kind {
+            ControlledEvidenceKind::ExternalCaseResult => Self::ExternalCaseResult,
+            ControlledEvidenceKind::BusinessObjectVerification => Self::BusinessObjectVerification,
+            ControlledEvidenceKind::FinancialReconciliation => Self::FinancialReconciliation,
+            ControlledEvidenceKind::CompensationResult => Self::CompensationResult,
+            ControlledEvidenceKind::DistinctReview => Self::DistinctReview,
+        }
+    }
+}
+
+/// 领域证据类型到服务受控证据类型的映射（1:1，wire 代码不变）。
+impl From<RequiredEvidenceKind> for ControlledEvidenceKind {
+    /// 将领域证据类型转换为服务受控证据类型。
+    ///
+    /// # 参数
+    /// * `kind` - 领域证据类型
+    ///
+    /// # 返回
+    /// 返回一一对应的服务受控证据类型。
+    fn from(kind: RequiredEvidenceKind) -> Self {
+        match kind {
+            RequiredEvidenceKind::ExternalCaseResult => Self::ExternalCaseResult,
+            RequiredEvidenceKind::BusinessObjectVerification => Self::BusinessObjectVerification,
+            RequiredEvidenceKind::FinancialReconciliation => Self::FinancialReconciliation,
+            RequiredEvidenceKind::CompensationResult => Self::CompensationResult,
+            RequiredEvidenceKind::DistinctReview => Self::DistinctReview,
+        }
     }
 }
 
@@ -657,18 +732,19 @@ pub(super) fn ensure_completion_policy(
             "终态证据策略已变化，请刷新后重试".to_string(),
         ));
     }
-    ensure_required_kinds(submitted_refs, &expected.required_evidence_kinds)
-}
-
-/// 判断当前已发现证据是否满足固定策略的类型集合。
-pub(super) fn evidence_satisfies_policy(
-    refs: &[ControlledEvidenceRef],
-    policy: &ResolutionEvidencePolicyView,
-) -> bool {
-    ensure_required_kinds(refs, &policy.required_evidence_kinds).is_ok()
+    kinds_subset(
+        &domain_kinds(submitted_refs),
+        &expected
+            .required_evidence_kinds
+            .iter()
+            .map(|kind| RequiredEvidenceKind::from(*kind))
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// 校验直接对账原因注册表身份、原因、结论与所需证据类型。
+///
+/// 注册原因与结论映射归领域，此处只做请求校验与错误映射。
 pub(super) fn ensure_direct_reason(
     registry_id: &str,
     registry_version: u64,
@@ -677,8 +753,8 @@ pub(super) fn ensure_direct_reason(
     conclusion: DirectReconciliationConclusion,
     evidence_refs: &[ControlledEvidenceRef],
 ) -> Result<()> {
-    let registry = reconciliation_reason_registry();
-    if registry_id != registry.reason_registry_id || registry_version != registry.reason_registry_version {
+    let registry = domain_reason_registry();
+    if registry_id != registry.id || registry_version != registry.version {
         return Err(Error::ConflictError(
             "对账原因注册表已变化，请刷新后重试".to_string(),
         ));
@@ -687,14 +763,32 @@ pub(super) fn ensure_direct_reason(
         return Err(Error::ValidationError("注册原因 ID 与原因代码不一致".to_string()));
     }
     let reason = registry
-        .registered_reasons
-        .iter()
-        .find(|candidate| candidate.registered_reason_id == registered_reason_id)
+        .find(registered_reason_id)
         .ok_or_else(|| Error::ValidationError("对账原因未注册".to_string()))?;
-    if reason.conclusion != conclusion {
+    if dto_conclusion(reason.conclusion) != conclusion {
         return Err(Error::ValidationError("对账原因与结论不一致".to_string()));
     }
-    ensure_required_kinds(evidence_refs, &reason.required_evidence_kinds)
+    kinds_subset(&domain_kinds(evidence_refs), reason.required)
+}
+
+/// 校验已提交证据类型覆盖全部必需类型（纯集合逻辑，类型要求归领域）。
+///
+/// # 参数
+/// * `submitted` - 已提交的证据类型
+/// * `required` - 必需的证据类型
+///
+/// # 返回
+/// 全覆盖返回 `Ok(())`，否则返回业务错误。
+///
+/// # 错误
+/// 存在未覆盖的必需类型时返回 `BusinessLogicError`。
+fn kinds_subset(submitted: &[RequiredEvidenceKind], required: &[RequiredEvidenceKind]) -> Result<()> {
+    if required.iter().all(|kind| submitted.contains(kind)) {
+        return Ok(());
+    }
+    Err(Error::BusinessLogicError(
+        "终态证据尚未满足固定策略要求".to_string(),
+    ))
 }
 
 /// 逐条调用权威端口重验证据，并返回可持久化的稳定引用。
@@ -727,36 +821,6 @@ pub(super) fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String
             .map(|evidence| evidence.canonical_reference.clone()),
     ))
     .map(EvidenceReferenceSet::into_wire)
-}
-
-fn ensure_required_kinds(
-    submitted_refs: &[ControlledEvidenceRef],
-    required: &[ControlledEvidenceKind],
-) -> Result<()> {
-    if required
-        .iter()
-        .any(|kind| !submitted_refs.iter().any(|evidence| evidence.kind == *kind))
-    {
-        return Err(Error::BusinessLogicError(
-            "终态证据尚未满足固定策略要求".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn reason_view(
-    code: DifferenceReasonCode,
-    conclusion: DirectReconciliationConclusion,
-    label: &str,
-    required: &[ControlledEvidenceKind],
-) -> RegisteredReconciliationReasonView {
-    RegisteredReconciliationReasonView {
-        registered_reason_id: code.as_str().to_string(),
-        registered_reason_version: REASON_REGISTRY_VERSION,
-        conclusion,
-        label: label.to_string(),
-        required_evidence_kinds: required.to_vec(),
-    }
 }
 
 async fn known_result_exists(db: &Database, message_id: &str, executor: &mut dyn Executor) -> Result<bool> {
@@ -1105,5 +1169,36 @@ mod tests {
             &[evidence],
         )
         .is_err());
+    }
+
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("evidence.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-E21）：证据策略与原因注册表归领域，服务只做 view 映射。
+    ///
+    /// 锁定旧规则源（策略常量、类型集合、逐条集合校验与原因装配）已删除；
+    /// 策略与注册表来自领域，服务只保留词汇映射与请求校验。
+    #[test]
+    fn evidence_tables_are_owned_by_domain() {
+        let source = production_source();
+        assert!(!source.contains("ERROR_EXTERNAL_RESULT"));
+        assert!(!source.contains("ERROR_BUSINESS_REPAIR"));
+        assert!(!source.contains("DIFFERENCE_REPAIR"));
+        assert!(!source.contains("DIFFERENCE_COMPENSATION"));
+        assert!(!source.contains("NO_ERROR_REVIEW"));
+        assert!(!source.contains("fn ensure_required_kinds"));
+        assert!(!source.contains("fn reason_view"));
+        assert!(!source.contains("fn evidence_satisfies_policy"));
+        assert!(source.contains("error_terminal_policy(task)"));
+        assert!(source.contains("difference_terminal_policy(difference)"));
+        assert!(source.contains("domain_reason_registry()"));
     }
 }

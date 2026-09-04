@@ -16,11 +16,15 @@
 use sha2::{Digest, Sha256};
 
 pub mod apply_result_set;
+pub mod confirmation_factories;
+pub mod import_row_factory;
 pub mod legacy_import_batch;
 pub mod legacy_import_confirmation;
 pub mod legacy_import_row;
 
 pub use apply_result_set::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
+pub use confirmation_factories::{confirmation_work_item, confirmation_workflow_action};
+pub use import_row_factory::{build_import_rows, ImportRowSpec};
 pub use legacy_import_batch::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
 pub use legacy_import_confirmation::{
     ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,

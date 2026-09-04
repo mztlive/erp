@@ -6,19 +6,19 @@
 use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, SourceRegistryExt, WorkItemExt};
 use entities::common::time::Instant;
 use entities::integration_ops::{
-    InboxMessage, InboxMessageData, InboxMessageId, InboxMessageStatus, InboxMessageUpdate,
-    IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
+    error_owner_role, InboxMessage, InboxMessageId, InboxMessageReceivedData, InboxMessageStatus,
+    InboxMessageUpdate, IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
 };
 use id_generator::next_id;
 use validator::Validate;
 
 use super::dto::SortDir;
-use super::producer::{error_owner_role, error_work_item};
+use super::producer::error_work_item;
 use super::validation::ensure_version;
 use super::{
     InboxMessageFilter, InboxMessageListParams, InboxMessageListView, InboxMessageView,
-    IntegrationOpsService, PageView, RegisterInboxMessageRequest, WriteBackInboxResultRequest,
-    WriteBackOutcome,
+    IntegrationOpsService, PageView, PreparedWriteBackOutcome, RegisterInboxMessageRequest,
+    WriteBackInboxResultRequest,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -52,7 +52,20 @@ impl IntegrationOpsService {
             .await?
             .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
 
-        let message = self.build_inbox_message(req)?;
+        let received_at = Instant::from_unix_secs(req.received_at.unwrap_or_else(now_secs));
+        let message = InboxMessage::received(
+            InboxMessageId::new(next_id()),
+            InboxMessageReceivedData {
+                source_system_id: req.source_system_id,
+                source_event_id: req.source_event_id,
+                message_type: req.message_type,
+                business_fact_key: req.business_fact_key,
+                payload_schema_version: req.payload_schema_version,
+                payload_reference: req.payload_reference,
+                source_sent_at: req.source_sent_at.map(Instant::from_unix_secs),
+                received_at,
+            },
+        )?;
         let audit =
             actor
                 .clone()
@@ -179,7 +192,7 @@ impl IntegrationOpsService {
         req: WriteBackInboxResultRequest,
         actor: &AuditActor,
     ) -> Result<InboxMessageView> {
-        req.validate()?;
+        let outcome = PreparedWriteBackOutcome::prepare(&req, Instant::now())?;
         let mut message = self
             .db
             .inbox_messages()
@@ -188,9 +201,8 @@ impl IntegrationOpsService {
             .ok_or_else(|| Error::NotFound("消息不存在".to_string()))?;
         ensure_version(message.base.version, req.version)?;
 
-        let processed_at = Instant::from_unix_secs(req.processed_at.unwrap_or_else(now_secs));
-        match req.outcome {
-            WriteBackOutcome::Processed => {
+        match outcome {
+            PreparedWriteBackOutcome::Processed { processed_at } => {
                 message.update(InboxMessageUpdate {
                     status: Some(InboxMessageStatus::Processed),
                     processed_at: Some(processed_at),
@@ -212,10 +224,11 @@ impl IntegrationOpsService {
                     .await?;
                 Ok(stored.into())
             }
-            WriteBackOutcome::Failed => {
-                let error_class = req
-                    .error_class
-                    .ok_or_else(|| Error::ValidationError("标记失败必须提供错误分类".to_string()))?;
+            PreparedWriteBackOutcome::Failed {
+                error_class,
+                attempt_summary,
+                attempt_at,
+            } => {
                 message.update(InboxMessageUpdate {
                     status: Some(InboxMessageStatus::Failed),
                     processed_at: None,
@@ -230,8 +243,8 @@ impl IntegrationOpsService {
                         owner_user_id: Some(actor.id().to_string()),
                     },
                 )?;
-                if req.attempt_summary.is_some() {
-                    task.record_attempt(processed_at, req.attempt_summary)?;
+                if attempt_summary.is_some() {
+                    task.record_attempt(attempt_at, attempt_summary)?;
                 }
                 let work_item = error_work_item(&task, actor.id())?;
                 let audit = actor.clone().resource_log(
@@ -256,40 +269,37 @@ impl IntegrationOpsService {
             }
         }
     }
-    // -----------------------------------------------------------------------
-    // 私有辅助
-    // -----------------------------------------------------------------------
-
-    /// 构造入站消息实体（登记态：`received`，接收时间缺省取当前时间）。
-    ///
-    /// # 参数
-    /// * `req` - 已通过校验的登记请求
-    ///
-    /// # 返回
-    /// 返回新建的入站消息实体。
-    ///
-    /// # 错误
-    /// 实体不变式校验失败时返回错误。
-    fn build_inbox_message(&self, req: RegisterInboxMessageRequest) -> Result<InboxMessage> {
-        Ok(InboxMessage::new(
-            InboxMessageId::new(next_id()),
-            InboxMessageData {
-                source_system_id: req.source_system_id,
-                source_event_id: req.source_event_id,
-                message_type: req.message_type,
-                business_fact_key: req.business_fact_key,
-                payload_schema_version: req.payload_schema_version,
-                payload_reference: req.payload_reference,
-                status: InboxMessageStatus::Received,
-                source_sent_at: req.source_sent_at.map(Instant::from_unix_secs),
-                received_at: Instant::from_unix_secs(req.received_at.unwrap_or_else(now_secs)),
-                processed_at: None,
-            },
-        )?)
-    }
 }
 
 /// 返回当前时间的秒级时间戳。
 fn now_secs() -> i64 {
     Instant::now().unix_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("inbox_message.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-E18）：登记态与回写形状归领域与 Prepared DTO，服务只做编排。
+    ///
+    /// 锁定旧拼装源（`build_inbox_message`、内联 `Received` 状态与 outcome
+    /// 匹配）已删除；登记走实体 `received` 工厂，回写走 tagged 决定。
+    #[test]
+    fn inbox_shapes_are_owned_by_domain_and_prepared() {
+        let source = production_source();
+        assert!(!source.contains("fn build_inbox_message"));
+        assert!(!source.contains("status: InboxMessageStatus::Received"));
+        assert!(!source.contains("match req.outcome"));
+        assert!(source.contains("InboxMessage::received("));
+        assert!(source.contains("PreparedWriteBackOutcome::prepare(&req"));
+    }
 }

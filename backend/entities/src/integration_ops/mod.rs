@@ -19,12 +19,25 @@
 
 use sha2::{Digest, Sha256};
 
+mod decision_policy;
+mod direct_conclusion;
 mod evidence_reference;
 mod inbox_message;
 mod integration_error_task;
 mod reconciliation_difference;
 mod reconciliation_difference_resolution;
 mod w29_close;
+mod w29_work_items;
+
+pub use decision_policy::{
+    difference_terminal_policy, error_terminal_policy, next_actions_after_outcome,
+    project_difference_actions, project_error_actions, reconciliation_reason_registry, ActionBlocker,
+    DecidedAction, DifferenceActionProjection, ErrorActionProjection, FundsImpact, ProjectionOutcome,
+    ProjectionSubject, ReasonRegistry, RegisteredReason, RequiredEvidenceKind, TerminalEvidencePolicy,
+    DIFFERENCE_POLICY_ID, ERROR_POLICY_ID, EVIDENCE_POLICY_VERSION, REASON_REGISTRY_ID,
+    REASON_REGISTRY_VERSION,
+};
+pub use direct_conclusion::DirectConclusion;
 
 pub use evidence_reference::{
     CanonicalEvidenceReference, CompactEvidenceSet, EvidenceRecordRef, EvidenceReferenceSet,
@@ -35,6 +48,12 @@ pub use integration_error_task::*;
 pub use reconciliation_difference::*;
 pub use reconciliation_difference_resolution::*;
 pub use w29_close::*;
+pub use w29_work_items::{
+    difference_owner_role, error_owner_role, error_priority, error_work_item_type, new_difference_work_item,
+    new_error_work_item, DIFFERENCE_INITIAL_SUBJECT_VERSION, DIFFERENCE_WORK_ITEM_OBJECT_TYPE,
+    ERROR_WORK_ITEM_OBJECT_TYPE, W29_FINANCE_ROLE, W29_OPERATIONS_ROLE, W29_OWNER_ORGANIZATION,
+    W29_PROCUREMENT_ROLE, W29_SYSADMIN_ROLE,
+};
 
 /// W29 命令的稳定幂等身份与载荷指纹。
 #[derive(Debug, Clone, PartialEq, Eq)]

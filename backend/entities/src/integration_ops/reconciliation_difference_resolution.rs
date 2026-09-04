@@ -243,6 +243,50 @@ impl ReconciliationDifferenceResolution {
         latest.map_or(Some(1), |record| record.resolution_no.checked_add(1))
     }
 
+    /// 从强类型动作追加一条决定记录，序号自动递增、状态唯一派生。
+    ///
+    /// # 参数
+    /// * `id` - 记录主键（调用方生成的稳定 ID）
+    /// * `reconciliation_difference_id` - 所属对账差异 ID
+    /// * `latest` - 当前最新决定；`None` 表示首条追加
+    /// * `action` - 强类型决定动作（派生状态由动作唯一确定）
+    /// * `evidence_reference` - 可追溯证据或正式结果引用
+    /// * `handled_by` - 决定人
+    /// * `handled_at` - 决定时间（调用方注入）
+    ///
+    /// # 返回
+    /// 返回新建的不可变追加式决定记录。
+    ///
+    /// # 错误
+    /// 序号已达 `u32` 上限，或动作、派生状态、决定人、证据约束不成立时返回错误。
+    ///
+    /// # 约束
+    /// 纯领域构造，不访问数据库、不生成 ID、不读取时钟；序号上限失败关闭。
+    pub fn append(
+        id: ReconciliationDifferenceResolutionId,
+        reconciliation_difference_id: ReconciliationDifferenceId,
+        latest: Option<&Self>,
+        action: ResolutionAction,
+        evidence_reference: Option<String>,
+        handled_by: String,
+        handled_at: Instant,
+    ) -> Result<Self> {
+        let resolution_no =
+            Self::next_resolution_no(latest).ok_or_else(|| Error::from("差异决定序号已达上限"))?;
+        Self::new(
+            id,
+            ReconciliationDifferenceResolutionData {
+                reconciliation_difference_id,
+                resolution_no,
+                resolution_action: action,
+                resulting_status: action.derived_status(),
+                evidence_reference,
+                handled_by,
+                handled_at,
+            },
+        )
+    }
+
     /// 创建由 W02 受控关闭命令形成的专用领域关闭证据。
     ///
     /// # 错误
@@ -461,6 +505,68 @@ mod tests {
             ReconciliationDifferenceResolution::next_resolution_no(Some(&terminal)),
             Some(8)
         );
+    }
+
+    #[test]
+    fn append_assigns_sequential_no_and_derived_status() {
+        let first = ReconciliationDifferenceResolution::append(
+            ReconciliationDifferenceResolutionId::new("append-1"),
+            ReconciliationDifferenceId::new("diff-1"),
+            None,
+            ResolutionAction::QueryOriginalResult,
+            None,
+            "ops-1".to_string(),
+            Instant::from_unix_secs(1_700_000_000),
+        )
+        .unwrap();
+        assert_eq!(first.resolution_no, 1);
+        assert_eq!(first.resulting_status, ResultingStatus::Open);
+
+        let second = ReconciliationDifferenceResolution::append(
+            ReconciliationDifferenceResolutionId::new("append-2"),
+            ReconciliationDifferenceId::new("diff-1"),
+            Some(&first),
+            ResolutionAction::ConfirmValidDifference,
+            Some("audit_log:a-9".to_string()),
+            "ops-2".to_string(),
+            Instant::from_unix_secs(1_700_000_001),
+        )
+        .unwrap();
+        assert_eq!(second.resolution_no, 2);
+        assert_eq!(second.resulting_status, ResultingStatus::ConfirmedValidDifference);
+        assert!(second.resulting_status.is_terminal());
+    }
+
+    #[test]
+    fn append_fails_closed_on_serial_overflow_and_missing_evidence() {
+        let mut saturated = data(ResolutionAction::QueryOriginalResult);
+        saturated.resolution_no = u32::MAX;
+        let record = ReconciliationDifferenceResolution::new(
+            ReconciliationDifferenceResolutionId::new("res-saturated"),
+            saturated,
+        )
+        .unwrap();
+        assert!(ReconciliationDifferenceResolution::append(
+            ReconciliationDifferenceResolutionId::new("append-overflow"),
+            ReconciliationDifferenceId::new("diff-1"),
+            Some(&record),
+            ResolutionAction::QueryOriginalResult,
+            None,
+            "ops-1".to_string(),
+            Instant::from_unix_secs(1_700_000_002),
+        )
+        .is_err());
+
+        assert!(ReconciliationDifferenceResolution::append(
+            ReconciliationDifferenceResolutionId::new("append-no-evidence"),
+            ReconciliationDifferenceId::new("diff-1"),
+            None,
+            ResolutionAction::AddEvidence,
+            None,
+            "ops-1".to_string(),
+            Instant::from_unix_secs(1_700_000_003),
+        )
+        .is_err());
     }
 
     #[test]

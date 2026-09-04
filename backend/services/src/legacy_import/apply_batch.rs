@@ -155,10 +155,12 @@ impl LegacyImportService {
         Ok(job)
     }
 
-    /// 预查客户行目标主体是否存在。
+    /// 预查客户行目标主体是否存在（INT-R30 批量读取）。
     ///
-    /// 仅对仍待导入的 `CUSTOMER` 且 outcome 为 imported 的行查询 D07；
-    /// 缺失记为 `false`，由 [`collect_apply_deltas`] 登记失败。
+    /// 预收集全部仍待导入的 `CUSTOMER` 且 outcome 为 imported 行的目标主体，
+    /// 单次 `$in` 确认存在性；缺失记为 `false`，由 [`collect_apply_deltas`] 登记失败。
+    /// 重复 target 只查询一次，混合对象类型与非 imported 结果不进入查询，
+    /// 软删除视为缺失。
     ///
     /// # 参数
     /// * `result_set` - 已校验结果集
@@ -174,31 +176,24 @@ impl LegacyImportService {
         result_set: &ApplyResultSet,
         rows: &HashMap<String, LegacyImportRow>,
     ) -> Result<HashMap<String, bool>> {
-        let mut hits = HashMap::new();
-        for item in result_set.items() {
-            let ApplyResultItem::Imported {
-                target_document_id, ..
-            } = item
-            else {
-                continue;
-            };
-            let Some(row) = rows.get(item.row_id().as_ref()) else {
-                continue;
-            };
-            if row.import_status != ImportStatus::PendingImport
-                || row.source_object_type != CUSTOMER_OBJECT_TYPE
-            {
-                continue;
-            }
-            let exists = self
-                .db
-                .parties()
-                .find_by_id(target_document_id, &mut NoTransaction)
-                .await?
-                .is_some();
-            hits.insert(row.base.id.clone(), exists);
+        use entities::ids::PartyId;
+        let targets = collect_customer_import_targets(result_set, rows);
+        if targets.is_empty() {
+            return Ok(HashMap::new());
         }
-        Ok(hits)
+        let mut seen_targets = std::collections::HashSet::new();
+        let mut party_ids = Vec::new();
+        for (_, target) in &targets {
+            if seen_targets.insert(target.clone()) {
+                party_ids.push(PartyId::new(target.clone()));
+            }
+        }
+        let found = self
+            .db
+            .parties()
+            .find_parties_by_ids(&party_ids, &mut NoTransaction)
+            .await?;
+        Ok(map_customer_party_ok(&targets, &found))
     }
 
     /// 将 delta 行、批次、后台任务与审计写入同一事务。
@@ -418,6 +413,85 @@ fn record_delta(deltas: &mut ApplyBatchDeltas, row: &LegacyImportRow, item: &App
     }
 }
 
+/// 预收集需批量确认主体的客户行目标（INT-R30 纯映射）。
+///
+/// 仅保留仍待导入的 `CUSTOMER` 且 outcome 为 imported 的行；返回全部命中行
+/// 的 `(行 ID, 目标主体 ID)`，调用方按目标去重后单次仓储 `$in` 查询，
+/// 大批量仍由单次读取承载。
+///
+/// # 参数
+/// * `result_set` - 已校验结果集
+/// * `rows` - 仓储命中行
+///
+/// # 返回
+/// 返回按请求顺序的 `(行 ID, 目标主体 ID)`；无需查询时返回空集合。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 纯内存过滤，不访问数据库；混合对象类型与终态行不进入结果。
+fn collect_customer_import_targets(
+    result_set: &ApplyResultSet,
+    rows: &HashMap<String, LegacyImportRow>,
+) -> Vec<(String, String)> {
+    let mut targets = Vec::new();
+    for item in result_set.items() {
+        let ApplyResultItem::Imported {
+            target_document_id, ..
+        } = item
+        else {
+            continue;
+        };
+        let Some(row) = rows.get(item.row_id().as_ref()) else {
+            continue;
+        };
+        if row.import_status != ImportStatus::PendingImport || row.source_object_type != CUSTOMER_OBJECT_TYPE
+        {
+            continue;
+        }
+        targets.push((row.base.id.clone(), target_document_id.clone()));
+    }
+    targets
+}
+
+/// 将批量主体命中映射为逐行存在性（INT-R30 纯映射）。
+///
+/// 按目标 ID 归组：共享同一主体的多行共享同一存在性结论；缺失记为 `false`。
+///
+/// # 参数
+/// * `targets` - 预收集的 `(行 ID, 目标主体 ID)`
+/// * `found` - 仓储批量返回的已存在主体
+///
+/// # 返回
+/// 返回行 ID → 主体是否存在。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 纯内存映射，不访问数据库；未命中目标一律视为不存在。
+fn map_customer_party_ok(
+    targets: &[(String, String)],
+    found: &[entities::party::Party],
+) -> HashMap<String, bool> {
+    use std::collections::{HashMap, HashSet};
+    let existing = found
+        .iter()
+        .map(|party| party.base.id.clone())
+        .collect::<HashSet<_>>();
+    let mut target_ok = HashMap::new();
+    for (_, target) in targets {
+        target_ok
+            .entry(target.clone())
+            .or_insert_with(|| existing.contains(target));
+    }
+    targets
+        .iter()
+        .map(|(row_id, target)| (row_id.clone(), *target_ok.get(target).unwrap_or(&false)))
+        .collect()
+}
+
 /// 事务内导入应用写入所需的可变状态与本批计数。
 struct PersistApplyWrite<'a> {
     /// 数据库。
@@ -492,7 +566,8 @@ mod tests {
 
     use super::{
         advance_batch_counts, apply_result_set_from_request, collect_apply_deltas,
-        ensure_no_missing_apply_rows, persist_apply_transaction, PersistApplyWrite,
+        collect_customer_import_targets, ensure_no_missing_apply_rows, map_customer_party_ok,
+        persist_apply_transaction, PersistApplyWrite,
     };
     use crate::legacy_import::dto::{ApplyLegacyImportBatchRequest, ApplyRowOutcome, ApplyRowResult};
 
@@ -679,6 +754,73 @@ mod tests {
             .collect();
 
         assert!(collect_apply_deltas(&set, &mut rows, &HashMap::new()).is_err());
+    }
+
+    #[test]
+    fn customer_targets_deduplicate_mixed_types_and_missing_parties() {
+        use super::super::dto::CUSTOMER_OBJECT_TYPE;
+        let mut customer_pending = applicable_row("row-customer");
+        customer_pending.source_object_type = CUSTOMER_OBJECT_TYPE.to_string();
+        let mut customer_duplicate = applicable_row("row-customer-dup");
+        customer_duplicate.source_object_type = CUSTOMER_OBJECT_TYPE.to_string();
+        let mut non_customer = applicable_row("row-contract");
+        non_customer.source_object_type = "CONTRACT".to_string();
+        let mut terminal_customer = applicable_row("row-terminal");
+        terminal_customer.source_object_type = CUSTOMER_OBJECT_TYPE.to_string();
+        terminal_customer
+            .mark_imported("party-shared".to_string(), None)
+            .unwrap();
+        let set = ApplyResultSet::try_from_drafts(vec![
+            imported_draft("row-customer", "party-shared"),
+            imported_draft("row-customer-dup", "party-shared"),
+            imported_draft("row-contract", "party-shared"),
+            imported_draft("row-terminal", "party-missing"),
+        ])
+        .unwrap();
+        let rows = [
+            customer_pending,
+            customer_duplicate,
+            non_customer,
+            terminal_customer,
+        ]
+        .into_iter()
+        .map(|row| (row.base.id.clone(), row))
+        .collect::<HashMap<_, _>>();
+        let targets = collect_customer_import_targets(&set, &rows);
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&("row-customer".to_string(), "party-shared".to_string())));
+        assert!(targets.contains(&("row-customer-dup".to_string(), "party-shared".to_string())));
+        let ok = map_customer_party_ok(&targets, &[]);
+        assert_eq!(ok.get("row-customer"), Some(&false));
+        assert_eq!(ok.get("row-customer-dup"), Some(&false));
+        assert_eq!(ok.get("row-contract"), None);
+    }
+
+    #[test]
+    fn customer_targets_scale_to_large_batch_with_shared_targets() {
+        use super::super::dto::CUSTOMER_OBJECT_TYPE;
+        use std::collections::HashSet;
+        let mut drafts = Vec::new();
+        let mut rows = HashMap::new();
+        for index in 0..300 {
+            let id = format!("row-{index}");
+            let target = format!("party-{}", index % 10);
+            let mut row = applicable_row(&id);
+            row.source_object_type = CUSTOMER_OBJECT_TYPE.to_string();
+            rows.insert(row.base.id.clone(), row);
+            drafts.push(imported_draft(&id, &target));
+        }
+        let set = ApplyResultSet::try_from_drafts(drafts).unwrap();
+        let targets = collect_customer_import_targets(&set, &rows);
+        assert_eq!(targets.len(), 300);
+        let unique_targets = targets
+            .iter()
+            .map(|(_, target)| target.clone())
+            .collect::<HashSet<_>>();
+        assert_eq!(unique_targets.len(), 10);
+        let ok = map_customer_party_ok(&targets, &[]);
+        assert_eq!(ok.len(), 300);
+        assert!(ok.values().all(|exists| !exists));
     }
 
     #[tokio::test]

@@ -6,19 +6,19 @@
 
 use entities::bulk_job::JobStatus;
 use entities::common::time::BusinessDate;
-use entities::ids::{
-    BackgroundJobId, FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId,
-};
+use entities::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
 use entities::legacy_import::{
-    ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchStatus,
-    LegacyImportConfirmation, MappingStatus, ParseStatus,
+    ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
+    LegacyImportBatchStatus, LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
 use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+
+use super::receipt::{optional_text, parse_command_version, required_text};
 
 /// 导入批次列表允许的排序字段白名单（与仓储投影白名单一致，Service 层先校验）。
 pub(crate) const LEGACY_IMPORT_BATCH_SORT_FIELDS: &[&str] = &["created_at", "batch_no", "baseline_date"];
@@ -103,6 +103,7 @@ pub struct CreateLegacyImportBatchRequest {
     pub failure_diagnostic_file_asset_id: Option<FileAssetId>,
     /// 本批来源行。
     #[validate(length(min = 1, max = 1000, message = "导入行数量必须在1-1000之间"))]
+    #[validate(nested)]
     pub rows: Vec<ImportRowRequest>,
 }
 
@@ -697,6 +698,151 @@ pub struct ImportExecutionResult {
     pub audit_receipt: String,
 }
 
+/// 已规范化的确认完成命令（INT-E24 DTO 归属）。
+///
+/// 持有强类型版本与动作专属必填/禁止矩阵已校验的字段；Service 只解释
+/// 持久化事实，不再做二次解析或字符串中转。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PreparedConfirmationCompletion {
+    /// 当前正式任务。
+    pub work_item_id: WorkItemId,
+    /// 命令锁定的导入批次。
+    pub batch_id: LegacyImportBatchId,
+    /// 客户端读取到的任务乐观锁版本。
+    pub expected_task_version: u64,
+    /// 任务冻结的批次试算主体版本。
+    pub expected_subject_version: String,
+    /// 客户端读取到的批次乐观锁版本。
+    pub expected_batch_version: u64,
+    /// 命令锁定的试算版本。
+    pub expected_trial_version: u32,
+    /// 已注册确认范围。
+    pub confirmation_scope: String,
+    /// 确认或退回动作。
+    pub decision: ConfirmationDecision,
+    /// 退回原因代码（退回时必填，确认时禁止）。
+    pub reason_code: Option<String>,
+    /// 意见说明。
+    pub comment: Option<String>,
+    /// 正式操作幂等键。
+    pub idempotency_key: String,
+}
+
+impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmationCompletion {
+    type Error = Error;
+
+    /// 从强类型命令构造已规范化的完成准备（INT-E24 纯转换）。
+    ///
+    /// # 参数
+    /// * `command` - 强类型完成命令
+    ///
+    /// # 返回
+    /// 返回动作矩阵已校验的准备。
+    ///
+    /// # 错误
+    /// 范围未注册、版本非法或动作专属原因矩阵非法时返回错误。
+    fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
+        let decision = command.decision;
+        let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?
+            .as_str()
+            .to_string();
+        let reason_code = optional_text(decision.reason_code);
+        if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
+            return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
+        }
+        if decision.action == ConfirmationDecision::ConfirmScope && reason_code.is_some() {
+            return Err(Error::ValidationError("确认责任范围不得携带退回原因".to_string()));
+        }
+        Ok(Self {
+            work_item_id: command.work_item_id,
+            batch_id: decision.batch_id,
+            expected_task_version: parse_command_version(&command.expected_task_version, "任务版本")?,
+            expected_subject_version: required_text(
+                &command.expected_subject_version,
+                "任务主体版本不能为空",
+            )?,
+            expected_batch_version: parse_command_version(&decision.expected_batch_version, "批次版本")?,
+            expected_trial_version: parse_command_version(&decision.expected_trial_version, "试算版本")?,
+            confirmation_scope,
+            decision: decision.action,
+            reason_code,
+            comment: optional_text(decision.comment),
+            idempotency_key: required_text(&command.idempotency_key, "幂等键不能为空")?,
+        })
+    }
+}
+
+/// 已规范化的导入执行命令（INT-E24 DTO 归属）。
+///
+/// 持有强类型版本与动作专属试算/原因矩阵已校验的字段；Service 只解释
+/// 持久化事实，不再做二次解析。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PreparedImportExecution {
+    /// 命令锁定的导入批次。
+    pub batch_id: LegacyImportBatchId,
+    /// 客户端读取到的批次乐观锁版本。
+    pub expected_batch_version: u64,
+    /// 命令锁定的试算版本；提交应用和重试失败项时必填。
+    pub expected_trial_version: Option<u32>,
+    /// 执行动作。
+    pub action: ImportExecutionAction,
+    /// 结构化原因码；取消时必填，提交应用时禁止。
+    pub reason_code: Option<String>,
+    /// 操作说明。
+    pub comment: Option<String>,
+    /// 请求幂等身份。
+    pub request_id: String,
+}
+
+impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
+    type Error = Error;
+
+    /// 从强类型命令构造已规范化的执行准备（INT-E24 纯转换）。
+    ///
+    /// # 参数
+    /// * `command` - 强类型执行命令
+    ///
+    /// # 返回
+    /// 返回动作矩阵已校验的准备。
+    ///
+    /// # 错误
+    /// 版本非法或动作专属试算/原因矩阵非法时返回错误。
+    fn try_from(command: ImportExecutionCommand) -> Result<Self> {
+        let expected_trial_version = command
+            .expected_trial_version
+            .as_deref()
+            .map(|value| parse_command_version(value, "试算版本"))
+            .transpose()?;
+        if matches!(
+            command.action,
+            ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed
+        ) && expected_trial_version.is_none()
+        {
+            return Err(Error::ValidationError(
+                "提交应用或重试失败项必须携带试算版本".to_string(),
+            ));
+        }
+        let reason_code = optional_text(command.reason_code);
+        if command.action == ImportExecutionAction::CancelPending && reason_code.is_none() {
+            return Err(Error::ValidationError("取消尚未应用项必须提供原因码".to_string()));
+        }
+        if command.action == ImportExecutionAction::StartApply && reason_code.is_some() {
+            return Err(Error::ValidationError(
+                "提交应用不得携带取消或重试原因码".to_string(),
+            ));
+        }
+        Ok(Self {
+            batch_id: command.batch_id,
+            expected_batch_version: parse_command_version(&command.expected_batch_version, "批次版本")?,
+            expected_trial_version,
+            action: command.action,
+            reason_code,
+            comment: optional_text(command.comment),
+            request_id: required_text(&command.request_id, "请求身份不能为空")?,
+        })
+    }
+}
+
 /// 导入确认列表查询参数（按批次查询为主）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct LegacyImportConfirmationListParams {
@@ -803,59 +949,12 @@ pub struct ApplyLegacyImportBatchRequest {
     pub results: Vec<ApplyRowResult>,
 }
 
-/// 与批次创建同时登记的后台任务编号前缀（`background_job.job_no` 全局唯一）。
-pub(crate) const LEGACY_IMPORT_JOB_NO_PREFIX: &str = "BJ";
-
-/// 与批次创建同时登记的后台任务类型代码（`background_job.domain_job_type`）。
-pub(crate) const LEGACY_IMPORT_DOMAIN_JOB_TYPE: &str = "LEGACY_IMPORT";
-
-/// 构造批次后台任务编号（`BJ-<batch_no>`，批次号全局唯一 → 任务编号全局唯一）。
-///
-/// # 参数
-/// * `batch_no` - 导入批次号
-///
-/// # 返回
-/// 返回后台任务编号字符串。
-pub(crate) fn background_job_no_for(batch_no: &str) -> String {
-    format!("{LEGACY_IMPORT_JOB_NO_PREFIX}-{batch_no}")
-}
-
 /// 客户行导入前必须命中的 ERP 主体类型代码（数据模型 §6.12 来源对象集合）。
 pub(crate) const CUSTOMER_OBJECT_TYPE: &str = "CUSTOMER";
 /// 客户行目标主体缺失的错误码（W18 问题代码口径）。
 pub(crate) const CUSTOMER_NOT_FOUND_ERROR_CODE: &str = "CUSTOMER_NOT_FOUND";
 /// 客户行目标主体缺失的错误明细。
 pub(crate) const CUSTOMER_NOT_FOUND_ERROR_DETAIL: &str = "目标客户主体不存在，禁止导入";
-
-/// 批次创建后登记的后台任务。
-///
-/// # 参数
-/// * `batch` - 导入批次实体
-/// * `actor_id` - 发起人账号 ID
-///
-/// # 返回
-/// 返回新建的后台任务实体（`PENDING`，`request_id` = 批次号用于幂等定位）。
-pub(crate) fn build_background_job(
-    batch: &LegacyImportBatch,
-    actor_id: &str,
-) -> Result<entities::bulk_job::BackgroundJob> {
-    entities::bulk_job::BackgroundJob::new(
-        BackgroundJobId::new(id_generator::next_id()),
-        entities::bulk_job::BackgroundJobData {
-            job_no: background_job_no_for(&batch.batch_no),
-            job_type: entities::bulk_job::JobType::Import,
-            domain_job_type: Some(LEGACY_IMPORT_DOMAIN_JOB_TYPE.to_string()),
-            domain_job_id: Some(batch.base.id.clone()),
-            selection_snapshot_id: None,
-            requested_by: actor_id.to_string(),
-            request_id: batch.batch_no.clone(),
-            input_file_asset_id: None,
-            result_file_asset_id: None,
-            total_count: batch.total_rows,
-        },
-    )
-    .map_err(Into::into)
-}
 
 #[cfg(test)]
 mod tests {
@@ -931,8 +1030,128 @@ mod tests {
     }
 
     #[test]
+    fn create_batch_request_rejects_illegal_inner_row() {
+        let bad_row = super::ImportRowRequest {
+            source_object_type: "   ".to_string(),
+            source_row_key: "key-1".to_string(),
+            normalized_payload_reference: "payload:1".to_string(),
+        };
+        let request = super::CreateLegacyImportBatchRequest {
+            batch_no: "IMP-2026-001".to_string(),
+            source_system_id: entities::ids::SourceSystemId::new("sys-1"),
+            source_object_set: "CUSTOMER".to_string(),
+            baseline_date: entities::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+            import_rule_version: "v1".to_string(),
+            source_file_hmac: None,
+            successful_sanitized_file_asset_id: None,
+            success_manifest_file_asset_id: None,
+            failure_diagnostic_file_asset_id: None,
+            rows: vec![bad_row],
+        };
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn prepared_confirmation_enforces_action_reason_matrix() {
+        use entities::legacy_import::ConfirmationDecision;
+        fn decision(
+            action: ConfirmationDecision,
+            reason: Option<&str>,
+        ) -> super::ImportBusinessConfirmationDecision {
+            super::ImportBusinessConfirmationDecision {
+                batch_id: entities::ids::LegacyImportBatchId::new("batch-1"),
+                expected_batch_version: "1".to_string(),
+                expected_trial_version: "2".to_string(),
+                confirmation_scope: " sales ".to_string(),
+                action,
+                reason_code: reason.map(str::to_string),
+                comment: Some(" 意见 ".to_string()),
+            }
+        }
+        fn command(
+            action: ConfirmationDecision,
+            reason: Option<&str>,
+        ) -> super::CompleteImportBusinessConfirmationCommand {
+            super::CompleteImportBusinessConfirmationCommand {
+                work_item_id: entities::ids::WorkItemId::new("work-item-1"),
+                expected_task_version: "3".to_string(),
+                expected_subject_version: "subject-1".to_string(),
+                decision: decision(action, reason),
+                idempotency_key: " request-1 ".to_string(),
+            }
+        }
+        assert!(super::PreparedConfirmationCompletion::try_from(command(
+            ConfirmationDecision::ReturnForFix,
+            None
+        ))
+        .is_err());
+        assert!(super::PreparedConfirmationCompletion::try_from(command(
+            ConfirmationDecision::ConfirmScope,
+            Some("REWORK")
+        ))
+        .is_err());
+        let prepared = super::PreparedConfirmationCompletion::try_from(command(
+            ConfirmationDecision::ReturnForFix,
+            Some("REWORK"),
+        ))
+        .unwrap();
+        assert_eq!(prepared.confirmation_scope, "SALES");
+        assert_eq!(prepared.idempotency_key, "request-1");
+        assert!(super::PreparedConfirmationCompletion::try_from(command(
+            ConfirmationDecision::ConfirmScope,
+            None
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn prepared_execution_enforces_trial_reason_matrix() {
+        fn command(
+            action: super::ImportExecutionAction,
+            trial: Option<&str>,
+            reason: Option<&str>,
+        ) -> super::ImportExecutionCommand {
+            super::ImportExecutionCommand {
+                batch_id: entities::ids::LegacyImportBatchId::new("batch-1"),
+                expected_batch_version: "4".to_string(),
+                expected_trial_version: trial.map(str::to_string),
+                action,
+                reason_code: reason.map(str::to_string),
+                comment: None,
+                request_id: " request-1 ".to_string(),
+            }
+        }
+        assert!(super::PreparedImportExecution::try_from(command(
+            super::ImportExecutionAction::StartApply,
+            None,
+            None
+        ))
+        .is_err());
+        assert!(super::PreparedImportExecution::try_from(command(
+            super::ImportExecutionAction::CancelPending,
+            None,
+            None
+        ))
+        .is_err());
+        assert!(super::PreparedImportExecution::try_from(command(
+            super::ImportExecutionAction::StartApply,
+            Some("2"),
+            Some("REASON")
+        ))
+        .is_err());
+        let prepared = super::PreparedImportExecution::try_from(command(
+            super::ImportExecutionAction::RetryFailed,
+            Some("2"),
+            Some("REASON"),
+        ))
+        .unwrap();
+        assert_eq!(prepared.request_id, "request-1");
+        assert_eq!(prepared.expected_trial_version, Some(2));
+    }
+
+    #[test]
     fn background_job_no_is_prefixed_and_unique() {
-        assert_eq!(super::background_job_no_for("IMP-1"), "BJ-IMP-1");
+        assert_eq!(entities::bulk_job::legacy_import_job_no("IMP-1"), "BJ-IMP-1");
     }
 
     #[test]

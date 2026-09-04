@@ -38,7 +38,9 @@ mod task_decision;
 mod transaction;
 mod validation;
 
-pub(crate) use self::producer::{error_owner_role, error_work_item};
+pub(crate) use self::producer::error_work_item;
+/// 领域 W29 责任政策在服务根的重出口（供站外调用方复用，唯一规则源仍在实体）。
+pub(crate) use entities::integration_ops::error_owner_role;
 
 pub use self::dto::{
     ActionBlockerView, ControlledEvidenceKind, ControlledEvidenceRef, CreateDifferenceRequest,
@@ -54,6 +56,7 @@ pub use self::dto::{
     RegisteredReconciliationReasonView, ResolutionEvidencePolicyView, ResolutionView, ReviewerSeparation,
     WriteBackInboxResultRequest, WriteBackOutcome,
 };
+pub(crate) use self::dto::{PreparedDirectDecisionTarget, PreparedWorkItemTarget, PreparedWriteBackOutcome};
 
 /// 入站消息列表筛选条件类型（经 `IntegrationOpsExt` 关联类型跨 crate 可达）。
 type InboxMessageFilter = <mongodb::Database as IntegrationOpsExt>::InboxMessageFilter;

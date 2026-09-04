@@ -3,19 +3,15 @@ use database::{
     WorkItemExt,
 };
 use entities::common::time::Instant;
-use entities::document_registry::{
-    BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
-};
+use entities::document_registry::WorkflowActionId;
 use entities::ids::WorkItemId;
 use entities::legacy_import::{
-    ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,
-    LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportCommandIdentity,
-    LegacyImportConfirmation, LegacyImportConfirmationData, LegacyImportConfirmationId,
+    confirmation_work_item, confirmation_workflow_action, ConfirmationDecision, ConfirmationMatrixDecision,
+    ConfirmationScope, ConfirmationStatus, LegacyImportBatch, LegacyImportBatchStatus,
+    LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportConfirmationData,
+    LegacyImportConfirmationId,
 };
-use entities::work_item::{
-    AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
-    WorkItemType,
-};
+use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
 use std::collections::HashMap;
@@ -30,9 +26,10 @@ use super::dto::{
     CompleteImportBusinessConfirmationCommand, CompleteImportBusinessConfirmationResult,
     CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep,
     ImportBusinessConfirmationResultStatus, ImportBusinessConfirmationWorkItemView,
-    LegacyImportConfirmationListParams, LegacyImportConfirmationView, PageView, SortDir,
+    LegacyImportConfirmationListParams, LegacyImportConfirmationView, PageView,
+    PreparedConfirmationCompletion, SortDir,
 };
-use super::receipt::{optional_text, parse_command_version, parse_receipt_number, required_text};
+use super::receipt::{parse_receipt_number, required_text};
 use super::{
     LegacyImportConfirmationFilter, LegacyImportService, COMMAND_FINGERPRINT_PREFIX,
     IMPORT_CONFIRMATION_AUDIT_PREFIX, IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_OBJECT_TYPE,
@@ -171,7 +168,7 @@ impl LegacyImportService {
                 work_item_id: work_item_id.clone(),
             },
         )?;
-        let work_item = import_confirmation_work_item(
+        let work_item = confirmation_work_item(
             work_item_id,
             &req.batch_id,
             subject_version.clone(),
@@ -549,55 +546,6 @@ impl LegacyImportService {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PreparedConfirmationCompletion {
-    work_item_id: WorkItemId,
-    batch_id: LegacyImportBatchId,
-    expected_task_version: u64,
-    expected_subject_version: String,
-    expected_batch_version: u64,
-    expected_trial_version: u32,
-    confirmation_scope: String,
-    decision: ConfirmationDecision,
-    reason_code: Option<String>,
-    comment: Option<String>,
-    idempotency_key: String,
-}
-
-impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmationCompletion {
-    type Error = Error;
-
-    fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
-        let decision = command.decision;
-        let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?
-            .as_str()
-            .to_string();
-        let reason_code = optional_text(decision.reason_code);
-        if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
-            return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
-        }
-        if decision.action == ConfirmationDecision::ConfirmScope && reason_code.is_some() {
-            return Err(Error::ValidationError("确认责任范围不得携带退回原因".to_string()));
-        }
-        Ok(Self {
-            work_item_id: command.work_item_id,
-            batch_id: decision.batch_id,
-            expected_task_version: parse_command_version(&command.expected_task_version, "任务版本")?,
-            expected_subject_version: required_text(
-                &command.expected_subject_version,
-                "任务主体版本不能为空",
-            )?,
-            expected_batch_version: parse_command_version(&decision.expected_batch_version, "批次版本")?,
-            expected_trial_version: parse_command_version(&decision.expected_trial_version, "试算版本")?,
-            confirmation_scope,
-            decision: decision.action,
-            reason_code,
-            comment: optional_text(decision.comment),
-            idempotency_key: required_text(&command.idempotency_key, "幂等键不能为空")?,
-        })
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ConfirmationCompletionReceipt {
     result_status: ImportBusinessConfirmationResultStatus,
@@ -610,53 +558,6 @@ struct ConfirmationCompletionTransactionResult {
     confirmation: LegacyImportConfirmation,
     work_item: WorkItem,
     receipt: ConfirmationCompletionReceipt,
-}
-
-/// 构造采用固定责任范围维度的 W18 正常导入确认任务。
-///
-/// 开放任务必须在创建时指定唯一个人责任人，责任角色仍由已注册
-/// `confirmation_scope` 决定。
-///
-/// # 参数
-/// * `work_item_id` - 任务主键
-/// * `batch_id` - 导入批次
-/// * `subject_version` - 确认任务对应的试算版本
-/// * `confirmation_scope` - 已注册确认范围
-/// * `owner_user_id` - 当前个人责任人
-///
-/// # 返回
-/// 返回带冻结 `responsibility_key` 的开放任务。
-///
-/// # 错误
-/// 确认范围未注册、责任角色无法解析，或任务字段校验失败时返回错误。
-fn import_confirmation_work_item(
-    work_item_id: WorkItemId,
-    batch_id: &LegacyImportBatchId,
-    subject_version: String,
-    confirmation_scope: &str,
-    owner_user_id: &str,
-) -> Result<WorkItem> {
-    let confirmation_scope = ConfirmationScope::parse(confirmation_scope)?;
-    let owner_role = confirmation_scope.owner_role();
-    let confirmation_scope = confirmation_scope.as_str();
-    Ok(WorkItem::new_with_responsibility_key(
-        work_item_id,
-        WorkItemData {
-            work_item_type: WorkItemType::ImportBusinessConfirmation,
-            business_object_type: IMPORT_CONFIRMATION_OBJECT_TYPE.to_string(),
-            business_object_id: batch_id.to_string(),
-            subject_version,
-            owner_role: owner_role.to_string(),
-            owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION.to_string(),
-            owner_user_id: owner_user_id.to_string(),
-            assignment_source: AssignmentSource::SystemRule,
-            priority: WorkItemPriority::Normal,
-            due_at: None,
-            reason_code: Some("IMPORT_TRIAL_CONFIRMATION".to_string()),
-            impact_summary: Some(format!("{confirmation_scope}范围导入试算待业务确认")),
-        },
-        confirmation_scope,
-    )?)
 }
 
 /// 校验创建确认任务时的批次与责任范围。
@@ -728,7 +629,25 @@ fn validate_confirmation_creation_replay(
     ))
 }
 
-/// 将新试算取代的旧待确认事实失效，并关闭关联任务。
+/// 将新试算取代的旧待确认事实失效，并关闭关联任务（INT-R28 批量读写）。
+///
+/// 预收集全部被取代确认的正式任务 ID，单次 `$in` 批量装载任务快照；
+/// 先完成全部实体 `invalidate`/`close` 迁移，再经仓储批量 CAS 写回，
+/// 均在调用方同一事务执行器内，任一失败整体回滚。已关闭任务跳过写回，
+/// 关联缺失失败关闭。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `confirmations` - 当前试算矩阵（就地失效被取代项）
+/// * `replacement` - 新试算确认事实
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方事务执行器
+///
+/// # 错误
+/// 确认失效、关联任务缺失或任务关闭/写入失败时返回错误。
+///
+/// # 约束
+/// 不自行开启或提交事务；批量读取不改变软删除与缺失语义。
 async fn invalidate_replaced_confirmation(
     db: &Database,
     confirmations: &mut [LegacyImportConfirmation],
@@ -736,34 +655,122 @@ async fn invalidate_replaced_confirmation(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let replaced_ids = replaced_confirmation_work_item_ids(confirmations, replacement.trial_version);
+    if replaced_ids.is_empty() {
+        return Ok(());
+    }
+    let work_items = db
+        .work_items()
+        .list_legacy_import_confirmations_by_ids(&replaced_ids, executor)
+        .await?;
+    let mut work_items_by_id = HashMap::new();
+    for item in work_items {
+        work_items_by_id.insert(item.base.id.clone(), item);
+    }
+    let replacement_id = LegacyImportConfirmationId::new(replacement.base.id.clone());
     for confirmation in confirmations
         .iter_mut()
         .filter(|item| item.is_replaced_by(replacement.trial_version))
     {
-        confirmation.invalidate(
-            LegacyImportConfirmationId::new(replacement.base.id.clone()),
+        confirmation.invalidate(replacement_id.clone(), Instant::now())?;
+    }
+    let mut to_close = collect_superseded_closable_work_items(
+        confirmations,
+        replacement.trial_version,
+        &mut work_items_by_id,
+        &replacement_id,
+    )?;
+    for work_item in to_close.iter_mut() {
+        work_item.close(
+            actor_id,
+            WorkItemCloseData {
+                close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string(),
+            },
             Instant::now(),
         )?;
-        db.legacy_import_confirmations()
-            .update(confirmation, executor)
-            .await?;
-        let mut work_item = db
-            .work_items()
-            .find_by_id(confirmation.work_item_id.as_ref(), executor)
-            .await?
+    }
+    db.legacy_import_confirmations()
+        .persist_invalidated_confirmations(confirmations, &replacement_id, executor)
+        .await?;
+    db.work_items()
+        .persist_closed_confirmation_work_items(&mut to_close, executor)
+        .await?;
+    Ok(())
+}
+
+/// 从批量装载的任务快照中取出需关闭的取代任务（INT-R28 纯映射）。
+///
+/// 仅处理本轮已标注失效的确认：关联缺失失败关闭，已关闭任务跳过，
+/// 开放任务返回调用方关闭。返回任务按矩阵顺序排列。
+///
+/// # 参数
+/// * `confirmations` - 已完成 `invalidate` 迁移的矩阵
+/// * `replacement_trial_version` - 新试算版本
+/// * `work_items_by_id` - 按任务 ID 索引的批量快照（命中项被取出）
+/// * `replacement_id` - 本轮替代确认事实 ID
+///
+/// # 返回
+/// 返回需关闭的开放任务；无关闭项时返回空集合。
+///
+/// # 错误
+/// 任一已失效确认关联任务缺失时返回 `Internal` 错误。
+///
+/// # 约束
+/// 纯内存映射，不访问数据库；不改变缺失与已关闭语义。
+fn collect_superseded_closable_work_items(
+    confirmations: &[LegacyImportConfirmation],
+    replacement_trial_version: u32,
+    work_items_by_id: &mut HashMap<String, WorkItem>,
+    replacement_id: &LegacyImportConfirmationId,
+) -> Result<Vec<WorkItem>> {
+    let mut to_close = Vec::new();
+    for confirmation in confirmations.iter().filter(|item| {
+        item.status == ConfirmationStatus::Invalidated
+            && item.replacement_confirmation_id.as_ref() == Some(replacement_id)
+            && item.trial_version < replacement_trial_version
+    }) {
+        let work_item = work_items_by_id
+            .remove(confirmation.work_item_id.as_ref())
             .ok_or_else(|| Error::Internal("被新试算取代的确认任务缺失".to_string()))?;
         if work_item.status == WorkItemStatus::Open {
-            work_item.close(
-                actor_id,
-                WorkItemCloseData {
-                    close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string(),
-                },
-                Instant::now(),
-            )?;
-            db.work_items().update(&mut work_item, executor).await?;
+            to_close.push(work_item);
         }
     }
-    Ok(())
+    Ok(to_close)
+}
+
+/// 预收集被新试算取代确认的正式任务 ID（INT-R28 纯映射）。
+///
+/// 仅保留仍待确认且试算版本更低的确认，保持矩阵顺序并去重，供单次批量装载。
+///
+/// # 参数
+/// * `confirmations` - 当前试算矩阵
+/// * `replacement_trial_version` - 新试算版本
+///
+/// # 返回
+/// 返回去重后的正式任务 ID；无取代项时返回空集合。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 纯内存过滤，不访问数据库；不改变取代判定语义。
+fn replaced_confirmation_work_item_ids(
+    confirmations: &[LegacyImportConfirmation],
+    replacement_trial_version: u32,
+) -> Vec<WorkItemId> {
+    use std::collections::HashSet;
+    let mut ids = Vec::new();
+    let mut seen = HashSet::new();
+    for confirmation in confirmations
+        .iter()
+        .filter(|item| item.is_replaced_by(replacement_trial_version))
+    {
+        if seen.insert(confirmation.work_item_id.to_string()) {
+            ids.push(confirmation.work_item_id.clone());
+        }
+    }
+    ids
 }
 
 /// 将本次决策后的事实替换进内存矩阵。
@@ -852,36 +859,6 @@ fn validate_confirmation_completion(
         return Err(Error::Forbidden("当前账号不是该导入确认的当前责任人".to_string()));
     }
     Ok(())
-}
-
-/// 构造确认事实对应的追加式 `workflow_action`。
-fn confirmation_workflow_action(
-    id: WorkflowActionId,
-    confirmation: &LegacyImportConfirmation,
-    actor_id: &str,
-) -> Result<WorkflowAction> {
-    let (action_type, to_status, comment) = match confirmation.decision {
-        Some(ConfirmationDecision::ConfirmScope) => (WorkflowActionType::Confirm, "CONFIRMED", None),
-        Some(ConfirmationDecision::ReturnForFix) => (
-            WorkflowActionType::Reject,
-            "REJECTED",
-            confirmation.reason_code.clone(),
-        ),
-        None => return Err(Error::Internal("导入确认动作缺少领域决策".to_string())),
-    };
-    WorkflowAction::new(
-        id,
-        WorkflowActionData {
-            document_id: BusinessDocumentId::new(confirmation.batch_id.to_string()),
-            action_type,
-            from_status: "PENDING".to_string(),
-            to_status: to_status.to_string(),
-            actor_id: actor_id.to_string(),
-            actor_role: confirmation.owner_role.clone(),
-            comment,
-        },
-    )
-    .map_err(Into::into)
 }
 
 /// 把任务实体映射为 W18 真实任务投影。
@@ -1163,7 +1140,7 @@ mod tests {
     }
 
     fn work_item() -> WorkItem {
-        let mut item = import_confirmation_work_item(
+        let mut item = confirmation_work_item(
             WorkItemId::new("work-item-1"),
             &LegacyImportBatchId::new("batch-1"),
             LegacyImportConfirmation::subject_version(1, 2, "rule-1"),
@@ -1210,7 +1187,7 @@ mod tests {
     fn same_batch_confirmation_scopes_use_distinct_server_responsibility_keys() {
         let batch_id = LegacyImportBatchId::new("batch-1");
         let subject_version = LegacyImportConfirmation::subject_version(1, 2, "rule-1");
-        let sales = import_confirmation_work_item(
+        let sales = confirmation_work_item(
             WorkItemId::new("work-item-sales"),
             &batch_id,
             subject_version.clone(),
@@ -1218,7 +1195,7 @@ mod tests {
             "user-sales",
         )
         .unwrap();
-        let procurement = import_confirmation_work_item(
+        let procurement = confirmation_work_item(
             WorkItemId::new("work-item-procurement"),
             &batch_id,
             subject_version,
@@ -1310,6 +1287,108 @@ mod tests {
 
         assert_eq!(next, ImportBusinessConfirmationNextStep::StartApply);
         assert_eq!(import_batch.status, LegacyImportBatchStatus::ReadyToApply);
+    }
+
+    #[test]
+    fn replaced_work_item_ids_batch_single_query_semantics() {
+        fn replaced(id: &str, scope: &str, trial: u32, work_item: &str) -> LegacyImportConfirmation {
+            LegacyImportConfirmation::new(
+                LegacyImportConfirmationId::new(id),
+                LegacyImportConfirmationData {
+                    batch_id: LegacyImportBatchId::new("batch-1"),
+                    confirmation_scope: scope.to_string(),
+                    owner_role: "role-sales".to_string(),
+                    batch_version: 1,
+                    trial_version: trial,
+                    import_rule_version: "rule-1".to_string(),
+                    work_item_id: WorkItemId::new(work_item),
+                },
+            )
+            .unwrap()
+        }
+        let confirmations = vec![
+            replaced("c-1", "SALES", 1, "work-item-1"),
+            replaced("c-2", "PROCUREMENT", 1, "work-item-2"),
+            replaced("c-3", "OPERATIONS", 2, "work-item-1"),
+            replaced("c-4", "WAREHOUSE", 3, "work-item-4"),
+        ];
+        let ids = replaced_confirmation_work_item_ids(&confirmations, 3);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids[0].to_string(), "work-item-1");
+        assert_eq!(ids[1].to_string(), "work-item-2");
+        assert!(replaced_confirmation_work_item_ids(&confirmations, 1).is_empty());
+        assert!(replaced_confirmation_work_item_ids(&[], 3).is_empty());
+    }
+
+    #[test]
+    fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
+        use std::collections::HashMap;
+        fn invalidated(id: &str, scope: &str, work_item: &str) -> LegacyImportConfirmation {
+            let mut confirmation = LegacyImportConfirmation::new(
+                LegacyImportConfirmationId::new(id),
+                LegacyImportConfirmationData {
+                    batch_id: LegacyImportBatchId::new("batch-1"),
+                    confirmation_scope: scope.to_string(),
+                    owner_role: "role-sales".to_string(),
+                    batch_version: 1,
+                    trial_version: 1,
+                    import_rule_version: "rule-1".to_string(),
+                    work_item_id: WorkItemId::new(work_item),
+                },
+            )
+            .unwrap();
+            confirmation
+                .invalidate(
+                    LegacyImportConfirmationId::new("c-new"),
+                    Instant::from_unix_secs(1_700_000_000),
+                )
+                .unwrap();
+            confirmation
+        }
+        let batch_id = LegacyImportBatchId::new("batch-1");
+        let subject = LegacyImportConfirmation::subject_version(1, 1, "rule-1");
+        let open = confirmation_work_item(
+            WorkItemId::new("work-item-1"),
+            &batch_id,
+            subject.clone(),
+            "SALES",
+            "user-1",
+        )
+        .unwrap();
+        let mut closed = confirmation_work_item(
+            WorkItemId::new("work-item-2"),
+            &batch_id,
+            subject,
+            "PROCUREMENT",
+            "user-2",
+        )
+        .unwrap();
+        closed
+            .close(
+                "user-2",
+                WorkItemCloseData {
+                    close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string(),
+                },
+                Instant::from_unix_secs(1_700_000_001),
+            )
+            .unwrap();
+        let confirmations = vec![
+            invalidated("c-1", "SALES", "work-item-1"),
+            invalidated("c-2", "PROCUREMENT", "work-item-2"),
+        ];
+        let mut map = HashMap::new();
+        map.insert(open.base.id.clone(), open);
+        map.insert(closed.base.id.clone(), closed);
+        let replacement = LegacyImportConfirmationId::new("c-new");
+        let to_close =
+            collect_superseded_closable_work_items(&confirmations, 3, &mut map, &replacement).unwrap();
+        assert_eq!(to_close.len(), 1);
+        assert_eq!(to_close[0].base.id, "work-item-1");
+        assert!(map.is_empty());
+
+        let confirmations = vec![invalidated("c-1", "SALES", "work-item-missing")];
+        let mut empty = HashMap::new();
+        assert!(collect_superseded_closable_work_items(&confirmations, 3, &mut empty, &replacement).is_err());
     }
 
     #[test]

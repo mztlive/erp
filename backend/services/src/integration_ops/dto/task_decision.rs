@@ -574,7 +574,7 @@ fn validate_evidence_refs(refs: &[ControlledEvidenceRef]) -> Result<()> {
     Ok(())
 }
 
-fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {
+pub(super) fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {
     required(value, label, VERSION_MAX_LEN)?;
     let version = value
         .trim()

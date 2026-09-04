@@ -16,6 +16,8 @@
 //! - `apply_scope`：按请求行 ID 且受批次约束的应用范围读取（INT-R29）。
 
 mod apply_scope;
+mod failed_retry;
+mod supersede_batch;
 
 #[allow(unused_imports)]
 pub use apply_scope::LegacyImportApplyScope;

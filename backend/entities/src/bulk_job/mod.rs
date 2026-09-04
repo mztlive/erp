@@ -16,6 +16,8 @@ pub mod background_job_item;
 pub mod bulk_selection_item;
 pub mod bulk_selection_snapshot;
 mod import_result_batch;
+pub mod legacy_import_job;
+pub mod supplier_governance_job;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
@@ -28,4 +30,11 @@ pub use background_job_item::{BackgroundJobItem, BackgroundJobItemData, ItemStat
 pub use bulk_selection_item::{BulkSelectionItem, BulkSelectionItemData, SelectionItemStatus};
 pub use bulk_selection_snapshot::{
     BulkSelectionSnapshot, BulkSelectionSnapshotData, SelectionStatus, SelectionType,
+};
+pub use legacy_import_job::{
+    legacy_import_job_no, LEGACY_IMPORT_DOMAIN_JOB_TYPE, LEGACY_IMPORT_JOB_NO_PREFIX,
+};
+pub use supplier_governance_job::{
+    SupplierGovernanceJobKind, SupplierGovernanceJobSpec, SUPPLIER_CATALOG_SYNC_JOB_TYPE,
+    SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };

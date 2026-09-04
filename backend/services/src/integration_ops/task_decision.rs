@@ -3,9 +3,10 @@
 use database::{AccessControlExt, Executor, IntegrationOpsExt, NoTransaction, WorkItemExt};
 use entities::common::time::Instant;
 use entities::integration_ops::{
-    CompactEvidenceSet, ErrorTaskStatus, EvidenceRecordRef, IntegrationCommandIdentity, IntegrationErrorTask,
-    ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
-    ReconciliationDifferenceResolutionData, ReconciliationDifferenceResolutionId, ResolutionAction,
+    error_work_item_type, next_actions_after_outcome, CompactEvidenceSet, DirectConclusion, ErrorTaskStatus,
+    EvidenceRecordRef, IntegrationCommandIdentity, IntegrationErrorTask, ProjectionOutcome,
+    ProjectionSubject, ReconciliationDifference, ReconciliationDifferenceId,
+    ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId, ResolutionAction,
     ResolutionType, ResolutionVersionCheck,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
@@ -17,13 +18,13 @@ use super::evidence::{
     verified_reference, verify_evidence_refs, EvidenceSubject, IntegrationEvidenceAuthority,
     OriginalResultFact,
 };
-use super::producer::error_work_item_type;
 use super::{
     ControlledEvidenceRef, DirectReconciliationCommand, DirectReconciliationDecision,
     DirectReconciliationResult, DirectReconciliationStatus, IntegrationActionOutcome, IntegrationItemType,
     IntegrationNonTerminalTaskAction, IntegrationOpsService, IntegrationTaskActionCommand,
     IntegrationTaskActionEvidence, IntegrationTaskActionKind, IntegrationTaskActionResult,
     IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, IntegrationWorkItemStatus,
+    PreparedDirectDecisionTarget, PreparedWorkItemTarget,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -128,18 +129,11 @@ impl IntegrationOpsService {
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskActionResult> {
         let rbac = crate::iam::shared_rbac_service(self.db.clone());
+        let prepared = PreparedWorkItemTarget::try_from(&command)?;
         self.run_audited(move |db, session| {
             Box::pin(async move {
-                let mut work_item = load_bound_work_item(
-                    db,
-                    &command.work_item_id,
-                    &command.expected_task_version,
-                    &command.expected_subject_version,
-                    &command.action,
-                    actor.id(),
-                    session,
-                )
-                .await?;
+                let mut work_item =
+                    load_bound_work_item(db, &prepared, &command.action, actor.id(), session).await?;
                 WorkItemService::new(db.clone(), rbac.clone())
                     .ensure_domain_decision_access(&actor, &work_item, session)
                     .await?;
@@ -165,19 +159,11 @@ impl IntegrationOpsService {
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskCompletionResult> {
         let rbac = crate::iam::shared_rbac_service(self.db.clone());
+        let prepared = PreparedWorkItemTarget::try_from(&command)?;
         self.run_audited(move |db, session| {
             Box::pin(async move {
-                let action = completion_as_action(&command);
-                let mut work_item = load_bound_work_item(
-                    db,
-                    &command.work_item_id,
-                    &command.expected_task_version,
-                    &command.expected_subject_version,
-                    &action,
-                    actor.id(),
-                    session,
-                )
-                .await?;
+                let action = command.as_non_terminal_action();
+                let mut work_item = load_bound_work_item(db, &prepared, &action, actor.id(), session).await?;
                 WorkItemService::new(db.clone(), rbac.clone())
                     .ensure_domain_decision_access(&actor, &work_item, session)
                     .await?;
@@ -205,10 +191,11 @@ impl IntegrationOpsService {
     ) -> Result<DirectReconciliationResult> {
         self.run_audited(move |db, session| {
             Box::pin(async move {
-                ensure_no_work_item(db, &command.difference_id, session).await?;
-                let difference = load_difference(db, &command.difference_id, session).await?;
-                let latest = latest_resolution(db, &command.difference_id, session).await?;
-                ensure_direct_version(&command.expected_difference_version, latest.as_ref())?;
+                let prepared = PreparedDirectDecisionTarget::try_from(&command)?;
+                ensure_no_work_item(db, &prepared.difference_id, session).await?;
+                let difference = load_difference(db, &prepared.difference_id, session).await?;
+                let latest = latest_resolution(db, &prepared.difference_id, session).await?;
+                ensure_direct_version(prepared.difference_version, latest.as_ref())?;
                 ensure_difference_open(latest.as_ref())?;
                 let fact = direct_decision_fact(
                     db,
@@ -219,7 +206,7 @@ impl IntegrationOpsService {
                     session,
                 )
                 .await?;
-                let record = build_resolution(
+                let record = append_resolution(
                     &difference,
                     latest.as_ref(),
                     &fact,
@@ -477,33 +464,32 @@ struct DirectReceiptMessage {
     business_result_reference: Option<String>,
 }
 
+/// 加载与命令绑定的正式任务，并校验责任归属与版本。
+///
+/// 任务版本与业务主题版本取自 Prepared 目标（DTO 层单次解析），此处只做
+/// typed 比较，不再解析版本字符串。
 async fn load_bound_work_item(
     db: &Database,
-    work_item_id: &str,
-    expected_task_version: &str,
-    expected_subject_version: &str,
+    target: &PreparedWorkItemTarget,
     action: &IntegrationNonTerminalTaskAction,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let item = db
         .work_items()
-        .find_by_id(work_item_id, executor)
+        .find_by_id(&target.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("正式任务不存在".to_string()))?;
-    ensure_work_item_version(&item, expected_task_version, expected_subject_version)?;
+    ensure_work_item_version(&item, target.task_version, &target.subject_version)?;
     ensure_work_item_responsibility(&item, actor_id)?;
     ensure_actor_eligible(db, &item, actor_id, executor).await?;
     ensure_work_item_association(db, &item, action, executor).await?;
     Ok(item)
 }
 
-fn ensure_work_item_version(item: &WorkItem, task_version: &str, subject_version: &str) -> Result<()> {
-    let expected = task_version
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| Error::ValidationError("任务版本必须为十进制整数字符串".to_string()))?;
-    if item.base.version != expected || item.subject_version != subject_version.trim() {
+/// 校验任务与业务主题版本与调用方冻结的 typed 版本一致（无二次解析）。
+fn ensure_work_item_version(item: &WorkItem, task_version: u64, subject_version: &str) -> Result<()> {
+    if item.base.version != task_version || item.subject_version != subject_version {
         return Err(Error::ConflictError(
             "任务或业务主题版本已变化，请刷新后重试".to_string(),
         ));
@@ -715,7 +701,7 @@ async fn execute_difference_task_action(
     ensure_difference_open(latest.as_ref())?;
     let fact =
         difference_action_fact(db, &difference, &command.action, receipt_id, actor_id, executor).await?;
-    let record = build_resolution(&difference, latest.as_ref(), &fact, receipt_id, actor_id)?;
+    let record = append_resolution(&difference, latest.as_ref(), &fact, receipt_id, actor_id)?;
     let next_subject_version = record.resolution_no.to_string();
     db.reconciliation_difference_resolutions()
         .create(&record, executor)
@@ -887,15 +873,16 @@ async fn complete_difference(
     let verified =
         verify_evidence_refs(db, &subject, &command.decision.evidence_refs, actor_id, executor).await?;
     let reference = verified_reference(&verified)?;
+    let typed = DirectConclusion::ConfirmValidDifference;
     let fact = DirectFact {
-        action: ResolutionAction::ConfirmValidDifference,
+        action: typed.resolution_action(),
         evidence_reference: Some(reference.clone()),
         resulting_status: DirectReconciliationStatus::ConfirmedValidDifference,
         outcome: IntegrationActionOutcome::ConfirmedValidDifference,
         business_result_reference: Some(reference.clone()),
         verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
     };
-    let record = build_resolution(&difference, latest.as_ref(), &fact, resolution_id, actor_id)?;
+    let record = append_resolution(&difference, latest.as_ref(), &fact, resolution_id, actor_id)?;
     let next_subject_version = record.resolution_no.to_string();
     db.reconciliation_difference_resolutions()
         .create(&record, executor)
@@ -918,18 +905,6 @@ fn completion_resolution(
         terminal_reference,
         actor_id
     )
-}
-
-fn completion_as_action(command: &IntegrationTaskCompletionCommand) -> IntegrationNonTerminalTaskAction {
-    IntegrationNonTerminalTaskAction {
-        item_type: command.decision.item_type,
-        item_id: command.decision.item_id.clone(),
-        kind: IntegrationTaskActionKind::AddEvidence,
-        operation_id: command.decision.operation_id.clone(),
-        reason_code: Some(command.decision.reason_code.as_str().to_string()),
-        comment: command.decision.comment.clone(),
-        evidence_refs: command.decision.evidence_refs.clone(),
-    }
 }
 
 async fn ensure_no_work_item(db: &Database, difference_id: &str, executor: &mut dyn Executor) -> Result<()> {
@@ -1009,15 +984,16 @@ fn ensure_difference_open(latest: Option<&ReconciliationDifferenceResolution>) -
     Ok(())
 }
 
-fn ensure_direct_version(expected: &str, latest: Option<&ReconciliationDifferenceResolution>) -> Result<()> {
-    match ReconciliationDifferenceResolution::check_version(expected, latest) {
-        ResolutionVersionCheck::Current => Ok(()),
-        ResolutionVersionCheck::Invalid => Err(Error::ValidationError(
-            "差异版本必须为十进制整数字符串".to_string(),
-        )),
-        ResolutionVersionCheck::Stale => Err(Error::ConflictError(
+/// 校验直接对账差异版本与当前决定序号一致（typed 比较，无二次解析）。
+///
+/// 非十进制输入已由 Prepared 目标在 DTO 层拒绝；此处只区分当前与陈旧。
+fn ensure_direct_version(expected: u64, latest: Option<&ReconciliationDifferenceResolution>) -> Result<()> {
+    if ReconciliationDifferenceResolution::current_version(latest) == expected {
+        Ok(())
+    } else {
+        Err(Error::ConflictError(
             "差异决定版本已变化，请刷新后重试".to_string(),
-        )),
+        ))
     }
 }
 
@@ -1073,20 +1049,19 @@ async fn direct_decision_fact(
             let subject = EvidenceSubject::difference(difference);
             let verified = verify_evidence_refs(db, &subject, evidence_refs, actor_id, executor).await?;
             let reference = verified_reference(&verified)?;
-            let (action, resulting_status, outcome) = match conclusion {
+            let typed = DirectConclusion::from(*conclusion);
+            let (resulting_status, outcome) = match conclusion {
                 super::DirectReconciliationConclusion::ConfirmNoError => (
-                    ResolutionAction::ConfirmNoError,
                     DirectReconciliationStatus::ConfirmedNoError,
                     IntegrationActionOutcome::ConfirmedNoError,
                 ),
                 super::DirectReconciliationConclusion::ConfirmValidDifference => (
-                    ResolutionAction::ConfirmValidDifference,
                     DirectReconciliationStatus::ConfirmedValidDifference,
                     IntegrationActionOutcome::ConfirmedValidDifference,
                 ),
             };
             Ok(DirectFact {
-                action,
+                action: typed.resolution_action(),
                 evidence_reference: Some(reference.clone()),
                 resulting_status,
                 outcome,
@@ -1097,27 +1072,47 @@ async fn direct_decision_fact(
     }
 }
 
-fn build_resolution(
+/// 经领域追加工厂形成决定记录（序号递增与状态派生归领域，时间与身份由调用方注入）。
+///
+/// # 参数
+/// * `difference` - 所属对账差异
+/// * `latest` - 当前最新决定；`None` 表示首条追加
+/// * `fact` - 已验证的决定事实（动作与证据引用）
+/// * `record_id` - 记录主键（调用方收据 ID）
+/// * `actor_id` - 决定人
+///
+/// # 返回
+/// 返回新建的不可变追加式决定记录。
+///
+/// # 错误
+/// 序号已达上限时返回 `ConflictError`，其余领域约束失败保持领域逻辑错误。
+///
+/// # 约束
+/// 序号上限文案由领域拥有，此处只做错误类别映射，不维护第二份上限规则。
+fn append_resolution(
     difference: &ReconciliationDifference,
     latest: Option<&ReconciliationDifferenceResolution>,
     fact: &DirectFact,
     record_id: &str,
     actor_id: &str,
 ) -> Result<ReconciliationDifferenceResolution> {
-    let resolution_no = ReconciliationDifferenceResolution::next_resolution_no(latest)
-        .ok_or_else(|| Error::ConflictError("差异决定序号已达上限".to_string()))?;
-    Ok(ReconciliationDifferenceResolution::new(
+    ReconciliationDifferenceResolution::append(
         ReconciliationDifferenceResolutionId::new(record_id.to_string()),
-        ReconciliationDifferenceResolutionData {
-            reconciliation_difference_id: ReconciliationDifferenceId::new(difference.base.id.clone()),
-            resolution_no,
-            resolution_action: fact.action,
-            resulting_status: fact.action.derived_status(),
-            evidence_reference: fact.evidence_reference.clone(),
-            handled_by: actor_id.to_string(),
-            handled_at: Instant::now(),
-        },
-    )?)
+        ReconciliationDifferenceId::new(difference.base.id.clone()),
+        latest,
+        fact.action,
+        fact.evidence_reference.clone(),
+        actor_id.to_string(),
+        Instant::now(),
+    )
+    .map_err(|error| {
+        let message = error.to_string();
+        if message == "差异决定序号已达上限" {
+            Error::ConflictError(message)
+        } else {
+            Error::Logic(error)
+        }
+    })
 }
 
 fn task_action_result(
@@ -1157,15 +1152,28 @@ fn audit_log_reference(receipt_id: &str) -> Result<String> {
         .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
+/// 推导单次动作后的下一开放动作代码（推导规则归领域，此处只做代码映射）。
+///
+/// # 参数
+/// * `item_type` - 业务项类型
+/// * `outcome` - 本次动作结果
+///
+/// # 返回
+/// 返回下一开放动作代码。
 fn next_allowed_actions(item_type: IntegrationItemType, outcome: IntegrationActionOutcome) -> Vec<String> {
-    let mut actions = vec!["QUERY_ORIGINAL_RESULT".to_string(), "ADD_EVIDENCE".to_string()];
-    if item_type == IntegrationItemType::ErrorTask && outcome == IntegrationActionOutcome::NoResultConfirmed {
-        actions.push("REPLAY_ORIGINAL".to_string());
-    }
-    if outcome == IntegrationActionOutcome::TerminalEvidenceFound {
-        actions.push("RESOLVE".to_string());
-    }
-    actions
+    let subject = match item_type {
+        IntegrationItemType::ErrorTask => ProjectionSubject::ErrorTask,
+        IntegrationItemType::ReconciliationDifference => ProjectionSubject::ReconciliationDifference,
+    };
+    let projected = match outcome {
+        IntegrationActionOutcome::TerminalEvidenceFound => ProjectionOutcome::TerminalEvidenceFound,
+        IntegrationActionOutcome::NoResultConfirmed => ProjectionOutcome::NoResultConfirmed,
+        _ => ProjectionOutcome::Other,
+    };
+    next_actions_after_outcome(subject, projected)
+        .iter()
+        .map(|action| action.as_str().to_string())
+        .collect()
 }
 
 fn completion_result(
@@ -1376,5 +1384,44 @@ mod tests {
             IntegrationActionOutcome::NoResultConfirmed,
         );
         assert!(!actions.iter().any(|action| action == "REPLAY_ORIGINAL"));
+    }
+
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("task_decision.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-E22）：版本只由 Prepared DTO 单次解析，服务只做 typed 比较。
+    ///
+    /// 锁定服务不再对版本字符串二次解析；typed 版本与规范化字段来自 Prepared 目标。
+    #[test]
+    fn versions_flow_typed_from_prepared_without_reparse() {
+        let source = production_source();
+        assert!(!source.contains("parse::<u64>()"));
+        assert!(source.contains("PreparedWorkItemTarget::try_from(&command)"));
+        assert!(source.contains("PreparedDirectDecisionTarget::try_from(&command)"));
+        assert!(source.contains("target.task_version"));
+        assert!(source.contains("prepared.difference_version"));
+    }
+
+    /// 分层守卫（INT-E23）：结论映射与序号追加归领域，服务只做编排与结果映射。
+    ///
+    /// 锁定旧派生源（`completion_as_action`、`build_resolution`、结论三元组）
+    /// 已删除；动作/状态派生走领域结论映射与追加工厂。
+    #[test]
+    fn conclusion_and_append_are_owned_by_domain() {
+        let source = production_source();
+        assert!(!source.contains("fn completion_as_action"));
+        assert!(!source.contains("fn build_resolution"));
+        assert!(!source.contains("ConfirmValidDifference,\n"));
+        assert!(source.contains("DirectConclusion::from("));
+        assert!(source.contains("ReconciliationDifferenceResolution::append("));
+        assert!(source.contains("as_non_terminal_action()"));
     }
 }

@@ -2,8 +2,8 @@ use database::{AccessControlExt, BulkJobExt, Executor, LegacyImportExt, NoTransa
 use entities::bulk_job::{BackgroundJob, JobStatus};
 use entities::common::time::Instant;
 use entities::legacy_import::{
-    ImportStatus, LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus,
-    LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportRow,
+    ImportStatus, LegacyImportBatch, LegacyImportBatchStatus, LegacyImportCommandIdentity,
+    LegacyImportConfirmation, LegacyImportRow,
 };
 use entities::AuditLog;
 use mongodb::Database;
@@ -14,10 +14,10 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::dto::{
-    self, ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,
-    ImportExecutionResultStatus,
+    ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,
+    ImportExecutionResultStatus, PreparedImportExecution,
 };
-use super::receipt::{optional_text, parse_command_version, parse_receipt_number, required_text};
+use super::receipt::parse_receipt_number;
 use super::{LegacyImportService, COMMAND_FINGERPRINT_PREFIX, IMPORT_EXECUTION_AUDIT_PREFIX};
 
 impl LegacyImportService {
@@ -140,56 +140,6 @@ impl LegacyImportService {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PreparedImportExecution {
-    batch_id: LegacyImportBatchId,
-    expected_batch_version: u64,
-    expected_trial_version: Option<u32>,
-    action: ImportExecutionAction,
-    reason_code: Option<String>,
-    comment: Option<String>,
-    request_id: String,
-}
-
-impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
-    type Error = Error;
-
-    fn try_from(command: ImportExecutionCommand) -> Result<Self> {
-        let expected_trial_version = command
-            .expected_trial_version
-            .as_deref()
-            .map(|value| parse_command_version(value, "试算版本"))
-            .transpose()?;
-        if matches!(
-            command.action,
-            ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed
-        ) && expected_trial_version.is_none()
-        {
-            return Err(Error::ValidationError(
-                "提交应用或重试失败项必须携带试算版本".to_string(),
-            ));
-        }
-        let reason_code = optional_text(command.reason_code);
-        if command.action == ImportExecutionAction::CancelPending && reason_code.is_none() {
-            return Err(Error::ValidationError("取消尚未应用项必须提供原因码".to_string()));
-        }
-        if command.action == ImportExecutionAction::StartApply && reason_code.is_some() {
-            return Err(Error::ValidationError(
-                "提交应用不得携带取消或重试原因码".to_string(),
-            ));
-        }
-        Ok(Self {
-            batch_id: command.batch_id,
-            expected_batch_version: parse_command_version(&command.expected_batch_version, "批次版本")?,
-            expected_trial_version,
-            action: command.action,
-            reason_code,
-            comment: optional_text(command.comment),
-            request_id: required_text(&command.request_id, "请求身份不能为空")?,
-        })
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ImportExecutionReceipt {
     action: ImportExecutionAction,
@@ -213,7 +163,6 @@ struct ImportExecutionActionOutcome {
     result_status: ImportExecutionResultStatus,
     next_step: ImportExecutionNextStep,
     affected_items: u64,
-    retry_row_ids: BTreeSet<String>,
 }
 
 /// 在一个持久化事务内执行导入应用强命令。
@@ -249,17 +198,16 @@ async fn execute_import_command_transaction(
     let trial_version = validate_import_execution_trial(prepared, &batch, &confirmations)?;
     let mut rows = if prepared.action == ImportExecutionAction::RetryFailed {
         db.legacy_import_rows()
-            .find_rows_by_batch_ids(std::slice::from_ref(&prepared.batch_id), executor)
+            .list_failed_by_batch(&prepared.batch_id, executor)
             .await?
     } else {
         Vec::new()
     };
     let outcome = apply_import_execution_action(prepared, &mut batch, &mut job, &mut rows)?;
-    for row in rows
-        .iter_mut()
-        .filter(|row| outcome.retry_row_ids.contains(&row.base.id))
-    {
-        db.legacy_import_rows().update(row, executor).await?;
+    if prepared.action == ImportExecutionAction::RetryFailed {
+        db.legacy_import_rows()
+            .persist_failed_retry_rows(&mut rows, executor)
+            .await?;
     }
     db.legacy_import_batches().update(&mut batch, executor).await?;
     db.background_jobs().update(&mut job, executor).await?;
@@ -288,7 +236,7 @@ async fn execute_import_command_transaction(
 /// 核对批次与后台任务的稳定关联和计数。
 fn validate_import_background_job(batch: &LegacyImportBatch, job: &BackgroundJob) -> Result<()> {
     let matches = job.job_type == entities::bulk_job::JobType::Import
-        && job.domain_job_type.as_deref() == Some(dto::LEGACY_IMPORT_DOMAIN_JOB_TYPE)
+        && job.domain_job_type.as_deref() == Some(entities::bulk_job::LEGACY_IMPORT_DOMAIN_JOB_TYPE)
         && job.domain_job_id.as_deref() == Some(batch.base.id.as_str())
         && job.request_id == batch.batch_no
         && job.total_count == batch.total_rows;
@@ -383,7 +331,6 @@ fn start_import_application(
         result_status: ImportExecutionResultStatus::Started,
         next_step: ImportExecutionNextStep::MonitorProgress,
         affected_items,
-        retry_row_ids: BTreeSet::new(),
     })
 }
 
@@ -420,11 +367,25 @@ fn cancel_pending_import(
         result_status: ImportExecutionResultStatus::Cancelled,
         next_step: ImportExecutionNextStep::ReviewResult,
         affected_items,
-        retry_row_ids: BTreeSet::new(),
     })
 }
 
 /// 仅重新准备失败行，保留已导入、已跳过与未处理行。
+///
+/// 调用方事务已按 `list_failed_by_batch` 只装载失败子集；成功计数沿用批次
+/// 已提交值，失败计数清零。子集行数必须与批次失败计数一致，否则失败关闭，
+/// 避免用子集重算把成功计数归零。并发重试依赖每行 `id + version` 乐观锁。
+///
+/// # 参数
+/// * `batch` - 失败或部分失败批次
+/// * `job` - 后台任务
+/// * `rows` - 失败行子集（调用方已按批次过滤）
+///
+/// # 返回
+/// 返回重试影响项数与重试行 ID。
+///
+/// # 错误
+/// 批次状态不允许、子集为空、子集与批次失败计数不一致或状态迁移失败时返回错误。
 fn prepare_failed_import_retry(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
@@ -445,22 +406,20 @@ fn prepare_failed_import_retry(
             "当前批次没有可重试的失败项".to_string(),
         ));
     }
+    if retry_row_ids.len() as u64 != batch.failed_rows {
+        return Err(Error::Internal("批次失败计数与失败行快照不一致".to_string()));
+    }
     for row in rows.iter_mut().filter(|row| retry_row_ids.contains(&row.base.id)) {
         row.prepare_failed_retry()?;
     }
     let affected_items = retry_row_ids.len() as u64;
     job.prepare_failed_retry(affected_items, Instant::now())?;
-    batch.update_counts(
-        batch.total_rows,
-        LegacyImportRow::count_by_import_status(rows, ImportStatus::Imported),
-        LegacyImportRow::count_by_import_status(rows, ImportStatus::Failed),
-    )?;
+    batch.update_counts(batch.total_rows, batch.success_rows, 0)?;
     batch.advance(LegacyImportBatchStatus::ReadyToApply)?;
     Ok(ImportExecutionActionOutcome {
         result_status: ImportExecutionResultStatus::RetryPrepared,
         next_step: ImportExecutionNextStep::StartApply,
         affected_items,
-        retry_row_ids,
     })
 }
 
@@ -674,8 +633,26 @@ mod tests {
     use entities::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId};
     use entities::legacy_import::{LegacyImportBatchData, LegacyImportRowData, ParseStatus};
 
-    use super::super::dto::build_background_job;
     use super::*;
+
+    /// 经领域工厂登记测试后台任务（Service 只注入 ID 与发起人）。
+    ///
+    /// # 参数
+    /// * `batch` - 导入批次实体
+    /// * `actor` - 发起人账号 ID
+    ///
+    /// # 返回
+    /// 返回新建的后台任务实体。
+    fn test_background_job(batch: &LegacyImportBatch, actor: &str) -> entities::bulk_job::BackgroundJob {
+        entities::bulk_job::BackgroundJob::for_legacy_import(
+            entities::ids::BackgroundJobId::new(format!("job-{}", batch.batch_no)),
+            &batch.batch_no,
+            &batch.base.id,
+            batch.total_rows,
+            actor,
+        )
+        .unwrap()
+    }
 
     fn batch() -> LegacyImportBatch {
         let mut batch = LegacyImportBatch::new(
@@ -734,7 +711,7 @@ mod tests {
     fn start_apply_is_the_only_action_that_starts_background_job() {
         let mut import_batch = batch();
         import_batch.status = LegacyImportBatchStatus::ReadyToApply;
-        let mut job = build_background_job(&import_batch, "admin-1").unwrap();
+        let mut job = test_background_job(&import_batch, "admin-1");
 
         let outcome = start_import_application(&mut import_batch, &mut job).unwrap();
 
@@ -750,7 +727,7 @@ mod tests {
         import_batch.status = LegacyImportBatchStatus::Importing;
         import_batch.total_rows = 3;
         import_batch.success_rows = 1;
-        let mut job = build_background_job(&import_batch, "admin-1").unwrap();
+        let mut job = test_background_job(&import_batch, "admin-1");
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
         job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100))
             .unwrap();
@@ -779,7 +756,7 @@ mod tests {
         import_batch.total_rows = 3;
         import_batch.success_rows = 1;
         import_batch.failed_rows = 1;
-        let mut job = build_background_job(&import_batch, "admin-1").unwrap();
+        let mut job = test_background_job(&import_batch, "admin-1");
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
         job.record_import_result_batch(1, 1, 1, true, Instant::from_unix_secs(1_700_000_100))
             .unwrap();
@@ -797,6 +774,108 @@ mod tests {
         assert_eq!(job.success_count, 1);
         assert_eq!(job.skipped_count, 1);
         assert_eq!(outcome.affected_items, 1);
+    }
+
+    #[test]
+    fn retry_failed_with_no_failed_rows_fails_closed() {
+        let mut imported = applicable_row("imported");
+        imported.mark_imported("SO-1".to_string(), None).unwrap();
+        let mut rows = vec![imported];
+        let mut import_batch = batch();
+        import_batch.status = LegacyImportBatchStatus::PartialFailed;
+        import_batch.total_rows = 1;
+        import_batch.success_rows = 1;
+        import_batch.failed_rows = 0;
+        let mut job = test_background_job(&import_batch, "admin-1");
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        assert!(prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).is_err());
+        assert!(prepare_failed_import_retry(&mut import_batch, &mut job, &mut []).is_err());
+    }
+
+    #[test]
+    fn retry_failed_leaves_pending_rows_untouched_and_counts_large_batch() {
+        let pending = applicable_row("pending");
+        let mut failed = applicable_row("failed");
+        failed.mark_import_failed("TEMPORARY".to_string(), None).unwrap();
+        let mut rows = vec![pending, failed];
+        let mut import_batch = batch();
+        import_batch.status = LegacyImportBatchStatus::Failed;
+        import_batch.total_rows = 2;
+        import_batch.success_rows = 0;
+        import_batch.failed_rows = 1;
+        let mut job = test_background_job(&import_batch, "admin-1");
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_import_result_batch(0, 0, 1, false, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        let outcome = prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).unwrap();
+        assert_eq!(rows[0].import_status, ImportStatus::PendingImport);
+        assert_eq!(rows[1].import_status, ImportStatus::PendingImport);
+        assert_eq!(outcome.affected_items, 1);
+    }
+
+    #[test]
+    fn retry_failed_counts_large_failed_batch_in_single_pass() {
+        let mut rows = Vec::new();
+        for index in 0..300 {
+            let mut row = applicable_row(&format!("failed-{index}"));
+            row.mark_import_failed("TEMPORARY".to_string(), None).unwrap();
+            rows.push(row);
+        }
+        let mut import_batch = batch();
+        import_batch.status = LegacyImportBatchStatus::Failed;
+        import_batch.total_rows = 300;
+        import_batch.success_rows = 0;
+        import_batch.failed_rows = 300;
+        let mut job = test_background_job(&import_batch, "admin-1");
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_import_result_batch(0, 0, 300, true, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        let outcome = prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).unwrap();
+        assert_eq!(outcome.affected_items, 300);
+        assert!(rows
+            .iter()
+            .all(|row| row.import_status == ImportStatus::PendingImport));
+    }
+
+    #[test]
+    fn retry_failed_only_subset_preserves_committed_success_counts() {
+        let mut failed = applicable_row("failed");
+        failed.mark_import_failed("TEMPORARY".to_string(), None).unwrap();
+        let mut rows = vec![failed];
+        let mut import_batch = batch();
+        import_batch.status = LegacyImportBatchStatus::PartialFailed;
+        import_batch.total_rows = 3;
+        import_batch.success_rows = 2;
+        import_batch.failed_rows = 1;
+        let mut job = test_background_job(&import_batch, "admin-1");
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_import_result_batch(2, 0, 1, true, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        let outcome = prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).unwrap();
+        assert_eq!(outcome.affected_items, 1);
+        assert_eq!(import_batch.success_rows, 2);
+        assert_eq!(import_batch.failed_rows, 0);
+        assert_eq!(import_batch.status, LegacyImportBatchStatus::ReadyToApply);
+        assert_eq!(rows[0].import_status, ImportStatus::PendingImport);
+    }
+
+    #[test]
+    fn retry_failed_subset_mismatch_fails_closed() {
+        let mut failed = applicable_row("failed");
+        failed.mark_import_failed("TEMPORARY".to_string(), None).unwrap();
+        let mut rows = vec![failed];
+        let mut import_batch = batch();
+        import_batch.status = LegacyImportBatchStatus::PartialFailed;
+        import_batch.total_rows = 3;
+        import_batch.success_rows = 1;
+        import_batch.failed_rows = 2;
+        let mut job = test_background_job(&import_batch, "admin-1");
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_import_result_batch(1, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        assert!(prepare_failed_import_retry(&mut import_batch, &mut job, &mut rows).is_err());
+        assert_eq!(import_batch.success_rows, 1);
+        assert_eq!(import_batch.failed_rows, 2);
     }
 
     #[test]
@@ -830,7 +909,7 @@ mod tests {
         let mut import_batch = batch();
         import_batch.status = LegacyImportBatchStatus::Completed;
         import_batch.base.version = 99;
-        let mut job = build_background_job(&import_batch, "admin-1").unwrap();
+        let mut job = test_background_job(&import_batch, "admin-1");
         job.base.version = 42;
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
         let receipt = ImportExecutionReceipt {

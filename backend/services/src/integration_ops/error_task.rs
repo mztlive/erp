@@ -4,15 +4,18 @@
 //! W02 责任 API。本模块不保留旧动作入口。
 
 use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, WorkItemExt};
-use entities::integration_ops::{IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId};
+use entities::integration_ops::{
+    error_owner_role, error_terminal_policy, project_error_actions, ErrorActionProjection,
+    IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
+};
 use id_generator::next_id;
 use validator::Validate;
 
 use super::dto::SortDir;
 use super::evidence::{
-    error_evidence_policy, evidence_satisfies_policy, EvidenceSubject, IntegrationEvidenceAuthority,
+    blocker_view, domain_kinds, error_evidence_policy, EvidenceSubject, IntegrationEvidenceAuthority,
 };
-use super::producer::{error_owner_role, error_work_item};
+use super::producer::error_work_item;
 use super::{
     ActionBlockerView, CreateErrorTaskRequest, ErrorTaskDetailView, ErrorTaskFilter, ErrorTaskListParams,
     ErrorTaskView, IntegrationOpsService, PageView,
@@ -118,7 +121,7 @@ impl IntegrationOpsService {
         let linked_evidence = self.db.discover_evidence(&subject, &mut NoTransaction).await?;
         let policy = error_evidence_policy(&task);
         let (allowed_actions, action_blockers) =
-            error_action_projection(&task, work_item.is_some(), &linked_evidence, &policy);
+            error_action_projection(&task, work_item.is_some(), &linked_evidence);
         let resolution_evidence_policy = (!task.is_terminal() && work_item.is_some()).then_some(policy);
         Ok(ErrorTaskDetailView {
             task: task.into(),
@@ -174,51 +177,29 @@ impl IntegrationOpsService {
     }
 }
 
+/// 推导错误任务开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
+///
+/// # 参数
+/// * `task` - 集成错误任务（提供终态与重放条件）
+/// * `has_work_item` - 是否已建立正式任务
+/// * `linked_evidence` - 服务端发现的受控证据
+///
+/// # 返回
+/// 返回开放动作代码与阻断视图。
 fn error_action_projection(
     task: &IntegrationErrorTask,
     has_work_item: bool,
     linked_evidence: &[super::ControlledEvidenceRef],
-    policy: &super::ResolutionEvidencePolicyView,
 ) -> (Vec<String>, Vec<ActionBlockerView>) {
-    if task.is_terminal() {
-        return (Vec::new(), Vec::new());
-    }
-    if !has_work_item {
-        return (
-            Vec::new(),
-            vec![ActionBlockerView {
-                action: "PROCESS".to_string(),
-                code: "FORMAL_WORK_ITEM_MISSING".to_string(),
-                message: "尚未建立 W29 处理责任，当前错误只能查看。".to_string(),
-            }],
-        );
-    }
-    let mut allowed_actions = vec!["QUERY_ORIGINAL_RESULT".to_string(), "ADD_EVIDENCE".to_string()];
-    if task.can_replay_original() {
-        allowed_actions.push("REPLAY_ORIGINAL".to_string());
-    }
-    if linked_evidence
-        .iter()
-        .any(|evidence| evidence.kind == super::ControlledEvidenceKind::BusinessObjectVerification)
-    {
-        allowed_actions.push("REATTRIBUTE".to_string());
-    }
-    if linked_evidence
-        .iter()
-        .any(|evidence| evidence.kind == super::ControlledEvidenceKind::CompensationResult)
-    {
-        allowed_actions.push("LINK_COMPENSATION".to_string());
-    }
-    if evidence_satisfies_policy(linked_evidence, policy) {
-        allowed_actions.push("RESOLVE".to_string());
-        return (allowed_actions, Vec::new());
-    }
+    let (actions, blockers) = project_error_actions(ErrorActionProjection {
+        terminal: task.is_terminal(),
+        has_work_item,
+        can_replay: task.can_replay_original(),
+        present: domain_kinds(linked_evidence),
+        policy: error_terminal_policy(task),
+    });
     (
-        allowed_actions,
-        vec![ActionBlockerView {
-            action: "RESOLVE".to_string(),
-            code: "VERIFIED_RESULT_REQUIRED".to_string(),
-            message: "取得可验证结果后才能完成任务。".to_string(),
-        }],
+        actions.iter().map(|action| action.as_str().to_string()).collect(),
+        blockers.iter().map(blocker_view).collect(),
     )
 }

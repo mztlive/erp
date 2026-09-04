@@ -251,6 +251,20 @@ mod tests {
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-8"), single_evidence)
                 .unwrap();
         assert!(difference.right_fact_reference.is_none());
+
+        let right_only = ReconciliationDifferenceData {
+            left_fact_reference: None,
+            right_fact_reference: Some("invoice://inv-88".to_string()),
+            ..difference_data()
+        };
+        let difference =
+            ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-8-right"), right_only)
+                .unwrap();
+        assert!(difference.left_fact_reference.is_none());
+        assert_eq!(
+            difference.right_fact_reference.as_deref(),
+            Some("invoice://inv-88")
+        );
     }
 
     #[test]

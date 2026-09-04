@@ -5,6 +5,7 @@
 
 use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, WorkItemExt};
 use entities::integration_ops::{
+    difference_terminal_policy, project_difference_actions, DifferenceActionProjection,
     ReconciliationDifference, ReconciliationDifferenceData, ReconciliationDifferenceId,
 };
 use id_generator::next_id;
@@ -12,7 +13,7 @@ use validator::Validate;
 
 use super::dto::SortDir;
 use super::evidence::{
-    difference_evidence_policy, evidence_satisfies_policy, reconciliation_reason_registry, EvidenceSubject,
+    blocker_view, difference_evidence_policy, domain_kinds, reconciliation_reason_registry, EvidenceSubject,
     IntegrationEvidenceAuthority,
 };
 use super::producer::difference_work_item;
@@ -34,11 +35,6 @@ impl IntegrationOpsService {
         actor: &AuditActor,
     ) -> Result<DifferenceView> {
         req.validate()?;
-        if req.left_fact_reference.is_none() && req.right_fact_reference.is_none() {
-            return Err(Error::ValidationError(
-                "差异必须至少提供一侧不可变证据引用".to_string(),
-            ));
-        }
         let owner_user_id = req.owner_user_id.clone();
         let difference = ReconciliationDifference::new(
             ReconciliationDifferenceId::new(next_id()),
@@ -49,7 +45,8 @@ impl IntegrationOpsService {
                 left_fact_reference: req.left_fact_reference,
                 right_fact_reference: req.right_fact_reference,
             },
-        )?;
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
         let work_item = difference_work_item(&difference, &owner_user_id)?;
         self.store_difference(difference.clone(), work_item, actor)
             .await?;
@@ -150,7 +147,7 @@ impl IntegrationOpsService {
         let linked_evidence = self.db.discover_evidence(&subject, &mut NoTransaction).await?;
         let policy = difference_evidence_policy(&difference);
         let (allowed_actions, action_blockers) =
-            difference_action_projection(terminal, has_work_item, &linked_evidence, &policy);
+            difference_action_projection(&difference, terminal, has_work_item, &linked_evidence);
         Ok(DifferenceDetailView {
             difference: view,
             resolutions,
@@ -200,45 +197,32 @@ impl IntegrationOpsService {
     }
 }
 
+/// 推导对账差异开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
+///
+/// # 参数
+/// * `difference` - 对账差异（提供资金影响策略）
+/// * `terminal` - 差异是否已形成正式结论
+/// * `has_work_item` - 是否已建立正式任务
+/// * `linked_evidence` - 服务端发现的受控证据
+///
+/// # 返回
+/// 返回开放动作代码与阻断视图。
 fn difference_action_projection(
+    difference: &ReconciliationDifference,
     terminal: bool,
     has_work_item: bool,
     linked_evidence: &[super::ControlledEvidenceRef],
-    policy: &super::ResolutionEvidencePolicyView,
 ) -> (Vec<String>, Vec<ActionBlockerView>) {
-    if terminal {
-        return (Vec::new(), Vec::new());
-    }
-    let mut actions = vec!["QUERY_ORIGINAL_RESULT".to_string(), "ADD_EVIDENCE".to_string()];
-    if linked_evidence
-        .iter()
-        .any(|evidence| evidence.kind == super::ControlledEvidenceKind::BusinessObjectVerification)
-    {
-        actions.push("REATTRIBUTE".to_string());
-    }
-    if linked_evidence
-        .iter()
-        .any(|evidence| evidence.kind == super::ControlledEvidenceKind::CompensationResult)
-    {
-        actions.push("LINK_COMPENSATION".to_string());
-    }
-    if has_work_item {
-        if evidence_satisfies_policy(linked_evidence, policy) {
-            actions.push("RESOLVE".to_string());
-            return (actions, Vec::new());
-        }
-        return (
-            actions,
-            vec![ActionBlockerView {
-                action: "RESOLVE".to_string(),
-                code: "VERIFIED_EVIDENCE_REQUIRED".to_string(),
-                message: "终态证据尚未满足当前固定策略。".to_string(),
-            }],
-        );
-    }
-    actions.push("CONFIRM_NO_ERROR".to_string());
-    actions.push("CONFIRM_VALID_DIFFERENCE".to_string());
-    (actions, Vec::new())
+    let (actions, blockers) = project_difference_actions(DifferenceActionProjection {
+        terminal,
+        has_work_item,
+        present: domain_kinds(linked_evidence),
+        policy: difference_terminal_policy(difference),
+    });
+    (
+        actions.iter().map(|action| action.as_str().to_string()).collect(),
+        blockers.iter().map(blocker_view).collect(),
+    )
 }
 
 #[cfg(test)]
@@ -265,5 +249,17 @@ mod tests {
         assert!(source.contains("map_or((None, 0)"));
         assert!(!source.contains("fn difference_state"));
         assert!(!source.contains("find_latest_by_difference("));
+    }
+
+    /// 分层守卫（INT-E17）：至少一侧证据引用不变量由实体独占，服务只映射错误类别。
+    ///
+    /// 锁定服务不再保留重复业务判断，实体错误统一映射为 `ValidationError`；
+    /// 四格矩阵（均无/仅左/仅右/两者）由实体单测覆盖，此处只锁定归属。
+    #[test]
+    fn create_difference_defers_reference_invariant_to_entity() {
+        let source = production_source();
+        assert!(!source.contains("left_fact_reference.is_none() && req.right_fact_reference.is_none()"));
+        assert!(source.contains("ReconciliationDifference::new("));
+        assert!(source.contains("Error::ValidationError(error.to_string())"));
     }
 }
