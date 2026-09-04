@@ -19,8 +19,11 @@ use crate::common::stable::StableBase;
 use crate::errors::{Error, Result};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+pub mod mall_sync_stage;
+
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+pub use mall_sync_stage::MallSyncStageMismatch;
 
 /// 来源系统代码最大长度。
 const CODE_MAX_LEN: usize = 64;

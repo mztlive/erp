@@ -40,6 +40,7 @@ pub struct IngestMallSalesOrderSnapshotsRequest {
     pub sync_job_id: MallSalesSyncJobId,
     /// 本页快照。
     #[validate(length(min = 1, max = 500, message = "快照数量必须在1-500之间"))]
+    #[validate(nested)]
     pub items: Vec<SnapshotItemRequest>,
 }
 
@@ -180,13 +181,55 @@ impl MallSalesOrderSnapshotListParams {
 
 #[cfg(test)]
 mod tests {
-    use super::IngestMallSalesOrderSnapshotsRequest;
+    use super::{IngestMallSalesOrderSnapshotsRequest, SnapshotItemRequest};
+    use entities::common::time::Instant;
+    use entities::ids::MallSalesSyncJobId;
     use validator::Validate;
+
+    fn item(order_no: &str, status: &str) -> SnapshotItemRequest {
+        SnapshotItemRequest {
+            external_order_no: order_no.to_string(),
+            source_updated_at: Instant::from_unix_secs(1_700_000_000),
+            content_hash: None,
+            source_status_code: status.to_string(),
+            normalized_snapshot: "{}".to_string(),
+            raw_payload_reference: None,
+        }
+    }
+
+    fn request(items: Vec<SnapshotItemRequest>) -> IngestMallSalesOrderSnapshotsRequest {
+        IngestMallSalesOrderSnapshotsRequest {
+            sync_job_id: MallSalesSyncJobId::new("j-1"),
+            items,
+        }
+    }
 
     #[test]
     fn ingest_request_rejects_empty_items() {
         let request: IngestMallSalesOrderSnapshotsRequest =
             serde_json::from_value(serde_json::json!({ "sync_job_id": "j-1", "items": [] })).unwrap();
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn ingest_request_validates_each_item_nested() {
+        assert!(request(vec![item("SO-1", "EFFECTIVE")]).validate().is_ok());
+        let invalid_order = request(vec![item("SO-1", "EFFECTIVE"), item("   ", "EFFECTIVE")]);
+        let error = invalid_order.validate().expect_err("空白来源单号必须失败");
+        assert!(error.to_string().contains("items"), "错误必须定位到 items");
+        let invalid_status = request(vec![item("SO-1", "   ")]);
+        assert!(invalid_status.validate().is_err());
+    }
+
+    #[test]
+    fn ingest_request_enforces_item_count_bounds() {
+        let full = (0..500)
+            .map(|index| item(&format!("SO-{index}"), "EFFECTIVE"))
+            .collect();
+        assert!(request(full).validate().is_ok());
+        let overlong = (0..501)
+            .map(|index| item(&format!("SO-{index}"), "EFFECTIVE"))
+            .collect();
+        assert!(request(overlong).validate().is_err());
     }
 }

@@ -52,6 +52,18 @@ pub struct MappingTargetRegistration {
     pub relation_role: RelationRole,
 }
 
+/// 确认目标形状失配的强类型原因。
+///
+/// 调用方按原因映射传输错误：未注册为业务失败关闭，
+/// 形状失配为请求校验失败；两者均携带固定注册事实以便定位。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappingTargetMismatch {
+    /// 映射类型未注册独立 ERP 规范目标。
+    Unregistered,
+    /// 已注册但命令目标形状与固定注册表不一致，携带期望的注册项。
+    ShapeMismatch(MappingTargetRegistration),
+}
+
 /// 规范化商城快照中的来源身份候选值。
 ///
 /// 值对象只接受非空文本；JSON 字符串或整数等传输形态由 Service 适配为
@@ -202,6 +214,36 @@ impl MappingTaskType {
             command_object_type.trim() == registration.command_object_type
                 && relation_role == registration.relation_role
         })
+    }
+
+    /// 校验确认命令目标并返回固定注册的强类型目标。
+    ///
+    /// # 参数
+    /// * `command_object_type` - 命令携带的目标对象类型代码
+    /// * `relation_role` - 命令携带的谱系关系角色
+    ///
+    /// # 返回
+    /// 形状完全匹配时返回固定注册项。
+    ///
+    /// # 错误
+    /// 映射类型未注册时返回 `Unregistered`；已注册但形状不一致时
+    /// 返回携带期望注册项的 `ShapeMismatch`。
+    ///
+    /// # 约束
+    /// 纯值规则，不访问数据库；传输错误类别由调用方按失配原因映射。
+    pub fn resolve_target(
+        self,
+        command_object_type: &str,
+        relation_role: RelationRole,
+    ) -> std::result::Result<MappingTargetRegistration, MappingTargetMismatch> {
+        let registration = self
+            .target_registration()
+            .ok_or(MappingTargetMismatch::Unregistered)?;
+        if self.accepts_target(command_object_type, relation_role) {
+            Ok(registration)
+        } else {
+            Err(MappingTargetMismatch::ShapeMismatch(registration))
+        }
     }
 
     /// 返回规范化快照来源身份字段的用户标签。
@@ -618,6 +660,30 @@ mod tests {
             .external_identity(&[MappingSourceIdentity::new("line-1").unwrap()])
             .is_err());
         assert!(MappingSourceIdentity::new("   ").is_err());
+    }
+
+    #[test]
+    fn resolve_target_returns_typed_registration_or_mismatch() {
+        let registration = MappingTaskType::Customer
+            .resolve_target("CUSTOMER", RelationRole::Primary)
+            .unwrap();
+        assert_eq!(registration.command_object_type, "CUSTOMER");
+        assert!(MappingTaskType::Customer
+            .resolve_target(" CUSTOMER ", RelationRole::Primary)
+            .is_ok());
+        let mismatch = MappingTaskType::Contract
+            .resolve_target("CUSTOMER", RelationRole::Primary)
+            .expect_err("合同映射不接受客户目标");
+        assert!(matches!(
+            mismatch,
+            MappingTargetMismatch::ShapeMismatch(item) if item.command_object_type == "CONTRACT"
+        ));
+        for unregistered in [MappingTaskType::UniqueLineItem, MappingTaskType::AmountFormat] {
+            assert_eq!(
+                unregistered.resolve_target("SKU", RelationRole::Primary),
+                Err(MappingTargetMismatch::Unregistered)
+            );
+        }
     }
 
     #[test]

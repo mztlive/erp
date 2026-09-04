@@ -21,10 +21,7 @@
 
 use database::{AccessControlExt, MallAfterSalesExt, MallOrderExt, NoTransaction, Transactional};
 use entities::common::time::Instant;
-use entities::ids::{
-    InboxMessageId, MallAfterSalesRequestId, MallBalanceRestorationId, MallOrderFactId, MallOrderId,
-    MallRefundId,
-};
+use entities::ids::{InboxMessageId, MallBalanceRestorationId, MallOrderFactId, MallRefundId};
 use entities::mall_after_sales::{
     MallBalanceRestoration, MallBalanceRestorationData, MallRefund, MallRefundData,
 };
@@ -51,6 +48,13 @@ pub use self::dto::{
 
 /// 售后请求列表筛选条件类型（经 `MallAfterSalesExt` 关联类型跨 crate 可达）。
 type AfterSalesRequestFilter = <mongodb::Database as MallAfterSalesExt>::MallAfterSalesRequestFilter;
+
+/// 退款分页筛选与作用域类型（INT-R08，经 `MallAfterSalesExt` 关联类型跨 crate 可达）。
+type MallRefundPageFilter = <mongodb::Database as MallAfterSalesExt>::MallRefundPageFilter;
+type MallRefundPageScope = <mongodb::Database as MallAfterSalesExt>::MallRefundPageScope;
+
+/// 余额恢复分页筛选类型（INT-R09，经 `MallAfterSalesExt` 关联类型跨 crate 可达）。
+type MallRestorationPageFilter = <mongodb::Database as MallAfterSalesExt>::MallRestorationPageFilter;
 
 /// 商城售后域服务：退款与余额恢复事实接收、售后查询。
 pub struct MallAfterSalesService {
@@ -228,9 +232,9 @@ impl MallAfterSalesService {
                             session,
                         )
                         .await?;
-                    for entry in &entries_for_tx {
-                        db.mall_consumption_entries().create(entry, session).await?;
-                    }
+                    db.mall_after_sales()
+                        .create_consumption_reversals(&entries_for_tx, session)
+                        .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
@@ -265,26 +269,46 @@ impl MallAfterSalesService {
     pub async fn mall_refund_list(&self, params: &MallRefundListParams) -> Result<PageView<MallRefundView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let mut refunds = match refund_scope(&query) {
-            Some(MallRefundScope::Order(order_id)) => {
+        let scope = query.scope();
+        let page = match scope {
+            Some(dto::MallRefundScope::Order(order_id)) => {
                 self.db
                     .mall_refunds()
-                    .list_by_order(&order_id, &mut NoTransaction)
+                    .search_page(
+                        &MallRefundPageFilter {
+                            scope: MallRefundPageScope::Order(order_id),
+                            sort_by: query.paging.sort_by.to_string(),
+                            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                            page: query.paging.page,
+                            page_size: query.paging.page_size,
+                        },
+                        &mut NoTransaction,
+                    )
                     .await?
             }
-            Some(MallRefundScope::AfterSalesRequest(request_id)) => {
+            Some(dto::MallRefundScope::AfterSalesRequest(request_id)) => {
                 self.db
                     .mall_refunds()
-                    .list_by_after_sales_request(&request_id, &mut NoTransaction)
+                    .search_page(
+                        &MallRefundPageFilter {
+                            scope: MallRefundPageScope::AfterSalesRequest(request_id),
+                            sort_by: query.paging.sort_by.to_string(),
+                            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                            page: query.paging.page,
+                            page_size: query.paging.page_size,
+                        },
+                        &mut NoTransaction,
+                    )
                     .await?
             }
-            None => Vec::new(),
+            None => database::repository::PageResult {
+                items: Vec::new(),
+                total: 0,
+            },
         };
-        sort_refunds(&mut refunds, query.paging.sort_by, query.paging.sort_dir);
-        let (items, total) = slice_page(refunds, query.paging, mall_refund_view);
         Ok(PageView {
-            items,
-            total,
+            items: page.items.into_iter().map(mall_refund_view).collect(),
+            total: page.total,
             page: query.paging.page,
             page_size: query.paging.page_size,
         })
@@ -473,17 +497,30 @@ impl MallAfterSalesService {
     ) -> Result<PageView<MallBalanceRestorationView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let mut restorations = if let Some(request_id) = &query.after_sales_request_id {
+        let page = if let Some(request_id) = &query.after_sales_request_id {
             self.db
                 .mall_balance_restorations()
-                .list_by_after_sales_request(request_id, &mut NoTransaction)
+                .search_page(
+                    &MallRestorationPageFilter {
+                        after_sales_request_id: request_id.clone(),
+                        sort_by: query.paging.sort_by.to_string(),
+                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                        page: query.paging.page,
+                        page_size: query.paging.page_size,
+                    },
+                    &mut NoTransaction,
+                )
                 .await?
         } else {
-            Vec::new()
+            database::repository::PageResult {
+                items: Vec::new(),
+                total: 0,
+            }
         };
-        sort_restorations(&mut restorations, query.paging.sort_by, query.paging.sort_dir);
-        let (items, total) = slice_page(restorations, query.paging, |restoration| {
-            MallBalanceRestorationView {
+        let items = page
+            .items
+            .into_iter()
+            .map(|restoration| MallBalanceRestorationView {
                 id: restoration.base.id.clone(),
                 mall_order_fact_id: restoration.mall_order_fact_id.to_string(),
                 after_sales_request_id: restoration.after_sales_request_id.to_string(),
@@ -494,11 +531,11 @@ impl MallAfterSalesService {
                 restored_amount: restoration.restored_amount.to_string(),
                 restored_at: restoration.restored_at.unix_secs() as u64,
                 created_at: restoration.base.created_at,
-            }
-        });
+            })
+            .collect();
         Ok(PageView {
             items,
-            total,
+            total: page.total,
             page: query.paging.page,
             page_size: query.paging.page_size,
         })
@@ -591,39 +628,6 @@ impl MallAfterSalesService {
     }
 }
 
-/// Service 已决定的退款查询业务作用域。
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum MallRefundScope {
-    /// 按原商城订单读取退款事实。
-    Order(MallOrderId),
-    /// 按售后案件读取退款事实。
-    AfterSalesRequest(MallAfterSalesRequestId),
-}
-
-/// 选择退款列表唯一业务作用域。
-///
-/// # 参数
-/// * `query` - 已完成参数校验和排序白名单归一化的退款查询
-///
-/// # 返回
-/// 有原订单或售后案件时返回单一类型化作用域；均未提供时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 关键约束
-/// 原订单始终优先，Repository 只接收已决定的单一领域 ID，不拥有优先级规则。
-fn refund_scope(query: &dto::MallRefundListQuery) -> Option<MallRefundScope> {
-    if let Some(mall_order_id) = &query.mall_order_id {
-        return Some(MallRefundScope::Order(mall_order_id.clone()));
-    }
-    query
-        .after_sales_request_id
-        .as_ref()
-        .cloned()
-        .map(MallRefundScope::AfterSalesRequest)
-}
-
 /// 将退款正式事实转换为列表响应视图。
 ///
 /// # 参数
@@ -665,125 +669,5 @@ fn hit_view(fact: &MallOrderFact) -> ReceivedFactView {
         fact_type: fact.fact_type,
         processing_status: fact.processing_status,
         idempotent_hit: true,
-    }
-}
-
-/// 按白名单字段与方向对退款头稳定排序。
-///
-/// # 参数
-/// * `refunds` - 待排序的退款正式事实
-/// * `sort_by` - 已过白名单校验的 `refunded_at` 或 `created_at`
-/// * `sort_dir` - 排序方向
-///
-/// # 返回
-/// 原地更新输入切片，无返回值。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 关键约束
-/// 业务时间与稳定事实 ID 使用同一方向，确保同秒事实的分页顺序确定。
-fn sort_refunds(refunds: &mut [MallRefund], sort_by: &str, sort_dir: SortDir) {
-    match sort_by {
-        "refunded_at" => refunds.sort_by_key(|refund| (refund.refunded_at, refund.base.id.clone())),
-        _ => refunds.sort_by_key(|refund| (refund.base.created_at, refund.base.id.clone())),
-    }
-    if matches!(sort_dir, SortDir::Desc) {
-        refunds.reverse();
-    }
-}
-
-/// 按白名单字段与方向对恢复头排序（`restored_at` 或 `created_at`）。
-///
-/// # 参数
-/// * `restorations` - 待排序的恢复头
-/// * `sort_by` - 已过白名单校验的排序字段
-/// * `sort_dir` - 排序方向
-fn sort_restorations(restorations: &mut [MallBalanceRestoration], sort_by: &str, sort_dir: SortDir) {
-    let ascending = matches!(sort_dir, SortDir::Asc);
-    match sort_by {
-        "restored_at" => {
-            restorations.sort_by_key(|restoration| (restoration.restored_at, restoration.base.id.clone()))
-        }
-        _ => {
-            restorations.sort_by_key(|restoration| (restoration.base.created_at, restoration.base.id.clone()))
-        }
-    }
-    if !ascending {
-        restorations.reverse();
-    }
-}
-
-/// 对已排序集合做内存分页切片并映射为视图。
-///
-/// # 参数
-/// * `rows` - 已按白名单排序的全量记录
-/// * `paging` - 分页参数
-/// * `map` - 实体 → 视图映射
-///
-/// # 返回
-/// 返回 `(当前页视图, 总数)`。
-fn slice_page<T, V, F>(rows: Vec<T>, paging: dto::PageParams, map: F) -> (Vec<V>, i64)
-where
-    F: Fn(T) -> V,
-{
-    let total = rows.len() as i64;
-    let start = ((paging.page.max(1) - 1) * u64::from(paging.page_size)) as usize;
-    let items = rows
-        .into_iter()
-        .skip(start)
-        .take(paging.page_size as usize)
-        .map(map)
-        .collect();
-    (items, total)
-}
-
-#[cfg(test)]
-mod refund_scope_tests {
-    use entities::ids::{MallAfterSalesRequestId, MallOrderId};
-
-    use super::dto::{MallRefundListQuery, PageParams};
-    use super::{refund_scope, MallRefundScope, SortDir};
-
-    /// 构造退款作用域测试使用的已归一化查询。
-    ///
-    /// 参数分别提供可选订单和售后案件，返回固定第一页、默认排序的查询；
-    /// 不执行参数解析或任何外部 I/O。
-    fn query(order_id: Option<&str>, request_id: Option<&str>) -> MallRefundListQuery {
-        MallRefundListQuery {
-            mall_order_id: order_id.map(MallOrderId::new),
-            after_sales_request_id: request_id.map(MallAfterSalesRequestId::new),
-            paging: PageParams {
-                page: 1,
-                page_size: 20,
-                sort_by: "created_at",
-                sort_dir: SortDir::Desc,
-            },
-        }
-    }
-
-    /// 验证同时提供两个作用域时 Service 只选择原订单。
-    ///
-    /// 测试直接调用纯作用域选择器，不访问 Repository；优先级漂移时失败。
-    #[test]
-    fn refund_scope_prefers_order() {
-        assert_eq!(
-            refund_scope(&query(Some("order-1"), Some("request-1"))),
-            Some(MallRefundScope::Order(MallOrderId::new("order-1")))
-        );
-    }
-
-    /// 验证售后案件可独立选择，缺少两个作用域时不产生仓储查询条件。
-    ///
-    /// 测试覆盖案件命中与无作用域边界，确保空查询不会退化为全表读取。
-    #[test]
-    fn refund_scope_handles_request_and_missing_scope() {
-        assert_eq!(
-            refund_scope(&query(None, Some("request-1"))),
-            Some(MallRefundScope::AfterSalesRequest(MallAfterSalesRequestId::new(
-                "request-1",
-            )))
-        );
-        assert_eq!(refund_scope(&query(None, None)), None);
     }
 }

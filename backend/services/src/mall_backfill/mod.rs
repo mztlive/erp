@@ -20,11 +20,9 @@ use database::{
     Transactional,
 };
 use entities::common::time::Instant;
-use entities::ids::{BackgroundJobId, MallConsumptionBackfillItemId, MallConsumptionBackfillJobId};
+use entities::ids::{BackgroundJobId, MallConsumptionBackfillJobId};
 use entities::mall_backfill::{
-    BackfillCostBasis, BackfillItemClassification, BackfillItemResult, BackfillJobStatus, BackfillWindow,
-    MallConsumptionBackfillItem, MallConsumptionBackfillItemData, MallConsumptionBackfillJob,
-    MallConsumptionBackfillJobData,
+    BackfillJobStatus, BackfillWindow, MallConsumptionBackfillJob, MallConsumptionBackfillJobData,
 };
 use entities::money::Amount;
 use id_generator::next_id;
@@ -35,8 +33,10 @@ use validator::Validate;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
+mod backfill_submit;
 mod dto;
 
+use self::backfill_submit::plan_backfill_items;
 use self::dto::SortDir;
 pub use self::dto::{
     BackfillCommand, BackfillCommandRequest, BackfillCommandResultView, BackfillItemListParams,
@@ -218,23 +218,13 @@ impl MallBackfillService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("回填作业不存在".to_string()))?;
-        let item_total = self
+        let item_total: i64 = self
             .db
             .mall_consumption_backfill_items()
-            .search_backfill_items(
-                &BackfillItemFilter {
-                    job_id: Some(job.base.id.clone().into()),
-                    result: None,
-                    cost_basis: None,
-                    page: 1,
-                    page_size: 1,
-                    sort_by: None,
-                    sort_ascending: false,
-                },
-                &mut NoTransaction,
-            )
+            .count_by_job(&job.base.id.clone().into(), &mut NoTransaction)
             .await?
-            .total;
+            .try_into()
+            .map_err(|_| Error::Internal("回填明细计数超出范围".to_string()))?;
         Ok(BackfillJobDetailView {
             job: backfill_job_view(&job),
             item_total_count: item_total,
@@ -422,65 +412,29 @@ impl MallBackfillService {
                         },
                     )?;
                     background.start(now)?;
-                    let mut deduplicated = 0u64;
-                    let mut actual = 0u64;
-                    let mut standard = 0u64;
-                    let mut none = 0u64;
-                    let mut unattributed = 0u64;
-                    let mut success = 0u64;
-                    for fact in facts {
-                        if db
-                            .mall_consumption_backfill_items()
-                            .find_by_job_and_key(
-                                &job_id_for_tx.clone().into(),
-                                &fact.business_fact_key,
-                                session,
-                            )
-                            .await?
-                            .is_some()
-                        {
-                            deduplicated += 1;
-                            background.record_progress(0, 1, 0, now)?;
-                            continue;
-                        }
-                        let classification = BackfillItemClassification::from_mall_fact(
-                            fact.fact_type,
-                            fact.processing_status,
-                        );
-                        let result = classification.result;
-                        let basis = classification.cost_basis;
-                        let item = MallConsumptionBackfillItem::new(
-                            MallConsumptionBackfillItemId::new(next_id()),
-                            MallConsumptionBackfillItemData {
-                                job_id: job_id_for_tx.clone().into(),
-                                business_fact_key: fact.business_fact_key.clone(),
-                                source_event_reference: fact.source_event_id.clone(),
-                                inbox_message_id: fact.inbox_message_id.clone(),
-                                mall_order_fact_id: Some(fact.base.id.clone().into()),
-                                result,
-                                cost_basis: basis,
-                                error_code: None,
-                                error_detail: None,
-                            },
-                        )?;
-                        db.mall_consumption_backfill_items()
-                            .create(&item, session)
-                            .await?;
-                        success += 1;
-                        match basis {
-                            BackfillCostBasis::Actual => actual += 1,
-                            BackfillCostBasis::Standard => standard += 1,
-                            BackfillCostBasis::None => none += 1,
-                        }
-                        if result == BackfillItemResult::PendingAttribution {
-                            unattributed += 1;
-                        }
-                    }
-                    background.record_progress(success, 0, 0, now)?;
+                    let job_key: MallConsumptionBackfillJobId = job_id_for_tx.clone().into();
+                    let fact_keys: Vec<String> =
+                        facts.iter().map(|fact| fact.business_fact_key.clone()).collect();
+                    let existing: std::collections::HashSet<String> = db
+                        .mall_consumption_backfill_items()
+                        .list_existing_keys(&job_key, &fact_keys, session)
+                        .await?
+                        .into_iter()
+                        .collect();
+                    let (items, progress) = plan_backfill_items(&job_key, &facts, &existing)?;
+                    db.mall_consumption_backfill_items()
+                        .create_many_ordered(&items, session)
+                        .await?;
+                    background.record_progress(
+                        progress.succeeded(),
+                        progress.deduplicated(),
+                        progress.failed(),
+                        now,
+                    )?;
                     background.mark_succeeded(now)?;
                     db.background_jobs().update(&mut background, session).await?;
 
-                    job.update_progress(deduplicated, actual, standard, none, unattributed, None)?;
+                    progress.apply_to_job(&mut job)?;
                     job.transition_to(BackfillJobStatus::Completed)?;
                     db.mall_consumption_backfill_jobs()
                         .update(&mut job, session)

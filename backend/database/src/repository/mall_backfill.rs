@@ -5,11 +5,20 @@
 //! 回填明细是不可变执行结果（§4.5 不设业务软删除），**不提供软删除方法**：
 //! 只暴露只读追加仓储。集合名常量统一从 `MallBackfillExt` 关联常量导入。
 //!
-//! ★ `(job_id, business_fact_key)` 去重只靠唯一索引（P2 计划 §5），本层不提供
-//! 「先查后插」的查重入口；重复写入由 `uk_mall_consumption_backfill_items_key`
-//! 唯一索引拒绝并透出 [`crate::Error::DuplicateKey`]。
+//! ★ `(job_id, business_fact_key)` 去重最终靠唯一索引（P2 计划 §5），批量预查
+//! 仅用于一次取回已存在键以避免 N+1，不得替代唯一约束；重复写入由
+//! `uk_mall_consumption_backfill_items_key` 唯一索引拒绝并透出
+//! [`crate::Error::DuplicateKey`]。
 //!
 //! 筛选/行类型定义在本文件，经 `MallBackfillExt` 的关联类型对外暴露。
+//!
+//! - [`item_batch`]：回填明细批量去重与批量追加（INT-R15）；
+//! - [`item_counts`]：回填明细按作业计数（INT-R14）。
+
+#[path = "mall_backfill/item_batch.rs"]
+mod item_batch;
+#[path = "mall_backfill/item_counts.rs"]
+mod item_counts;
 
 use entities::common::time::Instant;
 use entities::mall_backfill::{

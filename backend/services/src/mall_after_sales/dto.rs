@@ -68,6 +68,16 @@ fn valid_amount(value: &str) -> std::result::Result<(), validator::ValidationErr
     Ok(())
 }
 
+/// 校验数量字符串为合法非负定点数值（小数位 ≤ 6）。
+fn valid_quantity(value: &str) -> std::result::Result<(), validator::ValidationError> {
+    let quantity = entities::money::Quantity::from_str(value)
+        .map_err(|_| validator::ValidationError::new("不是合法数量"))?;
+    if quantity.to_decimal().is_sign_negative() {
+        return Err(validator::ValidationError::new("数量不能为负"));
+    }
+    Ok(())
+}
+
 /// 退款行载荷。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RefundLineData {
@@ -77,6 +87,7 @@ pub struct RefundLineData {
     /// 原商品明细。
     pub mall_order_item_id: MallOrderItemId,
     /// 本商品实际退款数量（字符串，6 位小数）。
+    #[validate(custom(function = "valid_quantity", message = "退款数量非法"))]
     pub refunded_quantity: String,
     /// 本商品实际退款金额（字符串）。
     #[validate(custom(function = "valid_amount", message = "退款金额非法"))]
@@ -152,10 +163,12 @@ pub struct ReceiveRefundFactRequest {
     #[validate(range(min = 1, message = "退款时间必须大于 0"))]
     pub refunded_at: u64,
     /// 商品退款行。
-    #[validate(length(min = 1, message = "退款行不能为空"))]
+    #[validate(length(min = 1, max = 500, message = "退款行数量必须在1-500之间"))]
+    #[validate(nested)]
     pub lines: Vec<RefundLineData>,
     /// 沿原支付来源的退款分配。
-    #[validate(length(min = 1, message = "退款分配不能为空"))]
+    #[validate(length(min = 1, max = 1000, message = "退款分配数量必须在1-1000之间"))]
+    #[validate(nested)]
     pub allocations: Vec<RefundAllocationData>,
 }
 
@@ -225,7 +238,8 @@ pub struct ReceiveBalanceRestorationRequest {
     #[validate(range(min = 1, message = "恢复时间必须大于 0"))]
     pub restored_at: u64,
     /// 按原 CARD 退款资金分配的恢复分配。
-    #[validate(length(min = 1, message = "恢复分配不能为空"))]
+    #[validate(length(min = 1, max = 1000, message = "恢复分配数量必须在1-1000之间"))]
+    #[validate(nested)]
     pub allocations: Vec<RestorationAllocationData>,
 }
 
@@ -330,6 +344,44 @@ pub(crate) struct MallRefundListQuery {
     pub after_sales_request_id: Option<MallAfterSalesRequestId>,
     /// 分页与排序参数。
     pub paging: PageParams,
+}
+
+/// Service 已判定的退款查询业务作用域（INT-E06）。
+///
+/// 作用域优先级属于纯查询范围规则，由查询 DTO 独占；
+/// Repository 只接收已决定的单一领域 ID，不拥有优先级规则。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum MallRefundScope {
+    /// 按原商城订单读取退款事实。
+    Order(MallOrderId),
+    /// 按售后案件读取退款事实。
+    AfterSalesRequest(MallAfterSalesRequestId),
+}
+
+impl MallRefundListQuery {
+    /// 选择退款列表唯一业务作用域（INT-E06）。
+    ///
+    /// # 参数
+    /// * `self` - 已完成参数校验和排序白名单归一化的退款查询
+    ///
+    /// # 返回
+    /// 有原订单或售后案件时返回单一类型化作用域；均未提供时返回 `None`，
+    /// 调用方不得以此退化为全表读取。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 原订单始终优先于售后案件；本方法是作用域优先级的唯一来源。
+    pub(crate) fn scope(&self) -> Option<MallRefundScope> {
+        if let Some(mall_order_id) = &self.mall_order_id {
+            return Some(MallRefundScope::Order(mall_order_id.clone()));
+        }
+        self.after_sales_request_id
+            .as_ref()
+            .cloned()
+            .map(MallRefundScope::AfterSalesRequest)
+    }
 }
 
 impl MallRefundListParams {
@@ -482,8 +534,16 @@ pub struct ReceivedFactView {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_sort;
+    use super::{
+        normalize_sort, MallRefundListQuery, MallRefundScope, PageParams, ReceiveBalanceRestorationRequest,
+        ReceiveRefundFactRequest, RefundAllocationData, RefundLineData, RestorationAllocationData,
+    };
     use crate::mall_after_sales::dto::{AfterSalesRequestListParams, MallRefundListParams, SortDir};
+    use entities::ids::{
+        MallAfterSalesRequestId, MallConsumptionEntryId, MallOrderFactId, MallOrderId, MallOrderItemId,
+        MallPaymentSourceId,
+    };
+    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -528,5 +588,250 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.mall_id.as_deref(), Some("mall-a"));
         assert_eq!(query.paging.page, 1);
+    }
+
+    /// 构造退款查询作用域测试使用的已归一化查询。
+    ///
+    /// 参数分别提供可选订单和售后案件，返回固定第一页、默认排序的查询；
+    /// 不执行参数解析或任何外部 I/O。
+    fn refund_query(order_id: Option<&str>, request_id: Option<&str>) -> MallRefundListQuery {
+        MallRefundListQuery {
+            mall_order_id: order_id.map(MallOrderId::new),
+            after_sales_request_id: request_id.map(MallAfterSalesRequestId::new),
+            paging: PageParams {
+                page: 1,
+                page_size: 20,
+                sort_by: "created_at",
+                sort_dir: SortDir::Desc,
+            },
+        }
+    }
+
+    /// 验证同时提供两个作用域时查询只选择原订单（INT-E06）。
+    ///
+    /// 测试直接调用查询自带的作用域选择器，不访问 Repository；优先级漂移时失败。
+    #[test]
+    fn refund_query_scope_prefers_order() {
+        assert_eq!(
+            refund_query(Some("order-1"), Some("request-1")).scope(),
+            Some(MallRefundScope::Order(MallOrderId::new("order-1")))
+        );
+    }
+
+    /// 验证售后案件可独立选择，缺少两个作用域时不产生仓储查询条件（INT-E06）。
+    ///
+    /// 测试覆盖案件命中与无作用域边界，确保空查询不会退化为全表读取。
+    #[test]
+    fn refund_query_scope_handles_request_and_missing_scope() {
+        assert_eq!(
+            refund_query(None, Some("request-1")).scope(),
+            Some(MallRefundScope::AfterSalesRequest(MallAfterSalesRequestId::new(
+                "request-1"
+            )))
+        );
+        assert_eq!(refund_query(None, None).scope(), None);
+    }
+
+    /// 验证仅提供原订单时查询选择原订单作用域（INT-E06）。
+    ///
+    /// 补齐四格矩阵中缺失的一格：单作用域分支不得退化为空或误选案件。
+    #[test]
+    fn refund_query_scope_handles_order_only() {
+        assert_eq!(
+            refund_query(Some("order-1"), None).scope(),
+            Some(MallRefundScope::Order(MallOrderId::new("order-1")))
+        );
+    }
+
+    /// 构造嵌套校验测试使用的合法退款接收请求。
+    ///
+    /// 返回最小合法载荷；调用方可按需篡改单个内部字段以触发嵌套拒绝；
+    /// 不访问数据库或外部 I/O。
+    fn valid_refund_request() -> ReceiveRefundFactRequest {
+        ReceiveRefundFactRequest {
+            mall_id: "mall-a".to_string(),
+            source_event_id: "evt-1".to_string(),
+            inbox_message_id: "inbox-1".to_string(),
+            business_fact_key: "key-1".to_string(),
+            external_order_no: "SO-1".to_string(),
+            external_order_version: "v1".to_string(),
+            after_sales_request_id: MallAfterSalesRequestId::new("req-1"),
+            original_payment_fact_id: MallOrderFactId::new("fact-pay-1"),
+            occurred_at: 1,
+            received_at: 1,
+            data_source: entities::mall_order::DataSource::Realtime,
+            raw_payload_reference: None,
+            external_refund_no: "R-1".to_string(),
+            external_refund_version: "v1".to_string(),
+            refund_amount: "10.00".to_string(),
+            refunded_at: 1,
+            lines: vec![RefundLineData {
+                line_no: 1,
+                mall_order_item_id: MallOrderItemId::new("item-1"),
+                refunded_quantity: "1.000000".to_string(),
+                line_refund_amount: "10.00".to_string(),
+            }],
+            allocations: vec![RefundAllocationData {
+                line_no: 1,
+                allocation_no: 1,
+                original_consumption_entry_id: MallConsumptionEntryId::new("ce-1"),
+                original_payment_source_id: MallPaymentSourceId::new("ps-1"),
+                allocated_refund_amount: "10.00".to_string(),
+            }],
+        }
+    }
+
+    /// 验证合法退款载荷通过嵌套校验（INT-E07）。
+    ///
+    /// 测试覆盖空集合拒绝前的合法基线，确保白名单内的金额、数量与编号可通过。
+    #[test]
+    fn refund_request_accepts_valid_nested_payload() {
+        assert!(valid_refund_request().validate().is_ok());
+    }
+
+    /// 验证内部非法金额、数量与编号被嵌套校验拒绝（INT-E07）。
+    ///
+    /// 测试覆盖行金额、分配金额、退款数量、行号与分配序号的非法形态；
+    /// 任一内部失败必须使整体请求校验失败。
+    #[test]
+    fn refund_request_rejects_invalid_nested_amounts_and_numbers() {
+        let mut req = valid_refund_request();
+        req.lines[0].line_refund_amount = "-1.00".to_string();
+        assert!(req.validate().is_err());
+
+        let mut req = valid_refund_request();
+        req.allocations[0].allocated_refund_amount = "not-a-number".to_string();
+        assert!(req.validate().is_err());
+
+        let mut req = valid_refund_request();
+        req.lines[0].refunded_quantity = "-1.000000".to_string();
+        assert!(req.validate().is_err());
+
+        let mut req = valid_refund_request();
+        req.lines[0].line_no = 0;
+        assert!(req.validate().is_err());
+
+        let mut req = valid_refund_request();
+        req.allocations[0].allocation_no = 0;
+        assert!(req.validate().is_err());
+    }
+
+    /// 验证空集合被长度校验拒绝（INT-E07）。
+    ///
+    /// 测试覆盖行与分配分别为空的边界，确保空载荷不会进入额度校验。
+    #[test]
+    fn refund_request_rejects_empty_collections() {
+        let mut req = valid_refund_request();
+        req.lines.clear();
+        assert!(req.validate().is_err());
+
+        let mut req = valid_refund_request();
+        req.allocations.clear();
+        assert!(req.validate().is_err());
+    }
+
+    /// 验证恢复请求内部非法金额与编号被嵌套校验拒绝（INT-E07）。
+    ///
+    /// 测试覆盖恢复金额非法与分配序号非法的内层形态，确保恢复载荷与退款载荷
+    /// 共用相同的嵌套拒绝时点。
+    #[test]
+    fn restoration_request_rejects_invalid_nested_payload() {
+        use entities::ids::{MallCardInstanceId, MallRefundAllocationId};
+        let mut req = ReceiveBalanceRestorationRequest {
+            mall_id: "mall-a".to_string(),
+            source_event_id: "evt-1".to_string(),
+            inbox_message_id: "inbox-1".to_string(),
+            business_fact_key: "key-1".to_string(),
+            external_order_no: "SO-1".to_string(),
+            external_order_version: "v1".to_string(),
+            after_sales_request_id: MallAfterSalesRequestId::new("req-1"),
+            original_payment_fact_id: MallOrderFactId::new("fact-pay-1"),
+            occurred_at: 1,
+            received_at: 1,
+            data_source: entities::mall_order::DataSource::Realtime,
+            raw_payload_reference: None,
+            external_restoration_no: "RS-1".to_string(),
+            version: "v1".to_string(),
+            restored_amount: "5.00".to_string(),
+            restored_at: 1,
+            allocations: vec![RestorationAllocationData {
+                allocation_no: 1,
+                mall_refund_allocation_id: MallRefundAllocationId::new("ra-1"),
+                mall_card_instance_id: MallCardInstanceId::new("card-1"),
+                restored_amount: "5.00".to_string(),
+            }],
+        };
+        assert!(req.validate().is_ok());
+        req.allocations[0].restored_amount = "-5.00".to_string();
+        assert!(req.validate().is_err());
+        req.allocations[0].restored_amount = "5.00".to_string();
+        req.allocations[0].allocation_no = 0;
+        assert!(req.validate().is_err());
+    }
+
+    /// 验证超长集合被长度上限拒绝，边界数量仍通过（INT-E07）。
+    ///
+    /// 上限与同步快照 500 条、对账差异 1000 条 precedent 同量级；
+    /// 测试覆盖行 500/501 与分配 1000/1001 边界，确保超长载荷在查库前失败关闭。
+    #[test]
+    fn refund_request_rejects_overlong_collections() {
+        let line = || RefundLineData {
+            line_no: 1,
+            mall_order_item_id: MallOrderItemId::new("item-1"),
+            refunded_quantity: "1.000000".to_string(),
+            line_refund_amount: "10.00".to_string(),
+        };
+        let allocation = || RefundAllocationData {
+            line_no: 1,
+            allocation_no: 1,
+            original_consumption_entry_id: MallConsumptionEntryId::new("ce-1"),
+            original_payment_source_id: MallPaymentSourceId::new("ps-1"),
+            allocated_refund_amount: "10.00".to_string(),
+        };
+        let mut req = valid_refund_request();
+        req.lines = (0..500).map(|_| line()).collect();
+        req.allocations = (0..1000).map(|_| allocation()).collect();
+        assert!(req.validate().is_ok());
+        req.lines.push(line());
+        assert!(req.validate().is_err());
+        req.lines.pop();
+        req.allocations.push(allocation());
+        assert!(req.validate().is_err());
+    }
+
+    /// 验证恢复超长分配被长度上限拒绝（INT-E07）。
+    ///
+    /// 测试覆盖恢复分配 1000/1001 边界，与退款载荷共用相同的查库前拒绝时点。
+    #[test]
+    fn restoration_request_rejects_overlong_allocations() {
+        use entities::ids::{MallCardInstanceId, MallRefundAllocationId};
+        let allocation = || RestorationAllocationData {
+            allocation_no: 1,
+            mall_refund_allocation_id: MallRefundAllocationId::new("ra-1"),
+            mall_card_instance_id: MallCardInstanceId::new("card-1"),
+            restored_amount: "5.00".to_string(),
+        };
+        let mut restore = ReceiveBalanceRestorationRequest {
+            mall_id: "mall-a".to_string(),
+            source_event_id: "evt-1".to_string(),
+            inbox_message_id: "inbox-1".to_string(),
+            business_fact_key: "key-1".to_string(),
+            external_order_no: "SO-1".to_string(),
+            external_order_version: "v1".to_string(),
+            after_sales_request_id: MallAfterSalesRequestId::new("req-1"),
+            original_payment_fact_id: MallOrderFactId::new("fact-pay-1"),
+            occurred_at: 1,
+            received_at: 1,
+            data_source: entities::mall_order::DataSource::Realtime,
+            raw_payload_reference: None,
+            external_restoration_no: "RS-1".to_string(),
+            version: "v1".to_string(),
+            restored_amount: "5.00".to_string(),
+            restored_at: 1,
+            allocations: (0..1000).map(|_| allocation()).collect(),
+        };
+        assert!(restore.validate().is_ok());
+        restore.allocations.push(allocation());
+        assert!(restore.validate().is_err());
     }
 }

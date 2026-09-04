@@ -1,13 +1,14 @@
 //! 商城订单与关键事实查询用例：列表、详情与视图装配。
 
 use database::{CardInstanceExt, MallOrderExt, NoTransaction};
-use entities::card_instance::{MallCardInstance, MallConsumptionCutover};
+use entities::card_instance::MallConsumptionCutover;
 use entities::common::time::Instant;
-use entities::ids::{MallOrderId, MallOrderItemId};
+use entities::ids::{MallConsumptionEntryId, MallOrderId, MallOrderItemId, MallPaymentSourceId};
 use entities::mall_order::{
-    AttributionStatus, CostBasis, DataSource, FactType, FulfillmentChain, FundingAmountResult,
-    FundingConservation, FundingOrderAmounts, MallConsumptionCostAssessment, MallConsumptionEntry,
-    MallItemFundingAllocation, MallOrder, MallOrderFact, MallOrderItem, MallPaymentSource, PaymentSourceType,
+    AttributionRollup, AttributionStatus, CostBasis, DataSource, FactType, FulfillmentChain,
+    FundingAmountResult, FundingConservation, FundingOrderAmounts, MallConsumptionCostAssessment,
+    MallConsumptionEntry, MallItemFundingAllocation, MallOrder, MallOrderFact, MallOrderItem,
+    MallPaymentSource, SourceComposition,
 };
 use entities::money::Amount;
 use std::str::FromStr;
@@ -22,6 +23,7 @@ use super::dto::{
     MallOrderListParams, MallOrderListRow, PageView, PaymentCompositionView, PaymentSourceView,
     SupplierOrderSummaryView,
 };
+use super::list_batch::ListPageSupport;
 use super::MallOrderService;
 use crate::errors::{Error, Result};
 
@@ -111,26 +113,33 @@ impl MallOrderService {
             .search_orders(&filter, &mut NoTransaction)
             .await?;
         // 行级聚合字段（事实摘要/支付构成/成本分项）按页内订单批量补齐：
-        // 事实按商城范围读取后按（商城, 订单号）分组、支付来源按订单、消费事实沿支付来源取。
-        let fact_map = self.facts_grouped_by_order(&filter.mall_id).await?;
+        // 事实按当前页订单键批量、支付来源按订单批量、消费沿支付来源批量、评估按消费批量。
+        let keys: Vec<(String, String)> = page
+            .items
+            .iter()
+            .map(|row| (row.mall_id.clone(), row.external_order_no.clone()))
+            .collect();
+        let order_ids: Vec<MallOrderId> = page
+            .items
+            .iter()
+            .map(|row| MallOrderId::new(row.id.clone()))
+            .collect();
+        let support = self.load_list_page_support(&keys, &order_ids).await?;
         let mut rows = Vec::with_capacity(page.items.len());
         for row in page.items {
-            rows.push(
-                self.build_list_row(
-                    OrderListRow {
-                        id: row.id,
-                        mall_id: row.mall_id,
-                        external_order_no: row.external_order_no,
-                        customer_id: row.customer_id,
-                        paid_at: row.paid_at,
-                        paid_amount: row.paid_amount,
-                        fulfillment_chain: row.fulfillment_chain,
-                        attribution_status: row.attribution_status,
-                    },
-                    &fact_map,
-                )
-                .await?,
-            );
+            rows.push(Self::build_list_row(
+                OrderListRow {
+                    id: row.id,
+                    mall_id: row.mall_id,
+                    external_order_no: row.external_order_no,
+                    customer_id: row.customer_id,
+                    paid_at: row.paid_at,
+                    paid_amount: row.paid_amount,
+                    fulfillment_chain: row.fulfillment_chain,
+                    attribution_status: row.attribution_status,
+                },
+                &support,
+            )?);
         }
         Ok(PageView {
             items: rows,
@@ -180,8 +189,24 @@ impl MallOrderService {
             .mall_order_facts()
             .list_by_mall_and_external_order_no(&order.mall_id, &order.external_order_no, &mut NoTransaction)
             .await?;
-        let entries = self.load_entries_for_sources(&sources).await?;
-        let assessments = self.load_current_assessments(&entries).await?;
+        let source_ids: Vec<MallPaymentSourceId> = sources
+            .iter()
+            .map(|source| MallPaymentSourceId::new(source.base.id.clone()))
+            .collect();
+        let entries = self
+            .db
+            .mall_consumption_entries()
+            .list_by_payment_sources(&source_ids, &mut NoTransaction)
+            .await?;
+        let entry_ids: Vec<MallConsumptionEntryId> = entries
+            .iter()
+            .map(|entry| MallConsumptionEntryId::new(entry.base.id.clone()))
+            .collect();
+        let assessments = self
+            .db
+            .mall_consumption_cost_assessments()
+            .list_latest_by_entries(&entry_ids, &mut NoTransaction)
+            .await?;
         let cutover = self
             .db
             .mall_consumption_cutovers()
@@ -262,55 +287,44 @@ impl MallOrderService {
     /// 构建列表行视图（事实摘要/支付构成/成本分项聚合）。
     ///
     /// # 用途
-    /// 将订单投影与页内关联事实、支付来源和成本评估装配为公开列表行。
+    /// 将订单投影与当前页批量装配的关联事实、支付来源和成本评估装配为公开列表行。
     ///
     /// # 参数
     /// * `row` - 订单投影行（已按列表投影字段提取）
-    /// * `fact_map` - （商城, 订单号）→ 事实摘要映射
+    /// * `support` - 当前页批量装配结果（事实摘要、支付来源、消费与最新评估）
     ///
     /// # 返回
     /// 返回列表行视图。
     ///
     /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
+    /// 金额字符串解析失败时返回领域错误。
     ///
     /// # 关键约束
-    /// 事实重复记录参与计数；最新数据来源按 `occurred_at` 后再按稳定事实 ID 取最大值。
-    async fn build_list_row(&self, row: OrderListRow, fact_map: &OrderFactMap) -> Result<MallOrderListRow> {
-        let order_id: MallOrderId = row.id.clone().into();
-        let sources = self
-            .db
-            .mall_payment_sources()
-            .list_by_order(&order_id, &mut NoTransaction)
-            .await?;
-        let entries = self.load_entries_for_sources(&sources).await?;
-        let assessments = self.load_current_assessments(&entries).await?;
-        let facts = fact_map
+    /// 事实重复记录参与计数；最新数据来源按 `occurred_at` 后再按稳定事实 ID 取最大值；
+    /// 无来源订单视为空支付构成；缺失评估的消费不计入成本分项。
+    fn build_list_row(row: OrderListRow, support: &ListPageSupport) -> Result<MallOrderListRow> {
+        let sources = support.sources.get(&row.id).cloned().unwrap_or_default();
+        let source_ids: std::collections::HashSet<String> =
+            sources.iter().map(|source| source.base.id.clone()).collect();
+        let entries: Vec<MallConsumptionEntry> = support
+            .entries
+            .iter()
+            .filter(|entry| source_ids.contains(entry.mall_payment_source_id.as_ref()))
+            .cloned()
+            .collect();
+        let entry_ids: std::collections::HashSet<String> =
+            entries.iter().map(|entry| entry.base.id.clone()).collect();
+        let assessments: Vec<&MallConsumptionCostAssessment> = entry_ids
+            .iter()
+            .filter_map(|id| support.assessments.get(id))
+            .collect();
+        let facts = support
+            .facts
             .get(&(row.mall_id.clone(), row.external_order_no.clone()))
             .cloned()
             .unwrap_or_default();
-        let facts = facts
-            .into_iter()
-            .map(|(id, fact_type, occurred_at, data_source)| OrderFactSummary {
-                id,
-                fact_type,
-                occurred_at,
-                data_source,
-            })
-            .collect::<Vec<_>>();
 
-        let card_amount = sources
-            .iter()
-            .filter(|source| source.source_type == PaymentSourceType::Card)
-            .fold(Amount::from_str("0.00")?, |acc, source| {
-                acc.checked_add(source.amount)
-            });
-        let wechat_amount = sources
-            .iter()
-            .filter(|source| source.source_type == PaymentSourceType::Wechat)
-            .fold(Amount::from_str("0.00")?, |acc, source| {
-                acc.checked_add(source.amount)
-            });
+        let composition = SourceComposition::from_sources(&sources);
         let mut fact_summary = Vec::new();
         for fact_type in [
             FactType::PaymentSucceeded,
@@ -336,7 +350,7 @@ impl MallOrderService {
 
         let mut breakdown: Vec<CostBasisBreakdownItemView> = Vec::new();
         let mut distinct_bases: Vec<CostBasis> = Vec::new();
-        for assessment in assessments.values() {
+        for assessment in assessments {
             if !distinct_bases.contains(&assessment.cost_basis) {
                 distinct_bases.push(assessment.cost_basis);
             }
@@ -354,7 +368,7 @@ impl MallOrderService {
                             .transpose()
                             .ok()
                             .flatten()
-                            .unwrap_or_else(|| Amount::from_str("0.00").expect("零常量可解析"));
+                            .unwrap_or(Amount::zero());
                         item.cost_amount = Some(current.checked_add(cost).to_string());
                     }
                 }
@@ -387,8 +401,8 @@ impl MallOrderService {
             paid_at: row.paid_at.unix_secs() as u64,
             paid_amount: row.paid_amount.to_string(),
             payment_composition: PaymentCompositionView {
-                card_amount: card_amount.to_string(),
-                wechat_amount: wechat_amount.to_string(),
+                card_amount: composition.card_amount.to_string(),
+                wechat_amount: composition.wechat_amount.to_string(),
                 source_count: sources.len() as u32,
             },
             fact_summary,
@@ -454,14 +468,7 @@ impl MallOrderService {
             })
             .collect();
         let conservation = self.build_conservation(&order, &items, &sources, &allocations);
-        let item_attribution = if sources
-            .iter()
-            .any(|source| source.attribution_status == AttributionStatus::PendingAttribution)
-        {
-            AttributionStatus::PendingAttribution
-        } else {
-            AttributionStatus::Attributed
-        };
+        let item_attribution = AttributionRollup::from_sources(&sources).order_status;
         let entry_views = entries
             .iter()
             .map(|entry| ConsumptionEntryView {
@@ -715,29 +722,6 @@ fn mask_reference(reference: &str) -> String {
     }
 }
 
-/// 归集状态判定：卡券来源映射到卡实例为已归集，否则待归集；微信恒为已归集。
-///
-/// # 参数
-/// * `source_type` - 来源类型
-/// * `card_instance` - 映射到的卡实例
-///
-/// # 返回
-/// 返回归集状态。
-pub(super) fn attribution_for(
-    source_type: PaymentSourceType,
-    card_instance: &Option<MallCardInstance>,
-) -> AttributionStatus {
-    match source_type {
-        PaymentSourceType::Card if card_instance.is_some() => AttributionStatus::Attributed,
-        PaymentSourceType::Card => AttributionStatus::PendingAttribution,
-        PaymentSourceType::Wechat => AttributionStatus::Attributed,
-    }
-}
-
-/// （商城, 订单号）→ 事实摘要列表的映射类型（列表行聚合用）。
-pub(super) type OrderFactMap =
-    std::collections::HashMap<(String, String), Vec<(String, FactType, Instant, DataSource)>>;
-
 /// 商城订单列表投影行（Service 内私有，避免依赖仓储私有子树类型名）。
 #[derive(Debug, Clone)]
 struct OrderListRow {
@@ -761,15 +745,15 @@ struct OrderListRow {
 
 /// 事实摘要（列表行聚合用）。
 #[derive(Debug, Clone)]
-struct OrderFactSummary {
+pub(super) struct OrderFactSummary {
     /// 稳定事实 ID（并列发生时间的最新来源判定键）。
-    id: String,
+    pub(super) id: String,
     /// 事实类型。
-    fact_type: FactType,
+    pub(super) fact_type: FactType,
     /// 发生时间。
-    occurred_at: Instant,
+    pub(super) occurred_at: Instant,
     /// 数据来源。
-    data_source: DataSource,
+    pub(super) data_source: DataSource,
 }
 
 /// 选择订单列表展示使用的最新事实数据来源。

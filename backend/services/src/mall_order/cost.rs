@@ -1,9 +1,8 @@
-//! 消费成本评估编排与事实/分录/评估加载器。
+//! 消费成本评估编排。
 //!
 //! 比例分摊、尾差归尾、含税拆分与金额守恒由 [`CostSharePlan`] 拥有；本模块只
-//! 将跨域事实转换为评估/`CostEntry`/`CostAllocation` 并加载查询所需实体。
+//! 将跨域事实转换为评估/`CostEntry`/`CostAllocation`。
 
-use database::{MallOrderExt, NoTransaction};
 use entities::common::time::Instant;
 use entities::cost::{
     CostAllocation, CostAllocationData, CostBasis as CostBasisEntry, CostEntry, CostEntryData, CostScope,
@@ -18,7 +17,6 @@ use entities::money::{Amount, Rate};
 use id_generator::next_id;
 use std::str::FromStr;
 
-use super::query::{MallOrderFactFilter, OrderFactMap};
 use super::MallOrderService;
 use crate::errors::Result;
 
@@ -316,120 +314,5 @@ impl MallOrderService {
                 assessed_by: assessed_by.to_string(),
             },
         )?)
-    }
-
-    /// 分页加载指定商城的关键事实并按（商城, 订单号）分组。
-    ///
-    /// # 用途
-    /// 复用既有商城范围查询，将事实投影组织为列表行摘要输入。
-    ///
-    /// # 参数
-    /// * `mall_id` - 商城筛选；`None` 表示全部商城
-    ///
-    /// # 返回
-    /// 返回订单键到 `(事实 ID, 类型, 发生时间, 来源)` 列表的映射。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    ///
-    /// # 关键约束
-    /// 不去重事实；稳定事实 ID 保留给 Service 处理最新来源的同秒并列。
-    pub(super) async fn facts_grouped_by_order(&self, mall_id: &Option<String>) -> Result<OrderFactMap> {
-        let mut grouped = std::collections::HashMap::new();
-        let mut page = 1u64;
-        loop {
-            let filter = MallOrderFactFilter {
-                mall_id: mall_id.clone(),
-                fact_type: None,
-                processing_status: None,
-                after_sales_request_id: None,
-                page,
-                page_size: 100,
-                sort_by: Some("occurred_at".to_string()),
-                sort_ascending: true,
-            };
-            let result = self
-                .db
-                .mall_order_facts()
-                .search_facts(&filter, &mut NoTransaction)
-                .await?;
-            if result.items.is_empty() {
-                break;
-            }
-            for row in result.items {
-                grouped
-                    .entry((row.mall_id, row.external_order_no))
-                    .or_insert_with(Vec::new)
-                    .push((row.id, row.fact_type, row.occurred_at, row.data_source));
-            }
-            if (result.total as u64) <= page * 100 {
-                break;
-            }
-            page += 1;
-        }
-        Ok(grouped)
-    }
-
-    /// 沿支付来源加载消费事实（去重后按发生时间升序）。
-    ///
-    /// # 参数
-    /// * `sources` - 支付来源
-    ///
-    /// # 返回
-    /// 返回消费事实列表。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    pub(super) async fn load_entries_for_sources(
-        &self,
-        sources: &[MallPaymentSource],
-    ) -> Result<Vec<MallConsumptionEntry>> {
-        let mut entries = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for source in sources {
-            for entry in self
-                .db
-                .mall_consumption_entries()
-                .list_by_original_payment_source(&source.base.id.clone().into(), &mut NoTransaction)
-                .await?
-            {
-                if seen.insert(entry.base.id.clone()) {
-                    entries.push(entry);
-                }
-            }
-        }
-        entries.sort_by_key(|entry| (entry.occurred_at, entry.base.id.clone()));
-        Ok(entries)
-    }
-
-    /// 取每条消费的当前成本评估（链尾，即最大评估号）。
-    ///
-    /// # 参数
-    /// * `entries` - 消费事实
-    ///
-    /// # 返回
-    /// 返回 `消费ID → 当前评估` 映射。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    pub(super) async fn load_current_assessments(
-        &self,
-        entries: &[MallConsumptionEntry],
-    ) -> Result<std::collections::HashMap<String, MallConsumptionCostAssessment>> {
-        let mut current = std::collections::HashMap::new();
-        for entry in entries {
-            let chain = self
-                .db
-                .mall_consumption_cost_assessments()
-                .list_by_entry(&entry.base.id.clone().into(), &mut NoTransaction)
-                .await?;
-            if let Some(tail) = chain
-                .into_iter()
-                .max_by_key(|assessment| assessment.assessment_no)
-            {
-                current.insert(entry.base.id.clone(), tail);
-            }
-        }
-        Ok(current)
     }
 }

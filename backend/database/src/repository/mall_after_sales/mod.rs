@@ -16,14 +16,22 @@
 //! - [`restoration_limit_scope`]：余额恢复关联事实图与历史恢复净额（INT-R12）。
 
 mod consumption_refund_limit_scope;
+mod order_refund_lines;
+mod refund_page;
 mod request_line_query;
 mod restoration_limit_scope;
+mod restoration_page;
+mod reversal_entry_batch;
 
 // 供公共方法返回类型命名；当前调用方以类型推断消费，故允许未直接 use。
 #[allow(unused_imports)]
 pub use consumption_refund_limit_scope::ConsumptionRefundLimitScope;
 #[allow(unused_imports)]
+pub use refund_page::{MallRefundPageFilter, MallRefundPageScope};
+#[allow(unused_imports)]
 pub use restoration_limit_scope::RestorationLimitScope;
+#[allow(unused_imports)]
+pub use restoration_page::MallRestorationPageFilter;
 
 use entities::common::time::Instant;
 use entities::mall_after_sales::{

@@ -140,35 +140,20 @@ impl MallAfterSalesService {
     /// 校验通过返回 `Ok(())`。
     ///
     /// # 错误
-    /// 累计超过原支付数量或金额时返回 `BusinessLogicError`。
+    /// 累计超过原支付数量或金额、退款行无对应原订单明细时返回 `BusinessLogicError`。
     async fn ensure_item_cumulative_refund_limits(
         &self,
         refund: &MallRefund,
         order_items: &[entities::mall_order::MallOrderItem],
         lines: &[MallRefundLine],
     ) -> Result<()> {
-        let previous_refunds = self
-            .db
-            .mall_refunds()
-            .list_by_order(&refund.mall_order_id, &mut NoTransaction)
-            .await?;
-        let previous_ids: Vec<entities::ids::MallRefundId> = previous_refunds
-            .iter()
-            .map(|refund| refund.base.id.clone().into())
-            .collect();
         let previous_lines = self
             .db
-            .mall_refund_lines()
-            .list_by_refunds(&previous_ids, &mut NoTransaction)
+            .mall_after_sales()
+            .list_refund_lines_by_order(&refund.mall_order_id, &mut NoTransaction)
             .await?;
         for line in lines {
-            let item = order_items
-                .iter()
-                .find(|item| {
-                    line.targets_item(&entities::ids::MallOrderItemId::new(item.base.id.clone()))
-                        && item.belongs_to_order(&refund.mall_order_id)
-                })
-                .expect("退款行实体已确认明细属于原订单");
+            let item = find_order_item_for_line(order_items, line, &refund.mall_order_id)?;
             let refunded_amount = previous_lines
                 .iter()
                 .filter(|previous| previous.targets_item(&line.mall_order_item_id))
@@ -313,4 +298,119 @@ fn pending_consumption_refunds(req: &ReceiveRefundFactRequest) -> Result<Vec<Pen
             })
         })
         .collect()
+}
+
+/// 查找退款行对应的原订单明细。
+///
+/// # 参数
+/// * `order_items` - 原订单商品明细快照
+/// * `line` - 本请求退款行
+/// * `mall_order_id` - 原商城订单
+///
+/// # 返回
+/// 返回同时满足明细归属与订单归属的原订单明细引用。
+///
+/// # 错误
+/// 无对应明细（缺失或跨订单引用）时返回 `BusinessLogicError`，永不 panic。
+///
+/// # 约束
+/// 只做内存匹配，不访问仓储；跨聚合存在性仍由调用方保证。
+fn find_order_item_for_line<'o>(
+    order_items: &'o [entities::mall_order::MallOrderItem],
+    line: &MallRefundLine,
+    mall_order_id: &entities::ids::MallOrderId,
+) -> Result<&'o entities::mall_order::MallOrderItem> {
+    order_items
+        .iter()
+        .find(|item| {
+            line.targets_item(&entities::ids::MallOrderItemId::new(item.base.id.clone()))
+                && item.belongs_to_order(mall_order_id)
+        })
+        .ok_or_else(|| {
+            Error::BusinessLogicError(format!("退款明细不属于原订单: {}", line.mall_order_item_id))
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_order_item_for_line;
+    use crate::errors::Error;
+    use entities::ids::{MallOrderId, MallOrderItemId, MallRefundId, MallRefundLineId, SkuId};
+    use entities::mall_after_sales::{MallRefundLine, MallRefundLineData};
+    use entities::mall_order::{MallOrderItem, MallOrderItemData};
+    use entities::money::{Amount, Quantity, Rate, UnitPrice};
+    use std::str::FromStr;
+
+    /// 构造归属 `order-1` 明细 `item-1` 的原订单明细。
+    ///
+    /// 复用实体行内恒等式（数量×单价=行总额，实付=总额-优惠+运费）；
+    /// 不访问仓储或外部 I/O。
+    fn order_item(order_id: &str, item_id: &str) -> MallOrderItem {
+        MallOrderItem::new(
+            MallOrderItemId::new(item_id),
+            MallOrderItemData {
+                mall_order_id: MallOrderId::new(order_id),
+                external_item_id: "ext-1".to_string(),
+                sku_id: Some(SkuId::new("sku-1")),
+                product_publication_revision_id: None,
+                supplier_offering_revision_id: None,
+                name_snapshot: "测试商品".to_string(),
+                spec_snapshot: None,
+                quantity: Quantity::from_str("2.000000").unwrap(),
+                unit_price_gross: UnitPrice::from_str("9.9900").unwrap(),
+                line_gross_amount: Amount::from_str("19.98").unwrap(),
+                allocated_discount_amount: Amount::from_str("0.98").unwrap(),
+                allocated_freight_amount: Amount::from_str("1.00").unwrap(),
+                paid_amount: Amount::from_str("20.00").unwrap(),
+                sales_tax_rate: Rate::from_str("0.130000").unwrap(),
+                unit_cost_snapshot: None,
+                cost_snapshot_total: None,
+                cost_tax_inclusion: None,
+                cost_input_tax_rate: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 构造指向 `item-1` 的退款行。
+    ///
+    /// 行数量与金额为正以通过实体构造校验；不访问仓储或外部 I/O。
+    fn refund_line() -> MallRefundLine {
+        MallRefundLine::new(
+            MallRefundLineId::new("rl-1"),
+            MallRefundLineData {
+                mall_refund_id: MallRefundId::new("refund-1"),
+                line_no: 1,
+                mall_order_item_id: MallOrderItemId::new("item-1"),
+                refunded_quantity: Quantity::from_str("1.000000").unwrap(),
+                line_refund_amount: Amount::from_str("10.00").unwrap(),
+            },
+        )
+        .unwrap()
+    }
+
+    /// 命中明细时返回引用，不报错。
+    #[test]
+    fn find_order_item_returns_matching_item() {
+        let items = vec![order_item("order-1", "item-1")];
+        let line = refund_line();
+        let found = find_order_item_for_line(&items, &line, &MallOrderId::new("order-1")).unwrap();
+        assert_eq!(found.base.id, "item-1");
+    }
+
+    /// 缺失明细时返回 `BusinessLogicError` 而非 panic。
+    ///
+    /// 测试覆盖空快照与跨订单引用两种形态；任一形态不得 panic。
+    #[test]
+    fn find_order_item_rejects_missing_and_cross_order_without_panic() {
+        let line = refund_line();
+        let err =
+            find_order_item_for_line(&[], &line, &MallOrderId::new("order-1")).expect_err("空快照必须拒绝");
+        assert!(matches!(err, Error::BusinessLogicError(_)));
+
+        let items = vec![order_item("order-2", "item-1")];
+        let err = find_order_item_for_line(&items, &line, &MallOrderId::new("order-1"))
+            .expect_err("跨订单引用必须拒绝");
+        assert!(matches!(err, Error::BusinessLogicError(_)));
+    }
 }

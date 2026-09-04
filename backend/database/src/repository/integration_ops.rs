@@ -33,6 +33,8 @@ use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, Q
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+mod difference_resolution_batch;
+
 /// `inbox_message` 集合名（单一来源：`IntegrationOpsExt` 关联常量）。
 const INBOX_MESSAGES: &str = <mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES;
 /// `integration_error_task` 集合名（单一来源：`IntegrationOpsExt` 关联常量）。

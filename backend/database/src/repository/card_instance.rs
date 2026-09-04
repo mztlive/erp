@@ -12,6 +12,8 @@
 //! 筛选/行类型定义在本文件，经 `CardInstanceExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+mod card_resolve_batch;
+
 use entities::card_instance::{
     CardSourceType, CutoverStatus, MallBalanceSnapshot, MallCardInstance, MallCardInstanceCorrection,
     MallConsumptionCutover,

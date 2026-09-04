@@ -56,6 +56,7 @@ pub struct CreateMallSalesReconciliationJobRequest {
     pub erp_count: u64,
     /// 差异明细（差异数量 = 明细条数）。
     #[validate(length(min = 1, max = 1000, message = "差异明细数量必须在1-1000之间"))]
+    #[validate(nested)]
     pub items: Vec<ReconciliationItemRequest>,
 }
 
@@ -312,8 +313,38 @@ pub struct ResolveMallSalesReconciliationItemRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{MallSalesReconciliationItemListParams, MallSalesReconciliationJobListParams};
+    use super::{
+        CreateMallSalesReconciliationJobRequest, MallSalesReconciliationItemListParams,
+        MallSalesReconciliationJobListParams, ReconciliationDifferenceType, ReconciliationItemRequest,
+    };
     use crate::mall_sync::dto::common::SortDir;
+    use entities::common::time::Instant;
+    use entities::ids::SourceSystemId;
+    use validator::Validate;
+
+    fn item(order_no: &str) -> ReconciliationItemRequest {
+        ReconciliationItemRequest {
+            external_order_no: order_no.to_string(),
+            source_status_code: "EFFECTIVE".to_string(),
+            source_updated_at: Instant::from_unix_secs(1_700_000_000),
+            source_content_hash: None,
+            sales_order_id: None,
+            erp_revision_id: None,
+            erp_content_hash: None,
+            difference_type: ReconciliationDifferenceType::ErpMissing,
+        }
+    }
+
+    fn request(items: Vec<ReconciliationItemRequest>) -> CreateMallSalesReconciliationJobRequest {
+        CreateMallSalesReconciliationJobRequest {
+            source_system_id: SourceSystemId::new("mall-1"),
+            job_no: "REC-1".to_string(),
+            source_list_as_of: Instant::from_unix_secs(1_700_000_000),
+            source_count: 1,
+            erp_count: 0,
+            items,
+        }
+    }
 
     #[test]
     fn reconciliation_queries_normalize_default_paging_and_sort() {
@@ -347,5 +378,22 @@ mod tests {
         assert_eq!(item_query.paging.page_size, 40);
         assert_eq!(item_query.paging.sort_by, "source_updated_at");
         assert_eq!(item_query.paging.sort_dir, SortDir::Asc);
+    }
+
+    #[test]
+    fn create_request_validates_each_difference_item_nested() {
+        assert!(request(vec![item("SO-1")]).validate().is_ok());
+        let invalid = request(vec![item("SO-1"), item("   ")]);
+        let error = invalid.validate().expect_err("空白来源单号必须失败");
+        assert!(error.to_string().contains("items"), "错误必须定位到 items");
+    }
+
+    #[test]
+    fn create_request_enforces_item_count_bounds() {
+        let full = (0..1000).map(|index| item(&format!("SO-{index}"))).collect();
+        assert!(request(full).validate().is_ok());
+        let overlong = (0..1001).map(|index| item(&format!("SO-{index}"))).collect();
+        assert!(request(overlong).validate().is_err());
+        assert!(request(Vec::new()).validate().is_err());
     }
 }

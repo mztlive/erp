@@ -136,6 +136,37 @@ impl<'a> Repository<'a, SourceSystem> {
             total: total as i64,
         })
     }
+
+    /// 按来源系统 ID 集合批量读取来源系统（INT-R17）。
+    ///
+    /// 一次 `$in` 查询装载页面所需的全部来源商城；空输入不访问数据库。
+    ///
+    /// # 参数
+    /// * `source_system_ids` - 来源系统 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的来源系统；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
+    pub async fn find_systems_by_ids(
+        &self,
+        source_system_ids: &[SourceSystemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SourceSystem>> {
+        if source_system_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = source_system_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
 }
 
 /// 外部身份映射列表投影行。
@@ -272,6 +303,45 @@ impl<'a> Repository<'a, ExternalIdentityMap> {
         )
         .await
     }
+
+    /// 按页面来源身份集合批量读取外部身份映射（INT-R17）。
+    ///
+    /// 一次 `$or` 查询装载本页全部任务的谱系映射；空输入不访问数据库。返回
+    /// 顺序不承诺与输入一致，调用方按来源身份归组。元组项为
+    /// （来源系统，对象类型，规范化比较键）。
+    ///
+    /// # 参数
+    /// * `lookups` - 本页任务的来源身份集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的映射；无谱系的身份不出现。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
+    pub async fn find_maps_by_identities(
+        &self,
+        lookups: &[(SourceSystemId, ExternalObjectType, ExternalIdKey)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityMap>> {
+        if lookups.is_empty() {
+            return Ok(Vec::new());
+        }
+        let alternatives = lookups
+            .iter()
+            .map(|(source_system_id, object_type, external_id_key)| {
+                doc! {
+                    "source_system_id": source_system_id.to_string(),
+                    "object_type": object_type.as_str(),
+                    "external_id_key": external_id_key.to_bson_binary(),
+                }
+            })
+            .collect::<Vec<_>>();
+        self.find_many(doc! { "$or": alternatives }, executor).await
+    }
 }
 
 impl<'a> Repository<'a, ExternalIdentityTarget> {
@@ -330,6 +400,105 @@ impl<'a> Repository<'a, ExternalIdentityTarget> {
             executor,
         )
         .await
+    }
+
+    /// 在调用方执行器下批量 CAS 过期谱系目标（INT-R24）。
+    ///
+    /// 逐目标复用基类 `update` 的 `id + version` 乐观锁；全部调用共享同一个
+    /// 调用方执行器，Service 在事务内调用时任一冲突随事务整体回滚。版本冲突
+    /// 的目标 ID 收集为类型化结果，不抛 services DTO、HTTP View 或授权结论。
+    ///
+    /// # 参数
+    /// * `targets` - 已调用 `expire` 的待写入目标（可变，成功时版本递增）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回批量 CAS 结果：`applied` 为成功目标 ID，`conflicts` 为版本冲突目标
+    /// ID；空输入不访问数据库并返回双空结果。
+    ///
+    /// # 错误
+    /// 非版本冲突的 MongoDB 写入失败时返回错误；版本冲突只进入 `conflicts`。
+    ///
+    /// # 约束
+    /// 不开事务、不提交事务；调用方必须在 `conflicts` 非空时失败关闭并回滚。
+    pub async fn expire_targets_batch(
+        &self,
+        targets: &mut [ExternalIdentityTarget],
+        executor: &mut dyn Executor,
+    ) -> Result<ExpireTargetsOutcome> {
+        let mut outcome = ExpireTargetsOutcome::default();
+        for target in targets.iter_mut() {
+            let target_id = target.base.id.clone();
+            match self.update(target, executor).await {
+                Ok(()) => outcome.applied.push(target_id),
+                Err(crate::Error::OptimisticLockingError) => {
+                    outcome.conflicts.push(target_id);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// 按映射 ID 集合批量加载谱系目标历史（INT-R17）。
+    ///
+    /// 一次 `$in` 查询装载本页全部谱系的目标历史，按映射归组由 Service 解释；
+    /// 返回按 `valid_from` 降序、ID 升序稳定排列。
+    ///
+    /// # 参数
+    /// * `mapping_ids` - 外部身份映射 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的目标历史；无目标的映射不出现。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
+    pub async fn list_targets_for_maps(
+        &self,
+        mapping_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        if mapping_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! { "external_identity_map_id": { "$in": mapping_ids } },
+            doc! { "valid_from": -1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+/// 批量过期谱系目标的 CAS 结果（INT-R24 类型化报告）。
+///
+/// # 约束
+/// 存储无关投影，不携带 services DTO、HTTP View 或授权结论。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExpireTargetsOutcome {
+    /// CAS 成功并已递增版本的目标 ID。
+    pub applied: Vec<String>,
+    /// 版本冲突未写入的目标 ID；调用方必须整体回滚。
+    pub conflicts: Vec<String>,
+}
+
+impl ExpireTargetsOutcome {
+    /// 是否存在版本冲突。
+    ///
+    /// # 返回
+    /// 存在任一冲突目标时返回 `true`。
+    ///
+    /// # 错误
+    /// 无错误返回。
+    ///
+    /// # 约束
+    /// 纯状态判断；调用方必须在 `true` 时失败关闭并回滚事务。
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts.is_empty()
     }
 }
 

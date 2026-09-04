@@ -131,6 +131,29 @@ pub enum SyncJobOutcome {
     Failed,
 }
 
+impl SyncJobOutcome {
+    /// 将请求终态结果映射为作业持久化状态。
+    ///
+    /// # 参数
+    /// 无额外参数；映射仅依赖终态结果本身。
+    ///
+    /// # 返回
+    /// 返回对应的 `MallSalesSyncJobStatus` 终态。
+    ///
+    /// # 错误
+    /// 本映射为全函数，不返回错误。
+    ///
+    /// # 约束
+    /// 纯值映射，不访问数据库；作业状态机推进仍由实体 `finish` 校验。
+    pub fn status(self) -> MallSalesSyncJobStatus {
+        match self {
+            Self::Success => MallSalesSyncJobStatus::Success,
+            Self::PartialFailure => MallSalesSyncJobStatus::PartialFailure,
+            Self::Failed => MallSalesSyncJobStatus::Failed,
+        }
+    }
+}
+
 /// 同步作业响应视图（字段与数据模型 §6.13 一致）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct MallSalesSyncJobView {
@@ -312,7 +335,7 @@ impl From<MallSalesSyncCursor> for MallSalesSyncCursorView {
 
 #[cfg(test)]
 mod tests {
-    use super::{MallSalesSyncJobListParams, TriggerMallSyncCommand};
+    use super::{MallSalesSyncJobListParams, MallSalesSyncJobStatus, SyncJobOutcome, TriggerMallSyncCommand};
     use crate::mall_sync::dto::common::SortDir;
     use validator::Validate;
 
@@ -366,5 +389,15 @@ mod tests {
         .unwrap();
         assert_eq!(command.source_system_id().as_ref(), "mall-1");
         assert_eq!(command.idempotency_key(), "request-1");
+    }
+
+    #[test]
+    fn outcome_status_covers_all_branches() {
+        assert_eq!(SyncJobOutcome::Success.status(), MallSalesSyncJobStatus::Success);
+        assert_eq!(
+            SyncJobOutcome::PartialFailure.status(),
+            MallSalesSyncJobStatus::PartialFailure
+        );
+        assert_eq!(SyncJobOutcome::Failed.status(), MallSalesSyncJobStatus::Failed);
     }
 }

@@ -21,7 +21,7 @@ use mongodb::Database;
 use super::super::mall_after_sales::{
     MallAfterSalesRepository, MallAfterSalesRequestFilter, MallBalanceRestorationAllocationRepository,
     MallBalanceRestorationRepository, MallRefundAllocationRepository, MallRefundLineRepository,
-    MallRefundRepository,
+    MallRefundPageFilter, MallRefundPageScope, MallRefundRepository, MallRestorationPageFilter,
 };
 use crate::Repository;
 
@@ -44,6 +44,15 @@ pub trait MallAfterSalesExt {
 
     /// 售后请求列表筛选条件类型（定义见 `repository::mall_after_sales`）。
     type MallAfterSalesRequestFilter;
+
+    /// 退款分页筛选条件类型（INT-R08，定义见 `repository::mall_after_sales`）。
+    type MallRefundPageFilter;
+
+    /// 退款分页作用域类型（INT-R08，Service 已判定，Repository 只接收）。
+    type MallRefundPageScope;
+
+    /// 余额恢复分页筛选条件类型（INT-R09，定义见 `repository::mall_after_sales`）。
+    type MallRestorationPageFilter;
 
     /// 获取 `mall_after_sales_request` 集合的 Repository。
     ///
@@ -106,6 +115,9 @@ pub trait MallAfterSalesExt {
 
 impl MallAfterSalesExt for Database {
     type MallAfterSalesRequestFilter = MallAfterSalesRequestFilter;
+    type MallRefundPageFilter = MallRefundPageFilter;
+    type MallRefundPageScope = MallRefundPageScope;
+    type MallRestorationPageFilter = MallRestorationPageFilter;
 
     fn mall_after_sales_requests(&self) -> Repository<'_, MallAfterSalesRequest> {
         Repository::new(self, Self::MALL_AFTER_SALES_REQUESTS)

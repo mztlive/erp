@@ -18,6 +18,7 @@ use mongodb::Database;
 
 mod cost;
 mod dto;
+mod list_batch;
 mod payment_plan;
 mod query;
 mod receive;

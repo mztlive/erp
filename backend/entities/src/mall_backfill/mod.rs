@@ -16,6 +16,8 @@
 //! 仍由 P2 Repository 与 P3 Service 编排。
 
 pub mod backfill_job;
+pub mod backfill_progress;
 
 pub use crate::ids::{MallConsumptionBackfillItemId, MallConsumptionBackfillJobId};
 pub use backfill_job::*;
+pub use backfill_progress::BackfillProgress;

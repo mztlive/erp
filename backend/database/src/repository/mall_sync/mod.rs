@@ -13,7 +13,9 @@
 //! 筛选/行类型定义在本文件，经 `MallSyncExt` 的关联类型对外暴露。
 //!
 //! - [`snapshot_ingest`]：快照落盘 exact/latest 批量事实与单调水位、批量插入（INT-R16）。
+//! - [`mapping_page`]：映射任务列表页批量事实装载（INT-R17）。
 
+mod mapping_page;
 mod snapshot_ingest;
 
 #[allow(unused_imports)]

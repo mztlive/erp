@@ -79,9 +79,17 @@ impl IntegrationOpsService {
             .reconciliation_differences()
             .search_differences(&filter, &mut NoTransaction)
             .await?;
+        let difference_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let latest_by_difference = self
+            .db
+            .reconciliation_difference_resolutions()
+            .find_latest_by_differences(&difference_ids, &mut NoTransaction)
+            .await?;
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
-            let (status, version) = self.difference_state(&row.id).await?;
+            let (status, version) = latest_by_difference.get(&row.id).map_or((None, 0), |record| {
+                (Some(record.resulting_status), u64::from(record.resolution_no))
+            });
             items.push(DifferenceView {
                 id: row.id,
                 business_object_type: row.business_object_type,
@@ -159,7 +167,7 @@ impl IntegrationOpsService {
         let items = self
             .db
             .work_items()
-            .list_for_reconciliation_difference(difference_id, &mut NoTransaction)
+            .find_unique_for_reconciliation_difference(difference_id, &mut NoTransaction)
             .await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("对账差异存在多个正式责任关联".to_string()));
@@ -189,23 +197,6 @@ impl IntegrationOpsService {
             })
         })
         .await
-    }
-
-    async fn difference_state(
-        &self,
-        id: &str,
-    ) -> Result<(Option<entities::integration_ops::ResultingStatus>, u64)> {
-        let latest = self
-            .db
-            .reconciliation_difference_resolutions()
-            .find_latest_by_difference(
-                &ReconciliationDifferenceId::new(id.to_string()),
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok(latest.map_or((None, 0), |record| {
-            (Some(record.resulting_status), u64::from(record.resolution_no))
-        }))
     }
 }
 
@@ -248,4 +239,31 @@ fn difference_action_projection(
     actions.push("CONFIRM_NO_ERROR".to_string());
     actions.push("CONFIRM_VALID_DIFFERENCE".to_string());
     (actions, Vec::new())
+}
+
+#[cfg(test)]
+mod tests {
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("reconciliation_difference.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-R26）：差异列表经单次批量装载最新决定，无逐行查询。
+    ///
+    /// 锁定 `find_latest_by_differences` 单次批量入口与缺失映射为无状态版本零；
+    /// 逐行 `difference_state` 与单条 `find_latest_by_difference` 不得回潮。
+    #[test]
+    fn difference_list_resolves_latest_via_single_batch() {
+        let source = production_source();
+        assert!(source.contains("find_latest_by_differences(&difference_ids"));
+        assert!(source.contains("map_or((None, 0)"));
+        assert!(!source.contains("fn difference_state"));
+        assert!(!source.contains("find_latest_by_difference("));
+    }
 }

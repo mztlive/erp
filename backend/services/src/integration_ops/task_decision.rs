@@ -935,7 +935,7 @@ fn completion_as_action(command: &IntegrationTaskCompletionCommand) -> Integrati
 async fn ensure_no_work_item(db: &Database, difference_id: &str, executor: &mut dyn Executor) -> Result<()> {
     let items = db
         .work_items()
-        .list_for_reconciliation_difference(difference_id, executor)
+        .find_unique_for_reconciliation_difference(difference_id, executor)
         .await?;
     if items.is_empty() {
         return Ok(());

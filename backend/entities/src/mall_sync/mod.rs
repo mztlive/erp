@@ -18,15 +18,19 @@
 
 use sha2::{Digest, Sha256};
 
+pub mod command_preparation;
 pub mod external_order_key;
 pub mod mall_sales_order_snapshot;
 pub mod mall_sales_reconciliation;
 pub mod mall_sales_sync_cursor;
 pub mod mall_sales_sync_job;
+pub mod mapping_identity_adapter;
 pub mod master_mapping_task;
 pub mod reapply_operation;
+pub mod reconciliation_assembly;
 pub mod snapshot_ingest;
 
+pub use command_preparation::CommandPreparationError;
 pub use external_order_key::ExternalOrderKey;
 pub use mall_sales_order_snapshot::{
     MallSalesOrderSnapshot, MallSalesOrderSnapshotData, SnapshotMappingStatus,
@@ -41,12 +45,15 @@ pub use mall_sales_sync_job::{
     MallSalesSyncJob, MallSalesSyncJobData, MallSalesSyncJobStatus, MallSalesSyncJobType, MallSyncTimeRange,
     MallSyncTriggerSource, SyncJobCompletionDisposition,
 };
+pub use mapping_identity_adapter::SnapshotIdentityError;
 pub use master_mapping_task::{
-    MappingSourceIdentity, MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData,
+    MappingSourceIdentity, MappingTargetMismatch, MappingTaskStatus, MappingTaskType, MasterMappingTask,
+    MasterMappingTaskData,
 };
 pub use reapply_operation::{
     MallSnapshotReapplyOperation, MallSnapshotReapplyOperationData, ReapplyOperationStatus,
 };
+pub use reconciliation_assembly::{AssembledReconciliation, ReconciliationItemSeed};
 pub use snapshot_ingest::{
     SnapshotFactIdentity, SnapshotIngestDecision, SnapshotIngestPlan, SnapshotOrderIdentity,
 };

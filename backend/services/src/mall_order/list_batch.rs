@@ -174,4 +174,45 @@ mod tests {
         assert!(support.entries.is_empty());
         assert!(support.assessments.is_empty());
     }
+
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("list_batch.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-R01/R03/R04/R05）：列表页四集合各恰好一次批量装配。
+    ///
+    /// 锁定事实/来源/消费/评估批量入口单调用；旧全量翻页与逐行单查不得回潮；
+    /// 空页在触及数据库前短路。
+    #[test]
+    fn list_page_assembles_four_collections_with_single_batches() {
+        let source = production_source();
+        for marker in [
+            "list_fact_rows_by_order_keys(",
+            "list_by_orders(",
+            "list_by_payment_sources(",
+            "list_latest_by_entries(",
+        ] {
+            assert_eq!(
+                source.matches(marker).count(),
+                1,
+                "批量入口必须恰好调用一次: {marker}"
+            );
+        }
+        for marker in [
+            "facts_grouped_by_order",
+            "load_entries_for_sources",
+            "load_current_assessments",
+            "list_by_order(",
+        ] {
+            assert!(!source.contains(marker), "旧逐行/全量入口回潮: {marker}");
+        }
+        assert!(source.contains("if keys.is_empty() || order_ids.is_empty()"));
+    }
 }

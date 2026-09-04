@@ -148,31 +148,27 @@ impl MallOrderService {
                     db.mall_order()
                         .create_payment_fact_with_order(&fact_for_tx, &plan_for_tx.order, session)
                         .await?;
-                    for item in &plan_for_tx.items {
-                        db.mall_order_items().create(item, session).await?;
-                    }
-                    for source in &plan_for_tx.sources {
-                        db.mall_payment_sources().create(source, session).await?;
-                    }
-                    for allocation in &plan_for_tx.allocations {
-                        db.mall_item_funding_allocations()
-                            .create(allocation, session)
-                            .await?;
-                    }
-                    for entry in &plan_for_tx.entries {
-                        db.mall_consumption_entries().create(entry, session).await?;
-                    }
-                    for assessment in &plan_for_tx.assessments {
-                        db.mall_consumption_cost_assessments()
-                            .create(assessment, session)
-                            .await?;
-                    }
-                    for cost_entry in &plan_for_tx.cost_entries {
-                        db.cost_entries().create(cost_entry, session).await?;
-                    }
-                    for allocation in &plan_for_tx.cost_allocations {
-                        db.cost_allocations().create(allocation, session).await?;
-                    }
+                    db.mall_order_items()
+                        .create_many_ordered(&plan_for_tx.items, session)
+                        .await?;
+                    db.mall_payment_sources()
+                        .create_many_ordered(&plan_for_tx.sources, session)
+                        .await?;
+                    db.mall_item_funding_allocations()
+                        .create_many_ordered(&plan_for_tx.allocations, session)
+                        .await?;
+                    db.mall_consumption_entries()
+                        .create_many_ordered(&plan_for_tx.entries, session)
+                        .await?;
+                    db.mall_consumption_cost_assessments()
+                        .create_many_ordered(&plan_for_tx.assessments, session)
+                        .await?;
+                    db.cost_entries()
+                        .create_many_ordered(&plan_for_tx.cost_entries, session)
+                        .await?;
+                    db.cost_allocations()
+                        .create_many_ordered(&plan_for_tx.cost_allocations, session)
+                        .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
@@ -353,5 +349,52 @@ impl MallOrderService {
             mall_order_id: order_id,
             idempotent_hit: true,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
+    ///
+    /// # 返回
+    /// 返回去掉测试模块后的生产代码全文。
+    fn production_source() -> &'static str {
+        include_str!("receive.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    /// 分层守卫（INT-R07）：支付图经批量 primitive 在调用方事务内原子落库。
+    ///
+    /// 锁定事实+订单跨集合写入与 7 个集合的有序批量写入入口；
+    /// 计划集合的逐条 `create(` 不得回潮，事务开启与提交仍归属 Service。
+    #[test]
+    fn payment_graph_persists_via_batch_primitives_in_caller_transaction() {
+        let source = production_source();
+        assert!(source.contains("create_payment_fact_with_order"));
+        for marker in [
+            "create_many_ordered(&plan_for_tx.items",
+            "create_many_ordered(&plan_for_tx.sources",
+            "create_many_ordered(&plan_for_tx.allocations",
+            "create_many_ordered(&plan_for_tx.entries",
+            "create_many_ordered(&plan_for_tx.assessments",
+            "create_many_ordered(&plan_for_tx.cost_entries",
+            "create_many_ordered(&plan_for_tx.cost_allocations",
+        ] {
+            assert!(source.contains(marker), "缺失批量写入入口: {marker}");
+        }
+        for accessor in [
+            "mall_order_items().create(",
+            "mall_payment_sources().create(",
+            "mall_item_funding_allocations().create(",
+            "mall_consumption_entries().create(",
+            "mall_consumption_cost_assessments().create(",
+            "cost_entries().create(",
+            "cost_allocations().create(",
+        ] {
+            assert!(!source.contains(accessor), "逐条写入回潮: {accessor}");
+        }
+        assert!(source.contains("with_transaction"));
     }
 }

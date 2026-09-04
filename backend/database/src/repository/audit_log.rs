@@ -244,6 +244,42 @@ impl<'a> Repository<'a, AuditLog> {
         .await
     }
 
+    /// 按页面映射任务 ID 集合批量加载不可变审计时间线（INT-R17）。
+    ///
+    /// 一次 `$in` 查询装载本页全部任务的审计记录，按任务归组由 Service 解释；
+    /// 返回整体按创建时间与 ID 稳定排序，不承诺与输入一致。
+    ///
+    /// # 参数
+    /// * `mapping_task_ids` - 本页映射任务 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的审计记录；缺项表示该任务尚无历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问映射任务集合；不裁决最新语义。
+    pub async fn list_master_mapping_task_histories(
+        &self,
+        mapping_task_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        if mapping_task_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! {
+                "resource_type": "MASTER_MAPPING_TASK",
+                "resource_id": { "$in": mapping_task_ids },
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 批量读取指定资源的成功创建审计。
     ///
     /// 工作项简报 hydration 入口：只返回动作固定为 `<resource_type>.create` 的

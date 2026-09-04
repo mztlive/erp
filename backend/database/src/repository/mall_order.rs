@@ -14,6 +14,9 @@
 //!
 //! 筛选/行类型定义在本文件，经 `MallOrderExt` 的关联类型对外暴露。
 
+mod order_read_batch;
+mod payment_plan_persist;
+
 use entities::common::time::Instant;
 use entities::ids::{
     CustomerAccountId, MallAfterSalesRequestId, MallOrderFactId, MallOrderId, MallOrderItemId,

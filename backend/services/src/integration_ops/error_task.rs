@@ -134,7 +134,7 @@ impl IntegrationOpsService {
         let mut items = self
             .db
             .work_items()
-            .list_for_integration_error_task(task_id, &mut NoTransaction)
+            .find_unique_for_integration_error_task(task_id, &mut NoTransaction)
             .await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("错误任务存在多个正式责任关联".to_string()));

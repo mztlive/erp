@@ -248,10 +248,7 @@ impl MallSyncService {
         if ordered_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let account_ids = ordered_ids
-            .iter()
-            .map(CustomerAccountId::new)
-            .collect::<Vec<_>>();
+        let account_ids = ordered_ids.iter().map(CustomerAccountId::new).collect::<Vec<_>>();
         let accounts = self
             .db
             .customer_accounts()

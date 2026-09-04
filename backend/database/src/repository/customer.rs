@@ -571,6 +571,62 @@ impl<'a> Repository<'a, CustomerAssignment> {
         )
         .await
     }
+
+    /// 去重后的生效客户 ID 投影（INT-R22）。
+    ///
+    /// 一次归属查询装载调用方当天的生效行，在仓储内按客户 ID 排序去重后返回；
+    /// 空结果返回空集合。业务日期边界与半开有效期语义与
+    /// [`Self::find_active_assignments_for_user`] 完全一致。
+    ///
+    /// # 参数
+    /// * `user_id` - 销售人员
+    /// * `as_of` - 业务日期边界，由 Service 显式注入
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回排序去重后的客户 ID；无生效归属时为空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回强类型客户 ID 投影，不返回 services DTO、HTTP View 或授权结论；
+    /// 候选排序与数据范围仍由 Service 解释。
+    pub async fn distinct_active_customer_ids_for_user(
+        &self,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let assignments = self
+            .find_active_assignments_for_user(user_id, as_of, executor)
+            .await?;
+        Ok(distinct_sorted_customer_ids(
+            assignments
+                .iter()
+                .map(|assignment| assignment.customer_id.to_string()),
+        ))
+    }
+}
+
+/// 对客户 ID 迭代器排序去重（INT-R22 投影归一化）。
+///
+/// # 参数
+/// * `ids` - 原始客户 ID 迭代器（可含重复、无序）
+///
+/// # 返回
+/// 返回升序去重后的客户 ID；空输入返回空集合。
+///
+/// # 错误
+/// 无错误返回。
+///
+/// # 约束
+/// 纯内存函数；固定升序保证投影顺序稳定，与业务日期边界无关。
+fn distinct_sorted_customer_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut sorted: Vec<String> = ids.into_iter().collect();
+    sorted.sort();
+    sorted.dedup();
+    sorted
 }
 
 /// 构造用户对目标客户的当前有效归属查询条件。
@@ -676,7 +732,10 @@ fn customer_assignment_projection() -> Document {
 mod tests {
     use std::str::FromStr;
 
-    use super::{active_customer_user_assignment_filter, sort_doc, CustomerAccountFilter, QueryFilter};
+    use super::{
+        active_customer_user_assignment_filter, distinct_sorted_customer_ids, sort_doc,
+        CustomerAccountFilter, QueryFilter,
+    };
     use entities::common::time::BusinessDate;
     use entities::customer::CustomerAccountStatus;
     use mongodb::bson::doc;
@@ -764,6 +823,20 @@ mod tests {
                 .get_str("$gt")
                 .unwrap(),
             "2026-08-31"
+        );
+    }
+
+    #[test]
+    fn distinct_sorted_customer_ids_dedups_and_sorts() {
+        assert!(distinct_sorted_customer_ids(Vec::<String>::new()).is_empty());
+        assert_eq!(
+            distinct_sorted_customer_ids(vec![
+                "c-2".to_string(),
+                "c-1".to_string(),
+                "c-2".to_string(),
+                "c-10".to_string(),
+            ]),
+            vec!["c-1".to_string(), "c-10".to_string(), "c-2".to_string()]
         );
     }
 }
