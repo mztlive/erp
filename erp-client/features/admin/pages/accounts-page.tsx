@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
     MoreHorizontalIcon,
@@ -58,11 +58,15 @@ type AccountFormState = {
  */
 export function AccountsPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const adminsQuery = useAdminsQuery()
     const rolesQuery = useRolesQuery()
     const assignableRolesQuery = useAssignableRolesQuery()
 
-    const [keyword, setKeyword] = React.useState("")
+    /** 权限配置页按角色跳转过来时（?q=角色名），首屏直接带上该筛选。 */
+    const [keyword, setKeyword] = React.useState(
+        () => searchParams.get("q") ?? "",
+    )
     const [accountForm, setAccountForm] =
         React.useState<AccountFormState | null>(null)
     const [deletingAccount, setDeletingAccount] = React.useState<{
