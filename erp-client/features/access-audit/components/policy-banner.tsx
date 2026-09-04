@@ -2,8 +2,6 @@
 
 import { ChevronDownIcon, ShieldAlertIcon } from "lucide-react"
 
-import { surfaceInsetClassName } from "@/components/business"
-import { cn } from "@/lib/utils"
 import {
     Collapsible,
     CollapsibleContent,
@@ -67,7 +65,7 @@ function PolicyBanner({
     return (
         <Collapsible
             data-slot="policy-banner"
-            className={cn(surfaceInsetClassName, "overflow-hidden")}
+            className="overflow-hidden rounded-xl border border-border bg-card"
         >
             <CollapsibleTrigger
                 id={`operations-${view}-policy-banner-trigger`}
@@ -77,13 +75,12 @@ function PolicyBanner({
                     className="size-3.5 shrink-0 text-warning"
                     aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1 text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
                     <span className="font-medium text-foreground">
-                        {missing.length} 项治理策略未配置
+                        {missing.length} 项策略未配置
                     </span>
                     {" · "}
                     {missing.map((item) => item.label).join("、")}
-                    ，部分操作因此受限
                 </span>
                 <span className="shrink-0 text-muted-foreground group-aria-expanded:hidden">
                     详情
@@ -93,7 +90,7 @@ function PolicyBanner({
                     className="size-3.5 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-180"
                 />
             </CollapsibleTrigger>
-            <CollapsibleContent className="border-t border-grid px-3 py-2 text-xs text-muted-foreground">
+            <CollapsibleContent className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
                 <ul className="flex flex-col gap-1">
                     {missing.map((item) => (
                         <li key={item.key}>

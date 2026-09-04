@@ -27,7 +27,7 @@ function AccessAuditFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 恢复
- * view=roles|users|scopes|fields|audit 与 subjectId / eventId 等。
+ * view=roles|audit 与 subjectId / eventId 等（view=users 旧链接回退到 roles）。
  * 业务数据不在服务端 fetch。
  */
 export default function AccessAuditRoutePage() {

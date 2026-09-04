@@ -1,6 +1,6 @@
 "use client"
 
-import { ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
+import { DownloadIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -12,13 +12,14 @@ import {
 import { formatDateTime } from "@/lib/datetime"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
+import {
+    AccessListToolbar,
+    AuditAdvancedFilterPanel,
+} from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
-import type { AccessView, AuditEventRow } from "@/features/access-audit/types"
-
-const AUDIT_VIEWS: AccessView[] = ["audit"]
+import type { AuditEventRow } from "@/features/access-audit/types"
 
 /**
  * 审计查询：追加式事件的只读查询页。
@@ -123,7 +124,6 @@ export function AuditPage() {
             <AccessViewTable
                 view="audit"
                 isAudit
-                views={AUDIT_VIEWS}
                 rows={rows}
                 pagination={page.pagination}
                 onPaginationChange={page.handlePaginationChange}
@@ -138,30 +138,54 @@ export function AuditPage() {
                 auditColumns={page.auditColumns}
                 onClearFilters={page.clearFilters}
                 toolbar={
-                    <AccessListToolbar
-                        isAudit
-                        searchInputRef={page.searchInputRef}
-                        searchDraft={page.searchDraft}
-                        setSearchDraft={page.setSearchDraft}
-                        panelOpen={page.panelOpen}
-                        setPanelOpen={page.setPanelOpen}
-                        hasStructuredFilters={page.hasStructuredFilters}
-                        appliedChips={page.appliedChips}
-                        hasChips={
-                            page.hasActiveFilters &&
-                            page.appliedChips.length > 0
-                        }
-                        removeFilter={page.removeFilter}
-                        clearAllFilters={page.clearFilters}
-                        resetMoreFilters={page.resetMoreFilters}
-                        applyFilters={page.applyFilters}
-                        filterError={page.filterError}
-                        draft={page.draft}
-                        updateDraft={page.updateDraft}
-                        actionOptions={page.actionOptions}
-                    />
+                    <>
+                        <AccessListToolbar
+                            isAudit
+                            searchInputRef={page.searchInputRef}
+                            searchDraft={page.searchDraft}
+                            setSearchDraft={page.setSearchDraft}
+                            panelOpen={page.panelOpen}
+                            setPanelOpen={page.setPanelOpen}
+                            hasStructuredFilters={page.hasStructuredFilters}
+                            appliedChips={page.appliedChips}
+                            hasChips={
+                                page.hasActiveFilters &&
+                                page.appliedChips.length > 0
+                            }
+                            removeFilter={page.removeFilter}
+                            clearAllFilters={page.clearFilters}
+                            applyFilters={page.applyFilters}
+                        />
+                        {page.panelOpen ? (
+                            <AuditAdvancedFilterPanel
+                                draft={page.draft}
+                                updateDraft={page.updateDraft}
+                                actionOptions={page.actionOptions}
+                                filterError={page.filterError}
+                                resetMoreFilters={page.resetMoreFilters}
+                                applyFilters={page.applyFilters}
+                            />
+                        ) : null}
+                    </>
                 }
-                onViewChange={() => {}}
+                headerAction={
+                    <Button
+                        id="operations-audit-export"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={page.exportBlocked}
+                        title={
+                            page.exportBlocked
+                                ? (page.exportBlocker?.message ?? "导出已禁用")
+                                : "导出当前筛选的审计事件"
+                        }
+                        onClick={() => page.handleExport()}
+                    >
+                        <DownloadIcon className="size-3.5" aria-hidden="true" />
+                        导出审计
+                    </Button>
+                }
                 onRowPreview={(row) =>
                     page.openEvent((row as AuditEventRow).auditEventId)
                 }
@@ -185,9 +209,6 @@ export function AuditPage() {
                         />
                     ) : undefined
                 }
-                exportBlocked={page.exportBlocked}
-                exportBlocker={page.exportBlocker}
-                onExport={page.handleExport}
             />
 
             <AccessPreviewSheets

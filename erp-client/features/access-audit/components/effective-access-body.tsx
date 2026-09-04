@@ -5,12 +5,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import {
     GROUP_NAME_BY_CODE,
     PERMISSION_CATALOG,
 } from "@/features/admin/lib/permission-catalog"
@@ -150,27 +144,17 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
     }
     return (
         <div className="flex flex-col gap-5">
-            <DescriptionList columns="two" aria-label="主体摘要">
-                <DescriptionItem>
-                    <DescriptionTerm>主体</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="flex flex-wrap items-center gap-2">
-                            <Badge variant="secondary">
-                                {query.data.subject.type === "ROLE"
-                                    ? "角色"
-                                    : "用户"}
-                            </Badge>
-                            {query.data.subject.label}
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>计算时间</DescriptionTerm>
-                    <DescriptionDetails>
-                        {formatDateTime(query.data.calculatedAt, "full")}
-                    </DescriptionDetails>
-                </DescriptionItem>
-            </DescriptionList>
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
+                <Badge variant="secondary">
+                    {query.data.subject.type === "ROLE" ? "角色" : "用户"}
+                </Badge>
+                <span className="text-sm font-medium">
+                    {query.data.subject.label}
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                    计算于 {formatDateTime(query.data.calculatedAt, "full")}
+                </span>
+            </div>
 
             <section className="flex flex-col gap-3">
                 <h3 className="text-sm font-medium">
@@ -188,24 +172,68 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                         无有效模块授权
                     </p>
                 ) : (
-                    groupGrants(query.data.moduleAndActionGrants).map(
-                        (section) => (
-                            <div
-                                key={section.name}
-                                className="flex flex-col gap-1.5"
-                            >
-                                <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                                    <span className="font-medium text-foreground">
-                                        {section.name}
-                                    </span>
-                                    <span className="num">
-                                        {section.items.length}
-                                    </span>
-                                </div>
-                                <GrantList items={section.items} />
-                            </div>
-                        ),
-                    )
+                    (() => {
+                        const sections = groupGrants(
+                            query.data.moduleAndActionGrants,
+                        )
+                        const visible = sections.slice(0, 2)
+                        const rest = sections.slice(2)
+                        const restCount = rest.reduce(
+                            (sum, section) => sum + section.items.length,
+                            0,
+                        )
+                        return (
+                            <>
+                                {visible.map((section) => (
+                                    <div
+                                        key={section.name}
+                                        className="flex flex-col gap-1.5"
+                                    >
+                                        <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                                            <span className="font-medium text-foreground">
+                                                {section.name}
+                                            </span>
+                                            <span className="num">
+                                                {section.items.length}
+                                            </span>
+                                        </div>
+                                        <GrantList items={section.items} />
+                                    </div>
+                                ))}
+                                {rest.length > 0 ? (
+                                    <details className="group rounded-lg border border-border">
+                                        <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+                                            展开其余 {rest.length} 个模块（共{" "}
+                                            {restCount} 项）
+                                        </summary>
+                                        <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
+                                            {rest.map((section) => (
+                                                <div
+                                                    key={section.name}
+                                                    className="flex flex-col gap-1.5"
+                                                >
+                                                    <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                                                        <span className="font-medium text-foreground">
+                                                            {section.name}
+                                                        </span>
+                                                        <span className="num">
+                                                            {
+                                                                section.items
+                                                                    .length
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <GrantList
+                                                        items={section.items}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </details>
+                                ) : null}
+                            </>
+                        )
+                    })()
                 )}
             </section>
 
@@ -245,45 +273,45 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                 />
             </section>
 
-            <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">
-                    拒绝 / 阻塞（含对象状态，不混淆为配置缺失）
-                </h3>
-                {query.data.deniedOrBlocked.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        当前无拒绝或阻塞项
-                    </p>
-                ) : (
-                    <ul className="divide-y divide-warning/20 overflow-hidden rounded-lg border border-warning/40 bg-warning/5">
-                        {query.data.deniedOrBlocked.map((e) => (
-                            <li
-                                key={e.id}
-                                className="flex flex-col gap-1 px-3 py-2.5"
-                            >
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="warning">
-                                        {e.layerLabel}
-                                    </Badge>
-                                    <span className="font-mono text-xs">
-                                        {e.code}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                    {e.message}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    来源{sourceTypeLabel(e.sourceType)}{" "}
-                                    {e.sourceLabel}
-                                </p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </section>
-
-            {query.data.actionBlockers.length > 0 ? (
-                <section className="flex flex-col gap-2">
-                    <h3 className="text-sm font-medium">当前被阻断的操作</h3>
+            {(query.data.deniedOrBlocked.length > 0 ||
+                query.data.actionBlockers.length > 0) && (
+                <section className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-3">
+                    <h3 className="text-sm font-medium">
+                        拒绝 / 阻塞
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            对象状态与业务阻断，不混淆为配置缺失
+                        </span>
+                    </h3>
+                    {query.data.deniedOrBlocked.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            当前无拒绝或阻塞项
+                        </p>
+                    ) : (
+                        <ul className="flex flex-col gap-2">
+                            {query.data.deniedOrBlocked.map((e) => (
+                                <li
+                                    key={e.id}
+                                    className="flex flex-col gap-1 rounded-md bg-background/60 px-2.5 py-2"
+                                >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="warning">
+                                            {e.layerLabel}
+                                        </Badge>
+                                        <span className="font-mono text-xs text-muted-foreground">
+                                            {e.code}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        {e.message}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        来源{sourceTypeLabel(e.sourceType)}{" "}
+                                        {e.sourceLabel}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                     {query.data.actionBlockers.map((b) => (
                         <Alert key={`${b.action}-${b.code}`} variant="warning">
                             <AlertTitle>{b.message}</AlertTitle>
@@ -291,7 +319,7 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                         </Alert>
                     ))}
                 </section>
-            ) : null}
+            )}
         </div>
     )
 }

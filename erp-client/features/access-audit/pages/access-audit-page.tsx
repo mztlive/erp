@@ -1,6 +1,11 @@
 "use client"
 
-import { PlusIcon, TriangleAlertIcon, UsersIcon } from "lucide-react"
+import {
+    DownloadIcon,
+    PlusIcon,
+    TriangleAlertIcon,
+    UsersIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -15,24 +20,17 @@ import { Button } from "@/components/ui/button"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
-import { RoleAssignmentDialog } from "@/features/access-audit/components/role-assignment-dialog"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
-import type {
-    AccessView,
-    RoleRow,
-    UserRow,
-} from "@/features/access-audit/types"
-
-/** 权限配置工作面展示的视图；审计查询已独立成页。 */
-const ACCESS_VIEWS: AccessView[] = ["roles", "users"]
+import type { RoleRow } from "@/features/access-audit/types"
 
 /**
- * 权限配置：角色权限与用户授权。
+ * 权限配置：角色权限。
  *
- * 数据范围不再是并列页签——它是角色/用户的属性，列表给摘要、整行点击看来源。
+ * 数据范围不再是并列页签——它是角色的属性，列表给摘要、整行点击看来源。
+ * 用户授权不在这里：账号的角色绑定在账号管理中维护。
  */
 export function AccessAuditPage() {
     const page = useAccessAuditPage("access")
@@ -42,7 +40,7 @@ export function AccessAuditPage() {
             <PageScaffold density="compact">
                 <PageHeader
                     title="权限配置"
-                    description="这里只处理角色权限、用户授权与有效权限解释。"
+                    description="这里只处理角色权限与有效权限解释；用户授权在账号管理中维护。"
                 />
                 <FormalActionResult
                     status="blocked"
@@ -89,13 +87,13 @@ export function AccessAuditPage() {
 
     const data = page.data
     const view = page.view
-    const rows = view === "users" ? (data?.users ?? []) : (data?.roles ?? [])
+    const rows = data?.roles ?? []
 
     return (
         <PageScaffold density="compact">
             <PageHeader
                 title="权限配置"
-                description="角色决定能做什么，账号绑定角色后立即生效；点击任意一行查看有效权限来源。"
+                description="角色决定能做什么；在账号管理中绑定角色后立即生效；点击任意一行查看有效权限来源。"
                 metadata={
                     <DataFreshness
                         label="配置更新时间"
@@ -110,38 +108,28 @@ export function AccessAuditPage() {
                 }
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        {view === "roles" ? (
-                            <Button
-                                id="operations-access-config-create-role"
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                    page.routerPush("/system/roles/new")
-                                }
-                            >
-                                <PlusIcon
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                />
-                                新建角色
-                            </Button>
-                        ) : (
-                            <Button
-                                id="operations-access-config-manage-accounts"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                    page.routerPush("/system/accounts")
-                                }
-                            >
-                                <UsersIcon
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                />
-                                账号管理
-                            </Button>
-                        )}
+                        <Button
+                            id="operations-access-config-create-role"
+                            type="button"
+                            size="sm"
+                            onClick={() => page.routerPush("/system/roles/new")}
+                        >
+                            <PlusIcon className="size-3.5" aria-hidden="true" />
+                            新建角色
+                        </Button>
+                        <Button
+                            id="operations-access-config-manage-accounts"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => page.routerPush("/system/accounts")}
+                        >
+                            <UsersIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                            账号管理
+                        </Button>
                     </div>
                 }
             />
@@ -186,7 +174,6 @@ export function AccessAuditPage() {
             <AccessViewTable
                 view={view}
                 isAudit={false}
-                views={ACCESS_VIEWS}
                 rows={rows}
                 pagination={page.pagination}
                 onPaginationChange={page.handlePaginationChange}
@@ -214,22 +201,30 @@ export function AccessAuditPage() {
                         }
                         removeFilter={page.removeFilter}
                         clearAllFilters={page.clearFilters}
-                        resetMoreFilters={page.resetMoreFilters}
                         applyFilters={page.applyFilters}
-                        filterError={page.filterError}
-                        draft={page.draft}
-                        updateDraft={page.updateDraft}
-                        actionOptions={page.actionOptions}
                     />
                 }
-                onViewChange={page.switchView}
-                onRowPreview={(row) => {
-                    if ("userId" in row) {
-                        page.openExplain("USER", (row as UserRow).userId)
-                        return
-                    }
+                headerAction={
+                    <Button
+                        id="operations-access-export"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={page.exportBlocked}
+                        title={
+                            page.exportBlocked
+                                ? (page.exportBlocker?.message ?? "导出已禁用")
+                                : "导出当前筛选的配置"
+                        }
+                        onClick={() => page.handleExport()}
+                    >
+                        <DownloadIcon className="size-3.5" aria-hidden="true" />
+                        导出配置
+                    </Button>
+                }
+                onRowPreview={(row) =>
                     page.openExplain("ROLE", (row as RoleRow).id)
-                }}
+                }
                 errorState={
                     page.pageQuery.isError && !data ? (
                         <BusinessFailureState
@@ -250,9 +245,6 @@ export function AccessAuditPage() {
                         />
                     ) : undefined
                 }
-                exportBlocked={page.exportBlocked}
-                exportBlocker={page.exportBlocker}
-                onExport={page.handleExport}
             />
 
             <AccessPreviewSheets
@@ -281,17 +273,6 @@ export function AccessAuditPage() {
                 form={page.form}
                 onApplyOutcome={page.applyOutcome}
             />
-
-            {page.roleAssignment ? (
-                <RoleAssignmentDialog
-                    key={page.roleAssignment.userId}
-                    target={page.roleAssignment}
-                    roleOptions={page.assignableRolesQuery.data ?? []}
-                    onOpenChange={(open) => {
-                        if (!open) page.setRoleAssignment(null)
-                    }}
-                />
-            ) : null}
 
             {page.deletingRole ? (
                 <DeleteRoleDialog

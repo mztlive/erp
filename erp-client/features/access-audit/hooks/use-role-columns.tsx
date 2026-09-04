@@ -34,8 +34,10 @@ function useRoleColumns({
                 header: "角色",
                 cell: ({ row }) => (
                     <div className="min-w-[8rem]">
-                        <div className="font-medium">{row.original.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">
+                        <div className="text-sm font-medium">
+                            {row.original.name}
+                        </div>
+                        <div className="font-mono text-[11px] text-muted-foreground">
                             {row.original.roleCode}
                         </div>
                     </div>
@@ -51,29 +53,38 @@ function useRoleColumns({
                     }
                     if (role.permissionCount === 0) {
                         return (
-                            <span className="text-muted-foreground">
+                            <span className="text-sm text-muted-foreground">
                                 无权限条目
                             </span>
                         )
                     }
+                    const fullSummary = [
+                        `共 ${role.permissionCount} 项`,
+                        ...role.permissionGroups.map(
+                            (group) => `${group.name} ${group.count}`,
+                        ),
+                    ].join(" · ")
                     return (
-                        <div className="flex min-w-[14rem] flex-wrap items-center gap-1.5">
-                            <span className="text-sm">
+                        <div
+                            className="flex max-w-[22rem] flex-wrap items-center gap-1.5"
+                            title={fullSummary}
+                        >
+                            <span className="text-sm font-medium">
                                 共{" "}
                                 <span className="num">
                                     {role.permissionCount}
                                 </span>{" "}
                                 项
                             </span>
-                            {role.permissionGroups.slice(0, 3).map((group) => (
+                            {role.permissionGroups.slice(0, 2).map((group) => (
                                 <Badge key={group.name} variant="outline">
                                     {group.name}
                                     <span className="num">{group.count}</span>
                                 </Badge>
                             ))}
-                            {role.permissionGroups.length > 3 ? (
+                            {role.permissionGroups.length > 2 ? (
                                 <span className="text-xs text-muted-foreground">
-                                    +{role.permissionGroups.length - 3} 个模块
+                                    +{role.permissionGroups.length - 2} 个模块
                                 </span>
                             ) : null}
                         </div>
@@ -96,7 +107,13 @@ function useRoleColumns({
                 id: "scope",
                 header: "数据范围",
                 cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
+                    <span
+                        className={
+                            row.original.dataScopeSummary === "—"
+                                ? "text-sm text-muted-foreground"
+                                : "text-sm"
+                        }
+                    >
                         {row.original.dataScopeSummary}
                     </span>
                 ),

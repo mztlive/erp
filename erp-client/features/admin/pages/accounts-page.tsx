@@ -181,7 +181,7 @@ export function AccountsPage() {
                                         id={`governance-admin-accounts-row-${segment}-permissions`}
                                         onClick={() =>
                                             router.push(
-                                                `/system/access-audit?view=users&subjectType=USER&subjectId=${account.id}`,
+                                                `/system/access-audit?subjectType=USER&subjectId=${account.id}`,
                                             )
                                         }
                                     >

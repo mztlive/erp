@@ -2,15 +2,9 @@
 
 import type { ReactNode } from "react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
-import { DownloadIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { DataTable, surfacePanelClassName } from "@/components/business"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BusinessTableFrame, DataTable } from "@/components/business"
 import { EmptyByReason } from "@/features/access-audit/components/empty-by-reason"
-import { parseView } from "@/features/access-audit/lib/url-state"
-import { ACCESS_VIEW_LABEL } from "@/features/access-audit/types"
 import type {
     AccessEmptyReason,
     AccessView,
@@ -18,9 +12,7 @@ import type {
     RoleRow,
     UserRow,
 } from "@/features/access-audit/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 
 type ViewRows =
     | readonly RoleRow[]
@@ -30,8 +22,6 @@ type ViewRows =
 type AccessViewTableProps = {
     view: AccessView
     isAudit: boolean
-    /** 顶部二级导航展示的视图；只有一个时不渲染导航。 */
-    views: readonly AccessView[]
     rows: ViewRows
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
@@ -43,21 +33,27 @@ type AccessViewTableProps = {
     userColumns: ColumnDef<UserRow>[]
     auditColumns: ColumnDef<AuditEventRow>[]
     onClearFilters?: () => void
+    /** 搜索与筛选：独立工具条卡片，不嵌入表格卡片。 */
     toolbar?: ReactNode
-    onViewChange: (view: AccessView) => void
+    /** 与整张表结果相关的标题区动作（如导出）。 */
+    headerAction?: ReactNode
     /** 查询失败且无可用缓存时，替换表格内容的失败态（筛选区保持常驻）。 */
     errorState?: ReactNode
-    exportBlocked?: boolean
-    exportBlocker?: { message: string }
-    onExport?: () => void
     /** 整行点击打开的详情（有效权限 / 审计事件）。 */
     onRowPreview?: (row: RoleRow | UserRow | AuditEventRow) => void
+}
+
+const TABLE_TITLE: Record<AccessView, string> = {
+    roles: "角色列表",
+    users: "用户授权",
+    scopes: "数据范围",
+    fields: "字段策略",
+    audit: "审计事件",
 }
 
 function AccessViewTable({
     view,
     isAudit,
-    views,
     rows,
     pagination,
     onPaginationChange,
@@ -70,23 +66,18 @@ function AccessViewTable({
     auditColumns,
     onClearFilters,
     toolbar,
-    onViewChange,
+    headerAction,
     errorState,
-    exportBlocked,
-    exportBlocker,
-    onExport,
     onRowPreview,
 }: AccessViewTableProps) {
     const pagedRows = rows.slice(
         pagination.pageIndex * pagination.pageSize,
         pagination.pageIndex * pagination.pageSize + pagination.pageSize,
     )
-    const description =
-        emptyReason && emptyReason !== "FIELD_MASKED"
-            ? "当前无列表数据，可调整筛选后重试"
-            : isAudit && auditCoverageFrom && auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(auditCoverageFrom, "full")} ~ ${formatDateTime(auditCoverageTo, "full")}`
-              : `共 ${rows.length} 条`
+    const coverage =
+        isAudit && auditCoverageFrom && auditCoverageTo
+            ? `覆盖 ${formatDateTime(auditCoverageFrom, "full")} ~ ${formatDateTime(auditCoverageTo, "full")}`
+            : undefined
     const commonTableProps = {
         pagination,
         onPaginationChange,
@@ -97,73 +88,24 @@ function AccessViewTable({
     }
 
     return (
-        <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
-            {views.length > 1 ? (
-                <nav aria-label="权限配置二级导航">
-                    <Tabs
-                        value={view}
-                        onValueChange={(next) => onViewChange(parseView(next))}
+        <BusinessTableFrame
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    {TABLE_TITLE[view]}
+                    <span
+                        className="font-normal text-muted-foreground"
+                        aria-live="polite"
                     >
-                        <TabsList
-                            variant="line"
-                            className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
-                        >
-                            {views.map((item) => (
-                                <TabsTrigger
-                                    key={item}
-                                    id={`operations-access-view-${toAutomationIdSegment(item)}-trigger`}
-                                    value={item}
-                                    className="flex-none"
-                                >
-                                    {ACCESS_VIEW_LABEL[item]}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
-                </nav>
-            ) : null}
-            {toolbar ? (
-                <>
-                    <div className="flex flex-wrap items-start gap-2 px-3 py-2.5">
-                        <div className="min-w-[16rem] flex-1">{toolbar}</div>
-                        <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                            <span
-                                className="text-xs text-muted-foreground"
-                                aria-live="polite"
-                            >
-                                {description}
-                            </span>
-                            {onExport ? (
-                                <Button
-                                    id={
-                                        isAudit
-                                            ? "operations-audit-export"
-                                            : "operations-access-export"
-                                    }
-                                    type="button"
-                                    variant="outline"
-                                    disabled={exportBlocked}
-                                    onClick={onExport}
-                                >
-                                    <DownloadIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    {isAudit ? "导出审计" : "导出配置"}
-                                </Button>
-                            ) : null}
-                        </div>
-                    </div>
-                    {exportBlocked && exportBlocker ? (
-                        <p className="px-3 pb-2 text-xs text-muted-foreground">
-                            导出已禁用：{exportBlocker.message}
-                        </p>
-                    ) : null}
-                    <Separator />
-                </>
-            ) : null}
-            <div data-slot="business-table-frame-table">
-                {errorState ? (
+                        {rows.length} 条
+                    </span>
+                </span>
+            }
+            description={coverage}
+            toolbar={toolbar}
+            headerActions={headerAction}
+            table={
+                errorState ? (
                     errorState
                 ) : emptyReason && emptyReason !== "FIELD_MASKED" ? (
                     <EmptyByReason
@@ -210,9 +152,9 @@ function AccessViewTable({
                             right: ["actions"],
                         }}
                     />
-                )}
-            </div>
-        </div>
+                )
+            }
+        />
     )
 }
 

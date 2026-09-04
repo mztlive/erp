@@ -33,7 +33,7 @@ export type AccessAppliedChip = Readonly<{
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 type AccessListToolbarProps = {
-    /** 审计侧提供结构化筛选面板；角色 / 用户授权侧只有关键词。 */
+    /** 审计侧提供结构化筛选面板入口；角色 / 用户授权侧只有关键词。 */
     isAudit: boolean
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
@@ -45,16 +45,7 @@ type AccessListToolbarProps = {
     hasChips: boolean
     removeFilter: (key: AccessFilterKey) => void
     clearAllFilters: () => void
-    resetMoreFilters: () => void
     applyFilters: () => void
-    filterError: string | null
-    draft: AccessFilterDraft
-    updateDraft: <Key extends keyof AccessFilterDraft>(
-        key: Key,
-        value: AccessFilterDraft[Key],
-    ) => void
-    /** 动作选项：由当前查询结果归纳，保证每个选项都能筛出记录。 */
-    actionOptions: readonly { value: string; label: string }[]
 }
 
 function AccessListToolbar({
@@ -69,16 +60,8 @@ function AccessListToolbar({
     hasChips,
     removeFilter,
     clearAllFilters,
-    resetMoreFilters,
     applyFilters,
-    filterError,
-    draft,
-    updateDraft,
-    actionOptions,
 }: AccessListToolbarProps) {
-    const panelId = React.useId()
-    const dateErrorId = React.useId()
-
     return (
         <form
             onSubmit={(event) => {
@@ -106,11 +89,9 @@ function AccessListToolbar({
                             placeholder={
                                 isAudit
                                     ? "操作者、动作、对象、追踪号"
-                                    : "角色名称、账号或姓名"
+                                    : "角色名称"
                             }
-                            aria-label={
-                                isAudit ? "搜索审计事件" : "搜索角色与账号"
-                            }
+                            aria-label={isAudit ? "搜索审计事件" : "搜索角色"}
                         />
                     </InputGroup>
                 }
@@ -121,7 +102,6 @@ function AccessListToolbar({
                             type="button"
                             variant="outline"
                             aria-expanded={panelOpen}
-                            aria-controls={panelId}
                             onClick={() => setPanelOpen((open) => !open)}
                         >
                             <FilterIcon
@@ -145,196 +125,34 @@ function AccessListToolbar({
                     ) : undefined
                 }
                 secondary={
-                    hasChips || (isAudit && panelOpen) ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`${isAudit ? "operations-audit-toolbar" : "operations-access-toolbar"}-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id={
-                                            isAudit
-                                                ? "operations-audit-toolbar-clear-all"
-                                                : "operations-access-toolbar-clear-all"
-                                        }
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {isAudit && panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="审计查询更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        id="operations-audit-toolbar-filter-result"
-                                        label="结果"
-                                        value={draft.result}
-                                        onValueChange={(value) =>
-                                            updateDraft("result", value)
-                                        }
-                                        options={RESULT_FILTER_RADIO_OPTIONS}
-                                    />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
-                                            <span className="text-muted-foreground">
-                                                时间范围
-                                            </span>
-                                            <DateRangePicker
-                                                id="operations-audit-toolbar-date-range"
-                                                className="w-full"
-                                                value={{
-                                                    from: draft.from,
-                                                    to: draft.to,
-                                                }}
-                                                onValueChange={(next) => {
-                                                    updateDraft(
-                                                        "from",
-                                                        next?.from ?? "",
-                                                    )
-                                                    updateDraft(
-                                                        "to",
-                                                        next?.to ?? "",
-                                                    )
-                                                }}
-                                                placeholder="选择审计时间范围"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                动作
-                                            </span>
-                                            <OptionCombobox
-                                                id="operations-audit-toolbar-action"
-                                                className="w-full"
-                                                value={
-                                                    draft.action === "all"
-                                                        ? null
-                                                        : draft.action
-                                                }
-                                                onValueChange={(value) =>
-                                                    updateDraft(
-                                                        "action",
-                                                        value ?? "all",
-                                                    )
-                                                }
-                                                options={[...actionOptions]}
-                                                placeholder="全部动作"
-                                                aria-label="动作"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                操作者
-                                            </span>
-                                            <Input
-                                                id="operations-audit-toolbar-actor"
-                                                className="w-full"
-                                                value={draft.actorId}
-                                                onChange={(event) =>
-                                                    updateDraft(
-                                                        "actorId",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                autoComplete="off"
-                                                placeholder="操作者姓名或账号"
-                                                aria-label="操作者"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                请求追踪号
-                                            </span>
-                                            <Input
-                                                id="operations-audit-toolbar-trace"
-                                                className="w-full"
-                                                value={draft.traceId}
-                                                onChange={(event) =>
-                                                    updateDraft(
-                                                        "traceId",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                autoComplete="off"
-                                                placeholder="精确匹配"
-                                                aria-label="请求追踪号"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                对象编号
-                                            </span>
-                                            <Input
-                                                id="operations-audit-toolbar-object"
-                                                className="w-full"
-                                                value={draft.objectId}
-                                                onChange={(event) =>
-                                                    updateDraft(
-                                                        "objectId",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                autoComplete="off"
-                                                placeholder="对象名称或编号"
-                                                aria-label="对象编号"
-                                            />
-                                        </div>
-                                    </div>
-                                    {filterError ? (
-                                        <span
-                                            id={dateErrorId}
-                                            className="text-xs text-destructive"
-                                            role="alert"
-                                        >
-                                            {filterError}
-                                        </span>
-                                    ) : null}
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="operations-audit-toolbar-reset-filters"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="operations-audit-toolbar-apply-filters"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
+                    hasChips ? (
+                        <div className="flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5">
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                                已筛选
+                            </span>
+                            {appliedChips.map((chip) => (
+                                <FilterChip
+                                    key={chip.key}
+                                    id={`${isAudit ? "operations-audit-toolbar" : "operations-access-toolbar"}-filter-chip-${toAutomationIdSegment(chip.key)}`}
+                                    label={chip.label}
+                                    clearLabel={`移除${chip.label}`}
+                                    onClear={() => removeFilter(chip.key)}
+                                />
+                            ))}
+                            <Button
+                                id={
+                                    isAudit
+                                        ? "operations-audit-toolbar-clear-all"
+                                        : "operations-access-toolbar-clear-all"
+                                }
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className="shrink-0"
+                                onClick={clearAllFilters}
+                            >
+                                清空全部
+                            </Button>
                         </div>
                     ) : undefined
                 }
@@ -343,4 +161,168 @@ function AccessListToolbar({
     )
 }
 
-export { AccessListToolbar }
+type AuditAdvancedFilterPanelProps = {
+    draft: AccessFilterDraft
+    updateDraft: <Key extends keyof AccessFilterDraft>(
+        key: Key,
+        value: AccessFilterDraft[Key],
+    ) => void
+    /** 动作选项：由当前查询结果归纳，保证每个选项都能筛出记录。 */
+    actionOptions: readonly { value: string; label: string }[]
+    filterError: string | null
+    resetMoreFilters: () => void
+    applyFilters: () => void
+}
+
+/**
+ * 审计高级筛选面板。
+ *
+ * 渲染在工具条卡片内的附属板块（上方以分隔线与搜索区划分），不进入表格卡片。
+ * 所有控件 id 保持不变，自动化与现有用例不受影响。
+ */
+function AuditAdvancedFilterPanel({
+    draft,
+    updateDraft,
+    actionOptions,
+    filterError,
+    resetMoreFilters,
+    applyFilters,
+}: AuditAdvancedFilterPanelProps) {
+    const panelId = React.useId()
+    const dateErrorId = React.useId()
+
+    return (
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                applyFilters()
+            }}
+        >
+            <div
+                id={panelId}
+                aria-label="审计查询更多筛选条件"
+                className="mt-3 flex w-full flex-col gap-3 border-t border-border pt-3"
+            >
+                <FixedOptionRadioFilter
+                    id="operations-audit-toolbar-filter-result"
+                    label="结果"
+                    value={draft.result}
+                    onValueChange={(value) => updateDraft("result", value)}
+                    options={RESULT_FILTER_RADIO_OPTIONS}
+                />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
+                        <span className="text-muted-foreground">时间范围</span>
+                        <DateRangePicker
+                            id="operations-audit-toolbar-date-range"
+                            className="w-full"
+                            value={{
+                                from: draft.from,
+                                to: draft.to,
+                            }}
+                            onValueChange={(next) => {
+                                updateDraft("from", next?.from ?? "")
+                                updateDraft("to", next?.to ?? "")
+                            }}
+                            placeholder="选择审计时间范围"
+                        />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">动作</span>
+                        <OptionCombobox
+                            id="operations-audit-toolbar-action"
+                            className="w-full"
+                            value={draft.action === "all" ? null : draft.action}
+                            onValueChange={(value) =>
+                                updateDraft("action", value ?? "all")
+                            }
+                            options={[...actionOptions]}
+                            placeholder="全部动作"
+                            aria-label="动作"
+                        />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">操作者</span>
+                        <Input
+                            id="operations-audit-toolbar-actor"
+                            className="w-full"
+                            value={draft.actorId}
+                            onChange={(event) =>
+                                updateDraft("actorId", event.target.value)
+                            }
+                            autoComplete="off"
+                            placeholder="操作者姓名或账号"
+                            aria-label="操作者"
+                        />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">
+                            请求追踪号
+                        </span>
+                        <Input
+                            id="operations-audit-toolbar-trace"
+                            className="w-full"
+                            value={draft.traceId}
+                            onChange={(event) =>
+                                updateDraft("traceId", event.target.value)
+                            }
+                            autoComplete="off"
+                            placeholder="精确匹配"
+                            aria-label="请求追踪号"
+                        />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">对象编号</span>
+                        <Input
+                            id="operations-audit-toolbar-object"
+                            className="w-full"
+                            value={draft.objectId}
+                            onChange={(event) =>
+                                updateDraft("objectId", event.target.value)
+                            }
+                            autoComplete="off"
+                            placeholder="对象名称或编号"
+                            aria-label="对象编号"
+                        />
+                    </div>
+                </div>
+                {filterError ? (
+                    <span
+                        id={dateErrorId}
+                        className="text-xs text-destructive"
+                        role="alert"
+                    >
+                        {filterError}
+                    </span>
+                ) : null}
+                <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                        将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <Button
+                            id="operations-audit-toolbar-reset-filters"
+                            type="button"
+                            variant="ghost"
+                            onClick={resetMoreFilters}
+                        >
+                            重置更多条件
+                        </Button>
+                        <Button
+                            id="operations-audit-toolbar-apply-filters"
+                            type="submit"
+                        >
+                            <SearchIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            应用全部筛选
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    )
+}
+
+export { AccessListToolbar, AuditAdvancedFilterPanel }

@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { MoreHorizontalIcon, ShieldOffIcon } from "lucide-react"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -47,12 +48,20 @@ function useUserColumns({
                 id: "identity",
                 header: "用户",
                 cell: ({ row }) => (
-                    <div className="min-w-[9rem]">
-                        <div className="font-medium">
-                            {row.original.displayName}
-                        </div>
-                        <div className="font-mono text-xs text-muted-foreground">
-                            {row.original.accountName}
+                    <div className="flex min-w-[9rem] items-center gap-2">
+                        <span
+                            aria-hidden="true"
+                            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+                        >
+                            {row.original.displayName.slice(0, 1)}
+                        </span>
+                        <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">
+                                {row.original.displayName}
+                            </div>
+                            <div className="truncate font-mono text-[11px] text-muted-foreground">
+                                {row.original.accountName}
+                            </div>
                         </div>
                     </div>
                 ),
@@ -60,13 +69,47 @@ function useUserColumns({
             {
                 id: "roles",
                 header: "当前角色",
-                cell: ({ row }) => row.original.activeRoles,
+                cell: ({ row }) => {
+                    if (row.original.activeRoles === "—") {
+                        return (
+                            <span className="text-sm text-muted-foreground">
+                                暂无角色
+                            </span>
+                        )
+                    }
+                    const names = row.original.activeRoles
+                        .split("、")
+                        .filter(Boolean)
+                    return (
+                        <div
+                            className="flex max-w-[20rem] flex-wrap items-center gap-1"
+                            title={row.original.activeRoles}
+                        >
+                            {names.slice(0, 2).map((name) => (
+                                <Badge key={name} variant="secondary">
+                                    {name}
+                                </Badge>
+                            ))}
+                            {names.length > 2 ? (
+                                <span className="text-xs text-muted-foreground">
+                                    +{names.length - 2}
+                                </span>
+                            ) : null}
+                        </div>
+                    )
+                },
             },
             {
                 id: "scope",
                 header: "数据范围",
                 cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
+                    <span
+                        className={
+                            row.original.dataScopeSummary === "—"
+                                ? "text-sm text-muted-foreground"
+                                : "text-sm"
+                        }
+                    >
                         {row.original.dataScopeSummary}
                     </span>
                 ),

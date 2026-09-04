@@ -21,8 +21,11 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                 id: "time",
                 header: "时间",
                 cell: ({ row }) => (
-                    <span className="num text-xs">
-                        {formatDateTime(row.original.recordedAt, "full")}
+                    <span
+                        className="num whitespace-nowrap text-xs"
+                        title={formatDateTime(row.original.recordedAt, "full")}
+                    >
+                        {formatDateTime(row.original.recordedAt, "monthDay")}
                     </span>
                 ),
             },
@@ -31,35 +34,30 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                 header: "操作者",
                 cell: ({ row }) => (
                     <div className="min-w-[7rem]">
-                        <div className="font-medium">
+                        <div className="text-sm font-medium">
                             {row.original.actorLabel}
                         </div>
-                        <div className="font-mono text-xs text-muted-foreground">
+                        <div className="truncate font-mono text-[11px] text-muted-foreground">
                             {row.original.actorId}
                         </div>
                     </div>
                 ),
             },
             {
-                id: "role",
-                header: "责任角色",
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {row.original.actorRole}
-                    </span>
-                ),
-            },
-            {
                 id: "action",
                 header: "动作",
-                cell: ({ row }) => row.original.actionLabel,
+                cell: ({ row }) => (
+                    <span className="text-sm">{row.original.actionLabel}</span>
+                ),
             },
             {
                 id: "object",
                 header: "对象",
                 cell: ({ row }) => (
                     <div className="min-w-[8rem]">
-                        <div>{row.original.objectLabel}</div>
+                        <div className="truncate text-sm">
+                            {row.original.objectLabel}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                             {row.original.objectTypeLabel}
                         </div>
@@ -78,21 +76,19 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
             },
             {
                 id: "fields",
-                header: "变更字段",
+                header: "变更",
                 cell: ({ row }) => (
-                    <span className="text-sm">
+                    <span
+                        className="block max-w-[12rem] truncate text-sm"
+                        title={
+                            row.original.changedFieldDisplay !== "—"
+                                ? row.original.changedFieldDisplay
+                                : undefined
+                        }
+                    >
                         {row.original.changedFieldDisplay !== "—"
                             ? row.original.changedFieldDisplay
                             : "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "trace",
-                header: "请求追踪号",
-                cell: ({ row }) => (
-                    <span className="font-mono text-xs">
-                        {row.original.traceId}
                     </span>
                 ),
             },
