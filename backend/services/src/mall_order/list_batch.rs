@@ -170,7 +170,7 @@ mod tests {
             assessments: HashMap::new(),
         };
         assert!(support.facts.is_empty());
-        assert!(support.sources.get("order-missing").is_none());
+        assert!(!support.sources.contains_key("order-missing"));
         assert!(support.entries.is_empty());
         assert!(support.assessments.is_empty());
     }

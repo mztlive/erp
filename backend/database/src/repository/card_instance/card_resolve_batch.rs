@@ -303,9 +303,9 @@ mod tests {
     fn missing_ref_yields_no_map_entry() {
         let mapped = index_by_opaque_ref(vec![card_fixture("card-1", "ref-1")]);
         assert_eq!(mapped.len(), 1);
-        assert!(mapped.get("ref-1").is_some());
+        assert!(mapped.contains_key("ref-1"));
         assert!(
-            mapped.get("ref-missing").is_none(),
+            !mapped.contains_key("ref-missing"),
             "缺失引用不得伪造映射项，Service 保持 PendingAttribution 与缺失错误语义"
         );
     }
@@ -318,7 +318,7 @@ mod tests {
         let first = mapped.get("card-1").expect("卡 ID 必须命中");
         let second = mapped.get("card-1").expect("重复查找必须命中同一项");
         assert_eq!(first.origin_sales_order_id, second.origin_sales_order_id);
-        assert!(mapped.get("card-missing").is_none());
+        assert!(!mapped.contains_key("card-missing"));
     }
 
     /// 引用去重：重复引用只查询一次，空输入直接返回且保序。

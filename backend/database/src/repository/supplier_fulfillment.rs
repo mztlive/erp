@@ -1326,10 +1326,12 @@ fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
 ///
 /// # 参数
 /// * `facts` - 已按主键稳定排序的退款事实头
-/// * `allocations` - 已按主键稳定排序的全部未软删除分配行
+/// * `allocations` - 已按主键稳定排序的全部未软删除分配行；即使输入乱序，
+///   本函数仍按主键对每组分配行稳定排序，保证输出确定
 ///
 /// # 返回
-/// 返回与事实头一一对应的归组快照，顺序与输入事实头一致。
+/// 返回与事实头一一对应的归组快照，顺序与输入事实头一致；每组分配行按主键
+/// 稳定排序，无分配行时为空集合，未知事实头的孤儿分配行直接丢弃。
 fn group_refund_allocations(
     facts: Vec<SupplierRefundFact>,
     allocations: Vec<SupplierRefundAllocation>,
@@ -1344,7 +1346,8 @@ fn group_refund_allocations(
     facts
         .into_iter()
         .map(|fact| {
-            let allocations = by_fact.remove(fact.base.id.as_str()).unwrap_or_default();
+            let mut allocations = by_fact.remove(fact.base.id.as_str()).unwrap_or_default();
+            allocations.sort_by(|left, right| left.base.id.cmp(&right.base.id));
             SupplierRefundFactBundle { fact, allocations }
         })
         .collect()
@@ -1522,6 +1525,25 @@ mod refund_bundle_tests {
         assert_eq!(first_ids, vec!["allocation-1", "allocation-3"]);
         assert_eq!(bundles[1].allocations.len(), 1);
         assert_eq!(bundles[1].allocations[0].base.id.as_str(), "allocation-2");
+    }
+
+    #[test]
+    fn orphan_allocations_are_dropped_and_groups_sort_by_id() {
+        let bundles = group_refund_allocations(
+            vec![sample_fact("fact-1")],
+            vec![
+                sample_allocation("allocation-3", "fact-1", 2),
+                sample_allocation("orphan-1", "fact-missing", 1),
+                sample_allocation("allocation-1", "fact-1", 1),
+            ],
+        );
+        assert_eq!(bundles.len(), 1);
+        let ids: Vec<&str> = bundles[0]
+            .allocations
+            .iter()
+            .map(|allocation| allocation.base.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["allocation-1", "allocation-3"]);
     }
 }
 

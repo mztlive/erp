@@ -2167,6 +2167,53 @@ mod tests {
         .is_empty());
     }
 
+    #[test]
+    fn scope_filters_with_empty_ids_match_nothing() {
+        use super::{CustomerReceiptFilter, InvoiceFilter};
+        let receipt_filter = CustomerReceiptFilter {
+            receipt_ids: Some(Vec::new()),
+            receipt_no: None,
+            counterparty_party_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        let receipt_doc = receipt_filter.to_doc();
+        assert_eq!(
+            receipt_doc
+                .get_document("id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap()
+                .len(),
+            0
+        );
+        let invoice_filter = InvoiceFilter {
+            invoice_ids: Some(Vec::new()),
+            invoice_direction: None,
+            invoice_kind: None,
+            party_id: None,
+            invoice_no: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        let invoice_doc = invoice_filter.to_doc();
+        assert_eq!(
+            invoice_doc
+                .get_document("id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap()
+                .len(),
+            0
+        );
+    }
+
     /// 空输入批量回退直接成功且不访问数据库。
     #[tokio::test]
     async fn revert_invoicings_many_empty_input_returns_empty_without_db() {

@@ -511,7 +511,7 @@ mod tests {
         );
 
         let source_column = FundingPlan::build(
-            &vec![item("item-1", "line-1", "59.00")],
+            &[item("item-1", "line-1", "59.00")],
             &sources,
             &[request("a-1", "line-1", 1, "59.00")],
             order_amounts("59.00"),

@@ -677,7 +677,7 @@ mod tests {
             |id| id.clone(),
         );
         assert_eq!(grouped["t-1"], vec!["t-1".to_string(), "t-1".to_string()]);
-        assert!(grouped.get("missing").is_none());
+        assert!(!grouped.contains_key("missing"));
     }
 
     #[test]
