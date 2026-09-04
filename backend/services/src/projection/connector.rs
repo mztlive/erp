@@ -15,6 +15,22 @@ pub struct ClassifiedError {
     pub summary: String,
 }
 
+impl ClassifiedError {
+    /// 判断外部调用是否没有可确认的最终结果（委托 Entity 唯一规则）。
+    pub fn is_result_unknown(&self) -> bool {
+        entities::integration_ops::is_result_unknown(self.class, &self.code)
+    }
+
+    /// 将符合结果未知信号的错误归一化为正式结果未知分类（保留错误码与摘要）。
+    pub fn into_result_unknown(self) -> Self {
+        if !self.is_result_unknown() {
+            return self;
+        }
+        let class = entities::integration_ops::normalized_result_unknown_class(self.class, &self.code);
+        Self { class, ..self }
+    }
+}
+
 /// 商城下发确认（成功响应）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeliverAck {

@@ -21,6 +21,7 @@ use sha2::{Digest, Sha256};
 
 mod decision_policy;
 mod direct_conclusion;
+mod error_classification;
 mod evidence_reference;
 mod inbox_message;
 mod integration_error_task;
@@ -38,6 +39,7 @@ pub use decision_policy::{
     REASON_REGISTRY_VERSION,
 };
 pub use direct_conclusion::DirectConclusion;
+pub use error_classification::{is_result_unknown, normalized_result_unknown_class};
 
 pub use evidence_reference::{
     CanonicalEvidenceReference, CompactEvidenceSet, EvidenceRecordRef, EvidenceReferenceSet,

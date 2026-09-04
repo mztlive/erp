@@ -88,9 +88,7 @@ impl ClassifiedError {
     /// 显式结果未知分类，或稳定错误码包含大写 `TIMEOUT`、
     /// `OUTCOME_UNKNOWN` 时返回 `true`；匹配规则区分大小写。
     pub fn is_result_unknown(&self) -> bool {
-        self.class == ErrorClass::ResultUnknown
-            || self.code.contains("TIMEOUT")
-            || self.code.contains("OUTCOME_UNKNOWN")
+        entities::integration_ops::is_result_unknown(self.class, &self.code)
     }
 
     /// 将符合结果未知信号的错误归一化为正式结果未知分类。
@@ -104,10 +102,8 @@ impl ClassifiedError {
         if !self.is_result_unknown() {
             return self;
         }
-        Self {
-            class: ErrorClass::ResultUnknown,
-            ..self
-        }
+        let class = entities::integration_ops::normalized_result_unknown_class(self.class, &self.code);
+        Self { class, ..self }
     }
 }
 

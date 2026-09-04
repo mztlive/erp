@@ -447,11 +447,11 @@ impl ProjectionService {
                 })
                 .await
             }
-            Err(error) if is_unknown_error(&error) => {
+            Err(error) if error.is_result_unknown() => {
                 self.settle_failure(
                     claimed,
                     message,
-                    unknown_error(error),
+                    error.into_result_unknown(),
                     operation_id,
                     command_action,
                     actor,
@@ -1140,20 +1140,6 @@ impl ProjectionService {
     }
 }
 
-fn is_unknown_error(error: &ClassifiedError) -> bool {
-    error.class == ErrorClass::ResultUnknown
-        || error.code.contains("TIMEOUT")
-        || error.code.contains("OUTCOME_UNKNOWN")
-}
-
-fn unknown_error(error: ClassifiedError) -> ClassifiedError {
-    ClassifiedError {
-        class: ErrorClass::ResultUnknown,
-        code: error.code,
-        summary: error.summary,
-    }
-}
-
 fn terminal_or_inflight_result(
     delivery: &SalesOrderProjectionDelivery,
     operation_id: String,
@@ -1297,7 +1283,7 @@ fn stable_entity_id(prefix: &str, identity: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{operation_id, stable_entity_id, unknown_error};
+    use super::{operation_id, stable_entity_id};
     use crate::projection::ClassifiedError;
     use entities::integration_ops::ErrorClass;
 
@@ -1312,11 +1298,12 @@ mod tests {
 
     #[test]
     fn timeout_error_is_preserved_but_classified_as_result_unknown() {
-        let error = unknown_error(ClassifiedError {
+        let error = ClassifiedError {
             class: ErrorClass::TransientFailure,
             code: "MALL_TIMEOUT".to_string(),
             summary: "请求超时".to_string(),
-        });
+        }
+        .into_result_unknown();
         assert_eq!(error.class, ErrorClass::ResultUnknown);
         assert_eq!(error.code, "MALL_TIMEOUT");
     }
