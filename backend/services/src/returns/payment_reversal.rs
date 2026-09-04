@@ -15,7 +15,6 @@ use super::dto::{
     CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
     PaymentReversalView, SubmitPaymentReversalRequest,
 };
-use std::str::FromStr;
 
 use super::offset_batch::load_payable_offset_facts;
 use super::start_approval::{
@@ -49,7 +48,7 @@ use entities::payable::{
     AllocationAction as PayableAllocationAction, PaymentAllocation, PaymentAllocationData, SupplierPayment,
     SupplierPaymentStatus,
 };
-use entities::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
+use entities::returns::{CumulativeAmountLimit, PaymentReversal, PaymentReversalData, PaymentReversalStatus};
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -713,19 +712,10 @@ async fn apply_payment_reversal_posting(
     }
     let reversed_before: Amount = db
         .payment_reversals()
-        .find_reversals_by_payments(std::slice::from_ref(&original_id), session)
-        .await?
-        .iter()
-        .filter(|other| other.base.id != reversal.base.id)
-        .fold(
-            Amount::from_str("0.00").expect("固定零金额必须可解析"),
-            |sum, other| sum.checked_add(other.amount),
-        );
-    if reversed_before.checked_add(reversal.amount) > payment.amount {
-        return Err(Error::BusinessLogicError(
-            "累计冲正金额不得超过原付款金额".to_string(),
-        ));
-    }
+        .posted_reversal_total_by_payment(&original_id, &reversal.base.id, session)
+        .await?;
+    CumulativeAmountLimit::ensure_within_limit(payment.amount, reversed_before, reversal.amount)
+        .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原付款金额".to_string()))?;
     persist_reversal_offsets_and_mark_payment(db, reversal, payment, actor_id, session).await
 }
 

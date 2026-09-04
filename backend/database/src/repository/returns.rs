@@ -32,6 +32,9 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+#[path = "returns_posted_totals.rs"]
+mod posted_totals;
+
 /// `sales_return_line` 集合名（单一来源：`ReturnsExt` 关联常量）。
 const SALES_RETURN_LINES: &str = <mongodb::Database as ReturnsExt>::SALES_RETURN_LINES;
 /// `purchase_return_line` 集合名（单一来源：`ReturnsExt` 关联常量）。

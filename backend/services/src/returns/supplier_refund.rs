@@ -13,7 +13,6 @@ use super::dto::{
     CancelSupplierRefundApprovalRequest, CommitSupplierRefundRequest, CreateSupplierRefundRequest,
     SubmitSupplierRefundRequest, SupplierRefundView,
 };
-use std::str::FromStr;
 
 use super::offset_batch::load_payable_offset_facts;
 use super::start_approval::{
@@ -54,7 +53,7 @@ use entities::payable::{
     PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType, PaymentAllocation,
     PaymentAllocationData, SupplierPaymentStatus,
 };
-use entities::returns::{SupplierRefund, SupplierRefundData, SupplierRefundStatus};
+use entities::returns::{CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus};
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -872,19 +871,10 @@ async fn apply_supplier_refund_posting(
     }
     let refunded_before: Amount = db
         .supplier_refunds()
-        .find_refunds_by_originals(std::slice::from_ref(&original_payment_id), &[], session)
-        .await?
-        .iter()
-        .filter(|other| other.base.id != refund.base.id)
-        .fold(
-            Amount::from_str("0.00").expect("固定零金额必须可解析"),
-            |sum, other| sum.checked_add(other.amount),
-        );
-    if refunded_before.checked_add(refund.amount) > payment.amount {
-        return Err(Error::BusinessLogicError(
-            "累计退款金额不得超过原付款金额".to_string(),
-        ));
-    }
+        .posted_refund_total_by_payment(&original_payment_id, &refund.base.id, session)
+        .await?;
+    CumulativeAmountLimit::ensure_within_limit(payment.amount, refunded_before, refund.amount)
+        .map_err(|_| Error::BusinessLogicError("累计退款金额不得超过原付款金额".to_string()))?;
     persist_refund_offsets_and_reversals(db, refund, &payment, actor_id, session).await
 }
 

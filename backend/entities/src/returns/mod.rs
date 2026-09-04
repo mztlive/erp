@@ -15,6 +15,7 @@
 //! - 财务纠错共同不变量（§6.11）：经办人与复核人不得相同；过账后原事实保留，
 //!   追加反向分录；同一原事实的累计有效冲正不得超过原金额（跨实体部分归 P3）。
 
+pub mod cumulative_limit;
 pub mod customer_refund;
 pub mod payment_reversal;
 pub mod purchase_return_line;
@@ -24,6 +25,7 @@ pub mod sales_return_case;
 pub mod sales_return_line;
 pub mod supplier_refund;
 
+pub use cumulative_limit::*;
 pub use customer_refund::*;
 pub use payment_reversal::*;
 pub use purchase_return_line::*;

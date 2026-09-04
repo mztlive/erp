@@ -13,7 +13,6 @@ use super::dto::{
     CancelReceiptReversalApprovalRequest, CommitReceiptReversalRequest, CreateReceiptReversalRequest,
     ReceiptReversalView, SubmitReceiptReversalRequest,
 };
-use std::str::FromStr;
 
 use super::offset_batch::load_receivable_offset_facts;
 use super::start_approval::{
@@ -46,7 +45,7 @@ use entities::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     ReceiptAllocation, ReceiptAllocationData,
 };
-use entities::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
+use entities::returns::{CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -731,19 +730,10 @@ async fn apply_receipt_reversal_posting(
     }
     let reversed_before: Amount = db
         .receipt_reversals()
-        .find_reversals_by_receipts(std::slice::from_ref(&original_id), session)
-        .await?
-        .iter()
-        .filter(|other| other.base.id != reversal.base.id)
-        .fold(
-            Amount::from_str("0.00").expect("固定零金额必须可解析"),
-            |sum, other| sum.checked_add(other.amount),
-        );
-    if reversed_before.checked_add(reversal.amount) > receipt.amount {
-        return Err(Error::BusinessLogicError(
-            "累计冲正金额不得超过原回款金额".to_string(),
-        ));
-    }
+        .posted_reversal_total_by_receipt(&original_id, &reversal.base.id, session)
+        .await?;
+    CumulativeAmountLimit::ensure_within_limit(receipt.amount, reversed_before, reversal.amount)
+        .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原回款金额".to_string()))?;
     persist_reversal_offsets_and_mark_receipt(db, reversal, receipt, actor_id, session).await
 }
 
