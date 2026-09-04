@@ -92,21 +92,21 @@ mod tests {
             Instant::from_unix_secs(1_700_000_100),
             "system",
             FactSource {
-                source_type: SourceType::MallSync,
+                source_type: SourceType::ManualImport,
                 source_reference: Some("msg-1".to_string()),
                 reason_code: None,
                 reason_text: Some("人工补录".to_string()),
             },
         );
         assert_eq!(base.fact_no, "F-100");
-        assert_eq!(base.source_type, SourceType::MallSync);
+        assert_eq!(base.source_type, SourceType::ManualImport);
         assert_eq!(base.occurred_at.unix_secs(), 1_700_000_000);
         assert!(base.reason_code.is_none());
 
         let json = serde_json::to_string(&base).unwrap();
         let back: FactBase = serde_json::from_str(&json).unwrap();
         assert_eq!(back.recorded_by, "system");
-        assert_eq!(back.source_type, SourceType::MallSync);
+        assert_eq!(back.source_type, SourceType::ManualImport);
         assert_eq!(back.recorded_at.unix_secs(), 1_700_000_100);
         assert_eq!(back.reason_text.as_deref(), Some("人工补录"));
     }

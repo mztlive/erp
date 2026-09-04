@@ -3,18 +3,16 @@
 use std::str::FromStr;
 
 use database::{
-    ensure_indexes, BackgroundJobRegistration, BulkJobExt, CardBaselineRegistration, CardInstanceExt,
-    NoTransaction, PayableExt, ReceivableExt, Transactional,
+    ensure_indexes, BackgroundJobRegistration, BulkJobExt, NoTransaction, PayableExt, ReceivableExt,
+    Transactional,
 };
 use entities::bulk_job::{
     BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobItemDraft, JobType,
 };
-use entities::card_instance::{CardSourceType, MallCardBaselineAggregate, MallCardInstanceData};
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    BackgroundJobId, BackgroundJobItemId, ExternalIdentityMapId, MallBalanceSnapshotId, MallCardInstanceId,
-    PayableAccountId, PayableEntryId, ReceivableAccountId, ReceivableEntryId, SalesOrderId,
-    SalesOrderRevisionId,
+    BackgroundJobId, BackgroundJobItemId, PayableAccountId, PayableEntryId, ReceivableAccountId,
+    ReceivableEntryId,
 };
 use entities::money::Amount;
 use entities::payable::{
@@ -26,79 +24,6 @@ use entities::receivable::{
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::Database;
 use test_support::{require_mongo, TestDb};
-
-#[tokio::test]
-#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-async fn card_baseline_unique_competition_is_replayable_and_atomic() {
-    require_mongo!(async {
-        let fixture = TestDb::new("core_card_baseline")
-            .await
-            .expect("测试数据库创建失败");
-        ensure_indexes(fixture.db()).await.expect("索引创建失败");
-
-        let first = card_baseline("card-1", "snapshot-1", "100.00");
-        let second = card_baseline("card-2", "snapshot-2", "100.00");
-        assert!(first.0.same_baseline_as(&second.0));
-
-        let db_first = fixture.db().clone();
-        let client_first = db_first.client().clone();
-        let db_second = fixture.db().clone();
-        let client_second = db_second.client().clone();
-        let first_for_tx = first.clone();
-        let second_for_tx = second.clone();
-        let create_first = client_first.with_transaction(move |session| {
-            Box::pin(async move {
-                db_first
-                    .card_instance()
-                    .create_card_instance_with_initial_snapshot(&first_for_tx.0, &first_for_tx.1, session)
-                    .await
-            })
-        });
-        let create_second = client_second.with_transaction(move |session| {
-            Box::pin(async move {
-                db_second
-                    .card_instance()
-                    .create_card_instance_with_initial_snapshot(&second_for_tx.0, &second_for_tx.1, session)
-                    .await
-            })
-        });
-
-        let (first_result, second_result) = tokio::join!(create_first, create_second);
-        assert_eq!(
-            usize::from(first_result.is_ok()) + usize::from(second_result.is_ok()),
-            1,
-            "并发唯一竞争必须恰有一个事务成功：first={first_result:?}, second={second_result:?}"
-        );
-        let loser = if first_result.is_err() {
-            &first.0
-        } else {
-            &second.0
-        };
-        let replay = fixture
-            .db()
-            .card_instance()
-            .registration_by_identity(loser, &mut NoTransaction)
-            .await
-            .expect("失败事务退出后的基线复核失败")
-            .expect("唯一竞争后必须存在胜者");
-        assert!(matches!(replay, CardBaselineRegistration::ExistingSame(_)));
-        assert_eq!(count(fixture.db(), "mall_card_instances").await, 1);
-        assert_eq!(count(fixture.db(), "mall_balance_snapshots").await, 1);
-
-        let conflict = card_baseline("card-conflict", "snapshot-conflict", "101.00");
-        let conflict_result = fixture
-            .db()
-            .card_instance()
-            .registration_by_identity(&conflict.0, &mut NoTransaction)
-            .await
-            .expect("冲突基线复核失败")
-            .expect("冲突基线必须命中既有身份");
-        assert!(matches!(
-            conflict_result,
-            CardBaselineRegistration::ExistingConflict(_)
-        ));
-    });
-}
 
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
@@ -354,33 +279,6 @@ async fn minimum_due_date_aggregation_matches_contract_and_uses_indexes() {
             "exists 查询最多读取一条，实际 {total_examined}"
         );
     });
-}
-
-fn card_baseline(
-    instance_id: &str,
-    snapshot_id: &str,
-    initial_balance: &str,
-) -> (
-    entities::card_instance::MallCardInstance,
-    entities::card_instance::MallBalanceSnapshot,
-) {
-    MallCardBaselineAggregate::new(
-        MallCardInstanceId::new(instance_id),
-        MallBalanceSnapshotId::new(snapshot_id),
-        MallCardInstanceData {
-            mall_id: "mall-1".to_string(),
-            opaque_instance_ref: "opaque-1".to_string(),
-            origin_sales_order_source_identity_id: ExternalIdentityMapId::new("external-1"),
-            origin_sales_order_id: SalesOrderId::new("sales-order-1"),
-            origin_sales_order_revision_id: SalesOrderRevisionId::new("sales-order-revision-1"),
-            source_baseline_version: Some("baseline-v1".to_string()),
-            initial_balance: Amount::from_str(initial_balance).unwrap(),
-            baseline_at: Instant::from_unix_secs(1_788_112_000),
-            source_type: CardSourceType::Realtime,
-        },
-    )
-    .expect("卡基线聚合构造失败")
-    .into_parts()
 }
 
 fn background_job(

@@ -4,21 +4,15 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ProjectionExt, ReceivableExt,
-    SalesOrderExt, Transactional, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, SalesOrderExt,
+    Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderProjectionDeliveryId,
-    SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId, SalesOrderSubmissionId,
+    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId,
     WorkItemId,
 };
 use entities::money::Amount;
-use entities::projection::{
-    ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection, SalesOrderProjectionData,
-    SalesOrderProjectionDelivery, SalesOrderProjectionDeliveryData, SalesOrderProjectionRevision,
-    SalesOrderProjectionRevisionData,
-};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
@@ -32,9 +26,7 @@ use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPrio
 use id_generator::next_id;
 use mongodb::Database;
 
-use super::adapter::{
-    ensure_final_approve_formalize, is_voucher_sales_order, sales_order_responsible_org_id,
-};
+use super::adapter::{ensure_final_approve_formalize, sales_order_responsible_org_id};
 use super::dto::SalesOrderDetailView;
 use super::procurement::submission_procurement_inputs;
 use super::SalesOrderService;
@@ -61,11 +53,6 @@ struct FormalizedSubmissionWrite {
     aggregate: SalesOrderRevisionAggregate,
     procurement: Option<ProcurementFormalizationPlan>,
     procurement_items: Vec<WorkItem>,
-    projection: Option<(
-        SalesOrderProjection,
-        SalesOrderProjectionRevision,
-        SalesOrderProjectionDelivery,
-    )>,
     audit: entities::AuditLog,
     now: Instant,
 }
@@ -74,7 +61,7 @@ impl SalesOrderService {
     /// 最终通过并形式化已批准提交。
     ///
     /// 只包装既有 `repository formalize_submission`：先把销售单推进到
-    /// `EFFECTIVE` / `APPROVED`，再写入正式修订。卡券在同一事务向商城发出执行投影。
+    /// `EFFECTIVE` / `APPROVED`，再写入正式修订。
     /// 不得 `$set` 绕过领域不变式，也不得按卡券运营节点写专用副作用分支。
     ///
     /// # 参数
@@ -85,7 +72,7 @@ impl SalesOrderService {
     /// 返回形式化后的销售单详情。
     ///
     /// # 错误
-    /// 非审批中、缺少提交、卡券投影字段缺失或仓储失败时返回错误。
+    /// 非审批中、缺少提交或仓储失败时返回错误。
     #[tracing::instrument(
         name = "sales_order.formalize_approved_submission",
         skip_all,
@@ -133,7 +120,7 @@ impl SalesOrderService {
     /// * `session` - 审批运行时持有的唯一事务会话
     ///
     /// # 返回
-    /// 正式版本、应收、供给任务、投影和成功审计全部写入时返回 `Ok(())`。
+    /// 正式版本、应收、供给任务和成功审计全部写入时返回 `Ok(())`。
     ///
     /// # 错误
     /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
@@ -263,7 +250,7 @@ async fn persist_formalized_submission(
 /// 完成销售形式化的纯领域计算并生成待写上下文。
 ///
 /// # 错误
-/// 状态、版本、投影或任务字段不合法时返回错误。
+/// 状态、版本或任务字段不合法时返回错误。
 fn prepare_formalized_submission_write(
     db: &Database,
     rbac: crate::iam::SharedRbacService,
@@ -275,16 +262,6 @@ fn prepare_formalized_submission_write(
 ) -> Result<FormalizedSubmissionWrite> {
     let now = Instant::now();
     let aggregate = build_revision_for_order(order, &submission, &lines, now)?;
-    let projection = if is_voucher_sales_order(order.business_type) {
-        Some(build_voucher_execution_projection(
-            order,
-            &submission,
-            &aggregate,
-            now,
-        )?)
-    } else {
-        None
-    };
     let procurement_items = procurement
         .as_ref()
         .map(|plan| build_procurement_work_items(order, &submission, plan))
@@ -305,7 +282,6 @@ fn prepare_formalized_submission_write(
         aggregate,
         procurement,
         procurement_items,
-        projection,
         audit,
         now,
     })
@@ -321,7 +297,7 @@ fn prepare_formalized_submission_write(
 /// 全部业务事实与审计写入成功时返回 `Ok(())`。
 ///
 /// # 错误
-/// 采购责任重验、正式版本、投影、应收或审计任一写入失败时返回错误。
+/// 采购责任重验、正式版本、应收或审计任一写入失败时返回错误。
 async fn persist_formalized_submission_write(
     mut write: FormalizedSubmissionWrite,
     session: &mut mongodb::ClientSession,
@@ -370,9 +346,6 @@ async fn persist_formalized_submission_write(
         .sales_order_submissions()
         .update(&mut write.submission, session)
         .await?;
-    if let Some((projection, revision, delivery)) = write.projection {
-        persist_voucher_projection(&write.db, &projection, &revision, &delivery, session).await?;
-    }
     // 销售单生效即形成原始应收（§6.8/§8.1.1）：子账 + 原始应收分录原子写入。
     // 后续销售变更差额由 sales_review 生效路径另行入账，本路径只写首次生效。
     create_original_receivable(&write.db, &write.order, &write.aggregate, write.now, session).await?;
@@ -607,100 +580,6 @@ fn build_revision_for_order(
     .map_err(Error::Logic)
 }
 
-/// 由已形式化卡券版本构造商城执行投影与待下发记录。
-///
-/// # 错误
-/// 冻结投影字段缺失或卡券行不唯一时返回错误。
-fn build_voucher_execution_projection(
-    order: &SalesOrder,
-    submission: &SalesOrderSubmission,
-    aggregate: &SalesOrderRevisionAggregate,
-    at: Instant,
-) -> Result<(
-    SalesOrderProjection,
-    SalesOrderProjectionRevision,
-    SalesOrderProjectionDelivery,
-)> {
-    let voucher = aggregate
-        .voucher_lines
-        .first()
-        .ok_or_else(|| Error::BusinessLogicError("卡券销售正式版本必须且只能包含一条卡券明细".to_string()))?;
-    let target_mall_id = submission
-        .target_mall_id
-        .clone()
-        .ok_or_else(|| Error::BusinessLogicError("卡券销售提交缺少冻结目标商城".to_string()))?;
-    let projection_id = SalesOrderProjectionId::new(next_id());
-    let projection = SalesOrderProjection::new(
-        projection_id.clone(),
-        SalesOrderProjectionData {
-            sales_order_id: SalesOrderId::new(order.base.id.clone()),
-            target_mall_id: target_mall_id.clone(),
-        },
-    )?;
-    let projection_revision_id = SalesOrderProjectionRevisionId::new(next_id());
-    let projection_revision = SalesOrderProjectionRevision::new(
-        projection_revision_id.clone(),
-        1,
-        SalesOrderProjectionRevisionData {
-            projection_id,
-            projection_source: ProjectionSource::ErpRevision,
-            sales_order_revision_id: aggregate.revision.base.id.clone().into(),
-            customer_external_identity: submission
-                .customer_external_identity
-                .clone()
-                .ok_or_else(|| Error::BusinessLogicError("卡券销售提交缺少冻结商城客户身份".to_string()))?,
-            voucher_category_external_identity: submission
-                .voucher_category_external_identity
-                .clone()
-                .ok_or_else(|| {
-                    Error::BusinessLogicError("卡券销售提交缺少冻结商城卡券类目身份".to_string())
-                })?,
-            voucher_expiry_at: submission
-                .voucher_expiry_at
-                .ok_or_else(|| Error::BusinessLogicError("卡券销售提交缺少冻结履约期限".to_string()))?,
-            face_value: voucher.face_value,
-            card_count: voucher.card_count,
-            card_form: voucher.card_form.into(),
-            effective_at: at,
-        },
-    )?;
-    let delivery = SalesOrderProjectionDelivery::new(
-        SalesOrderProjectionDeliveryId::new(next_id()),
-        SalesOrderProjectionDeliveryData {
-            projection_revision_id,
-            target_mall_id,
-            status: ProjectionDeliveryStatus::PendingSend,
-            attempt_count: 0,
-            next_attempt_at: None,
-            mall_ack_at: None,
-            mall_execution_baseline: None,
-            error_code: None,
-            error_summary: None,
-        },
-    )?;
-    Ok((projection, projection_revision, delivery))
-}
-
-/// 在同一事务写入执行投影版本与待下发记录。
-///
-/// # 错误
-/// 仓储写入失败时返回错误。
-async fn persist_voucher_projection(
-    db: &Database,
-    projection: &SalesOrderProjection,
-    revision: &SalesOrderProjectionRevision,
-    delivery: &SalesOrderProjectionDelivery,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    db.projection()
-        .create_projection_revision(projection, revision, session)
-        .await?;
-    db.sales_order_projection_deliveries()
-        .create(delivery, session)
-        .await?;
-    Ok(())
-}
-
 /// 验证销售形式化事务的状态、仓储与供给任务合同。
 #[cfg(test)]
 mod tests {
@@ -746,8 +625,6 @@ mod tests {
             "供给任务必须在销售当前版本落库后按权威覆盖量校准"
         );
         assert!(production.contains("ensure_final_approve_formalize"));
-        assert!(production.contains("build_voucher_execution_projection"));
-        assert!(production.contains("create_projection_revision"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(!production.contains("CARD_SALES_APPROVAL"));
         let mut order = draft_order();
@@ -776,12 +653,9 @@ mod tests {
         assert!(procurement_responsibility_key(&[]).is_err());
     }
 
-    /// 卡券最终通过同样只接受审批中，并与投影写入同事务。
+    /// 卡券最终通过同样只接受审批中.
     #[test]
-    fn voucher_formalize_accepts_in_approval_and_projects() {
-        let source = include_str!("formalize.rs");
-        assert!(source.contains("is_voucher_sales_order"));
-        assert!(source.contains("persist_voucher_projection"));
+    fn voucher_formalize_accepts_in_approval() {
         let mut order = draft_order();
         order.business_type = BusinessType::Voucher;
         assert!(ensure_final_approve_formalize(&order).is_err());

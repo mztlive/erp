@@ -15,7 +15,7 @@ use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
-    SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SourceSystemId,
+    SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -40,8 +40,6 @@ const ITEM_NAME_MAX_LEN: usize = 256;
 const SPEC_MAX_LEN: usize = 256;
 /// 单位快照最大长度。
 const UNIT_MAX_LEN: usize = 64;
-/// 商城外部身份最大长度（与 `external_identity_map.external_id` 一致）。
-const EXTERNAL_IDENTITY_MAX_LEN: usize = 256;
 
 /// 提交状态（数据模型 §6.5：审核中、已通过、已驳回、因重新提交失效）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -124,12 +122,6 @@ pub struct SalesOrderSubmissionData {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限（卡券单必填，非卡券单为空）。
     pub voucher_expiry_at: Option<Instant>,
-    /// 目标商城（卡券单必填，非卡券单为空）。
-    pub target_mall_id: Option<SourceSystemId>,
-    /// 服务端解析并冻结的商城客户身份（卡券单必填）。
-    pub customer_external_identity: Option<String>,
-    /// 服务端解析并冻结的商城卡券类目身份（卡券单必填）。
-    pub voucher_category_external_identity: Option<String>,
     /// 最终通过时形成应收所使用的到期日（卡券单必填）。
     pub receivable_due_date: Option<BusinessDate>,
     /// 提交行汇总（含税）。
@@ -190,12 +182,6 @@ pub struct SalesOrderSubmission {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限。
     pub voucher_expiry_at: Option<Instant>,
-    /// 卡券执行投影的目标商城。
-    pub target_mall_id: Option<SourceSystemId>,
-    /// 提交时服务端解析并冻结的商城客户身份。
-    pub customer_external_identity: Option<String>,
-    /// 提交时服务端解析并冻结的商城卡券类目身份。
-    pub voucher_category_external_identity: Option<String>,
     /// 最终通过时形成应收所使用的到期日。
     pub receivable_due_date: Option<BusinessDate>,
     /// 提交行汇总（含税）。
@@ -235,9 +221,6 @@ impl PartialEq for SalesOrderSubmission {
             && self.business_remark == other.business_remark
             && self.voucher_category_sku_id == other.voucher_category_sku_id
             && self.voucher_expiry_at == other.voucher_expiry_at
-            && self.target_mall_id == other.target_mall_id
-            && self.customer_external_identity == other.customer_external_identity
-            && self.voucher_category_external_identity == other.voucher_category_external_identity
             && self.receivable_due_date == other.receivable_due_date
             && self.gross_amount == other.gross_amount
             && self.net_amount == other.net_amount
@@ -249,7 +232,7 @@ impl PartialEq for SalesOrderSubmission {
 
 impl Eq for SalesOrderSubmission {}
 
-/// 卡券商城执行投影校验输入。
+/// 卡券执行投影校验输入。
 ///
 /// # 用途
 /// 将卡券投影字段与提交时间打包，供提交构造时一次性校验。
@@ -272,12 +255,6 @@ struct CardProjectionInputs<'a> {
     voucher_category_sku_id: Option<&'a SkuId>,
     /// 卡券履约期限。
     voucher_expiry_at: Option<Instant>,
-    /// 目标商城。
-    target_mall_id: Option<&'a SourceSystemId>,
-    /// 商城客户外部身份。
-    customer_external_identity: Option<&'a str>,
-    /// 商城卡券类目外部身份。
-    voucher_category_external_identity: Option<&'a str>,
     /// 应收到期日。
     receivable_due_date: Option<BusinessDate>,
     /// 提交时间。
@@ -317,23 +294,10 @@ impl SalesOrderSubmission {
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
-        let customer_external_identity = normalize_optional_text(
-            data.customer_external_identity,
-            "商城客户身份",
-            EXTERNAL_IDENTITY_MAX_LEN,
-        )?;
-        let voucher_category_external_identity = normalize_optional_text(
-            data.voucher_category_external_identity,
-            "商城卡券类目身份",
-            EXTERNAL_IDENTITY_MAX_LEN,
-        )?;
         Self::validate_card_projection_inputs(CardProjectionInputs {
             business_type: data.business_type,
             voucher_category_sku_id: data.voucher_category_sku_id.as_ref(),
             voucher_expiry_at: data.voucher_expiry_at,
-            target_mall_id: data.target_mall_id.as_ref(),
-            customer_external_identity: customer_external_identity.as_deref(),
-            voucher_category_external_identity: voucher_category_external_identity.as_deref(),
             receivable_due_date: data.receivable_due_date,
             submitted_at: data.submitted_at,
         })?;
@@ -369,9 +333,6 @@ impl SalesOrderSubmission {
             business_remark,
             voucher_category_sku_id: data.voucher_category_sku_id,
             voucher_expiry_at: data.voucher_expiry_at,
-            target_mall_id: data.target_mall_id,
-            customer_external_identity,
-            voucher_category_external_identity,
             receivable_due_date: data.receivable_due_date,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
@@ -468,14 +429,13 @@ impl SalesOrderSubmission {
         self.transition(SubmissionStatus::Superseded, updated_by)
     }
 
-    /// 校验卡券提交为最终运营审批冻结了完整且不过期的商城执行输入。
+    /// 校验卡券提交冻结了完整且不过期的卡券输入。
     ///
-    /// 卡券提交必须同时冻结类目、履约期限、目标商城、两类服务端解析的外部身份和
-    /// 应收到期日；非卡券提交不得携带这些商城投影字段。应收到期日不得早于服务端
-    /// 记录的提交自然日。
+    /// 卡券提交必须同时冻结类目、履约期限和应收到期日。非卡券提交不得携带这些卡券字段。
+    /// 应收到期日不得早于服务端记录的提交自然日。
     ///
     /// # 用途
-    /// 按业务性质校验卡券商城投影字段组是否完整、互斥且到期日合法。
+    /// 按业务性质校验卡券投影字段组是否完整、互斥且到期日合法。
     ///
     /// # 参数
     /// * `inputs` - 业务性质、卡券投影字段与提交时间
@@ -487,38 +447,29 @@ impl SalesOrderSubmission {
     /// 字段组不完整、业务性质不匹配或应收到期日早于提交日时返回错误。
     ///
     /// # 关键业务约束
-    /// 卡券必须全字段冻结；非卡券不得携带任一投影字段。
+    /// 卡券必须冻结类目、期限与到期日。
     fn validate_card_projection_inputs(inputs: CardProjectionInputs<'_>) -> Result<()> {
         let CardProjectionInputs {
             business_type,
             voucher_category_sku_id,
             voucher_expiry_at,
-            target_mall_id,
-            customer_external_identity,
-            voucher_category_external_identity,
             receivable_due_date,
             submitted_at,
         } = inputs;
         let all_present = voucher_category_sku_id.is_some()
             && voucher_expiry_at.is_some()
-            && target_mall_id.is_some()
-            && customer_external_identity.is_some()
-            && voucher_category_external_identity.is_some()
             && receivable_due_date.is_some();
         let any_present = voucher_category_sku_id.is_some()
             || voucher_expiry_at.is_some()
-            || target_mall_id.is_some()
-            || customer_external_identity.is_some()
-            || voucher_category_external_identity.is_some()
             || receivable_due_date.is_some();
         match business_type {
             BusinessType::Voucher if !all_present => {
                 return Err(Error::from(
-                    "卡券提交必须冻结目标商城、客户外部身份、卡券类目外部身份和应收到期日",
+                    "卡券提交必须冻结卡券类目、履约期限和应收到期日",
                 ));
             }
             BusinessType::GoodsService if any_present => {
-                return Err(Error::from("非卡券提交不得携带商城执行投影字段"));
+                return Err(Error::from("非卡券提交不得携带卡券字段"));
             }
             BusinessType::Voucher | BusinessType::GoodsService => {}
         }
@@ -917,9 +868,6 @@ mod tests {
             business_remark: Some(" 按合同执行 ".to_string()),
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
-            customer_external_identity: None,
-            voucher_category_external_identity: None,
             receivable_due_date: None,
             gross_amount: amt("29.97"),
             net_amount: amt("26.07"),
@@ -935,9 +883,6 @@ mod tests {
             business_type: BusinessType::Voucher,
             voucher_category_sku_id: Some(SkuId::new("vcat-1")),
             voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            target_mall_id: Some(SourceSystemId::new("mall-1")),
-            customer_external_identity: Some("mall-customer-1".to_string()),
-            voucher_category_external_identity: Some("mall-voucher-1".to_string()),
             receivable_due_date: Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()),
             gross_amount: amt("270.00"),
             net_amount: amt("238.94"),
@@ -1013,20 +958,11 @@ mod tests {
     }
 
     #[test]
-    fn voucher_submission_freezes_server_resolved_projection_inputs() {
+    fn voucher_submission_freezes_projection_inputs() {
         let submission =
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-1"), voucher_header_data())
                 .unwrap();
 
-        assert_eq!(submission.target_mall_id, Some(SourceSystemId::new("mall-1")));
-        assert_eq!(
-            submission.customer_external_identity.as_deref(),
-            Some("mall-customer-1")
-        );
-        assert_eq!(
-            submission.voucher_category_external_identity.as_deref(),
-            Some("mall-voucher-1")
-        );
         assert_eq!(
             submission.receivable_due_date,
             Some(BusinessDate::from_ymd(2026, 10, 31).unwrap())
@@ -1034,13 +970,7 @@ mod tests {
     }
 
     #[test]
-    fn voucher_submission_rejects_missing_mapping_and_past_receivable_due_date() {
-        let missing_mapping = SalesOrderSubmissionData {
-            customer_external_identity: None,
-            ..voucher_header_data()
-        };
-        assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-1"), missing_mapping).is_err());
-
+    fn voucher_submission_rejects_past_due_date() {
         let past_due = SalesOrderSubmissionData {
             receivable_due_date: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
             ..voucher_header_data()

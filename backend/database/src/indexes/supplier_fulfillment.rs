@@ -100,10 +100,6 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
             "uk_supplier_fulfillment_orders_order_no",
             doc! { "fulfillment_order_no": 1 },
         ),
-        unique_index(
-            "uk_supplier_fulfillment_orders_mall_supplier_split",
-            doc! { "mall_order_id": 1, "supplier_id": 1, "split_no": 1 },
-        ),
         // §6.19「非空 (connection_id, external_order_no) 唯一」：部分唯一索引，
         // external_order_no 为空（下单成功回传前）时多条记录不受约束；
         // 回滚方式：删除本索引后以唯一约束下放到应用层校验。
@@ -120,11 +116,6 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
             "idx_supplier_fulfillment_orders_external_order_no",
             doc! { "external_order_no": 1 },
         ),
-        // §6.19 mall_order_fact 联动：按来源商城订单聚合子订单的查询索引。
-        named_index(
-            "idx_supplier_fulfillment_orders_mall_order",
-            doc! { "mall_order_id": 1 },
-        ),
         // FUL-R06 结算来源范围：按供应商枚举期间内完成订单（completed_at 区间）
         // 的有界查询索引；回滚方式：删除本索引后查询退化为全表扫描。
         named_index(
@@ -137,11 +128,6 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
 fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
     vec![
-        // §6.19「一条商城商品明细只属于一个供应商子订单」：全局唯一，不拆量给多个供应商。
-        unique_index(
-            "uk_supplier_fulfillment_items_mall_order_item",
-            doc! { "mall_order_item_id": 1 },
-        ),
         named_index(
             "idx_supplier_fulfillment_items_order",
             doc! { "supplier_fulfillment_order_id": 1 },
@@ -150,11 +136,6 @@ fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
 }
 
 /// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。
-///
-/// `idx_supplier_order_actions_request` 支撑 FUL-R03 `scope_submitted_totals`
-/// 按 `{after_sales_request_id, deleted_at}` 枚举动作头的有界查询；前向路径为
-/// 本函数随 `ensure_indexes` 创建，回滚方式为删除本索引后查询退化为全表扫描
-/// （合同 §7.3.5）。
 fn supplier_order_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -165,25 +146,15 @@ fn supplier_order_action_indexes() -> Vec<IndexModel> {
             "idx_supplier_order_actions_order",
             doc! { "supplier_fulfillment_order_id": 1 },
         ),
-        named_index(
-            "idx_supplier_order_actions_request",
-            doc! { "after_sales_request_id": 1, "deleted_at": 1 },
-        ),
     ]
 }
 
 /// 返回 `supplier_order_action_line` 的身份约束索引（§6.19）。
 fn supplier_order_action_line_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index(
-            "uk_supplier_order_action_lines_action_line_no",
-            doc! { "supplier_order_action_id": 1, "line_no": 1 },
-        ),
-        unique_index(
-            "uk_supplier_order_action_lines_action_request_line",
-            doc! { "supplier_order_action_id": 1, "after_sales_request_line_id": 1 },
-        ),
-    ]
+    vec![unique_index(
+        "uk_supplier_order_action_lines_action_line_no",
+        doc! { "supplier_order_action_id": 1, "line_no": 1 },
+    )]
 }
 
 /// 返回 `supplier_order_status_history` 的回调幂等唯一索引（§6.19）。
@@ -290,11 +261,6 @@ mod tests {
                 == Some("uk_supplier_fulfillment_orders_order_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes.iter().any(|index| {
-            index.options.as_ref().and_then(|options| options.name.as_deref())
-                == Some("uk_supplier_fulfillment_orders_mall_supplier_split")
-                && index.keys == doc! { "mall_order_id": 1, "supplier_id": 1, "split_no": 1 }
-        }));
         let external = indexes
             .iter()
             .find(|index| {
@@ -313,47 +279,17 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| index.keys == doc! { "external_order_no": 1 }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "mall_order_id": 1 }));
     }
 
     #[test]
-    fn fulfillment_item_ownership_is_globally_unique() {
+    fn fulfillment_item_order_index_exists() {
         let indexes = supplier_fulfillment_item_indexes();
 
-        let ownership = indexes
-            .iter()
-            .find(|index| {
-                index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_supplier_fulfillment_items_mall_order_item")
-            })
-            .unwrap();
-        assert_eq!(ownership.keys, doc! { "mall_order_item_id": 1 });
-        assert_eq!(ownership.options.as_ref().unwrap().unique, Some(true));
-    }
-
-    #[test]
-    fn action_request_index_covers_after_sales_scope_query() {
-        let actions = supplier_order_action_indexes();
-
-        let request = actions
-            .iter()
-            .find(|index| {
-                index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("idx_supplier_order_actions_request")
-            })
-            .unwrap();
-        assert_eq!(
-            request.keys,
-            doc! { "after_sales_request_id": 1, "deleted_at": 1 },
-            "FUL-R03 按售后申请枚举动作头必须命中该索引"
-        );
-        assert_ne!(
-            request.options.as_ref().and_then(|options| options.unique),
-            Some(true),
-            "查询索引不得携带唯一约束"
-        );
+        assert!(indexes.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("idx_supplier_fulfillment_items_order")
+                && index.keys == doc! { "supplier_fulfillment_order_id": 1 }
+        }));
     }
 
     #[test]
@@ -367,10 +303,6 @@ mod tests {
         let lines = supplier_order_action_line_indexes();
         assert!(lines.iter().any(|index| {
             index.keys == doc! { "supplier_order_action_id": 1, "line_no": 1 }
-                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
-        }));
-        assert!(lines.iter().any(|index| {
-            index.keys == doc! { "supplier_order_action_id": 1, "after_sales_request_line_id": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
     }

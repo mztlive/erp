@@ -103,10 +103,11 @@ impl BusinessType {
 }
 
 /// 最初创建入口（数据模型 §6.4：商城或 ERP，创建后永久不变）。
+/// 商城变体仅保留历史卡券同步单据标识，不代表商城二期对接；重做时另行设计。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OriginSystem {
-    /// 商城。
+    /// 商城（历史来源标识，无二期业务规则）。
     Mall,
     /// ERP。
     Erp,

@@ -47,7 +47,6 @@ export function useSalesOrderCreateDefaults({
             welfareScene: initialDraft?.welfareScene ?? "",
             paymentTerms: initialDraft?.paymentTerms ?? "",
             fulfillmentDeadline: initialDraft?.fulfillmentDeadline ?? "",
-            targetMallId: initialDraft?.targetMallId ?? "",
             receivableDueDate: initialDraft?.receivableDueDate ?? "",
             taxRatePercent:
                 initialDraft?.taxRatePercent ??

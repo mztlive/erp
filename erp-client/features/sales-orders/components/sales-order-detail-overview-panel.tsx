@@ -142,10 +142,6 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
                             numeric
                         />
                         <OverviewField
-                            label="目标商城"
-                            value={order.targetMallName || "—"}
-                        />
-                        <OverviewField
                             label="应收到期日"
                             value={order.receivableDueDate || "—"}
                             numeric

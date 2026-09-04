@@ -41,20 +41,12 @@ export function OverviewSection({
                     }
                 />
                 <Item
-                    label="发布数据版本"
-                    value={
-                        <span className="num">
-                            {codeVersion(order.publicationVersion)}
-                        </span>
-                    }
-                />
-                <Item
                     label="支付凭证号"
                     value={<span className="num">{order.paymentFactKey}</span>}
                 />
             </DescriptionList>
             <p className="mt-3 text-xs text-muted-foreground">
-                发布版本、供给、商品与成本在下单时固定，不受后续基础资料变化影响。
+                供给、商品与成本在下单时固定，不受后续基础资料变化影响。
             </p>
         </DocumentSection>
     )
@@ -72,7 +64,7 @@ export function ItemsSection({
     return (
         <DocumentSection
             title="商品明细"
-            description="一条商城明细只属于一个供应商子订单；下单记录不可改供应商"
+            description="一条商品明细只属于一个供应商子订单；下单记录不可改供应商"
         >
             <Table>
                 <TableHeader>
@@ -80,7 +72,7 @@ export function ItemsSection({
                         <TableHead>商品</TableHead>
                         <TableHead>数量</TableHead>
                         <TableHead>供应商订货编码</TableHead>
-                        <TableHead>发布/供给版本</TableHead>
+                        <TableHead>供给版本</TableHead>
                         <TableHead className="text-right">
                             下单成本（含税）
                         </TableHead>
@@ -115,7 +107,6 @@ export function ItemsSection({
                                 </div>
                             </TableCell>
                             <TableCell className="num text-xs">
-                                {codeVersion(item.publicationVersion)} /{" "}
                                 {codeVersion(item.supplyVersion)}
                             </TableCell>
                             <TableCell className="text-right">

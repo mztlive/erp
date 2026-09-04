@@ -159,7 +159,6 @@ mod tests {
     use crate::ids::{
         ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
         SalesOrderSubmissionId, SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-        SourceSystemId,
     };
     use crate::money::{Amount, Rate, UnitPrice};
     use crate::sales_order::snapshot::HeaderSnapshotData;
@@ -270,9 +269,6 @@ mod tests {
             business_remark: None,
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
-            customer_external_identity: None,
-            voucher_category_external_identity: None,
             receivable_due_date: None,
             gross_amount,
             net_amount: gross_amount,
@@ -292,9 +288,6 @@ mod tests {
             business_type: BusinessType::Voucher,
             voucher_category_sku_id: Some(SkuId::new("vcat-1")),
             voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            target_mall_id: Some(SourceSystemId::new("mall-1")),
-            customer_external_identity: Some("mall-customer-1".to_string()),
-            voucher_category_external_identity: Some("mall-voucher-1".to_string()),
             receivable_due_date: Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()),
             gross_amount: gross,
             net_amount: gross,

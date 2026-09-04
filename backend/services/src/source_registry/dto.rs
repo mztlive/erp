@@ -4,7 +4,7 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
 use entities::source_registry::{
-    ExternalIdentityMap, ExternalObjectType, MallSyncStage, MappingStatus, RelationRole, SourceSystem,
+    ExternalIdentityMap, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
     SourceSystemData, SourceSystemId, SourceSystemStatus, SourceSystemType,
 };
 use serde::{Deserialize, Serialize};
@@ -57,9 +57,7 @@ pub use crate::query::PageView;
 /// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
 use crate::query::non_blank;
 
-/// 来源系统创建请求。
-///
-/// `MALL` 来源必须显式携带 `mall_sync_stage`，其他来源禁止携带；阶段不设默认值。
+/// 来源系统创建请求.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSourceSystemRequest {
     /// 稳定代码（唯一）。
@@ -68,13 +66,11 @@ pub struct CreateSourceSystemRequest {
     /// 显示名称。
     #[validate(custom(function = "non_blank", message = "来源系统名称不能为空"))]
     pub name: String,
-    /// 系统类型（`ERP`/`MALL`/`SUPPLIER`）。
+    /// 系统类型.
     pub system_type: SourceSystemType,
     /// 启停状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<SourceSystemStatus>,
-    /// 商城同步执行阶段；仅 `MALL` 来源必填。
-    pub mall_sync_stage: Option<MallSyncStage>,
 }
 
 impl CreateSourceSystemRequest {
@@ -88,7 +84,6 @@ impl CreateSourceSystemRequest {
             system_type: self.system_type,
             name: self.name,
             status: self.status.unwrap_or(SourceSystemStatus::Active),
-            mall_sync_stage: self.mall_sync_stage,
         }
     }
 }
@@ -103,8 +98,6 @@ pub struct UpdateSourceSystemRequest {
     pub name: Option<String>,
     /// 启停状态；缺省表示不修改。
     pub status: Option<SourceSystemStatus>,
-    /// 商城同步执行阶段；仅 `MALL` 来源允许修改。
-    pub mall_sync_stage: Option<MallSyncStage>,
 }
 
 /// 来源系统响应视图（契约形状：`id`/`code`/`name`/`system_type`/`status`/`created_at`，
@@ -121,8 +114,6 @@ pub struct SourceSystemView {
     pub system_type: SourceSystemType,
     /// 启停状态。
     pub status: SourceSystemStatus,
-    /// 商城同步执行阶段；仅 `MALL` 来源存在。
-    pub mall_sync_stage: Option<MallSyncStage>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
@@ -144,7 +135,6 @@ impl From<SourceSystem> for SourceSystemView {
             name: system.name,
             system_type: system.system_type,
             status: system.stable.status,
-            mall_sync_stage: system.mall_sync_stage,
             created_at: system.base.created_at,
             version: system.base.version,
         }
@@ -338,7 +328,7 @@ impl ExternalIdentityMapListParams {
 mod tests {
     use super::{normalize_sort, ExternalIdentityMapListParams, SortDir, SourceSystemListParams};
     use entities::source_registry::{
-        MallSyncStage, MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType,
+        MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType,
     };
     use serde_json::json;
     use validator::Validate;
@@ -423,18 +413,15 @@ mod tests {
         .unwrap();
         let data = request.into_data();
         assert_eq!(data.status, SourceSystemStatus::Active);
-        assert_eq!(data.mall_sync_stage, None);
 
         let request: super::CreateSourceSystemRequest = serde_json::from_value(json!({
             "code": "MALL",
             "name": "Mall",
             "system_type": "MALL",
-            "status": "disabled",
-            "mall_sync_stage": "FIRST_PHASE_MALL_OWNED"
+            "status": "disabled"
         }))
         .unwrap();
         let data = request.into_data();
         assert_eq!(data.status, SourceSystemStatus::Disabled);
-        assert_eq!(data.mall_sync_stage, Some(MallSyncStage::FirstPhaseMallOwned));
     }
 }

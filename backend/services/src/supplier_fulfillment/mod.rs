@@ -15,12 +15,11 @@
 //! `account` 上下文。
 //!
 //! 跨域协作只经 DatabaseExt 调对方域 Repository（P3 §2）：D25 `supplier_api`
-//! （连接与能力）、D29 `mall_order`（商城订单与明细）、D24 `supplier_offering`
-//! （供给修订）、D30 `mall_after_sales`（售后申请与行，§6.19 净余额校验）、
+//! （连接与能力）、D24 `supplier_offering`（供给修订）、
 //! D34 `integration_ops`（inbox_message / integration_error_task）。
 //!
 //! 资金/状态机入口一律幂等（§6.19）：下单键为 `fulfillment_order_no`，
-//! 取消/退款键为「ERP 供应商订单号 + 动作类型 + 商城售后请求 ID」（本域拼装），
+//! 取消/退款键为「ERP 供应商订单号 + 动作类型」（本域拼装），
 //! 拒单键为 `(connection_id, external_event_id)`，退款结果键为
 //! `(connection_id, external_refund_no, external_refund_version)`；
 //! 重复提交只返回原结果，不产生第二条正式事实。
@@ -29,8 +28,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use database::{
-    AccessControlExt, Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, NoTransaction,
-    SupplierApiExt, SupplierExt, SupplierFulfillmentExt, Transactional, WorkItemExt,
+    AccessControlExt, Executor, IntegrationOpsExt, NoTransaction, SupplierApiExt, SupplierExt,
+    SupplierFulfillmentExt, Transactional, WorkItemExt,
 };
 use entities::common::time::Instant;
 use entities::ids::{
@@ -41,7 +40,6 @@ use entities::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
 };
-use entities::money::{Amount, Quantity};
 use entities::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
@@ -59,7 +57,6 @@ use id_generator::next_id;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::str::FromStr;
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -199,40 +196,6 @@ impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
 type FulfillmentOrderFilter = <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;
 
-/// 返回零金额（成本余额累加起点）。
-fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
-}
-
-/// 返回零数量（售后申请行净余额累加起点）。
-fn zero_quantity() -> Quantity {
-    Quantity::from_str("0.000000").expect("零是合法数量")
-}
-
-/// 数量相减（小数位受类型约束，恒合法）。
-///
-/// # 参数
-/// * `left` - 被减数
-/// * `right` - 减数
-///
-/// # 返回
-/// 返回相减结果。
-fn qty_sub(left: Quantity, right: Quantity) -> Quantity {
-    Quantity::try_from(left.to_decimal() - right.to_decimal()).expect("数量小数位合法")
-}
-
-/// 金额相减（小数位受类型约束，恒合法）。
-///
-/// # 参数
-/// * `left` - 被减数
-/// * `right` - 减数
-///
-/// # 返回
-/// 返回相减结果。
-fn amount_sub(left: Amount, right: Amount) -> Amount {
-    Amount::try_from(left.to_decimal() - right.to_decimal()).expect("金额小数位合法")
-}
-
 /// 供应商履约服务。
 ///
 /// 提供供应商子订单的下单、查询、取消/退款动作提交与外部结果登记编排。
@@ -277,7 +240,6 @@ impl SupplierFulfillmentService {
             supplier_id: query.supplier_id,
             fulfillment_status: query.fulfillment_status,
             external_order_no: query.external_order_no,
-            mall_order_id: query.mall_order_id,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -294,7 +256,6 @@ impl SupplierFulfillmentService {
             .map(|row| SupplierFulfillmentOrderView {
                 id: row.id,
                 fulfillment_order_no: row.fulfillment_order_no,
-                mall_order_id: row.mall_order_id.to_string(),
                 supplier_id: row.supplier_id.to_string(),
                 connection_id: row.connection_id.to_string(),
                 split_no: row.split_no,
@@ -362,25 +323,12 @@ impl SupplierFulfillmentService {
             .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), &mut NoTransaction)
             .await?
             .remove(&supplier_id);
-        let mall_order_no = self
-            .db
-            .mall_orders()
-            .find_by_id(&order.mall_order_id, &mut NoTransaction)
-            .await?
-            .map(|mall_order| mall_order.external_order_no);
         let mut action_blockers = Vec::new();
         if supplier_name.is_none() {
             action_blockers.push(supplier_order_blocker(
                 "VIEW_SUPPLIER_NAME",
                 "SUPPLIER_NAME_MISSING",
                 "供应商主体或当前名称修订缺失，禁止以供应商 ID 伪装名称",
-            ));
-        }
-        if mall_order_no.is_none() {
-            action_blockers.push(supplier_order_blocker(
-                "VIEW_MALL_ORDER_NO",
-                "MALL_ORDER_MISSING",
-                "当前供应商履约单缺少可验证的商城订单事实",
             ));
         }
         action_blockers.push(supplier_order_blocker(
@@ -507,7 +455,6 @@ impl SupplierFulfillmentService {
             actions: actions.into_iter().map(Into::into).collect(),
             refund_facts: refund_views,
             supplier_name,
-            mall_order_no,
             address: SupplierOrderAddressView {
                 masked: None,
                 can_reveal: false,
@@ -685,7 +632,7 @@ impl SupplierFulfillmentService {
         Ok(order.into())
     }
 
-    /// 提交供应商取消（幂等键：「订单号 + CANCEL + 售后申请 ID」，§6.19）。
+    /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
     ///
     /// 同事务创建 `CANCEL` 动作头/行并把 `cancel_status` 推进到 `CANCEL_PENDING`；
     /// 事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
@@ -699,7 +646,7 @@ impl SupplierFulfillmentService {
     /// 返回动作与动作后订单视图。
     ///
     /// # 错误
-    /// * `NotFound` - 订单/售后申请/申请行不存在
+    /// * `NotFound` - 订单不存在
     /// * `BusinessLogicError` - 动作范围非法或连接缺少取消能力
     /// * `ConflictError` - 唯一键冲突（并发重复提交）
     pub async fn submit_cancel(
@@ -712,7 +659,7 @@ impl SupplierFulfillmentService {
             .await
     }
 
-    /// 提交供应商退款（幂等键：「订单号 + REFUND + 售后申请 ID」，§6.19）。
+    /// 提交供应商退款（幂等键：「订单号 + REFUND」，§6.19）。
     ///
     /// 同事务创建 `REFUND` 动作头/行并把 `refund_status` 推进到 `REFUND_PENDING`；
     /// 事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
@@ -726,7 +673,7 @@ impl SupplierFulfillmentService {
     /// 返回动作与动作后订单视图。
     ///
     /// # 错误
-    /// * `NotFound` - 订单/售后申请/申请行不存在
+    /// * `NotFound` - 订单不存在
     /// * `BusinessLogicError` - 动作范围非法或连接缺少退款能力
     /// * `ConflictError` - 唯一键冲突（并发重复提交）
     pub async fn submit_refund(
@@ -1204,10 +1151,9 @@ impl SupplierFulfillmentService {
         req.validate()?;
         let mut order = self.load_order(id).await?;
         let idempotency_key = format!(
-            "{}+{}+{}",
+            "{}+{}",
             order.fulfillment_order_no,
             action_type.as_str(),
-            req.after_sales_request_id
         );
         if let Some(existing) = self
             .db
@@ -1230,11 +1176,6 @@ impl SupplierFulfillmentService {
                 order: order.into(),
             });
         }
-        self.db
-            .mall_after_sales_requests()
-            .find_by_id(&req.after_sales_request_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("商城售后申请不存在".to_string()))?;
         let connection = self
             .db
             .supplier_api_connections()
@@ -1875,12 +1816,6 @@ impl SupplierFulfillmentService {
             .find_capabilities_by_connection(&req.connection_id, &mut NoTransaction)
             .await?;
         ensure_capability(&capabilities, SupplierApiCapabilityCode::Order)?;
-        self.db
-            .mall_orders()
-            .find_by_id(&req.mall_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源商城订单不存在".to_string()))?;
-        self.ensure_mall_items(req).await?;
         let mut revision_ids = req
             .items
             .iter()
@@ -1904,36 +1839,6 @@ impl SupplierFulfillmentService {
             }
         }
         Ok((connection, by_revision))
-    }
-
-    /// 校验商城订单明细全部存在且归属该商城订单（D29 跨域读取）。
-    ///
-    /// # 参数
-    /// * `req` - 下单请求
-    ///
-    /// # 错误
-    /// * `NotFound` - 商城订单明细不存在
-    /// * `BusinessLogicError` - 明细不属于该商城订单
-    async fn ensure_mall_items(&self, req: &PlaceFulfillmentOrderRequest) -> Result<()> {
-        let item_ids = req
-            .items
-            .iter()
-            .map(|item| item.mall_order_item_id.clone())
-            .collect::<Vec<_>>();
-        let items = self
-            .db
-            .mall_order_items()
-            .list_by_ids(&item_ids, &mut NoTransaction)
-            .await?;
-        if items.len() != item_ids.len() {
-            return Err(Error::NotFound("商城订单明细不存在".to_string()));
-        }
-        if items.iter().any(|item| item.mall_order_id != req.mall_order_id) {
-            return Err(Error::BusinessLogicError(
-                "商城订单明细不属于该商城订单".to_string(),
-            ));
-        }
-        Ok(())
     }
 
     /// 构建下单事实（子订单 + 明细 + 首个 `PLACE` 动作）。
@@ -1963,7 +1868,6 @@ impl SupplierFulfillmentService {
             order_id.clone(),
             SupplierFulfillmentOrderData::submitting(
                 req.fulfillment_order_no.clone(),
-                req.mall_order_id.clone(),
                 req.supplier_id.clone(),
                 req.connection_id.clone(),
                 req.split_no,
@@ -2005,7 +1909,6 @@ impl SupplierFulfillmentService {
                     .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
                 let data = SupplierFulfillmentItemData::from_unit_cost(
                     order_id.clone(),
-                    item.mall_order_item_id.clone(),
                     item.supplier_offering_revision_id.clone(),
                     offering.supplier_sku_code.clone(),
                     offering.supplier_product_code.clone(),
@@ -2024,7 +1927,7 @@ impl SupplierFulfillmentService {
     /// # 参数
     /// * `order` - 供应商子订单
     /// * `req` - 动作提交请求
-    /// * `idempotency_key` - 「订单号 + 动作类型 + 售后申请 ID」
+    /// * `idempotency_key` - 「订单号 + 动作类型」
     /// * `action_type` - `Cancel` 或 `Refund`
     ///
     /// # 返回
@@ -2041,10 +1944,9 @@ impl SupplierFulfillmentService {
     ) -> Result<SupplierOrderAction> {
         SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),
-            SupplierOrderActionData::after_sales(
+            SupplierOrderActionData::manual_adjustment(
                 SupplierFulfillmentOrderId::new(order.base.id.as_str()),
                 action_type,
-                req.after_sales_request_id.clone(),
                 idempotency_key,
                 req.reason_code.as_deref(),
             ),
@@ -2077,7 +1979,6 @@ impl SupplierFulfillmentService {
                     SupplierOrderActionLineData::from_request_index(
                         SupplierOrderActionId::new(action.base.id.as_str()),
                         index,
-                        line.after_sales_request_line_id.clone(),
                         line.supplier_fulfillment_item_id.clone(),
                         line.quantity,
                         line.amount,
@@ -2088,56 +1989,33 @@ impl SupplierFulfillmentService {
             .map_err(crate::errors::Error::from)
     }
 
-    /// 校验动作行范围（§6.19）：行明细必须属于该子订单；数量/金额不得超过
-    /// 对应售后申请行尚未提交的净余额。范围事实（订单合法明细、申请行限额、
-    /// 按申请行聚合的历史已提交数量/金额）由 Repository 一次取回
-    /// （FUL-R03），Service 只保留跨聚合归属与剩余净额决定。
+    /// 校验动作行范围（§6.19）：行明细必须属于该子订单。
     ///
     /// # 参数
     /// * `order` - 供应商子订单
     /// * `req` - 动作提交请求
     ///
     /// # 错误
-    /// * `NotFound` - 售后申请行不存在
-    /// * `BusinessLogicError` - 明细归属或净余额超限
+    /// * `BusinessLogicError` - 明细归属非法
     async fn ensure_action_lines(
         &self,
         order: &SupplierFulfillmentOrder,
         req: &SubmitAfterSalesActionRequest,
     ) -> Result<()> {
-        let scope = self
+        let order_id = SupplierFulfillmentOrderId::new(order.base.id.as_str());
+        let items = self
             .db
-            .supplier_fulfillment()
-            .after_sales_action_scope(
-                &SupplierFulfillmentOrderId::new(order.base.id.as_str()),
-                &req.after_sales_request_id,
-                &mut NoTransaction,
-            )
+            .supplier_fulfillment_items()
+            .find_items_by_order_ids(std::slice::from_ref(&order_id), &mut NoTransaction)
             .await?;
-        let item_ids: std::collections::HashSet<&str> = scope.item_ids.iter().map(|id| id.as_ref()).collect();
+        let item_ids: std::collections::HashSet<&str> = items
+            .iter()
+            .map(|item| item.base.id.as_ref())
+            .collect();
         for line in &req.lines {
             if !item_ids.contains(line.supplier_fulfillment_item_id.as_ref()) {
                 return Err(Error::BusinessLogicError(
                     "动作行不属于该供应商子订单".to_string(),
-                ));
-            }
-            let request_line = scope
-                .request_line_limits
-                .iter()
-                .find(|request_line| request_line.id == line.after_sales_request_line_id)
-                .ok_or_else(|| Error::NotFound("商城售后申请行不存在".to_string()))?;
-            let (submitted_qty, submitted_amount) = scope
-                .submitted_by_request_line
-                .get(&line.after_sales_request_line_id)
-                .map(|totals| (totals.quantity, totals.amount))
-                .unwrap_or((zero_quantity(), zero_amount()));
-            if line.quantity.to_decimal()
-                > qty_sub(request_line.requested_quantity, submitted_qty).to_decimal()
-                || line.amount.to_decimal()
-                    > amount_sub(request_line.requested_amount, submitted_amount).to_decimal()
-            {
-                return Err(Error::BusinessLogicError(
-                    "动作行数量或金额超过售后申请行尚未提交的净余额".to_string(),
                 ));
             }
         }
@@ -3368,7 +3246,6 @@ fn item_view(item: SupplierFulfillmentItem) -> crate::supplier_fulfillment::dto:
     crate::supplier_fulfillment::dto::SupplierFulfillmentItemView {
         id: item.base.id,
         supplier_fulfillment_order_id: item.supplier_fulfillment_order_id.to_string(),
-        mall_order_item_id: item.mall_order_item_id.to_string(),
         supplier_offering_revision_id: item.supplier_offering_revision_id.to_string(),
         supplier_sku_code_snapshot: item.supplier_sku_code_snapshot,
         supplier_product_code_snapshot: item.supplier_product_code_snapshot,
@@ -3392,7 +3269,6 @@ fn action_line_view(
     crate::supplier_fulfillment::dto::SupplierOrderActionLineView {
         id: line.base.id,
         line_no: line.line_no,
-        after_sales_request_line_id: line.after_sales_request_line_id.to_string(),
         supplier_fulfillment_item_id: line.supplier_fulfillment_item_id.to_string(),
         quantity: line.quantity,
         amount: line.amount,
@@ -3492,7 +3368,6 @@ mod investigation_tests {
             SupplierOrderActionData {
                 supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(&context.order_id),
                 action_type: SupplierOrderActionType::Query,
-                after_sales_request_id: None,
                 idempotency_key: "stable-key".to_string(),
                 status: SupplierOrderActionStatus::Pending,
                 external_request_id: None,

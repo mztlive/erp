@@ -153,7 +153,7 @@ export function SupplierOrdersListToolbar({
                             onChange={(event) =>
                                 onSearchDraftChange(event.target.value)
                             }
-                            placeholder="供应商订单号、商城订单、外部单号"
+                            placeholder="供应商订单号、外部单号"
                             aria-label="搜索供应商订单"
                         />
                     </InputGroup>

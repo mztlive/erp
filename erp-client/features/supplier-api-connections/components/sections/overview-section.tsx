@@ -128,14 +128,6 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                         >
                             供应商供给
                         </Link>
-                        {" · "}
-                        <Link
-                            id="supplier-api-connections-overview-publications"
-                            href="/commerce/publications"
-                            className="text-primary underline-offset-2 hover:underline"
-                        >
-                            商品发布
-                        </Link>
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2">

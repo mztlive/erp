@@ -31,7 +31,6 @@ export type SupplierOrderCenterResult = {
 export type AfterSalesConfirmRequest = {
     requestId: string
     requestNo: string
-    mallRequestRef: string
     action: "CANCEL" | "REFUND"
 }
 

@@ -1518,7 +1518,6 @@ fn safe_reference(bound: bool, visible: bool) -> SafeReferenceView {
 fn impact_view(impact: SupplierConnectionImpact) -> RelatedImpactView {
     RelatedImpactView {
         active_offerings: impact.active_offerings,
-        active_publications: impact.active_publications,
         open_supplier_orders: impact.open_supplier_orders,
         active_sync_jobs: impact.active_sync_jobs,
     }

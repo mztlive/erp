@@ -372,7 +372,6 @@ export function mapListItemFromBackend(
         taxRatePercent?: string
         welfareScene?: string
         fulfillmentDeadline?: string
-        targetMallName?: string
         receivableDueDate?: string
         remark?: string
         settlementEntity?: string
@@ -458,7 +457,6 @@ export function mapListItemFromBackend(
         paymentTerms: extras?.paymentTerms ?? "",
         taxRatePercent: extras?.taxRatePercent ?? "",
         fulfillmentDeadline: extras?.fulfillmentDeadline ?? "",
-        targetMallName: extras?.targetMallName,
         receivableDueDate: extras?.receivableDueDate,
         customerContact: extras?.customerContact,
         lineItems: extras?.lineItems ?? [],

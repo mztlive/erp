@@ -7,7 +7,6 @@ mod access_control;
 mod approval_integration;
 mod bpm;
 mod bulk_job;
-mod card_instance;
 mod catalog;
 mod contract;
 mod cost;
@@ -18,15 +17,9 @@ mod fulfillment;
 mod integration_ops;
 mod inventory;
 mod legacy_import;
-mod mall_after_sales;
-mod mall_backfill;
-mod mall_order;
-mod mall_sync;
 mod party;
 mod payable;
 mod procurement_responsibility;
-mod projection;
-mod publication;
 mod purchase_order;
 mod receivable;
 mod returns;
@@ -45,7 +38,6 @@ pub use access_control::AccessControlExt;
 pub use approval_integration::ApprovalIntegrationExt;
 pub use bpm::BpmExt;
 pub use bulk_job::BulkJobExt;
-pub use card_instance::CardInstanceExt;
 pub use catalog::CatalogExt;
 pub use contract::ContractExt;
 pub use cost::CostExt;
@@ -56,15 +48,9 @@ pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 pub use inventory::InventoryExt;
 pub use legacy_import::LegacyImportExt;
-pub use mall_after_sales::MallAfterSalesExt;
-pub use mall_backfill::MallBackfillExt;
-pub use mall_order::MallOrderExt;
-pub use mall_sync::MallSyncExt;
 pub use party::PartyExt;
 pub use payable::PayableExt;
 pub use procurement_responsibility::ProcurementResponsibilityExt;
-pub use projection::ProjectionExt;
-pub use publication::PublicationExt;
 pub use purchase_order::PurchaseOrderExt;
 pub use receivable::ReceivableExt;
 pub use returns::ReturnsExt;
@@ -88,7 +74,6 @@ pub trait DatabaseExt:
     + ApprovalIntegrationExt
     + BpmExt
     + BulkJobExt
-    + CardInstanceExt
     + CatalogExt
     + ContractExt
     + CostExt
@@ -99,15 +84,9 @@ pub trait DatabaseExt:
     + IntegrationOpsExt
     + InventoryExt
     + LegacyImportExt
-    + MallAfterSalesExt
-    + MallBackfillExt
-    + MallOrderExt
-    + MallSyncExt
     + PartyExt
     + PayableExt
-    + ProjectionExt
     + ProcurementResponsibilityExt
-    + PublicationExt
     + PurchaseOrderExt
     + ReceivableExt
     + ReturnsExt
@@ -129,7 +108,6 @@ impl<
             + ApprovalIntegrationExt
             + BpmExt
             + BulkJobExt
-            + CardInstanceExt
             + CatalogExt
             + ContractExt
             + CostExt
@@ -140,15 +118,9 @@ impl<
             + IntegrationOpsExt
             + InventoryExt
             + LegacyImportExt
-            + MallAfterSalesExt
-            + MallBackfillExt
-            + MallOrderExt
-            + MallSyncExt
             + PartyExt
             + PayableExt
-            + ProjectionExt
             + ProcurementResponsibilityExt
-            + PublicationExt
             + PurchaseOrderExt
             + ReceivableExt
             + ReturnsExt

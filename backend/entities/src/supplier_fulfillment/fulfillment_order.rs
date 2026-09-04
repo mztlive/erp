@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::common::state::ensure_transition;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{MallOrderId, SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
+use crate::ids::{SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 // 兼容既有深层导入路径：`supplier_fulfillment::fulfillment_order::{...}`。
@@ -35,8 +35,6 @@ const ADDRESS_FINGERPRINT_MAX_LEN: usize = 128;
 pub struct SupplierFulfillmentOrderData {
     /// ERP 供应商子订单号（唯一，也是下单幂等键）。
     pub fulfillment_order_no: String,
-    /// 来源商城订单。
-    pub mall_order_id: MallOrderId,
     /// 固定供应商。
     pub supplier_id: SupplierAccountId,
     /// 供应商 API 连接。
@@ -71,7 +69,6 @@ impl SupplierFulfillmentOrderData {
     ///
     /// # 参数
     /// * `fulfillment_order_no` - ERP 供应商子订单号
-    /// * `mall_order_id` - 来源商城订单
     /// * `supplier_id` - 固定供应商
     /// * `connection_id` - 供应商 API 连接
     /// * `split_no` - 确定性拆单序号
@@ -84,7 +81,6 @@ impl SupplierFulfillmentOrderData {
     #[allow(clippy::too_many_arguments)]
     pub fn submitting(
         fulfillment_order_no: impl Into<String>,
-        mall_order_id: MallOrderId,
         supplier_id: SupplierAccountId,
         connection_id: SupplierApiConnectionId,
         split_no: u32,
@@ -94,7 +90,6 @@ impl SupplierFulfillmentOrderData {
     ) -> Self {
         Self {
             fulfillment_order_no: fulfillment_order_no.into(),
-            mall_order_id,
             supplier_id,
             connection_id,
             split_no,
@@ -120,7 +115,7 @@ pub struct SupplierFulfillmentOrderUpdate {
 
 /// 供应商子订单实体（数据模型 §6.19，正式单据）。
 ///
-/// `fulfillment_order_no`、`mall_order_id`、`supplier_id`、`connection_id`、`split_no`
+/// `fulfillment_order_no`、`supplier_id`、`connection_id`、`split_no`
 /// 与三条状态是创建后不可修改的关键字段；地址快照为敏感值，`Debug` 一律脱敏。
 #[derive(Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct SupplierFulfillmentOrder {
@@ -128,8 +123,6 @@ pub struct SupplierFulfillmentOrder {
     pub base: BaseModel,
     /// ERP 供应商子订单号。
     pub fulfillment_order_no: String,
-    /// 来源商城订单。
-    pub mall_order_id: MallOrderId,
     /// 固定供应商。
     pub supplier_id: SupplierAccountId,
     /// 供应商 API 连接。
@@ -202,7 +195,6 @@ impl SupplierFulfillmentOrder {
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             fulfillment_order_no,
-            mall_order_id: data.mall_order_id,
             supplier_id: data.supplier_id,
             connection_id: data.connection_id,
             split_no: data.split_no,
@@ -439,7 +431,6 @@ impl fmt::Debug for SupplierFulfillmentOrder {
             .debug_struct("SupplierFulfillmentOrder")
             .field("base", &self.base)
             .field("fulfillment_order_no", &self.fulfillment_order_no)
-            .field("mall_order_id", &self.mall_order_id)
             .field("supplier_id", &self.supplier_id)
             .field("connection_id", &self.connection_id)
             .field("split_no", &self.split_no)
@@ -522,7 +513,6 @@ mod tests {
     fn sample_data() -> SupplierFulfillmentOrderData {
         SupplierFulfillmentOrderData {
             fulfillment_order_no: " FO-2026-001 ".to_string(),
-            mall_order_id: MallOrderId::new("mall-order-1"),
             supplier_id: SupplierAccountId::new("supplier-1"),
             connection_id: SupplierApiConnectionId::new("connection-1"),
             split_no: 1,
@@ -548,7 +538,6 @@ mod tests {
             crate::supplier_fulfillment::SupplierOrderActionData {
                 supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
                 action_type: SupplierOrderActionType::Place,
-                after_sales_request_id: None,
                 idempotency_key: "order-1".to_string(),
                 status,
                 external_request_id: None,
@@ -711,7 +700,6 @@ mod tests {
     fn submitting_factory_freezes_initial_states_and_version_guard() {
         let data = SupplierFulfillmentOrderData::submitting(
             "order-2",
-            MallOrderId::new("mall-order-1"),
             SupplierAccountId::new("supplier-1"),
             SupplierApiConnectionId::new("connection-1"),
             1,

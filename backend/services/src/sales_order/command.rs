@@ -6,7 +6,7 @@ use mongodb::ClientSession;
 
 use database::{
     AccessControlExt, CatalogExt, ContractExt, CustomerExt, DocumentRegistryExt, Executor, NoTransaction,
-    SalesOrderExt, SourceRegistryExt, Transactional,
+    SalesOrderExt, Transactional,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::{
@@ -17,12 +17,14 @@ use entities::ids::{
     SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use entities::sales_order::{
-    ExternalIdentityResolution, SalesContentHash, SalesOrder, SalesOrderData, SalesOrderWorkingCopy,
+    SalesContentHash, SalesOrder, SalesOrderData, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate, WorkingPurpose,
 };
-use entities::source_registry::{ExternalObjectType, SourceSystemType};
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
+use crate::approval::binding::{
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+};
 use validator::Validate;
 
 use super::adapter::{
@@ -51,9 +53,6 @@ use super::start_approval::{
     SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
 };
 use super::SalesOrderService;
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
@@ -64,17 +63,10 @@ use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
-/// 提交时从目标商城映射注册表精确解析出的两类外部身份。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ResolvedCardExternalIdentities {
-    customer: String,
-    voucher_category: String,
-}
-
 /// 销售单提交并启动审批所需的单据集合。
 ///
 /// # 用途
-/// 将销售单、工作副本、冻结提交与外部身份打包。
+/// 将销售单、工作副本与冻结提交打包。
 ///
 /// # 参数
 /// 无
@@ -86,7 +78,7 @@ struct ResolvedCardExternalIdentities {
 /// 无
 ///
 /// # 关键业务约束
-/// 提交行必须由当前工作副本冻结；卡券身份在提交期间不得变化。
+/// 提交行必须由当前工作副本冻结。
 struct ApprovalSubmissionStart<'a> {
     /// 销售单主键。
     id: &'a str,
@@ -98,8 +90,6 @@ struct ApprovalSubmissionStart<'a> {
     submission: entities::sales_order::SalesOrderSubmission,
     /// 冻结提交行。
     submission_lines: Vec<entities::sales_order::SalesOrderSubmissionLine>,
-    /// 提交时解析的卡券外部身份。
-    resolved_identities: Option<ResolvedCardExternalIdentities>,
     /// 工作副本行，用于可售引用重验。
     copy_lines: Vec<SalesOrderWorkingCopyLine>,
     /// 草稿替换与补开副本的事务写入计划。
@@ -285,7 +275,6 @@ impl SalesOrderService {
             business_remark: editable.business_remark,
             voucher_category_sku_id: editable.voucher_category_sku_id,
             voucher_expiry_at: editable.voucher_expiry_at,
-            target_mall_id: editable.target_mall_id,
             receivable_due_date: editable.receivable_due_date,
             lines: editable.lines,
         };
@@ -390,19 +379,7 @@ impl SalesOrderService {
             let _ = sales_order_object_readable(&organization_id, actor.id())?;
             self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines)
                 .await?;
-            let resolved_identities = self
-                .resolve_card_external_identities(&working_copy, &mut NoTransaction)
-                .await?;
-            let submission = build_submission(
-                &working_copy,
-                &working_copy_lines,
-                1,
-                actor,
-                resolved_identities.as_ref().map(|value| value.customer.as_str()),
-                resolved_identities
-                    .as_ref()
-                    .map(|value| value.voucher_category.as_str()),
-            )?;
+            let submission = build_submission(&working_copy, &working_copy_lines, 1, actor)?;
             let submission_lines = build_submission_lines(&submission, &working_copy_lines)?;
             let mut submitted_working_copy = working_copy;
             submitted_working_copy.submit()?;
@@ -465,14 +442,6 @@ impl SalesOrderService {
                         SalesOrderService::new(db.clone())
                             .ensure_sellable_refs(&sellable_refs, session)
                             .await?;
-                        let current_identities = SalesOrderService::new(db.clone())
-                            .resolve_card_external_identities(&submitted_working_copy, session)
-                            .await?;
-                        if current_identities != resolved_identities {
-                            return Err(Error::ConflictError(
-                                "目标商城外部身份映射在提交期间已变化，请刷新后重试".to_string(),
-                            ));
-                        }
                         let binding = persist_bound_sales_document(
                             &db,
                             &rbac,
@@ -724,7 +693,6 @@ impl SalesOrderService {
                 voucher_expiry_at: draft
                     .voucher_expiry_at
                     .map(|secs| Instant::from_unix_secs(secs as i64)),
-                target_mall_id: draft.target_mall_id.clone(),
                 receivable_due_date: draft.receivable_due_date,
                 gross_amount: Some(gross),
                 net_amount: Some(net),
@@ -879,7 +847,6 @@ impl SalesOrderService {
                         voucher_expiry_at: draft
                             .voucher_expiry_at
                             .map(|secs| Instant::from_unix_secs(secs as i64)),
-                        target_mall_id: draft.target_mall_id.clone(),
                         receivable_due_date: draft.receivable_due_date,
                         gross_amount: Some(gross),
                         net_amount: Some(net),
@@ -942,19 +909,7 @@ impl SalesOrderService {
             .unwrap_or(0);
         let submission_no =
             entities::sales_order::SalesOrderSubmission::next_submission_no(latest_submission_no)?;
-        let resolved_identities = self
-            .resolve_card_external_identities(&working_copy, &mut NoTransaction)
-            .await?;
-        let submission = build_submission(
-            &working_copy,
-            &copy_lines,
-            submission_no,
-            actor,
-            resolved_identities.as_ref().map(|value| value.customer.as_str()),
-            resolved_identities
-                .as_ref()
-                .map(|value| value.voucher_category.as_str()),
-        )?;
+        let submission = build_submission(&working_copy, &copy_lines, submission_no, actor)?;
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
         working_copy.submit()?;
         self.start_approval_submission(
@@ -964,7 +919,6 @@ impl SalesOrderService {
                 working_copy,
                 submission,
                 submission_lines,
-                resolved_identities,
                 copy_lines,
                 working_copy_plan,
             },
@@ -982,7 +936,7 @@ impl SalesOrderService {
     /// 冻结提交快照并启动统一审批。
     ///
     /// # 参数
-    /// * `start` - 销售单、工作副本、提交与外部身份
+    /// * `start` - 销售单、工作副本与提交快照
     /// * `actor` - 审计操作人
     /// * `idempotency_key` - 客户端幂等键
     /// * `audit_id` - 幂等审计主键
@@ -993,9 +947,6 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 提交期间目标商城外部身份不得变化。
     async fn start_approval_submission(
         &self,
         start: ApprovalSubmissionStart<'_>,
@@ -1010,7 +961,6 @@ impl SalesOrderService {
             working_copy,
             submission,
             submission_lines,
-            resolved_identities,
             copy_lines,
             working_copy_plan,
         } = start;
@@ -1077,14 +1027,6 @@ impl SalesOrderService {
         SalesOrderService::new(self.db.clone())
             .ensure_sellable_refs(&sellable_refs, &mut NoTransaction)
             .await?;
-        let current_identities = self
-            .resolve_card_external_identities(&working_copy, &mut NoTransaction)
-            .await?;
-        if current_identities != resolved_identities {
-            return Err(Error::ConflictError(
-                "目标商城外部身份映射在提交期间已变化，请刷新后重试".to_string(),
-            ));
-        }
         let recovery_subject_version = submission.submission_no;
         let persisted = persist_sales_order_start(
             &self.db,
@@ -1316,80 +1258,6 @@ impl SalesOrderService {
         Err(original_error)
     }
 
-    /// 解析并校验卡券提交所需的目标商城与两类外部身份。
-    async fn resolve_card_external_identities(
-        &self,
-        working_copy: &SalesOrderWorkingCopy,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ResolvedCardExternalIdentities>> {
-        let Some((target_mall_id, voucher_category_id)) = working_copy
-            .voucher_submission_identity_refs(BusinessDate::today())
-            .map_err(|error| Error::ValidationError(error.to_string()))?
-        else {
-            return Ok(None);
-        };
-        let mall = self
-            .db
-            .source_systems()
-            .find_by_id(target_mall_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("目标商城不存在".to_string()))?;
-        if mall.system_type != SourceSystemType::Mall || !mall.is_active() {
-            return Err(Error::BusinessLogicError(
-                "目标来源系统必须是启用中的商城".to_string(),
-            ));
-        }
-        let as_of = Instant::now().unix_secs();
-        let customer = self
-            .unique_card_external_identity(
-                target_mall_id,
-                ExternalObjectType::Customer,
-                working_copy.customer_id.as_ref(),
-                "客户",
-                as_of,
-                executor,
-            )
-            .await?;
-        let voucher_category = self
-            .unique_card_external_identity(
-                target_mall_id,
-                ExternalObjectType::VoucherCategory,
-                voucher_category_id.as_ref(),
-                "卡券类目",
-                as_of,
-                executor,
-            )
-            .await?;
-        Ok(Some(ResolvedCardExternalIdentities {
-            customer,
-            voucher_category,
-        }))
-    }
-
-    /// 要求目标商城下给定 ERP 对象恰好存在一条当前有效外部身份。
-    async fn unique_card_external_identity(
-        &self,
-        target_mall_id: &entities::ids::SourceSystemId,
-        object_type: ExternalObjectType,
-        internal_object_id: &str,
-        object_label: &str,
-        as_of: i64,
-        executor: &mut dyn Executor,
-    ) -> Result<String> {
-        let matches = self
-            .db
-            .source_registry()
-            .active_external_identities_for_internal_object(
-                target_mall_id,
-                object_type,
-                internal_object_id,
-                as_of,
-                executor,
-            )
-            .await?;
-        require_unique_card_external_identity(matches, object_label)
-    }
-
     /// 校验请求草稿中的实物及服务行仍引用公司商品池内的精确 SKU 修订。
     ///
     /// # 参数
@@ -1580,24 +1448,11 @@ async fn latest_submission_no(db: &mongodb::Database, sales_order_id: &str) -> R
         .ok_or_else(|| Error::ConflictError("销售单没有可撤回的提交版本".to_string()))
 }
 
-/// 将仓储的全部活动映射命中收敛为提交允许的精确唯一身份。
-fn require_unique_card_external_identity(matches: Vec<String>, object_label: &str) -> Result<String> {
-    match ExternalIdentityResolution::from_matches(matches) {
-        ExternalIdentityResolution::Resolved(external_id) => Ok(external_id),
-        ExternalIdentityResolution::Missing => Err(Error::BusinessLogicError(format!(
-            "目标商城缺少已确认的{object_label}外部身份映射，禁止提交"
-        ))),
-        ExternalIdentityResolution::Ambiguous => Err(Error::ConflictError(format!(
-            "目标商城存在多个有效{object_label}外部身份映射，禁止提交"
-        ))),
-    }
-}
-
 #[cfg(test)]
 mod card_projection_input_tests {
     use super::{
-        require_unique_card_external_identity, sales_order_create_audit_id, sales_order_create_fingerprint,
-        sales_submission_audit_id, sales_submission_fingerprint, Error,
+        sales_order_create_audit_id, sales_order_create_fingerprint, sales_submission_audit_id,
+        sales_submission_fingerprint,
     };
     use serde_json::json;
 
@@ -1613,7 +1468,6 @@ mod card_projection_input_tests {
                 "business_remark": null,
                 "voucher_category_sku_id": null,
                 "voucher_expiry_at": null,
-                "target_mall_id": null,
                 "receivable_due_date": null,
                 "lines": [{
                     "line_no": 1,
@@ -1637,29 +1491,6 @@ mod card_projection_input_tests {
             }
         }))
         .unwrap()
-    }
-
-    #[test]
-    fn unique_external_identity_accepts_exactly_one_mapping() {
-        assert_eq!(
-            require_unique_card_external_identity(vec!["mall-customer-1".to_string()], "客户").unwrap(),
-            "mall-customer-1"
-        );
-    }
-
-    #[test]
-    fn unique_external_identity_rejects_missing_or_ambiguous_mapping() {
-        assert!(matches!(
-            require_unique_card_external_identity(Vec::new(), "客户"),
-            Err(Error::BusinessLogicError(_))
-        ));
-        assert!(matches!(
-            require_unique_card_external_identity(
-                vec!["mall-customer-1".to_string(), "mall-customer-2".to_string()],
-                "客户"
-            ),
-            Err(Error::ConflictError(_))
-        ));
     }
 
     #[test]

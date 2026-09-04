@@ -50,8 +50,6 @@ export type CreateSalesOrderInput = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
-    /** 卡券执行投影的目标商城；非卡券为空。 */
-    targetMallId: string
     /** 卡券销售生效时形成应收所使用的业务到期日。 */
     receivableDueDate: string
     taxRatePercent: string
@@ -253,8 +251,6 @@ export type SalesOrderListItem = {
     taxRatePercent?: string
     /** 表头履约期限（卡券全单；实物为客户承诺期限摘要） */
     fulfillmentDeadline: string
-    /** 卡券执行目标商城展示名；非卡券或无法解析时为空。 */
-    targetMallName?: string
     /** 卡券最终通过后形成应收所使用的到期日。 */
     receivableDueDate?: string
     customerContact?: string

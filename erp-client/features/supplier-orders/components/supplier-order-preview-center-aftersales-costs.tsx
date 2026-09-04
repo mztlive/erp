@@ -39,11 +39,11 @@ export function AftersalesSection({
     return (
         <DocumentSection
             title="售后"
-            description="商城售后请求 + 商城退款 / 余额恢复 / 供应商退款三类记录分别展示"
+            description="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
         >
             {afterSales.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                    暂无商城售后请求。取消与退款必须引用既有请求，禁止任意创建。
+                    暂无售后请求。取消与退款必须引用既有请求，禁止任意创建。
                 </p>
             ) : (
                 <div className="space-y-4">
@@ -58,10 +58,7 @@ export function AftersalesSection({
                         >
                             <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                                 <CardTitle className="text-sm">
-                                    {as.requestNo}{" "}
-                                    <span className="num font-normal text-muted-foreground">
-                                        · {as.mallRequestRef}
-                                    </span>
+                                    {as.requestNo}
                                 </CardTitle>
                                 <CardDescription className="text-xs">
                                     {as.scope} · 申请于{" "}
@@ -73,13 +70,7 @@ export function AftersalesSection({
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                <div className="grid gap-2 sm:grid-cols-3">
-                                    <FactGap
-                                        title="商城退款"
-                                        status={as.mallRefund.statusLabel}
-                                        amount={as.mallRefund.amount}
-                                        gap={as.mallRefund.gapNote}
-                                    />
+                                <div className="grid gap-2 sm:grid-cols-2">
                                     <FactGap
                                         title="余额/卡券恢复"
                                         status={as.cardRestore.statusLabel}
@@ -112,8 +103,6 @@ export function AftersalesSection({
                                             onRequest({
                                                 requestId: as.requestId,
                                                 requestNo: as.requestNo,
-                                                mallRequestRef:
-                                                    as.mallRequestRef,
                                                 action: "CANCEL",
                                             })
                                         }
@@ -139,8 +128,6 @@ export function AftersalesSection({
                                             onRequest({
                                                 requestId: as.requestId,
                                                 requestNo: as.requestNo,
-                                                mallRequestRef:
-                                                    as.mallRequestRef,
                                                 action: "REFUND",
                                             })
                                         }
@@ -149,7 +136,7 @@ export function AftersalesSection({
                                     </GuardedBusinessAction>
                                 </div>
                                 <p className="text-tiny text-muted-foreground">
-                                    领域动作引用售后请求 {as.mallRequestRef}
+                                    领域动作引用售后请求 {as.requestNo}
                                     ，重复提交返回原结果；不读写任务。
                                 </p>
                             </CardContent>

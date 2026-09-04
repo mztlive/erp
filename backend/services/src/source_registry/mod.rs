@@ -136,7 +136,6 @@ impl SourceRegistryService {
                 name: row.name,
                 system_type: row.system_type,
                 status: row.status,
-                mall_sync_stage: row.mall_sync_stage,
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -190,7 +189,6 @@ impl SourceRegistryService {
             SourceSystemUpdate {
                 name: req.name,
                 status: req.status,
-                mall_sync_stage: req.mall_sync_stage,
             },
             actor.id(),
         )?;

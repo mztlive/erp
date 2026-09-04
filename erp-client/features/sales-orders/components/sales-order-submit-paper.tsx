@@ -96,15 +96,6 @@ export function SalesOrderSubmitPaper({
                     label: "福利场景",
                     value: welfareScenarioLabel(snapshot.welfareScene) || "—",
                 },
-                ...(isCard
-                    ? [
-                          {
-                              id: "origin",
-                              label: "目标商城",
-                              value: snapshot.targetMallId || "—",
-                          },
-                      ]
-                    : []),
             ]}
             lineItemLabel={isCard ? "卡券明细（唯一）" : "销售明细"}
             columns={

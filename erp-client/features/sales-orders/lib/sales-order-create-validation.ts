@@ -87,7 +87,6 @@ const createSalesOrderSchema = z
             ),
         paymentTerms: z.string().trim().min(1, "请选择付款条件"),
         fulfillmentDeadline: z.string(),
-        targetMallId: z.string(),
         receivableDueDate: z.string(),
         taxRatePercent: decimalInput("税率", 6).refine(
             (value) => decimalAtMost(value, "100", 6),
@@ -133,13 +132,6 @@ const createSalesOrderSchema = z
                 code: "custom",
                 path: ["lineItems"],
                 message: "卡券销售单必须恰好只有一条明细",
-            })
-        }
-        if (value.nature === "card_voucher" && !value.targetMallId.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["targetMallId"],
-                message: "请选择目标商城",
             })
         }
         if (
@@ -240,7 +232,6 @@ const draftSalesOrderSchema = z
         welfareScene: z.string(),
         paymentTerms: z.string(),
         fulfillmentDeadline: z.string(),
-        targetMallId: z.string(),
         receivableDueDate: z.string(),
         taxRatePercent: z.string(),
         remark: z.string(),

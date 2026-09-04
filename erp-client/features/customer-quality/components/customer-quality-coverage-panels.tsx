@@ -23,8 +23,6 @@ import type { CustomerQualityView } from "../types"
 export function CustomerQualityCoveragePanels({
     coverage,
     isVoucherOnly,
-    periodFrom,
-    periodTo,
     onShowReviewedOnly,
 }: {
     coverage: CustomerQualityView["coverage"]
@@ -137,21 +135,7 @@ export function CustomerQualityCoveragePanels({
                 <Alert variant="info">
                     <AlertTitle>业务性质：卡券</AlertTitle>
                     <AlertDescription>
-                        卡券实际经营结果请前往卡券经营分析；本页不显示卡券实际盈亏，卡券收入仍计入规模与回款分析。
-                        <Button
-                            id="customers-quality-open-card-business"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="ml-2"
-                            render={
-                                <Link
-                                    href={`/analytics/card-business?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&source=W15`}
-                                />
-                            }
-                        >
-                            {openWorkspaceLabel("W28")}
-                        </Button>
+                        卡券实际经营结果暂未提供；本页不显示卡券实际盈亏，卡券收入仍计入规模与回款分析。
                     </AlertDescription>
                 </Alert>
             ) : null}

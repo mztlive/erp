@@ -34,7 +34,6 @@ const SORT_COLUMN_TO_FIELD: Record<
     NonNullable<SupplierOrderListQuery["sortBy"]>
 > = {
     identity: "orderNo",
-    mall: "mallOrderNo",
     external: "externalOrderNo",
     updated: "lastBusinessAt",
 }

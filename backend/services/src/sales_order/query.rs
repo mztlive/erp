@@ -695,7 +695,6 @@ impl SalesOrderService {
             business_remark: copy.business_remark.clone(),
             voucher_category_sku_id: copy.voucher_category_sku_id.as_ref().map(ToString::to_string),
             voucher_expiry_at: copy.voucher_expiry_at.map(|instant| instant.unix_secs() as u64),
-            target_mall_id: copy.target_mall_id.as_ref().map(ToString::to_string),
             receivable_due_date: copy.receivable_due_date,
             gross_amount: copy.gross_amount,
             net_amount: copy.net_amount,

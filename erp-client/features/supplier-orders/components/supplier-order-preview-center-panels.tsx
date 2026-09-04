@@ -124,7 +124,7 @@ export function StatusAlertsPanel({
             />
 
             <Alert variant="info">
-                <AlertTitle>商城支付已发生</AlertTitle>
+                <AlertTitle>客户款项已收</AlertTitle>
                 <AlertDescription className="text-xs leading-relaxed">
                     {order.paymentOccurredNotice} 支付凭证{" "}
                     <span className="num">{order.paymentFactKey}</span> ·
@@ -270,19 +270,6 @@ export function ResultPanel({
                             打开 API 结算
                         </Button>
                     ) : null}
-                    <Button
-                        id="supplier-order-center-result-open-mall"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        render={
-                            <Link
-                                href={`/commerce/consumption-orders?q=${encodeURIComponent(order.mallOrderNo)}`}
-                            />
-                        }
-                    >
-                        返回商城消费订单
-                    </Button>
                 </div>
             }
         />

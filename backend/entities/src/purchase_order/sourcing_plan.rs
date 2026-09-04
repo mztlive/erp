@@ -863,7 +863,6 @@ mod tests {
                 sales_order_id: SalesOrderId::new("so-1"),
                 revision_no: 1,
                 revision_source: RevisionSource::ErpApproval,
-                source_snapshot_id: None,
                 previous_revision_id: None,
                 content_hash: format!("hash-{id}"),
                 customer_revision_id: None,

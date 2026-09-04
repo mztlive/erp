@@ -10,7 +10,7 @@ use std::{
 
 use database::{
     AccessControlExt, BpmExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt,
-    LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
+    LegacyImportExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
     SalesOrderExt, SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt,
     Transactional, WorkItemExt,
 };
@@ -506,8 +506,6 @@ impl WorkItemService {
             .await?;
         self.load_independent_object_facts(keys, &mut facts, executor)
             .await?;
-        self.load_master_mapping_task_facts(keys, &mut facts, executor)
-            .await?;
         Ok(facts)
     }
 
@@ -633,35 +631,6 @@ impl WorkItemService {
         Ok(())
     }
 
-    async fn load_master_mapping_task_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::MasterMappingTask);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for task in self
-            .db
-            .master_mapping_tasks()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::MasterMappingTask, task.base.id.clone()),
-                ObjectFact::new(
-                    task.base.id.clone(),
-                    format!("{}映射任务", task.mapping_type.label()),
-                    task.owner_user_id
-                        .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string()),
-                ),
-            );
-        }
-        Ok(())
-    }
-
     /// 批量读取 W26 供应商履约订单事实，并冻结订单乐观锁版本用于任务对象校验。
     async fn load_supplier_fulfillment_order_facts(
         &self,
@@ -682,7 +651,7 @@ impl WorkItemService {
             facts.insert(
                 (ObjectKind::SupplierFulfillmentOrder, order.base.id.clone()),
                 ObjectFact {
-                    root_document_id: order.mall_order_id.to_string(),
+                    root_document_id: order.base.id.clone(),
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
                     created_by: SYSTEM_OBJECT_OWNER.to_string(),
                     subject_versions: WorkItemSubjectVersions::constrained(vec![order

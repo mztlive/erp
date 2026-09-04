@@ -83,7 +83,7 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
     },
     { key: "workItemId", type: "string" },
     { key: "from", type: "string" },
-    { key: "sourceId", type: "string", aliases: ["mallOrderId"] },
+    { key: "sourceId", type: "string" },
     { key: "sort", type: "string" },
     { key: "dir", type: "enum", values: ["asc", "desc"] },
 ])

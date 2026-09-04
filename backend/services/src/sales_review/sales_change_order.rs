@@ -281,7 +281,6 @@ impl SalesReviewService {
                 business_remark: base_revision.business_remark.clone(),
                 voucher_category_sku_id: base_revision.voucher_category_sku_id.clone(),
                 voucher_expiry_at: base_revision.voucher_expiry_at,
-                target_mall_id: None,
                 receivable_due_date: None,
                 gross_amount: gross,
                 net_amount: net,

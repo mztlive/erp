@@ -269,7 +269,6 @@ export function SalesOrderCreateForm({
                 "taxRatePercent",
                 nature === "card_voucher" ? "6.00" : "13.00",
             )
-            form.setFieldValue("targetMallId", "")
             form.setFieldValue("receivableDueDate", "")
             form.setFieldValue("lineItems", [createEmptyLine(nature)])
             setDraftSaved(null)

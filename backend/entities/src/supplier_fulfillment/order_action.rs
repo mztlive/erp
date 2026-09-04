@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    MallAfterSalesRequestId, MallAfterSalesRequestLineId, SupplierFulfillmentItemId,
-    SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
+    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
 };
 use crate::money::{Amount, Quantity};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -64,14 +63,6 @@ impl SupplierOrderActionType {
             Self::Cancel => "CANCEL",
             Self::Refund => "REFUND",
         }
-    }
-
-    /// 判断动作是否需要关联商城售后申请。
-    ///
-    /// # 返回
-    /// 取消/退款动作返回 `true`，下单/查询返回 `false`。
-    pub fn requires_after_sales_request(self) -> bool {
-        matches!(self, Self::Cancel | Self::Refund)
     }
 }
 
@@ -134,10 +125,8 @@ pub struct SupplierOrderActionData {
     pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
     /// 动作类型。
     pub action_type: SupplierOrderActionType,
-    /// 商城售后申请；取消/退款动作必填。
-    pub after_sales_request_id: Option<MallAfterSalesRequestId>,
     /// 对供应商动作幂等键（唯一；下单键为 ERP 供应商订单号，
-    /// 取消/退款键为"订单号 + 动作类型 + 售后申请 ID"，由 P3 拼装）。
+    /// 取消/退款键为"订单号 + 动作类型"，由 P3 拼装）。
     pub idempotency_key: String,
     /// 动作状态。
     pub status: SupplierOrderActionStatus,
@@ -172,7 +161,6 @@ impl SupplierOrderActionData {
         Self {
             supplier_fulfillment_order_id: order_id,
             action_type: SupplierOrderActionType::Place,
-            after_sales_request_id: None,
             request_summary: Some(format!("下单 {idempotency_key} 明细 {line_count} 行")),
             idempotency_key,
             status: SupplierOrderActionStatus::Pending,
@@ -183,33 +171,31 @@ impl SupplierOrderActionData {
         }
     }
 
-    /// 构造取消或退款动作数据。
+    /// 构造取消或退款手工动作数据.
     ///
     /// # 参数
     /// * `order_id` - 供应商履约订单
     /// * `action_type` - 取消或退款
-    /// * `request_id` - 商城售后申请
     /// * `idempotency_key` - 供应商动作幂等键
     /// * `reason_code` - 可选原因代码
     ///
     /// # 返回
-    /// 返回待发送的售后动作数据。
-    pub fn after_sales(
+    /// 返回待发送的手工调整动作数据。
+    pub fn manual_adjustment(
         order_id: SupplierFulfillmentOrderId,
         action_type: SupplierOrderActionType,
-        request_id: MallAfterSalesRequestId,
         idempotency_key: impl Into<String>,
         reason_code: Option<&str>,
     ) -> Self {
+        let idempotency_key = idempotency_key.into();
         let request_summary = reason_code.map_or_else(
-            || format!("{} 售后申请 {}", action_type.label(), request_id),
-            |code| format!("{} 售后申请 {} 原因 {code}", action_type.label(), request_id),
+            || format!("{} 手工调整", action_type.label()),
+            |code| format!("{} 手工调整 原因 {code}", action_type.label()),
         );
         Self {
             supplier_fulfillment_order_id: order_id,
             action_type,
-            after_sales_request_id: Some(request_id),
-            idempotency_key: idempotency_key.into(),
+            idempotency_key,
             status: SupplierOrderActionStatus::Pending,
             external_request_id: None,
             request_summary: Some(request_summary),
@@ -236,7 +222,6 @@ impl SupplierOrderActionData {
         Self {
             supplier_fulfillment_order_id: order_id,
             action_type: SupplierOrderActionType::Query,
-            after_sales_request_id: None,
             idempotency_key: idempotency_key.into(),
             status: SupplierOrderActionStatus::Sending,
             external_request_id: None,
@@ -266,7 +251,6 @@ impl SupplierOrderActionData {
         Self {
             supplier_fulfillment_order_id: order_id,
             action_type: SupplierOrderActionType::Query,
-            after_sales_request_id: None,
             idempotency_key: idempotency_key.into(),
             status: SupplierOrderActionStatus::Succeeded,
             external_request_id: None,
@@ -280,7 +264,7 @@ impl SupplierOrderActionData {
 
 /// 供应商动作更新数据（不含系统字段与关键字段）。
 ///
-/// 子订单、动作类型、售后申请与幂等键创建后不可修改；重试计数走 [`SupplierOrderAction::record_attempt`]。
+/// 子订单、动作类型、手工调整引用与幂等键创建后不可修改；重试计数走 [`SupplierOrderAction::record_attempt`]。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct SupplierOrderActionUpdate {
     /// 动作状态；`None` 表示不修改。
@@ -306,8 +290,6 @@ pub struct SupplierOrderAction {
     pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
     /// 动作类型。
     pub action_type: SupplierOrderActionType,
-    /// 商城售后申请。
-    pub after_sales_request_id: Option<MallAfterSalesRequestId>,
     /// 对供应商动作幂等键。
     pub idempotency_key: String,
     /// 动作状态。
@@ -327,8 +309,7 @@ pub struct SupplierOrderAction {
 impl SupplierOrderAction {
     /// 创建供应商动作。
     ///
-    /// 完成幂等键与摘要的校验和规范化，并强制动作类型与售后申请的关联一致性
-    /// （§6.19：取消/退款动作必填商城售后申请，下单/查询动作不得关联）。
+    /// 完成幂等键与摘要的校验和规范化。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::SupplierOrderActionId`）
@@ -338,7 +319,7 @@ impl SupplierOrderAction {
     /// 返回新建的动作实体。
     ///
     /// # 错误
-    /// 幂等键为空/超长、摘要超长或动作类型与售后申请不一致时返回错误。
+    /// 幂等键为空/超长或摘要超长时返回错误。
     pub fn new(id: SupplierOrderActionId, data: SupplierOrderActionData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
@@ -353,13 +334,11 @@ impl SupplierOrderAction {
         )?;
         let request_summary = normalize_optional_text(data.request_summary, "请求摘要", SUMMARY_MAX_LEN)?;
         let response_summary = normalize_optional_text(data.response_summary, "响应摘要", SUMMARY_MAX_LEN)?;
-        ensure_action_reference(data.action_type, &data.after_sales_request_id)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
             action_type: data.action_type,
-            after_sales_request_id: data.after_sales_request_id,
             idempotency_key,
             status: data.status,
             external_request_id,
@@ -372,7 +351,7 @@ impl SupplierOrderAction {
 
     /// 更新供应商动作。
     ///
-    /// 复用 `new` 的校验规则；子订单、动作类型、售后申请与幂等键不可修改。
+    /// 复用 `new` 的校验规则；子订单、动作类型、手工调整引用与幂等键不可修改。
     ///
     /// # 参数
     /// * `update` - 更新数据
@@ -473,27 +452,6 @@ fn apply_summary(target: &mut Option<String>, value: Option<String>, label: &str
     Ok(())
 }
 
-/// 校验动作类型与售后申请的关联一致性（§6.19）。
-///
-/// # 参数
-/// * `action_type` - 动作类型
-/// * `after_sales_request_id` - 商城售后申请
-///
-/// # 错误
-/// 取消/退款缺售后申请，或下单/查询带售后申请时返回错误。
-fn ensure_action_reference(
-    action_type: SupplierOrderActionType,
-    after_sales_request_id: &Option<MallAfterSalesRequestId>,
-) -> Result<()> {
-    if action_type.requires_after_sales_request() && after_sales_request_id.is_none() {
-        return Err(Error::from("取消/退款动作必须关联商城售后申请"));
-    }
-    if !action_type.requires_after_sales_request() && after_sales_request_id.is_some() {
-        return Err(Error::from("下单/查询动作不得关联商城售后申请"));
-    }
-    Ok(())
-}
-
 /// 供应商动作行创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierOrderActionLineData {
@@ -501,8 +459,6 @@ pub struct SupplierOrderActionLineData {
     pub supplier_order_action_id: SupplierOrderActionId,
     /// 动作内行号。
     pub line_no: u32,
-    /// 原商城售后申请行。
-    pub after_sales_request_line_id: MallAfterSalesRequestLineId,
     /// 本供应商履约明细。
     pub supplier_fulfillment_item_id: SupplierFulfillmentItemId,
     /// 本动作提交数量。
@@ -517,7 +473,6 @@ impl SupplierOrderActionLineData {
     /// # 参数
     /// * `action_id` - 所属供应商动作
     /// * `index` - 请求中的零基序号
-    /// * `after_sales_request_line_id` - 商城售后申请行
     /// * `supplier_fulfillment_item_id` - 供应商履约明细
     /// * `quantity` - 提交数量
     /// * `amount` - 提交金额
@@ -527,7 +482,6 @@ impl SupplierOrderActionLineData {
     pub fn from_request_index(
         action_id: SupplierOrderActionId,
         index: usize,
-        after_sales_request_line_id: MallAfterSalesRequestLineId,
         supplier_fulfillment_item_id: SupplierFulfillmentItemId,
         quantity: Quantity,
         amount: Amount,
@@ -535,7 +489,6 @@ impl SupplierOrderActionLineData {
         Self {
             supplier_order_action_id: action_id,
             line_no: u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1),
-            after_sales_request_line_id,
             supplier_fulfillment_item_id,
             quantity,
             amount,
@@ -555,8 +508,6 @@ pub struct SupplierOrderActionLine {
     pub supplier_order_action_id: SupplierOrderActionId,
     /// 动作内行号。
     pub line_no: u32,
-    /// 原商城售后申请行。
-    pub after_sales_request_line_id: MallAfterSalesRequestLineId,
     /// 本供应商履约明细。
     pub supplier_fulfillment_item_id: SupplierFulfillmentItemId,
     /// 本动作提交数量。
@@ -590,7 +541,6 @@ impl SupplierOrderActionLine {
             base: BaseModel::new(id.to_string()),
             supplier_order_action_id: data.supplier_order_action_id,
             line_no: data.line_no,
-            after_sales_request_line_id: data.after_sales_request_line_id,
             supplier_fulfillment_item_id: data.supplier_fulfillment_item_id,
             quantity: data.quantity,
             amount: data.amount,
@@ -602,8 +552,7 @@ impl SupplierOrderActionLine {
 mod tests {
     use super::*;
     use crate::ids::{
-        MallAfterSalesRequestId, MallAfterSalesRequestLineId, SupplierFulfillmentItemId,
-        SupplierOrderActionId, SupplierOrderActionLineId,
+        SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId,
     };
     use std::str::FromStr;
 
@@ -611,7 +560,6 @@ mod tests {
         SupplierOrderActionData {
             supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
             action_type: SupplierOrderActionType::Place,
-            after_sales_request_id: None,
             idempotency_key: " FO-2026-001 ".to_string(),
             status: SupplierOrderActionStatus::Pending,
             external_request_id: None,
@@ -626,7 +574,6 @@ mod tests {
         SupplierOrderActionLineData {
             supplier_order_action_id: SupplierOrderActionId::new("action-1"),
             line_no: 1,
-            after_sales_request_line_id: MallAfterSalesRequestLineId::new("request-line-1"),
             supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("item-1"),
             quantity: Quantity::from_str("2.000000").unwrap(),
             amount: Amount::from_str("19.98").unwrap(),
@@ -634,10 +581,9 @@ mod tests {
     }
 
     #[test]
-    fn new_accepts_place_and_query_without_after_sales() {
+    fn new_accepts_place_and_query_without_manual_adjustment() {
         let action = SupplierOrderAction::new(SupplierOrderActionId::new("action-1"), sample_data()).unwrap();
         assert_eq!(action.idempotency_key, "FO-2026-001");
-        assert!(action.after_sales_request_id.is_none());
         assert_eq!(action.status, SupplierOrderActionStatus::Pending);
         assert_eq!(action.attempt_count, 0);
         assert!(action.ensure_original_for_order("order-1").is_ok());
@@ -658,18 +604,13 @@ mod tests {
         assert_eq!(place.status, SupplierOrderActionStatus::Pending);
         assert!(place.request_summary.unwrap().contains("2 行"));
 
-        let after_sales = SupplierOrderActionData::after_sales(
+        let manual_adjustment = SupplierOrderActionData::manual_adjustment(
             SupplierFulfillmentOrderId::new("order-1"),
             SupplierOrderActionType::Cancel,
-            MallAfterSalesRequestId::new("request-1"),
             "cancel-key",
             Some("CUSTOMER_REQUEST"),
         );
-        assert_eq!(after_sales.action_type, SupplierOrderActionType::Cancel);
-        assert_eq!(
-            after_sales.after_sales_request_id,
-            Some(MallAfterSalesRequestId::new("request-1"))
-        );
+        assert_eq!(manual_adjustment.action_type, SupplierOrderActionType::Cancel);
 
         let query_intent = SupplierOrderActionData::query_intent(
             SupplierFulfillmentOrderId::new("order-1"),
@@ -695,7 +636,6 @@ mod tests {
         let line = SupplierOrderActionLineData::from_request_index(
             SupplierOrderActionId::new("action-1"),
             0,
-            MallAfterSalesRequestLineId::new("request-line-1"),
             SupplierFulfillmentItemId::new("item-1"),
             Quantity::from_str("1").unwrap(),
             Amount::from_str("1").unwrap(),
@@ -704,40 +644,34 @@ mod tests {
     }
 
     #[test]
-    fn new_accepts_cancel_and_refund_with_after_sales() {
+    fn new_accepts_cancel_and_refund_with_manual_adjustment() {
         for action_type in [SupplierOrderActionType::Cancel, SupplierOrderActionType::Refund] {
             let data = SupplierOrderActionData {
                 action_type,
-                after_sales_request_id: Some(MallAfterSalesRequestId::new("request-1")),
-                idempotency_key: format!("order-1-{}-request-1", action_type.as_str()),
+                idempotency_key: format!("order-1-{}", action_type.as_str()),
                 ..sample_data()
             };
             let action = SupplierOrderAction::new(SupplierOrderActionId::new("action-3"), data).unwrap();
             assert_eq!(action.action_type, action_type);
-            assert_eq!(
-                action.after_sales_request_id,
-                Some(MallAfterSalesRequestId::new("request-1"))
-            );
         }
     }
 
     #[test]
-    fn new_rejects_inconsistent_after_sales_reference() {
+    fn new_accepts_actions_without_manual_adjustment_reference() {
         let cancel_without_request = SupplierOrderActionData {
             action_type: SupplierOrderActionType::Cancel,
             ..sample_data()
         };
         assert!(
-            SupplierOrderAction::new(SupplierOrderActionId::new("action-4"), cancel_without_request).is_err()
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-4"), cancel_without_request).is_ok()
         );
 
         let place_with_request = SupplierOrderActionData {
             action_type: SupplierOrderActionType::Place,
-            after_sales_request_id: Some(MallAfterSalesRequestId::new("request-1")),
             ..sample_data()
         };
         assert!(
-            SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_err()
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_ok()
         );
     }
 

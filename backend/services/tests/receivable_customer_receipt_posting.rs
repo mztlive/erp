@@ -401,7 +401,6 @@ async fn snapshot_first_error_sales_order_before_receipt_and_invoice() {
                 sales_order_id: SalesOrderId::new("so-1"),
                 revision_no: 1,
                 revision_source: RevisionSource::ErpApproval,
-                source_snapshot_id: None,
                 previous_revision_id: None,
                 content_hash: "abc123def456".to_string(),
                 customer_revision_id: Some(PartyRevisionId::new("party-rev-1")),

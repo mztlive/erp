@@ -44,7 +44,6 @@ type DraftContentInput = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
-    targetMallId: string
     receivableDueDate: string
     taxRatePercent: string
     remark: string
@@ -158,10 +157,6 @@ function buildDraftPayload(
             voucher_expiry_at:
                 input.nature === "card_voucher"
                     ? dateToUnixSecs(input.fulfillmentDeadline)
-                    : null,
-            target_mall_id:
-                input.nature === "card_voucher"
-                    ? input.targetMallId.trim() || null
                     : null,
             receivable_due_date:
                 input.nature === "card_voucher"
@@ -284,7 +279,6 @@ export type SalesOrderDraftResumeData = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
-    targetMallId: string
     receivableDueDate: string
     taxRatePercent: string
     remark: string
@@ -372,7 +366,6 @@ export async function fetchSalesOrderDraftForResume(
         welfareScene,
         paymentTerms,
         fulfillmentDeadline: formatEpochDate(voucherExpiry),
-        targetMallId: source.target_mall_id ?? "",
         receivableDueDate: source.receivable_due_date ?? "",
         taxRatePercent: rateToPercent(lines[0]?.sales_tax_rate),
         remark: remark ?? "",

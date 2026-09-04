@@ -213,15 +213,13 @@ export type SupplierOrderListQuery = {
     pageSize: number
     /** 售后待处理快捷筛选（与指标口径一致：取消/退款异常态任一命中） */
     aftersalePending?: boolean
-    sortBy?: "orderNo" | "mallOrderNo" | "externalOrderNo" | "lastBusinessAt"
+    sortBy?: "orderNo" | "externalOrderNo" | "lastBusinessAt"
     sortDir?: "asc" | "desc"
 }
 
 export type SupplierOrderListRow = {
     orderId: string
     orderNo: string
-    mallOrderId: string
-    mallOrderNo: string
     supplierId: string
     supplierName: string
     externalOrderNo?: string
@@ -288,14 +286,12 @@ export type ExportJobResult = {
 
 type SupplierOrderItemView = {
     itemId: string
-    mallLineId: string
     productName: string
     skuCode: string
     quantity: string
     unit: string
     supplierProductId: string
     supplierProductName: string
-    publicationVersion: string
     supplyVersion: string
     /** 下单成本快照；无字段权限时为 null */
     unitCostGross: string | null
@@ -326,16 +322,8 @@ type StatusHistoryItem = {
 type AfterSalesTrackView = {
     requestId: string
     requestNo: string
-    mallRequestRef: string
     scope: string
     requestedAt: string
-    /** 商城退款记录 */
-    mallRefund: {
-        status: "NONE" | "PENDING" | "PARTIAL" | "FULL" | "FAILED"
-        statusLabel: string
-        amount?: string | null
-        gapNote?: string
-    }
     /** 卡券/余额恢复记录 */
     cardRestore: {
         status: "NONE" | "PENDING" | "DONE" | "NOT_APPLICABLE" | "FAILED"
@@ -431,8 +419,6 @@ export type SupplierOrderDetailView = {
     order: {
         id: string
         orderNo: string
-        mallOrderId: string
-        mallOrderNo: string
         paidAt: string
         paymentFactKey: string
         fulfillmentChain: "ERP_AUTOMATED"
@@ -441,7 +427,6 @@ export type SupplierOrderDetailView = {
         connectionCode: string
         connectionEnvironment: string
         supplyVersion: string
-        publicationVersion: string
         externalOrderNo?: string
         fulfillmentStatus: SupplierFulfillmentStatus
         fulfillmentLabel: string
@@ -453,7 +438,7 @@ export type SupplierOrderDetailView = {
         refundLabel: string
         refundTone: StatusTone
         lockVersion: number
-        /** 始终强调：商城支付已发生 */
+        /** 始终强调：客户款项已收，履约独立记录 */
         paymentOccurredNotice: string
         errorSummary?: string
     }

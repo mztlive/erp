@@ -24,11 +24,6 @@ export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
                     href: "/procurement/supplier-offerings",
                 },
                 {
-                    label: "生效发布",
-                    value: conn.relatedImpact.activePublications,
-                    href: "/commerce/publications",
-                },
-                {
                     label: "待处理订单",
                     value: conn.relatedImpact.openSupplierOrders,
                     href: "/supplier-api/orders",

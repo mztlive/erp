@@ -72,8 +72,6 @@ export function SupplierOrderCenterPage({
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const searchParams = useSearchParams()
-    const from = searchParams.get("from")
-    const sourceId = searchParams.get("sourceId")
     const workItemId =
         workItemIdProp ?? searchParams.get("workItemId") ?? undefined
 
@@ -220,8 +218,6 @@ export function SupplierOrderCenterPage({
         >
             <SupplierOrderCenterHeader
                 order={o}
-                from={from}
-                sourceId={sourceId}
                 canQuery={derivation.canQuery}
                 canReplay={derivation.canReplay}
                 isResultUnknown={derivation.isResultUnknown}

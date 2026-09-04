@@ -22,7 +22,6 @@ const HEADER_VALIDATION_FIELDS = [
         label: "履约期限",
         targetId: "fulfillmentDeadline",
     },
-    { name: "targetMallId", label: "目标商城", targetId: "targetMallId" },
     {
         name: "receivableDueDate",
         label: "应收到期日",

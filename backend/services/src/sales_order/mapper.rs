@@ -109,7 +109,6 @@ pub(super) fn build_working_copy(
             voucher_expiry_at: draft
                 .voucher_expiry_at
                 .map(|secs| Instant::from_unix_secs(secs as i64)),
-            target_mall_id: draft.target_mall_id.clone(),
             receivable_due_date: draft.receivable_due_date,
             gross_amount: gross,
             net_amount: net,
@@ -237,8 +236,6 @@ pub(super) fn header_snapshot(
 /// * `lines` - 工作副本行
 /// * `submission_no` - 提交序号
 /// * `actor` - 提交人
-/// * `customer_external_identity` - 服务端解析的商城客户身份
-/// * `voucher_category_external_identity` - 服务端解析的商城卡券类目身份
 ///
 /// # 返回
 /// 返回提交快照实体。
@@ -250,8 +247,6 @@ pub(super) fn build_submission(
     lines: &[SalesOrderWorkingCopyLine],
     submission_no: u32,
     actor: &AuditActor,
-    customer_external_identity: Option<&str>,
-    voucher_category_external_identity: Option<&str>,
 ) -> Result<SalesOrderSubmission> {
     let data = SalesOrderSubmissionData::from_working_copy(
         working_copy,
@@ -259,8 +254,6 @@ pub(super) fn build_submission(
         submission_no,
         Instant::now(),
         actor.id(),
-        customer_external_identity,
-        voucher_category_external_identity,
     )?;
     SalesOrderSubmission::new(SalesOrderSubmissionId::new(next_id()), data).map_err(Error::Logic)
 }
@@ -333,9 +326,6 @@ pub(super) fn submission_view(
         voucher_expiry_at: submission
             .voucher_expiry_at
             .map(|instant| instant.unix_secs() as u64),
-        target_mall_id: submission.target_mall_id.as_ref().map(ToString::to_string),
-        customer_external_identity: submission.customer_external_identity.clone(),
-        voucher_category_external_identity: submission.voucher_category_external_identity.clone(),
         receivable_due_date: submission.receivable_due_date,
         gross_amount: submission.gross_amount,
         net_amount: submission.net_amount,
@@ -542,7 +532,6 @@ mod tests {
             sales_order_id: SalesOrderId::new("o-1"),
             revision_no: 1,
             revision_source: RevisionSource::ErpApproval,
-            source_snapshot_id: None,
             previous_revision_id: None,
             content_hash: "abc123def456".to_string(),
             customer_revision_id: Some(PartyRevisionId::new("party-rev-1")),

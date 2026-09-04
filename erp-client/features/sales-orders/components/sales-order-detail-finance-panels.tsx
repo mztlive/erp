@@ -2,7 +2,6 @@
 
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import { RevisionHistoryCard } from "@/features/sales-orders/components/revision-history-card"
-import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
@@ -45,22 +44,11 @@ export function VersionsPanel({
 }
 
 export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
-    if (order.nature !== "card_voucher") {
-        return (
-            <p className="text-sm text-muted-foreground">
-                只有卡券销售单会与商城对接。
-            </p>
-        )
-    }
+    void order;
+    // TODO(商城重做): 执行投影恢复后替换此占位面板。
     return (
-        <div className="space-y-4">
-            <SectionLead>
-                这里只看商城接收和执行投影，不提供第二套改单入口。
-            </SectionLead>
-            <SalesOrderCollaborationCard
-                salesOrderId={order.id}
-                salesOrderNo={order.documentNumber}
-            />
-        </div>
+        <p className="text-sm text-muted-foreground">
+            商城对接已移除，执行投影待未来重做时恢复。
+        </p>
     )
 }

@@ -66,20 +66,14 @@ export type WorkspaceId =
     | "W14"
     | "W15"
     | "W16"
-    | "W17"
     | "W18"
     | "W19"
     | "W20"
     | "W21"
-    | "W22"
-    | "W23"
     | "W24"
-    | "W25"
     | "W26"
     | "W27"
-    | "W28"
     | "W29"
-    | "W30"
 
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
@@ -184,12 +178,6 @@ function defaultNavPermissionsFor(
             return ["customer:list"]
         case "W16":
             return ["cost_entry:list", "sales_order:list"]
-        case "W17":
-            return [
-                "mall_sales_sync_job:list",
-                "master_mapping_task:list",
-                "source_system:list",
-            ]
         case "W18":
             return ["legacy_import_batch:list"]
         case "W19":
@@ -203,27 +191,17 @@ function defaultNavPermissionsFor(
             return ["supplier_api_connection:list"]
         case "W21":
             return ["supplier_offering:list"]
-        case "W22":
-            return ["product_publication:list"]
-        case "W23":
-            return ["sales_order_projection:list"]
         case "W24":
             return ["approval_process:read"]
-        case "W25":
-            return ["mall_order:list"]
         case "W26":
             return ["supplier_fulfillment_order:list"]
         case "W27":
             return ["supplier_settlement_statement:list"]
-        case "W28":
-            return ["mall_order:list", "mall_card_instance:list"]
         case "W29":
             return [
                 "integration_error_task:list",
                 "reconciliation_difference:list",
             ]
-        case "W30":
-            return ["mall_consumption_backfill_job:list"]
         default:
             return []
     }
@@ -292,7 +270,7 @@ export function filterNavGroupsByPermissions(
         .filter((group) => group.items.length > 0)
 }
 
-/** Full W01–W30 index. */
+/** Full workspace index (mall phase-2 IDs removed; re-add on redo). */
 export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     {
         id: "W01",
@@ -408,13 +386,6 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/analytics/profit-loss",
     },
     {
-        id: "W17",
-        name: "商城同步与映射",
-        mode: "M7",
-        mainRoute: "/governance/mall-sync",
-        navHref: "/governance/mall-sync",
-    },
-    {
         id: "W18",
         name: "导入与期初",
         mode: "M7",
@@ -443,32 +414,11 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/procurement/supplier-offerings",
     },
     {
-        id: "W22",
-        name: "商品发布",
-        mode: "M2+M4",
-        mainRoute: "/commerce/publications",
-        navHref: "/commerce/publications",
-    },
-    {
-        id: "W23",
-        name: "执行信息",
-        mode: "M2+M4",
-        mainRoute: "/commerce/execution-projections",
-        navHref: "/commerce/execution-projections",
-    },
-    {
         id: "W24",
         name: "审批流程配置",
         mode: "M2+M4",
         mainRoute: "/system/approval-processes",
         navHref: "/system/approval-processes",
-    },
-    {
-        id: "W25",
-        name: "商城消费订单",
-        mode: "M2+M4",
-        mainRoute: "/commerce/consumption-orders",
-        navHref: "/commerce/consumption-orders",
     },
     {
         id: "W26",
@@ -485,25 +435,11 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/supplier-api/settlements",
     },
     {
-        id: "W28",
-        name: "卡券消费台账与经营分析",
-        mode: "M6",
-        mainRoute: "/analytics/card-business",
-        navHref: "/analytics/card-business",
-    },
-    {
         id: "W29",
         name: "接口错误与对账中心",
         mode: "M7",
         mainRoute: "/governance/integration-errors",
         navHref: "/governance/integration-errors",
-    },
-    {
-        id: "W30",
-        name: "历史消费回填",
-        mode: "M7",
-        mainRoute: "/governance/history-backfill",
-        navHref: "/governance/history-backfill",
     },
 ] as const
 
@@ -664,28 +600,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     routeId: "W16",
                     icon: ScaleIcon,
                 },
-                {
-                    routeId: "W28",
-                    label: "卡券经营分析",
-                    icon: ShoppingBagIcon,
-                },
-            ],
-        },
-        {
-            label: "商城与发布",
-            items: [
-                {
-                    routeId: "W22",
-                    icon: StoreIcon,
-                },
-                {
-                    routeId: "W23",
-                    icon: WorkflowIcon,
-                },
-                {
-                    routeId: "W25",
-                    icon: PackageIcon,
-                },
             ],
         },
         {
@@ -710,10 +624,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             label: "治理",
             items: [
                 {
-                    routeId: "W17",
-                    icon: Link2Icon,
-                },
-                {
                     routeId: "W18",
                     icon: UploadIcon,
                 },
@@ -721,10 +631,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     routeId: "W29",
                     label: "接口错误与对账",
                     icon: ShieldCheckIcon,
-                },
-                {
-                    routeId: "W30",
-                    icon: HistoryIcon,
                 },
             ],
         },

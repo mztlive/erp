@@ -115,7 +115,7 @@ export function SupplierOrderCenterDialogs({
                               afterSalesRequest.action === "CANCEL"
                                   ? "取消"
                                   : "退款"
-                          }请求，引用售后请求 ${afterSalesRequest.mallRequestRef}；重复提交返回原结果。`
+                          }请求，引用售后请求 ${afterSalesRequest.requestNo}；重复提交返回原结果。`
                         : undefined
                 }
                 fromStatus={{
@@ -130,7 +130,7 @@ export function SupplierOrderCenterDialogs({
                     tone: "info",
                 }}
                 effects={[
-                    `引用售后请求 ${afterSalesRequest?.mallRequestRef ?? "—"}`,
+                    `引用售后请求 ${afterSalesRequest?.requestNo ?? "—"}`,
                     "重复提交返回原结果，不会重复发起",
                 ]}
                 irreversibleEffects={[

@@ -5,13 +5,6 @@ use services::approval::definition::ApprovalDefinitionService;
 use services::approval::execution::ApprovalRuntimeService;
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
-use services::projection::{
-    MallConnector as ProjectionMallConnector, ProjectionService, UnavailableMallConnector,
-};
-use services::publication::{
-    MallConnector as PublicationMallConnector, PublicationService,
-    UnavailableMallConnector as UnavailablePublicationMallConnector,
-};
 use services::supplier_api::{
     SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
     UnavailableSupplierReferenceRegistry,
@@ -43,8 +36,6 @@ pub enum ConnectorMode {
 /// 外部连接器 readiness 视图。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ExternalConnectorReadiness {
-    pub projection: ConnectorMode,
-    pub publication: ConnectorMode,
     pub supplier_api: ConnectorMode,
     pub supplier_reference_registry: ConnectorMode,
     pub supplier_fulfillment: ConnectorMode,
@@ -53,9 +44,7 @@ pub struct ExternalConnectorReadiness {
 impl ExternalConnectorReadiness {
     /// 全部强依赖连接器是否已配置。
     pub const fn is_ready(self) -> bool {
-        matches!(self.projection, ConnectorMode::Configured)
-            && matches!(self.publication, ConnectorMode::Configured)
-            && matches!(self.supplier_api, ConnectorMode::Configured)
+        matches!(self.supplier_api, ConnectorMode::Configured)
             && matches!(self.supplier_reference_registry, ConnectorMode::Configured)
             && matches!(self.supplier_fulfillment, ConnectorMode::Configured)
     }
@@ -64,8 +53,6 @@ impl ExternalConnectorReadiness {
 /// 启动组合根注入的外部连接器集合。
 #[derive(Clone)]
 pub struct ExternalConnectorPorts {
-    projection: Arc<dyn ProjectionMallConnector>,
-    publication: Arc<dyn PublicationMallConnector>,
     supplier_api: Arc<dyn SupplierApiGateway>,
     supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
     supplier_fulfillment: Arc<dyn SupplierGateway>,
@@ -75,21 +62,15 @@ pub struct ExternalConnectorPorts {
 impl ExternalConnectorPorts {
     /// 构造显式配置的连接器集合；生产实现与测试替身均通过此入口注入。
     pub fn configured(
-        projection: Arc<dyn ProjectionMallConnector>,
-        publication: Arc<dyn PublicationMallConnector>,
         supplier_api: Arc<dyn SupplierApiGateway>,
         supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
         supplier_fulfillment: Arc<dyn SupplierGateway>,
     ) -> Self {
         Self {
-            projection,
-            publication,
             supplier_api,
             supplier_reference_registry,
             supplier_fulfillment,
             readiness: ExternalConnectorReadiness {
-                projection: ConnectorMode::Configured,
-                publication: ConnectorMode::Configured,
                 supplier_api: ConnectorMode::Configured,
                 supplier_reference_registry: ConnectorMode::Configured,
                 supplier_fulfillment: ConnectorMode::Configured,
@@ -100,14 +81,10 @@ impl ExternalConnectorPorts {
     /// 构造失败关闭集合；仅用于尚未接入真实连接器的部署。
     pub fn fail_closed() -> Self {
         Self {
-            projection: Arc::new(UnavailableMallConnector),
-            publication: Arc::new(UnavailablePublicationMallConnector),
             supplier_api: Arc::new(UnavailableSupplierApiGateway),
             supplier_reference_registry: Arc::new(UnavailableSupplierReferenceRegistry),
             supplier_fulfillment: Arc::new(UnavailableSupplierGateway),
             readiness: ExternalConnectorReadiness {
-                projection: ConnectorMode::FailClosed,
-                publication: ConnectorMode::FailClosed,
                 supplier_api: ConnectorMode::FailClosed,
                 supplier_reference_registry: ConnectorMode::FailClosed,
                 supplier_fulfillment: ConnectorMode::FailClosed,
@@ -249,16 +226,6 @@ impl AppState {
         Arc::clone(&self.approval_outbox)
     }
 
-    /// 返回已注入连接器的执行投影应用服务。
-    pub fn projection_service(&self) -> ProjectionService {
-        ProjectionService::new(self.db(), Arc::clone(&self.external_connectors.projection))
-    }
-
-    /// 返回已注入商城连接器的商品发布应用服务。
-    pub fn publication_service(&self) -> PublicationService {
-        PublicationService::new(self.db(), Arc::clone(&self.external_connectors.publication))
-    }
-
     /// 返回已注入网关、引用注册表与 RBAC 的供应商 API 应用服务。
     pub fn supplier_api_service(&self) -> SupplierApiService {
         SupplierApiService::new(self.db(), Arc::clone(&self.external_connectors.supplier_api))
@@ -380,8 +347,6 @@ mod tests {
     #[test]
     fn readiness_requires_every_external_port() {
         let configured = ExternalConnectorReadiness {
-            projection: ConnectorMode::Configured,
-            publication: ConnectorMode::Configured,
             supplier_api: ConnectorMode::Configured,
             supplier_reference_registry: ConnectorMode::Configured,
             supplier_fulfillment: ConnectorMode::Configured,

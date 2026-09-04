@@ -127,8 +127,6 @@ pub struct CostAllocationView {
     pub sales_order_id: Option<String>,
     /// 经营归属销售明细。
     pub sales_order_line_id: Option<String>,
-    /// 二期消费成本归属。
-    pub mall_consumption_entry_id: Option<String>,
     /// 分配含税金额。
     pub allocated_gross_amount: Amount,
     /// 分配不含税金额。

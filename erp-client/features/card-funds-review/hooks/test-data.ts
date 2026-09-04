@@ -58,7 +58,6 @@ export function makeTask(
             customerName: "演示客户",
             counterpartyPartyId: "cp_1",
             counterpartyPartyName: "演示往来主体",
-            mallName: "自营商城",
             reviewStatus: "pending",
             grossTotal: "1130.00",
             settledTotal: "0.00",

@@ -28,7 +28,6 @@ export type SalesOrderSubmitSnapshot = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
-    targetMallId: string
     taxRatePercent: string
     remark: string
     lineCount: number
@@ -78,7 +77,6 @@ export function buildSalesOrderSubmitSnapshot(
         welfareScene: values.welfareScene,
         paymentTerms: values.paymentTerms,
         fulfillmentDeadline: values.fulfillmentDeadline,
-        targetMallId: values.targetMallId,
         taxRatePercent: values.taxRatePercent,
         remark: values.remark,
         lineCount: lineItems.length,

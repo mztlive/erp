@@ -111,7 +111,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         workItemTypeLabel: "主数据映射任务",
         family: "exception",
         destinationWorkspaceId: "W17",
-        baseHref: "/governance/mall-sync",
+        baseHref: "/governance/integration-errors",
     },
     business_exception: {
         workItemTypeLabel: "业务异常",

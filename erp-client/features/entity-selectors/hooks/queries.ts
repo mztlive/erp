@@ -7,7 +7,6 @@ import type { SalesOrderComboboxItem } from "@/components/business/entity-combob
 import { apiGet, type Page } from "@/lib/api"
 import {
     fetchContractOption,
-    fetchMallOptions,
     fetchCustomerOption,
     fetchPartyOption,
     fetchSupplierOption,
@@ -64,8 +63,6 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "sellable-sku", input] as const,
     companySku: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "company-sku", input] as const,
-    malls: (purpose: string) =>
-        [...entitySelectorKeys.all, "mall", { purpose }] as const,
 }
 
 /** 输入防抖只更新查询条件；HTTP 始终由 TanStack Query 的 queryFn 发起。 */
@@ -276,13 +273,5 @@ export function useCompanySkuSelectorQuery(input: EntitySearch) {
         queryKey: entitySelectorKeys.companySku(input),
         queryFn: () => searchCompanySkus(input),
         ...commonQueryOptions(),
-    })
-}
-
-export function useMallSelectorQuery(purpose: string) {
-    return useQuery({
-        queryKey: entitySelectorKeys.malls(purpose),
-        queryFn: fetchMallOptions,
-        staleTime: STALE_TIME,
     })
 }

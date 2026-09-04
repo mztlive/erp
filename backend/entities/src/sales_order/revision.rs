@@ -14,9 +14,8 @@ use crate::common::revision::RevisionBase;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    ContractRevisionId, MallSalesOrderSnapshotId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId,
-    SalesOrderId, SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-    SalesOrderVoucherLineRevisionId, SkuId, SkuRevisionId,
+    ContractRevisionId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId,
+    SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId, SkuRevisionId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -41,12 +40,10 @@ const UNIT_MAX_LEN: usize = 64;
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
 
-/// 版本来源（数据模型 §6.4：`MALL_SYNC`、`ERP_APPROVAL`、`SALES_CHANGE`）。
+/// 版本来源（数据模型：`ERP_APPROVAL`、`SALES_CHANGE`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RevisionSource {
-    /// 一期商城同步。
-    MallSync,
     /// ERP 审批通过。
     ErpApproval,
     /// 销售变更。
@@ -60,7 +57,6 @@ impl RevisionSource {
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::MallSync => "商城同步",
             Self::ErpApproval => "ERP 审批",
             Self::SalesChange => "销售变更",
         }
@@ -72,7 +68,6 @@ impl RevisionSource {
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::MallSync => "MALL_SYNC",
             Self::ErpApproval => "ERP_APPROVAL",
             Self::SalesChange => "SALES_CHANGE",
         }
@@ -88,9 +83,7 @@ pub struct SalesOrderRevisionData {
     pub revision_no: u32,
     /// 版本来源。
     pub revision_source: RevisionSource,
-    /// 一期商城快照；ERP 版本为空。
-    pub source_snapshot_id: Option<MallSalesOrderSnapshotId>,
-    /// 前一生效版本（一期同步版本只表示 ERP 观察到的快照）。
+    /// 前一生效版本。
     pub previous_revision_id: Option<SalesOrderRevisionId>,
     /// 本版全部商业字段的规范化指纹。
     pub content_hash: String,
@@ -131,8 +124,6 @@ pub struct SalesOrderRevision {
     pub sales_order_id: SalesOrderId,
     /// 版本来源。
     pub revision_source: RevisionSource,
-    /// 一期商城快照。
-    pub source_snapshot_id: Option<MallSalesOrderSnapshotId>,
     /// 前一生效版本。
     pub previous_revision_id: Option<SalesOrderRevisionId>,
     /// 本版全部商业字段的规范化指纹。
@@ -212,7 +203,6 @@ impl SalesOrderRevision {
             revision: RevisionBase::new(data.revision_no),
             sales_order_id: data.sales_order_id,
             revision_source: data.revision_source,
-            source_snapshot_id: data.source_snapshot_id,
             previous_revision_id: data.previous_revision_id,
             content_hash,
             customer_revision_id: data.customer_revision_id,
@@ -636,7 +626,6 @@ mod tests {
             sales_order_id: SalesOrderId::new("o-1"),
             revision_no: 1,
             revision_source: RevisionSource::ErpApproval,
-            source_snapshot_id: None,
             previous_revision_id: None,
             content_hash: " abc123def456 ".to_string(),
             customer_revision_id: Some(PartyRevisionId::new("party-rev-1")),

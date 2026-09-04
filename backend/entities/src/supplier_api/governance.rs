@@ -431,8 +431,6 @@ impl SupplierConnectionAction {
 pub struct SupplierConnectionBusinessImpact {
     /// 活动供给数量。
     pub active_offerings: u64,
-    /// 活动发布数量。
-    pub active_publications: u64,
     /// 未完成供应商订单数量。
     pub open_supplier_orders: u64,
     /// 活动目录同步任务数量。
@@ -446,7 +444,6 @@ impl SupplierConnectionBusinessImpact {
     /// 任一计数大于零时返回 `true`。
     pub fn has_blockers(self) -> bool {
         self.active_offerings > 0
-            || self.active_publications > 0
             || self.open_supplier_orders > 0
             || self.active_sync_jobs > 0
     }
@@ -608,9 +605,8 @@ impl SupplierConnectionGovernance<'_> {
                 action,
                 "ACTIVE_BUSINESS_IMPACT",
                 &format!(
-                    "仍有{}条供给、{}条发布、{}张订单和{}个同步任务受影响",
+                    "仍有{}条供给、{}张订单和{}个同步任务受影响",
                     impact.active_offerings,
-                    impact.active_publications,
                     impact.open_supplier_orders,
                     impact.active_sync_jobs
                 ),

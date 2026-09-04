@@ -72,17 +72,13 @@ fn cost_entry_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `cost_allocation` 的经营归属与消费归集查询索引。
+/// 返回 `cost_allocation` 的经营归属查询索引。
 fn cost_allocation_indexes() -> Vec<IndexModel> {
     vec![
         named_index("idx_cost_allocations_entry", doc! { "cost_entry_id": 1 }),
         named_index(
             "idx_cost_allocations_sales_order",
             doc! { "sales_order_id": 1, "sales_order_line_id": 1 },
-        ),
-        named_index(
-            "idx_cost_allocations_consumption",
-            doc! { "mall_consumption_entry_id": 1 },
         ),
     ]
 }
@@ -144,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn cost_allocation_indexes_cover_ownership_and_consumption_lookups() {
+    fn cost_allocation_indexes_cover_ownership_lookups() {
         let indexes = cost_allocation_indexes();
 
         assert!(indexes
@@ -154,8 +150,5 @@ mod tests {
             name(index) == Some("idx_cost_allocations_sales_order")
                 && index.keys == doc! { "sales_order_id": 1, "sales_order_line_id": 1 }
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "mall_consumption_entry_id": 1 }));
     }
 }

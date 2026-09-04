@@ -24,7 +24,7 @@ import { mapWorkItemDto } from "@/features/work-items/types"
 import type { BackendDetail, BackendOrder } from "./wire-types"
 
 export const PAYMENT_OCCURRED_NOTICE =
-    "商城支付已发生。供应商履约结果独立记录，不得用取消/退款折入履约主状态。"
+    "客户款项已收。供应商履约结果独立记录，不得用取消/退款折入履约主状态。"
 export const PERMISSION_VERSION = "server"
 
 export function tsToIso(secs: number | null | undefined): string {
@@ -102,8 +102,6 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
     return {
         orderId: o.id,
         orderNo: o.fulfillment_order_no,
-        mallOrderId: o.mall_order_id,
-        mallOrderNo: "",
         supplierId: o.supplier_id,
         supplierName: "",
         externalOrderNo: o.external_order_no ?? undefined,
@@ -126,11 +124,6 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
                 action: "VIEW_SUPPLIER_NAME",
                 code: "SUPPLIER_NAME_NOT_PROJECTED_IN_LIST",
                 message: "列表接口未返回权威供应商名称，禁止以 ID 伪装名称",
-            },
-            {
-                action: "VIEW_MALL_ORDER_NO",
-                code: "MALL_ORDER_NO_NOT_PROJECTED_IN_LIST",
-                message: "列表接口未返回权威商城订单号",
             },
         ],
         priority: priorityOf(fulfillment),
@@ -218,8 +211,6 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
         order: {
             id: o.id,
             orderNo: o.fulfillment_order_no,
-            mallOrderId: o.mall_order_id,
-            mallOrderNo: d.mall_order_no ?? "",
             paidAt: tsToIso(o.created_at),
             paymentFactKey: "",
             fulfillmentChain: "ERP_AUTOMATED",
@@ -228,7 +219,6 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
             connectionCode: o.connection_id,
             connectionEnvironment: "production",
             supplyVersion: "",
-            publicationVersion: "",
             externalOrderNo: o.external_order_no ?? undefined,
             fulfillmentStatus: fulfillment,
             fulfillmentLabel: FULFILLMENT_STATUS_LABEL[fulfillment],
@@ -244,7 +234,6 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
         },
         items: (d.items ?? []).map((it) => ({
             itemId: it.id,
-            mallLineId: it.mall_order_item_id,
             productName:
                 it.supplier_product_code_snapshot ??
                 it.supplier_sku_code_snapshot,
@@ -257,7 +246,6 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
             supplierProductName:
                 it.supplier_product_code_snapshot ??
                 it.supplier_sku_code_snapshot,
-            publicationVersion: "",
             supplyVersion: it.supplier_offering_revision_id,
             unitCostGross: String(it.unit_cost_snapshot_gross),
             unitCostNet: null,

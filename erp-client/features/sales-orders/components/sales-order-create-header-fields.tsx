@@ -6,7 +6,6 @@ import {
     PAYMENT_TERM_OPTIONS,
     WELFARE_SCENARIO_OPTIONS,
 } from "@/lib/business-options"
-import { toFieldErrors } from "@/components/form"
 import {
     NATURE_OPTIONS,
     decimalAtMost,
@@ -14,9 +13,7 @@ import {
     hasMeaningfulLines,
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import { MallSearchCombobox } from "@/features/entity-selectors"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 
 export type SalesOrderCreateHeaderFieldsProps = {
     form: SalesOrderCreateFormApi
@@ -138,55 +135,6 @@ export function SalesOrderCreateHeaderFields({
                                         required
                                     />
                                 )}
-                            </form.AppField>
-                            <form.AppField
-                                name="targetMallId"
-                                validators={{
-                                    onBlur: z
-                                        .string()
-                                        .trim()
-                                        .min(1, "请选择目标商城"),
-                                }}
-                            >
-                                {(field) => {
-                                    const isInvalid =
-                                        field.state.meta.isTouched &&
-                                        !field.state.meta.isValid
-                                    const errors = toFieldErrors(
-                                        field.state.meta.errors,
-                                    )
-                                    return (
-                                        <Field
-                                            data-invalid={
-                                                isInvalid || undefined
-                                            }
-                                        >
-                                            <FieldLabel htmlFor="sales-orders-create-header-target-mall">
-                                                目标商城
-                                                <span className="text-destructive">
-                                                    *
-                                                </span>
-                                            </FieldLabel>
-                                            <MallSearchCombobox
-                                                id="sales-orders-create-header-target-mall"
-                                                purpose="form"
-                                                value={
-                                                    field.state.value ||
-                                                    undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    field.handleChange(id ?? "")
-                                                }
-                                                onBlur={field.handleBlur}
-                                                placeholder="选择目标商城"
-                                                emptyLabel="暂无启用中的商城"
-                                            />
-                                            {isInvalid ? (
-                                                <FieldError errors={errors} />
-                                            ) : null}
-                                        </Field>
-                                    )
-                                }}
                             </form.AppField>
                             <form.AppField
                                 name="receivableDueDate"

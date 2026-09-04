@@ -13,8 +13,6 @@ import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 
 export function SupplierOrderCenterHeader({
     order,
-    from,
-    sourceId,
     canQuery,
     canReplay,
     isResultUnknown,
@@ -26,8 +24,6 @@ export function SupplierOrderCenterHeader({
     onReplayClick,
 }: {
     order: SupplierOrderDetailView["order"]
-    from: string | null
-    sourceId: string | null
     canQuery: boolean
     canReplay: boolean
     isResultUnknown: boolean
@@ -43,33 +39,16 @@ export function SupplierOrderCenterHeader({
             <PageHeader
                 variant="object-chrome"
                 actions={
-                    from === "mall-order" && sourceId ? (
-                        <Button
-                            id="supplier-order-center-header-back-mall"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={`/commerce/consumption-orders?q=${encodeURIComponent(order.mallOrderNo)}`}
-                                />
-                            }
-                        >
-                            <ArrowLeftIcon className="size-3.5" />
-                            返回商城订单
-                        </Button>
-                    ) : (
-                        <Button
-                            id="supplier-order-center-header-back-list"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={<Link href="/supplier-api/orders" />}
-                        >
-                            <ArrowLeftIcon className="size-3.5" />
-                            返回列表
-                        </Button>
-                    )
+                    <Button
+                        id="supplier-order-center-header-back-list"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        render={<Link href="/supplier-api/orders" />}
+                    >
+                        <ArrowLeftIcon className="size-3.5" />
+                        返回列表
+                    </Button>
                 }
             />
 
@@ -83,7 +62,7 @@ export function SupplierOrderCenterHeader({
                 }}
                 meta={
                     <span className="text-muted-foreground">
-                        商城单 {order.mallOrderNo}
+                        供应商单号 {order.externalOrderNo ?? "尚未返回"}
                     </span>
                 }
                 statuses={[
@@ -164,19 +143,9 @@ export function SupplierOrderCenterHeader({
                                 <ExternalLinkIcon className="size-3.5" />
                             </Button>
                         ) : null}
-                        <Button
-                            id="supplier-order-center-header-mall-link"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            render={
-                                <Link
-                                    href={`/commerce/consumption-orders?q=${encodeURIComponent(order.mallOrderNo)}`}
-                                />
-                            }
-                        >
-                            商城 {order.mallOrderNo}
-                        </Button>
+                        <span className="num text-sm text-muted-foreground">
+                            供应商单号 {order.externalOrderNo ?? "尚未返回"}
+                        </span>
                     </div>
                 }
             />

@@ -15,7 +15,7 @@ import {
  * 列表页 URL 状态管理：
  * - 解析 searchParams → url（含 returnTo 返回上下文）；
  * - 统一 updateUrl（筛选/分页 replace、预览 push）；
- * - W25 钻取：supplierOrderId / from=W25 时跳转对象中心。
+ * - W25 钻取已随商城移除：supplierOrderId/preview + openCenter=1 时跳转对象中心。
  *
  * 筛选草稿、清除与提交逻辑见 use-supplier-orders-filters.ts。
  */
@@ -30,24 +30,12 @@ export function useSupplierOrdersUrlState() {
     )
     const returnTo = searchParams.get("returnTo") ?? undefined
 
-    // W25 钻取：supplierOrderId / from=W25 时进入对象中心
+    // 对象中心直达：supplierOrderId/preview + openCenter=1 时进入对象中心
     React.useEffect(() => {
         const soId =
             searchParams.get("supplierOrderId") ?? searchParams.get("preview")
-        const from = searchParams.get("from")
-        if (
-            soId &&
-            (from === "W25" ||
-                from === "mall-order" ||
-                searchParams.get("openCenter") === "1")
-        ) {
-            const mall =
-                searchParams.get("mallOrderId") ?? searchParams.get("sourceId")
-            const qs = new URLSearchParams()
-            if (from) qs.set("from", from === "W25" ? "mall-order" : from)
-            if (mall) qs.set("sourceId", mall)
-            const s = qs.toString()
-            router.replace(`/supplier-api/orders/${soId}${s ? `?${s}` : ""}`)
+        if (soId && searchParams.get("openCenter") === "1") {
+            router.replace(`/supplier-api/orders/${soId}`)
         }
     }, [router, searchParams])
 

@@ -12,7 +12,6 @@ use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::publication::SystemSafetyPauseOperationView;
 
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
 
@@ -326,8 +325,8 @@ pub struct ReviseSupplierOfferingResult {
     pub status: OfferingStatus,
     /// 供给乐观锁版本。
     pub version: u64,
-    /// 同事务触发的安全暂停结果；没有当前在售影响或不构成安全原因时为空。
-    pub safety_pause: Option<SystemSafetyPauseOperationView>,
+    /// 发布侧影响已移除，恒为空。
+    pub safety_pause: Option<serde_json::Value>,
 }
 
 /// 更新实时可供状态请求。
@@ -385,8 +384,8 @@ pub struct UpdateSupplierOfferingAvailabilityResult {
     pub availability_version: u64,
     /// 来源更新时间。
     pub source_updated_at: i64,
-    /// 同事务触发的安全暂停结果；没有当前在售影响或不构成新安全原因时为空。
-    pub safety_pause: Option<SystemSafetyPauseOperationView>,
+    /// 发布侧影响已移除，恒为空。
+    pub safety_pause: Option<serde_json::Value>,
 }
 
 /// 供应停止后续任务的固定决定类型。
@@ -448,7 +447,7 @@ pub struct CompleteSupplierSupplyExceptionTaskRequest {
 pub struct CompleteSupplierSupplyExceptionTaskResult {
     /// 已完成任务。
     pub work_item_id: String,
-    /// 不可变安全暂停操作。
+    /// 关联任务标识。
     pub safety_pause_operation_id: String,
     /// 本次核对证据引用。
     pub evidence_reference: String,

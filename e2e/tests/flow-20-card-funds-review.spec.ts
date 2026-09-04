@@ -5,32 +5,23 @@
  * 账号: xiaoshou 建客户/合同并尝试提交卡券销售单；lisiyong → yunying → caiwu
  *       审批 VoucherSalesOrder；caiwu 在 W01 完成 CARD_FUNDS_REVIEW；
  *       fukuan 登记回款、caiwu 审批入账；kaipiao 在 W01 登记销项发票；
- *       admin 探查 W17/W18。
+ *       admin 探查 W18。
  *
- * 前置条件与跳过策略（一期）：
- * - 卡券销售单主责仍在商城。W17 映射完成前禁止派生应收；不得伪造商城快照，
- *   也不得用实物销售单顶替卡券单。
- * - ERP 建单页虽可选「卡券」，提交时必须存在目标商城下客户/卡券类目的唯一
- *   外部身份映射。E2E reset 清空客户与 mall_sales_order_snapshots /
- *   master_mapping_tasks，新建客户没有商城映射，提交会被拒绝。
- * - 若无启用商城、无卡券类目、或提交因缺少外部身份映射失败：断言「未派生
- *   应收 / 无 CARD_FUNDS_REVIEW」，登记 annotation 后结束，不走复核/回款/开票。
- * - CARD_FUNDS_DELTA_REVIEW：商城金额变化无法从 UI 触发；ERP 改单不能改金额。
- *   即使期初复核走通，差额复核也跳过。
+ * 前置条件与跳过策略（商城移除后）：
+ * - 卡券销售单由 ERP 直接创建，无需目标商城与外部身份映射。
+ * - 若无卡券类目或提交失败：断言「未派生应收 / 无 CARD_FUNDS_REVIEW」，
+ *   登记 annotation 后结束，不走复核/回款/开票。
  *
  * 文档-代码差异（以代码为准）:
- * 1. 文档 §8 一期卡券由商城开单；代码已提供 ERP 卡券建单 + VoucherSalesOrder
- *    审批（销售领导→运营→财务总监）。提交确认文案仍写「两级审批」，已发布
- *    定义为三节点（含 caiwu）。
- * 2. 文档 §9.3.1 要求回款/开票进度在复核未完成时标注「待复核」；销售单摘要
+ * 1. 文档 §9.3.1 要求回款/开票进度在复核未完成时标注「待复核」；销售单摘要
  *    mapCollection/mapInvoicing 只有未收/部分回款/已结清与未开/部分开票/已开齐。
  *    待复核展示在应收台账 reviewStatusLabel（期初待复核/同步差额待复核）。
- * 3. 文档复核完成后才登记回款/发票；代码在销售单生效时同时创建
+ * 2. 文档复核完成后才登记回款/发票；代码在销售单生效时同时创建
  *    CARD_FUNDS_REVIEW 与 SALES_INVOICE_EXECUTION，W13 还可登记历史回款/发票。
- * 4. 客户往来列表 businessTypeLabel 固定写成「实物服务」，即使账户来自卡券单。
- * 5. W01 卡券票款任务 object 标签是「应收子账 N」，来源销售单在 listSummary
+ * 3. 客户往来列表 businessTypeLabel 固定写成「实物服务」，即使账户来自卡券单。
+ * 4. W01 卡券票款任务 object 标签是「应收子账 N」，来源销售单在 listSummary
  *    （「销售单 {orderNo}」），不是「来源销售单」。
- * 6. 资金终态按钮不用「过账」；回款正式入账后列表状态文案是「已过账」。
+ * 5. 资金终态按钮不用「过账」；回款正式入账后列表状态文案是「已过账」。
  */
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 import fs from "node:fs"
@@ -54,7 +45,7 @@ const CONTRACT_PDF = path.resolve(REPO_ROOT, "fixtures", "sample-contract.pdf")
 test.describe.configure({ mode: "serial" })
 
 test.describe("flow-20 卡券销售单票款复核", () => {
-    test("映射完成前不得派生应收；已映射卡券单走期初复核、回款与开票", async ({
+    test("卡券单走期初复核、回款与开票", async ({
         page,
         browser,
     }) => {
@@ -91,9 +82,9 @@ test.describe("flow-20 卡券销售单票款复核", () => {
                 contractNo,
             })
 
-            // ── 2. 探查 W17 / W18：一期形成已映射卡券单的入口；reset 后应无快照/批次 ──
+            // ── 2. 探查 W18：reset 后应无导入批次 ──
             const admin = await openRole(browser, extra, "admin")
-            const mallName = await probeMallSyncAndImport(admin.page)
+            await probeImports(admin.page)
             await admin.context.close()
 
             const caiwuProbe = await openRole(browser, extra, "caiwu")
@@ -111,7 +102,6 @@ test.describe("flow-20 卡券销售单票款复核", () => {
                 customerId,
                 contractNo,
                 legalName,
-                mallName,
             })
 
             if (!created.ok) {
@@ -120,7 +110,7 @@ test.describe("flow-20 卡券销售单票款复核", () => {
                     description: created.reason,
                 })
 
-                // 映射/提交未完成前禁止派生应收，也不得出现期初复核任务。
+                // 提交未完成前禁止派生应收，也不得出现期初复核任务。
                 const caiwu = await openRole(browser, extra, "caiwu")
                 await assertNoCardFundsReview(caiwu.page, legalName)
                 await assertReceivableNotDerived(caiwu.page, legalName)
@@ -241,16 +231,6 @@ test.describe("flow-20 卡券销售单票款复核", () => {
             await expectInvoicing(page, "已开齐")
             await expectCollection(page, "已结清")
             await expectNotClosed(page)
-
-            // ── 9. CARD_FUNDS_DELTA_REVIEW：一期无法从 UI 触发同步金额变化 ──
-            const changeBtn = page.locator("#sales-orders-detail-start-change")
-            await expect(changeBtn).toBeVisible({ timeout: TIMEOUT })
-            test.info().annotations.push({
-                type: "skip-strategy",
-                description:
-                    "差额复核依赖商城快照金额变化或可编辑的销售变更；代码里商城来源禁止改单，ERP 改单不能改金额。未伪造商城，跳过 CARD_FUNDS_DELTA_REVIEW。",
-            })
-            await expect(page.getByText("同步差额待复核")).toHaveCount(0)
         } finally {
             await Promise.allSettled(extra.map((context) => context.close()))
         }
@@ -451,39 +431,9 @@ async function uploadContract(
     await expect(page.getByText(input.contractNo)).toBeVisible({ timeout: LONG })
 }
 
-// ─── W17 / W18 探查 ────────────────────────────────────────────────────────
+// ─── W18 探查 ────────────────────────────────────────────────────────────
 
-async function probeMallSyncAndImport(page: Page): Promise<string | null> {
-    await page.goto("/governance/mall-sync")
-    const mallSyncHeading = page.getByRole("heading", { name: "商城同步与映射" })
-    const forbidden = page.getByText(/无权限|未能获取来源数据|当前账号没有/)
-    await Promise.race([
-        mallSyncHeading.waitFor({ state: "visible", timeout: LONG }),
-        forbidden.waitFor({ state: "visible", timeout: LONG }),
-    ])
-    let mallName: string | null = null
-    if (await mallSyncHeading.isVisible().catch(() => false)) {
-        await expect(
-            page.getByText(/当前主责：第一阶段 · 商城开单|第一期已封存|商城边界/),
-        ).toBeVisible({ timeout: LONG })
-        await expect(page.getByText("无「编辑来源数据」「向商城回写商业修改」「手工标记同步成功」入口。")).toBeVisible({
-            timeout: TIMEOUT,
-        })
-
-        const emptySources = page.getByText("暂无来源系统。")
-        if (!(await emptySources.isVisible().catch(() => false))) {
-            const mallRow = page.locator("li").filter({ hasText: "商城" }).filter({
-                hasText: "启用",
-            })
-            if ((await mallRow.count()) === 1) {
-                mallName = (await mallRow.locator("span.font-medium").innerText()).trim()
-            }
-        }
-
-        await page.locator("#mall-sync-view-mapping").click()
-        await expect(page.getByText("当前没有待处理映射")).toBeVisible({ timeout: LONG })
-    }
-
+async function probeImports(page: Page): Promise<void> {
     await page.goto("/governance/imports")
     await expect(page.getByRole("heading", { name: "导入与期初" })).toBeVisible({
         timeout: LONG,
@@ -491,7 +441,6 @@ async function probeMallSyncAndImport(page: Page): Promise<string | null> {
     await expect(page.getByText(/还没有导入批次|当前环境还没有导入批次/)).toBeVisible({
         timeout: LONG,
     })
-    return mallName
 }
 
 // ─── 卡券销售单 ────────────────────────────────────────────────────────────
@@ -506,7 +455,6 @@ async function tryCreateVoucherSalesOrder(
         customerId: string
         contractNo: string
         legalName: string
-        mallName: string | null
     },
 ): Promise<CreateVoucherResult> {
     await page.goto(`/sales/orders?mode=create&customerId=${encodeURIComponent(input.customerId)}`)
@@ -546,28 +494,6 @@ async function tryCreateVoucherSalesOrder(
     await pickCalendarDay(page, "sales-orders-create-header-fulfillment-deadline", today)
     await pickCalendarDay(page, "sales-orders-create-header-receivable-due-date", today)
 
-    const mallInput = page.locator("#sales-orders-create-header-target-mall")
-    await expect(mallInput).toBeVisible({ timeout: TIMEOUT })
-    await mallInput.click()
-    if (await page.getByText("暂无启用中的商城").isVisible().catch(() => false)) {
-        return {
-            ok: false,
-            reason: "W17 无启用中的商城，一期无法从 UI 创建卡券销售单；未伪造商城。",
-        }
-    }
-    if (input.mallName) {
-        const named = page.getByRole("option", { name: new RegExp(escapeRe(input.mallName)) })
-        if (await named.isVisible({ timeout: TIMEOUT }).catch(() => false)) {
-            await named.click()
-        } else {
-            await mallInput.press("ArrowDown")
-            await mallInput.press("Enter")
-        }
-    } else {
-        await mallInput.press("ArrowDown")
-        await mallInput.press("Enter")
-    }
-
     const lineTable = page.locator("#sales-orders-create-line-items")
     const category = lineTable.getByPlaceholder("搜索卡券类目")
     await expect(category).toBeVisible({ timeout: TIMEOUT })
@@ -576,14 +502,14 @@ async function tryCreateVoucherSalesOrder(
     if (await page.getByText("暂无可用的卡券类目").isVisible().catch(() => false)) {
         return {
             ok: false,
-            reason: "无可用卡券类目，一期无法从 UI 创建卡券销售单。",
+            reason: "无可用卡券类目，无法从 UI 创建卡券销售单。",
         }
     }
     const voucherOption = page.getByRole("option", { name: new RegExp(escapeRe(VOUCHER_NAME)) })
     if (!(await voucherOption.isVisible({ timeout: LONG }).catch(() => false))) {
         return {
             ok: false,
-            reason: `卡券类目「${VOUCHER_NAME}」不可选，一期无法从 UI 创建卡券销售单。`,
+            reason: `卡券类目「${VOUCHER_NAME}」不可选，无法从 UI 创建卡券销售单。`,
         }
     }
     await voucherOption.click()
@@ -601,24 +527,21 @@ async function tryCreateVoucherSalesOrder(
     ).toBeVisible({ timeout: TIMEOUT })
     await page.locator("#sales-orders-submit-confirm-confirm").click()
 
-    const mappingError = page.getByText(/目标商城缺少已确认的.+外部身份映射，禁止提交/)
     const createdUrl = page.waitForURL(/\/sales\/orders\/[^/?#]+/, { timeout: LONG }).then(() => "ok")
-    const failed = mappingError.waitFor({ state: "visible", timeout: LONG }).then(() => "mapping")
     const uncreated = page
         .getByRole("heading", { name: /销售单未创建|操作未完成/ })
         .waitFor({ state: "visible", timeout: LONG })
         .then(() => "error")
-    const outcome = await Promise.race([createdUrl, failed, uncreated]).catch(() => "timeout")
+    const outcome = await Promise.race([createdUrl, uncreated]).catch(() => "timeout")
 
     if (outcome !== "ok") {
         const detail = (
-            (await mappingError.textContent().catch(() => null)) ||
             (await page.locator('[role="alert"]').innerText().catch(() => "")) ||
             String(outcome)
         ).trim()
         return {
             ok: false,
-            reason: `一期无法从 UI 形成已映射卡券销售单（${detail}）。未伪造商城，也未手工补建另一张销售单。`,
+            reason: `无法从 UI 创建卡券销售单（${detail}）。`,
         }
     }
 

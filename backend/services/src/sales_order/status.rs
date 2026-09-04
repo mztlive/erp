@@ -123,8 +123,8 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
 
 /// 是否可以发起销售变更单（服务端权威；移植自 close-eligibility.ts::canStartSalesChange）。
 ///
-/// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更（商城开单同步的
-/// 单据、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起）。
+/// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更。历史商城来源单据
+/// （卡券同步遗留）、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起。
 pub(super) fn compute_can_start_sales_change(
     origin_system: OriginSystem,
     stage_code: &str,

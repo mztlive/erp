@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 
 use database::{
-    AccessControlExt, CatalogExt, NoTransaction, PublicationExt, SupplierApiExt, SupplierExt,
-    SupplierOfferingExt, Transactional, WorkItemExt,
+    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt, Transactional,
+    WorkItemExt,
 };
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
 use entities::common::time::{BusinessDate, Instant};
@@ -18,8 +18,8 @@ use entities::ids::{
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
-    AvailabilityInterruptionReason, OfferingRevisionImpact, OfferingStatus, SupplierOffering,
-    SupplierOfferingAvailability, SupplierOfferingCommand, SupplierOfferingRevision,
+    OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
+    SupplierOfferingRevision,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -28,14 +28,9 @@ use validator::Validate;
 
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::errors::{Error, Result};
-use crate::publication::{PublicationService, SystemSafetyPauseTrigger, UnavailableMallConnector};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 use crate::work_item::WorkItemService;
-use entities::publication::{
-    SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType, SystemSafetyPauseOperation,
-};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use std::sync::Arc;
 
 mod dto;
 
@@ -272,20 +267,6 @@ impl SupplierOfferingService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
-        let prior_revision = match offering.stable.current_revision_id.as_ref() {
-            Some(revision_id) => Some(
-                self.db
-                    .supplier_offering_revisions()
-                    .find_by_id(revision_id, &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| {
-                        Error::BusinessLogicError(
-                            "供给当前修订不存在，禁止形成无法判定影响的新版本".to_string(),
-                        )
-                    })?,
-            ),
-            None => None,
-        };
         let current_no = self.current_revision_no(&offering).await?;
         let next_no = offering
             .next_revision_no(current_no, req.expected_revision_no)
@@ -296,7 +277,6 @@ impl SupplierOfferingService {
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
         let next_status = req.status.unwrap_or(offering.stable.status);
-        let prior_status = offering.stable.status;
         if next_status == OfferingStatus::Active {
             self.ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from)
                 .await?;
@@ -312,35 +292,6 @@ impl SupplierOfferingService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let safety_pause_cause = if next_status == OfferingStatus::Stopped && prior_status != next_status {
-            Some(SafetyPauseCause::SupplierStopped)
-        } else {
-            prior_revision
-                .as_ref()
-                .and_then(|prior| safety_pause_cause_for_revision(revision.impact_from(prior)))
-        };
-        let safety_pause = safety_pause_cause.map(|cause| {
-            let source_version = if cause == SafetyPauseCause::SupplierStopped {
-                format!("offering:{expected_version}")
-            } else {
-                format!("revision:{}", revision.base.id)
-            };
-            SystemSafetyPauseTrigger {
-                cause,
-                source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
-                source_object_id: offering.base.id.clone(),
-                source_version: source_version.clone(),
-                occurred_at: Instant::now(),
-                idempotency_key: format!(
-                    "w22:offering:{}:{}:{}",
-                    offering.base.id,
-                    cause.as_str().to_ascii_lowercase(),
-                    source_version
-                ),
-                owner_user_id: actor.id().to_string(),
-            }
-        });
-        let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
         let idempotency_key = req.idempotency_key.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let offering_id = offering.base.id.clone();
@@ -351,20 +302,13 @@ impl SupplierOfferingService {
                     db.supplier_offering_repository()
                         .append_revision(&mut offering, &revision, session)
                         .await?;
-                    let safety_pause = if let Some(trigger) = safety_pause.as_ref() {
-                        publication
-                            .system_safety_pause_in_transaction(trigger, session)
-                            .await?
-                    } else {
-                        None
-                    };
                     let result = ReviseSupplierOfferingResult {
                         offering_id,
                         revision_id,
                         revision_no: next_no,
                         status: next_status,
                         version: expected_version,
-                        safety_pause,
+                        safety_pause: None,
                     };
                     let command = SupplierOfferingCommand::with_result(
                         next_id(),
@@ -428,8 +372,6 @@ impl SupplierOfferingService {
             .find_by_offering_id(&offering_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给可供状态不存在".to_string()))?;
-        let prior_safety_pause_cause =
-            safety_pause_cause_for_availability(availability.interruption_reason());
         if let Some(expected_version) = req.expected_version {
             availability
                 .ensure_version(expected_version)
@@ -444,10 +386,6 @@ impl SupplierOfferingService {
             actor.id().to_string(),
         )?;
         availability.apply(availability_data)?;
-        let next_safety_pause_cause = safety_pause_cause_for_availability(availability.interruption_reason());
-        let safety_pause_cause = (next_safety_pause_cause != prior_safety_pause_cause)
-            .then_some(next_safety_pause_cause)
-            .flatten();
         let result_version = availability.next_persisted_version()?;
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.availability.update",
@@ -457,21 +395,6 @@ impl SupplierOfferingService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let safety_pause = safety_pause_cause.map(|cause| SystemSafetyPauseTrigger {
-            cause,
-            source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
-            source_object_id: offering_id.to_string(),
-            source_version: format!("availability:{result_version}"),
-            occurred_at: source_updated_at,
-            idempotency_key: format!(
-                "w22:offering:{}:{}:{}",
-                offering_id,
-                cause.as_str().to_ascii_lowercase(),
-                result_version
-            ),
-            owner_user_id: actor.id().to_string(),
-        });
-        let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
         let idempotency_key = req.idempotency_key.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let result_offering_id = offering_id.to_string();
@@ -483,19 +406,12 @@ impl SupplierOfferingService {
                     db.supplier_offering_availabilities()
                         .update(&mut availability, session)
                         .await?;
-                    let safety_pause = if let Some(trigger) = safety_pause.as_ref() {
-                        publication
-                            .system_safety_pause_in_transaction(trigger, session)
-                            .await?
-                    } else {
-                        None
-                    };
                     let result = UpdateSupplierOfferingAvailabilityResult {
                         offering_id: result_offering_id,
                         availability_status: result_status,
                         availability_version: result_version,
                         source_updated_at: result_source_updated_at,
-                        safety_pause,
+                        safety_pause: None,
                     };
                     let command = SupplierOfferingCommand::with_result(
                         next_id(),
@@ -519,14 +435,12 @@ impl SupplierOfferingService {
         .await
     }
 
-    /// 核对供应停止来源与安全暂停影响，并完成其唯一正式后续任务。
+    /// 核对供应停止来源，并完成其唯一正式后续任务。
     ///
-    /// 本命令只关闭人工核对责任；不可变安全暂停证据、暂停修订和发布暂停状态
-    /// 均保持不变，不得将“任务完成”解释为恢复供给或恢复发布。
+    /// 本命令只关闭人工核对责任，不得将“任务完成”解释为恢复供给或恢复发布。
     ///
     /// # 错误
-    /// 任务、来源对象、冻结版本、不可变安全暂停操作、当前责任或幂等请求任一
-    /// 不一致时失败关闭。
+    /// 任务、来源对象、冻结版本、当前责任或幂等请求任一不一致时失败关闭。
     pub async fn complete_supply_exception_task(
         &self,
         id: &str,
@@ -585,14 +499,6 @@ impl SupplierOfferingService {
                     WorkItemService::new(db.clone(), rbac.clone())
                         .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
                         .await?;
-                    let operation = db
-                        .system_safety_pause_operations()
-                        .find_safety_pause_by_work_item(&work_item.base.id, session)
-                        .await?
-                        .ok_or_else(|| {
-                            Error::BusinessLogicError("供应停止任务缺少不可变安全暂停证据".to_string())
-                        })?;
-                    ensure_supply_exception_operation(&operation, &work_item)?;
 
                     let completed_at = Instant::now();
                     work_item.complete_by_domain_command(actor_for_tx.id(), completed_at)?;
@@ -601,7 +507,7 @@ impl SupplierOfferingService {
                         "supplier_offering",
                         offering_id_for_tx.clone(),
                         Some(format!(
-                            "证据引用：{}；核对结论：{}；安全暂停保持生效",
+                            "证据引用：{}；核对结论：{}",
                             req_for_tx.decision.evidence_reference.trim(),
                             req_for_tx.decision.comment.trim()
                         )),
@@ -613,7 +519,7 @@ impl SupplierOfferingService {
                     db.audit_logs().create(&receipt_audit, session).await?;
 
                     Ok::<CompleteSupplierSupplyExceptionTaskResult, Error>(
-                        supply_exception_completion_result(&operation, &req_for_tx),
+                        supply_exception_completion_result(&work_item, &req_for_tx),
                     )
                 })
             })
@@ -649,14 +555,7 @@ impl SupplierOfferingService {
         {
             return Err(Error::Internal("已提交供应停止任务结果不完整".to_string()));
         }
-        let operation = self
-            .db
-            .system_safety_pause_operations()
-            .find_safety_pause_by_work_item(committed_work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("已提交任务缺少安全暂停证据".to_string()))?;
-        ensure_supply_exception_operation(&operation, &work_item)?;
-        Ok(supply_exception_completion_result(&operation, req))
+        Ok(supply_exception_completion_result(&work_item, req))
     }
 
     async fn ensure_identity_available(&self, offering: &SupplierOffering) -> Result<()> {
@@ -844,70 +743,15 @@ fn ensure_supply_exception_work_item(
     Ok(())
 }
 
-fn ensure_supply_exception_operation(
-    operation: &SystemSafetyPauseOperation,
-    work_item: &WorkItem,
-) -> Result<()> {
-    let bound = matches!(
-        &operation.follow_up,
-        SafetyPauseFollowUp::WorkItem(reference)
-            if reference.work_item_id == work_item.base.id
-                && reference.business_object_type == work_item.business_object_type
-                && reference.business_object_id == work_item.business_object_id
-                && reference.subject_version == work_item.subject_version
-                && reference.handler_key == "supplier_supply_exception"
-    );
-    if operation.cause != SafetyPauseCause::SupplierStopped
-        || operation.source_object_type != SafetyPauseSourceObjectType::SupplierOffering
-        || operation.source_object_id != work_item.business_object_id
-        || operation.source_version != work_item.subject_version
-        || !bound
-    {
-        return Err(Error::BusinessLogicError(
-            "供应停止任务与不可变安全暂停证据不一致".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn supply_exception_completion_result(
-    operation: &SystemSafetyPauseOperation,
+    work_item: &WorkItem,
     req: &CompleteSupplierSupplyExceptionTaskRequest,
 ) -> CompleteSupplierSupplyExceptionTaskResult {
     CompleteSupplierSupplyExceptionTaskResult {
         work_item_id: req.work_item_id.trim().to_string(),
-        safety_pause_operation_id: operation.base.id.clone(),
+        safety_pause_operation_id: work_item.base.id.clone(),
         evidence_reference: req.decision.evidence_reference.trim().to_string(),
-        message: "供应停止来源与安全暂停影响已核对；任务已完成，安全暂停继续生效".to_string(),
-    }
-}
-
-/// 将供给域的可供中断原因映射为发布安全暂停原因。
-///
-/// 映射属于 D24 供给与 D26 发布之间的集成适配合同；`None` 表示当前可供事实
-/// 不要求触发发布安全暂停。新增中断原因时必须在此穷尽声明其发布影响。
-fn safety_pause_cause_for_availability(
-    reason: Option<AvailabilityInterruptionReason>,
-) -> Option<SafetyPauseCause> {
-    reason.map(|reason| match reason {
-        AvailabilityInterruptionReason::SupplierStopped => SafetyPauseCause::SupplierStopped,
-        AvailabilityInterruptionReason::SupplyUnavailable => SafetyPauseCause::SupplyUnavailable,
-        AvailabilityInterruptionReason::AvailabilityStale => SafetyPauseCause::AvailabilityStale,
-        AvailabilityInterruptionReason::ZeroInventory => SafetyPauseCause::ZeroInventory,
-    })
-}
-
-/// 将供给商业条款影响映射为发布安全暂停原因。
-///
-/// 映射属于 D24 供给与 D26 发布之间的集成适配合同；无商业影响时不得生成
-/// 暂停原因。新增修订影响时必须在此穷尽声明其发布影响。
-fn safety_pause_cause_for_revision(impact: OfferingRevisionImpact) -> Option<SafetyPauseCause> {
-    match impact {
-        OfferingRevisionImpact::None => None,
-        OfferingRevisionImpact::CostChanged => Some(SafetyPauseCause::CostChangeUnconfirmed),
-        OfferingRevisionImpact::CriticalSupplyChanged => {
-            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
-        }
+        message: "供应停止来源已核对；任务已完成".to_string(),
     }
 }
 
@@ -1037,22 +881,14 @@ fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_supply_exception_operation, ensure_supply_exception_work_item,
-        safety_pause_cause_for_availability, safety_pause_cause_for_revision, CreateSupplierOfferingRequest,
-        CreateSupplierOfferingResult,
+        ensure_supply_exception_work_item, CreateSupplierOfferingRequest, CreateSupplierOfferingResult,
     };
     use crate::supplier_offering::dto::{CREATE_OFFERING_COMMAND, REVISE_OFFERING_COMMAND};
     use entities::common::time::Instant;
-    use entities::ids::{
-        ProductPublicationDeliveryId, ProductPublicationId, ProductPublicationRevisionId, WorkItemId,
-    };
-    use entities::publication::{
-        SafetyPauseAffectedPublication, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
-        SafetyPauseWorkItemRef, SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
-    };
+    use entities::ids::WorkItemId;
     use entities::supplier_offering::{
-        AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingSourceType,
-        OfferingStatus, SupplierOfferingCommand, SupplierOfferingCommandData,
+        AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingCommand,
+        SupplierOfferingCommandData,
     };
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 
@@ -1134,49 +970,6 @@ mod tests {
     }
 
     #[test]
-    fn availability_pause_adapter_maps_every_stable_interruption_reason() {
-        assert_eq!(safety_pause_cause_for_availability(None), None);
-        let cases = [
-            (
-                AvailabilityInterruptionReason::SupplierStopped,
-                SafetyPauseCause::SupplierStopped,
-            ),
-            (
-                AvailabilityInterruptionReason::SupplyUnavailable,
-                SafetyPauseCause::SupplyUnavailable,
-            ),
-            (
-                AvailabilityInterruptionReason::AvailabilityStale,
-                SafetyPauseCause::AvailabilityStale,
-            ),
-            (
-                AvailabilityInterruptionReason::ZeroInventory,
-                SafetyPauseCause::ZeroInventory,
-            ),
-        ];
-
-        for (reason, expected) in cases {
-            assert_eq!(safety_pause_cause_for_availability(Some(reason)), Some(expected));
-        }
-    }
-
-    #[test]
-    fn revision_pause_adapter_maps_every_stable_impact() {
-        assert_eq!(
-            safety_pause_cause_for_revision(OfferingRevisionImpact::None),
-            None
-        );
-        assert_eq!(
-            safety_pause_cause_for_revision(OfferingRevisionImpact::CostChanged),
-            Some(SafetyPauseCause::CostChangeUnconfirmed)
-        );
-        assert_eq!(
-            safety_pause_cause_for_revision(OfferingRevisionImpact::CriticalSupplyChanged),
-            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
-        );
-    }
-
-    #[test]
     fn supply_exception_completion_requires_exact_frozen_task_identity() {
         let task = supply_exception_task();
 
@@ -1187,39 +980,6 @@ mod tests {
         assert!(
             ensure_supply_exception_work_item(&task, "offering-1", task.base.version, "offering:3",).is_err()
         );
-    }
-
-    #[test]
-    fn supply_exception_completion_requires_bound_safety_pause_evidence() {
-        let task = supply_exception_task();
-        let operation = SystemSafetyPauseOperation::new(
-            "pause-1",
-            SystemSafetyPauseOperationData {
-                cause: SafetyPauseCause::SupplierStopped,
-                source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
-                source_object_id: task.business_object_id.clone(),
-                source_version: task.subject_version.clone(),
-                idempotency_key: "pause-key-1".to_string(),
-                affected_publications: vec![SafetyPauseAffectedPublication {
-                    publication_id: ProductPublicationId::new("publication-1"),
-                    pause_revision_id: ProductPublicationRevisionId::new("revision-1"),
-                    delivery_id: ProductPublicationDeliveryId::new("delivery-1"),
-                }],
-                follow_up: SafetyPauseFollowUp::WorkItem(SafetyPauseWorkItemRef {
-                    work_item_id: task.base.id.clone(),
-                    task_version: task.base.version,
-                    business_object_type: task.business_object_type.clone(),
-                    business_object_id: task.business_object_id.clone(),
-                    subject_version: task.subject_version.clone(),
-                    handler_key: "supplier_supply_exception".to_string(),
-                }),
-                occurred_at: Instant::from_unix_secs(1),
-                committed_at: Instant::from_unix_secs(1),
-            },
-        )
-        .unwrap();
-
-        ensure_supply_exception_operation(&operation, &task).unwrap();
     }
 
     fn supply_exception_task() -> WorkItem {
@@ -1237,7 +997,7 @@ mod tests {
                 priority: WorkItemPriority::High,
                 due_at: None,
                 reason_code: Some("SUPPLIER_STOPPED".to_string()),
-                impact_summary: Some("发布保持安全暂停".to_string()),
+                impact_summary: Some("供应停止待核对".to_string()),
             },
             Instant::from_unix_secs(1),
         )

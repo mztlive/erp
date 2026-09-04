@@ -9,7 +9,7 @@
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
 use entities::common::time::BusinessDate;
-use entities::ids::{ContractId, CustomerAccountId, SkuId, SourceSystemId};
+use entities::ids::{ContractId, CustomerAccountId, SkuId};
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
@@ -130,8 +130,6 @@ pub struct SalesOrderDraftRequest {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限（秒级时间戳，卡券单必填）。
     pub voucher_expiry_at: Option<u64>,
-    /// 卡券执行投影的目标商城；非卡券单为空。
-    pub target_mall_id: Option<SourceSystemId>,
     /// 卡券最终通过时形成应收所使用的到期日；非卡券单为空。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行清单（非空，上限 200 行）。
@@ -159,8 +157,6 @@ pub struct SalesOrderEditableDraftRequest {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限（秒级时间戳，卡券单必填）。
     pub voucher_expiry_at: Option<u64>,
-    /// 卡券执行投影的目标商城；非卡券单为空。
-    pub target_mall_id: Option<SourceSystemId>,
     /// 卡券最终通过时形成应收所使用的到期日；非卡券单为空。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行清单（非空，上限 200 行）。
@@ -523,8 +519,6 @@ pub struct WorkingCopyView {
     pub voucher_category_sku_id: Option<String>,
     /// 卡券履约期限（秒级时间戳）。
     pub voucher_expiry_at: Option<u64>,
-    /// 卡券执行投影的目标商城。
-    pub target_mall_id: Option<String>,
     /// 卡券最终通过时形成应收所使用的到期日。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行汇总（含税）。
@@ -623,12 +617,6 @@ pub struct SubmissionView {
     pub voucher_category_sku_id: Option<String>,
     /// 卡券履约期限（秒级时间戳）。
     pub voucher_expiry_at: Option<u64>,
-    /// 卡券执行投影的目标商城。
-    pub target_mall_id: Option<String>,
-    /// 提交时服务端解析并冻结的商城客户身份。
-    pub customer_external_identity: Option<String>,
-    /// 提交时服务端解析并冻结的商城卡券类目身份。
-    pub voucher_category_external_identity: Option<String>,
     /// 最终通过时形成应收所使用的到期日。
     pub receivable_due_date: Option<BusinessDate>,
     /// 提交行汇总（含税）。

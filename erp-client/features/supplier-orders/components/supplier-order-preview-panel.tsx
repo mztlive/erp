@@ -1,7 +1,6 @@
 "use client"
 
 import type { ReactNode } from "react"
-import Link from "next/link"
 
 import { MoneyValue, StatusTrackSummary } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -38,7 +37,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 <div className="space-y-4 p-4 md:p-5">
                     <Alert variant="info" className="py-3">
                         <AlertTitle className="text-sm">
-                            商城支付已发生
+                            客户款项已收
                         </AlertTitle>
                         <AlertDescription className="text-xs leading-relaxed">
                             {o.paymentOccurredNotice}
@@ -91,18 +90,6 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                 label="供应商订单"
                                 value={<span className="num">{o.orderNo}</span>}
                             />
-                            <Field
-                                label="商城订单"
-                                value={
-                                    <Link
-                                        id="supplier-order-preview-mall-link"
-                                        href={`/commerce/consumption-orders?q=${encodeURIComponent(o.mallOrderNo)}`}
-                                        className="num text-primary underline-offset-2 hover:underline"
-                                    >
-                                        {o.mallOrderNo}
-                                    </Link>
-                                }
-                            />
                             <Field label="供应商" value={o.supplierName} />
                             <Field
                                 label="供应商单号"
@@ -131,10 +118,8 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                 }
                             />
                             <Field
-                                label="供给 / 发布数据版本"
-                                value={`${codeVersion(o.supplyVersion)} / ${codeVersion(
-                                    o.publicationVersion,
-                                )}`}
+                                label="供给数据版本"
+                                value={codeVersion(o.supplyVersion)}
                             />
                         </DescriptionList>
                     </section>

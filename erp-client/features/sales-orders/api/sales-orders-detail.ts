@@ -175,26 +175,6 @@ async function loadContractDisplay(
     }
 }
 
-async function loadTargetMallName(
-    targetMallId: string | null | undefined,
-): Promise<string | undefined> {
-    if (!targetMallId) return undefined
-    try {
-        const page = await apiGet<
-            PageView<{ id: string; name: string; system_type: string }>
-        >("/admin/source-systems", {
-            system_type: "MALL",
-            page: 1,
-            page_size: 100,
-            sort_by: "name",
-            sort_dir: "asc",
-        })
-        return page.items.find((item) => item.id === targetMallId)?.name
-    } catch {
-        return undefined
-    }
-}
-
 export async function fetchSalesOrderDetail(
     id: string,
 ): Promise<SalesOrderDetailView | null> {
@@ -210,16 +190,11 @@ export async function fetchSalesOrderDetail(
     }
 
     const commercialSource = pickSalesOrderCommercialSource(detail)
-    const [customerDisplay, contractDisplay, extras, targetMallName] =
-        await Promise.all([
-            loadCustomerDisplay(detail.customer_id),
-            loadContractDisplay(
-                detail.contract_id,
-                commercialSource?.contract_revision_id,
-            ),
-            loadDetailExtras(id, mapNature(detail.business_type)),
-            loadTargetMallName(commercialSource?.target_mall_id),
-        ])
+    const [customerDisplay, contractDisplay, extras] = await Promise.all([
+        loadCustomerDisplay(detail.customer_id),
+        loadContractDisplay(detail.contract_id, commercialSource?.contract_revision_id),
+        loadDetailExtras(id, mapNature(detail.business_type)),
+    ])
     const order = mapDetailToListItem(detail, {
         customerName:
             contractDisplay.customerName ||
@@ -230,7 +205,6 @@ export async function fetchSalesOrderDetail(
         ownerUserId: detail.owner_user_id || "",
         ownerName: detail.owner_user_name || "—",
         customerContact: customerDisplay.customerContact,
-        targetMallName,
         ...extras,
     })
 

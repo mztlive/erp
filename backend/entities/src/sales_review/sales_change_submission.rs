@@ -1077,7 +1077,6 @@ mod tests {
             business_remark: None,
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
             receivable_due_date: None,
             gross_amount: amt("29.97"),
             net_amount: amt("26.07"),

@@ -6,10 +6,9 @@
 
 use entities::common::source::SourceType;
 use entities::ids::{
-    CostAllocationId, CostEntryId, MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId,
-    MallOrderItemId, PayableEntryId, PaymentAllocationId, SupplierAccountId, SupplierApiConnectionId,
-    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId, SupplierOrderActionId,
-    WorkItemId,
+    CostAllocationId, CostEntryId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
+    SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+    SupplierOfferingRevisionId, SupplierOrderActionId, WorkItemId,
 };
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::supplier_fulfillment::{
@@ -77,8 +76,6 @@ pub struct SupplierFulfillmentOrderListParams {
     pub refund_status: Option<RefundStatus>,
     /// 供应商订单号模糊筛选（字面量、忽略大小写）。
     pub external_order_no: Option<String>,
-    /// 来源商城订单筛选。
-    pub mall_order_id: Option<MallOrderId>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -104,8 +101,6 @@ pub(crate) struct FulfillmentOrderListQuery {
     pub refund_status: Option<RefundStatus>,
     /// 供应商订单号模糊筛选。
     pub external_order_no: Option<String>,
-    /// 来源商城订单筛选。
-    pub mall_order_id: Option<MallOrderId>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -129,7 +124,6 @@ impl SupplierFulfillmentOrderListParams {
             cancel_status: self.cancel_status,
             refund_status: self.refund_status,
             external_order_no: normalized_text(self.external_order_no.as_deref()),
-            mall_order_id: self.mall_order_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -140,7 +134,7 @@ impl SupplierFulfillmentOrderListParams {
     }
 }
 
-/// 供应商履约订单响应视图（契约形状：`id`/`fulfillment_order_no`/`mall_order_id`/
+/// 供应商履约订单响应视图（契约形状：`id`/`fulfillment_order_no`/
 /// `supplier_id`/`connection_id`/`split_no`/三条状态/`external_order_no`/关键时间/
 /// `version`/`created_at`）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -149,8 +143,6 @@ pub struct SupplierFulfillmentOrderView {
     pub id: String,
     /// ERP 供应商子订单号（下单幂等键）。
     pub fulfillment_order_no: String,
-    /// 来源商城订单。
-    pub mall_order_id: String,
     /// 固定供应商。
     pub supplier_id: String,
     /// 供应商 API 连接。
@@ -189,7 +181,6 @@ impl From<SupplierFulfillmentOrder> for SupplierFulfillmentOrderView {
         Self {
             id: order.base.id,
             fulfillment_order_no: order.fulfillment_order_no,
-            mall_order_id: order.mall_order_id.to_string(),
             supplier_id: order.supplier_id.to_string(),
             connection_id: order.connection_id.to_string(),
             split_no: order.split_no,
@@ -209,8 +200,6 @@ impl From<SupplierFulfillmentOrder> for SupplierFulfillmentOrderView {
 /// 供应商履约明细创建请求行。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PlaceFulfillmentItemRequest {
-    /// 来源商城商品明细。
-    pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
     /// 整条明细数量（SKU 基础单位，最多 6 位小数）。
@@ -227,13 +216,11 @@ pub struct PlaceFulfillmentOrderRequest {
     /// ERP 供应商子订单号（唯一，也是下单幂等键；重复提交返回原订单不重复下单）。
     #[validate(custom(function = "non_blank", message = "供应商子订单号不能为空"))]
     pub fulfillment_order_no: String,
-    /// 来源商城订单。
-    pub mall_order_id: MallOrderId,
     /// 固定供应商。
     pub supplier_id: SupplierAccountId,
     /// 供应商 API 连接。
     pub connection_id: SupplierApiConnectionId,
-    /// 同一商城订单、同一供应商下的确定性拆单序号。
+    /// 同一供应商下的确定性拆单序号。
     #[validate(range(min = 1, message = "拆单序号必须大于 0"))]
     pub split_no: u32,
     /// 履约地址快照加密值（调用方已加密，本接口按不透明值保存）。
@@ -257,8 +244,6 @@ pub struct SupplierFulfillmentItemView {
     pub id: String,
     /// 所属供应商子订单。
     pub supplier_fulfillment_order_id: String,
-    /// 来源商城商品明细。
-    pub mall_order_item_id: String,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: String,
     /// 下单时固定的供应商侧订货 SKU 编码。
@@ -330,8 +315,6 @@ pub struct SupplierOrderActionView {
     pub supplier_fulfillment_order_id: String,
     /// 动作类型。
     pub action_type: SupplierOrderActionType,
-    /// 商城售后申请。
-    pub after_sales_request_id: Option<String>,
     /// 动作状态。
     pub status: SupplierOrderActionStatus,
     /// 供应商请求号。
@@ -359,7 +342,6 @@ impl From<SupplierOrderAction> for SupplierOrderActionView {
             id: action.base.id,
             supplier_fulfillment_order_id: action.supplier_fulfillment_order_id.to_string(),
             action_type: action.action_type,
-            after_sales_request_id: action.after_sales_request_id.map(|id| id.to_string()),
             status: action.status,
             external_request_id: action.external_request_id,
             request_summary: action.request_summary,
@@ -377,8 +359,6 @@ pub struct SupplierOrderActionLineView {
     pub id: String,
     /// 动作内行号。
     pub line_no: u32,
-    /// 原商城售后申请行。
-    pub after_sales_request_line_id: String,
     /// 本供应商履约明细。
     pub supplier_fulfillment_item_id: String,
     /// 本动作提交数量。
@@ -450,8 +430,6 @@ pub struct SupplierFulfillmentOrderDetailView {
     pub refund_facts: Vec<SupplierRefundFactView>,
     /// 权威供应商名称；基础资料缺失时为空，禁止回退显示 ID。
     pub supplier_name: Option<String>,
-    /// 权威商城订单号；商城订单缺失时为空。
-    pub mall_order_no: Option<String>,
     /// 地址的服务端安全投影。
     pub address: SupplierOrderAddressView,
     /// 当前操作人可见的 W26 正式任务。
@@ -788,8 +766,6 @@ pub struct SupplierOrderTaskCompletionResultView {
 /// 供应商取消/退款动作提交请求（动作行冻结实际提交给供应商的范围）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SubmitAfterSalesActionRequest {
-    /// 商城售后申请（取消/退款动作必填，§6.19）。
-    pub after_sales_request_id: MallAfterSalesRequestId,
     /// 提交给供应商的动作行。
     #[validate(length(min = 1, message = "动作行至少一行"))]
     pub lines: Vec<AfterSalesActionLineRequest>,
@@ -802,8 +778,6 @@ pub struct SubmitAfterSalesActionRequest {
 /// 供应商取消/退款动作行请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AfterSalesActionLineRequest {
-    /// 原商城售后申请行。
-    pub after_sales_request_line_id: MallAfterSalesRequestLineId,
     /// 本供应商履约明细。
     pub supplier_fulfillment_item_id: SupplierFulfillmentItemId,
     /// 本动作提交数量。
@@ -921,7 +895,6 @@ mod tests {
             cancel_status: Some(CancelStatus::None),
             refund_status: Some(RefundStatus::RefundPending),
             external_order_no: Some(" SUP-1 ".to_string()),
-            mall_order_id: None,
             page: None,
             page_size: None,
             sort_by: None,
@@ -944,7 +917,6 @@ mod tests {
             cancel_status: None,
             refund_status: None,
             external_order_no: None,
-            mall_order_id: None,
             page: Some(0),
             page_size: Some(u32::MAX),
             sort_by: None,
@@ -957,14 +929,12 @@ mod tests {
     fn place_request_rejects_blank_order_no_and_empty_items() {
         let base = json!({
             "fulfillment_order_no": "FO-2026-001",
-            "mall_order_id": "mall-order-1",
             "supplier_id": "supplier-1",
             "connection_id": "connection-1",
             "split_no": 1,
             "address_snapshot_encrypted": "encrypted",
             "address_snapshot_fingerprint": "fingerprint",
             "items": [{
-                "mall_order_item_id": "mall-item-1",
                 "supplier_offering_revision_id": "offering-rev-1",
                 "quantity": "3.000000",
                 "unit_cost_snapshot_gross": "9.9900",
@@ -976,7 +946,6 @@ mod tests {
 
         let blank_no = json!({
             "fulfillment_order_no": "  ",
-            "mall_order_id": "mall-order-1",
             "supplier_id": "supplier-1",
             "connection_id": "connection-1",
             "split_no": 1,

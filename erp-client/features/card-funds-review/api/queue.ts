@@ -196,7 +196,6 @@ async function projectItem(
             customerName: account.customer_name,
             counterpartyPartyId: account.counterparty_party_id,
             counterpartyPartyName: account.counterparty_party_name ?? "",
-            mallName: "",
             reviewStatus: account.review_status,
             grossTotal: account.gross_total,
             settledTotal: account.settled_total,

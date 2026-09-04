@@ -152,14 +152,6 @@
 //! - `legacy_import_row` → `LegacyImportRowId`
 //! - `legacy_import_confirmation` → `LegacyImportConfirmationId`
 //!
-//! D23 `mall_sync`：
-//! - `mall_sales_sync_job` → `MallSalesSyncJobId`
-//! - `mall_sales_sync_cursor` → `MallSalesSyncCursorId`
-//! - `mall_sales_order_snapshot` → `MallSalesOrderSnapshotId`
-//! - `mall_sales_reconciliation_job` → `MallSalesReconciliationJobId`
-//! - `mall_sales_reconciliation_item` → `MallSalesReconciliationItemId`
-//! - `master_mapping_task` → `MasterMappingTaskId`
-//!
 //! D24 `supplier_offering`：
 //! - `supplier_offering` → `SupplierOfferingId`
 //! - `supplier_offering_revision` → `SupplierOfferingRevisionId`
@@ -168,45 +160,6 @@
 //! D25 `supplier_api`：
 //! - `supplier_api_connection` → `SupplierApiConnectionId`
 //! - `supplier_api_capability` → `SupplierApiCapabilityId`
-//!
-//! D26 `publication`：
-//! - `product_publication` → `ProductPublicationId`
-//! - `product_publication_revision` → `ProductPublicationRevisionId`
-//! - `product_publication_revision_media` → `ProductPublicationRevisionMediaId`
-//! - `product_publication_delivery` → `ProductPublicationDeliveryId`
-//!
-//! D27 `projection`：
-//! - `sales_order_projection` → `SalesOrderProjectionId`
-//! - `sales_order_projection_revision` → `SalesOrderProjectionRevisionId`
-//! - `sales_order_projection_delivery` → `SalesOrderProjectionDeliveryId`
-//!
-//! D28 `card_instance`：
-//! - `mall_consumption_cutover` → `MallConsumptionCutoverId`
-//! - `mall_card_instance` → `MallCardInstanceId`
-//! - `mall_card_instance_correction` → `MallCardInstanceCorrectionId`
-//! - `mall_balance_snapshot` → `MallBalanceSnapshotId`
-//!
-//! D29 `mall_order`：
-//! - `mall_order_fact` → `MallOrderFactId`
-//! - `mall_order_cancel_fact` → `MallOrderCancelFactId`
-//! - `mall_order_completion_fact` → `MallOrderCompletionFactId`
-//! - `mall_order` → `MallOrderId`；`mall_order_item` → `MallOrderItemId`
-//! - `mall_payment_source` → `MallPaymentSourceId`
-//! - `mall_item_funding_allocation` → `MallItemFundingAllocationId`
-//! - `mall_consumption_entry` → `MallConsumptionEntryId`
-//! - `mall_consumption_cost_assessment` → `MallConsumptionCostAssessmentId`
-//!
-//! D30 `mall_after_sales`：
-//! - `mall_after_sales_request` → `MallAfterSalesRequestId`
-//! - `mall_after_sales_request_line` → `MallAfterSalesRequestLineId`
-//! - `mall_refund` → `MallRefundId`；`mall_refund_line` → `MallRefundLineId`
-//! - `mall_refund_allocation` → `MallRefundAllocationId`
-//! - `mall_balance_restoration` → `MallBalanceRestorationId`
-//! - `mall_balance_restoration_allocation` → `MallBalanceRestorationAllocationId`
-//!
-//! D31 `mall_backfill`：
-//! - `mall_consumption_backfill_job` → `MallConsumptionBackfillJobId`
-//! - `mall_consumption_backfill_item` → `MallConsumptionBackfillItemId`
 //!
 //! D32 `supplier_fulfillment`：
 //! - `supplier_fulfillment_order` → `SupplierFulfillmentOrderId`
@@ -397,14 +350,6 @@ id_type!(LegacyImportBatchId);
 id_type!(LegacyImportRowId);
 id_type!(LegacyImportConfirmationId);
 
-// D23 mall_sync
-id_type!(MallSalesSyncJobId);
-id_type!(MallSalesSyncCursorId);
-id_type!(MallSalesOrderSnapshotId);
-id_type!(MallSalesReconciliationJobId);
-id_type!(MallSalesReconciliationItemId);
-id_type!(MasterMappingTaskId);
-
 // D24 supplier_offering
 id_type!(SupplierOfferingId);
 id_type!(SupplierOfferingRevisionId);
@@ -413,47 +358,6 @@ id_type!(SupplierOfferingAvailabilityId);
 // D25 supplier_api
 id_type!(SupplierApiConnectionId);
 id_type!(SupplierApiCapabilityId);
-
-// D26 publication
-id_type!(ProductPublicationId);
-id_type!(ProductPublicationRevisionId);
-id_type!(ProductPublicationRevisionMediaId);
-id_type!(ProductPublicationDeliveryId);
-
-// D27 projection
-id_type!(SalesOrderProjectionId);
-id_type!(SalesOrderProjectionRevisionId);
-id_type!(SalesOrderProjectionDeliveryId);
-
-// D28 card_instance
-id_type!(MallConsumptionCutoverId);
-id_type!(MallCardInstanceId);
-id_type!(MallCardInstanceCorrectionId);
-id_type!(MallBalanceSnapshotId);
-
-// D29 mall_order
-id_type!(MallOrderFactId);
-id_type!(MallOrderCancelFactId);
-id_type!(MallOrderCompletionFactId);
-id_type!(MallOrderId);
-id_type!(MallOrderItemId);
-id_type!(MallPaymentSourceId);
-id_type!(MallItemFundingAllocationId);
-id_type!(MallConsumptionEntryId);
-id_type!(MallConsumptionCostAssessmentId);
-
-// D30 mall_after_sales
-id_type!(MallAfterSalesRequestId);
-id_type!(MallAfterSalesRequestLineId);
-id_type!(MallRefundId);
-id_type!(MallRefundLineId);
-id_type!(MallRefundAllocationId);
-id_type!(MallBalanceRestorationId);
-id_type!(MallBalanceRestorationAllocationId);
-
-// D31 mall_backfill
-id_type!(MallConsumptionBackfillJobId);
-id_type!(MallConsumptionBackfillItemId);
 
 // D32 supplier_fulfillment
 id_type!(SupplierFulfillmentOrderId);

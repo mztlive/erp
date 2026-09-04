@@ -80,8 +80,6 @@ impl SalesOrderSubmissionData {
     /// * `submission_no` - 调用方读取的下一提交序号
     /// * `submitted_at` - 调用方注入的提交时间
     /// * `submitted_by` - 调用方注入的提交人
-    /// * `customer_external_identity` - 服务端解析的商城客户身份
-    /// * `voucher_category_external_identity` - 服务端解析的商城卡券类目身份
     ///
     /// # 返回
     /// 返回提交头创建数据（含行创建数据）。
@@ -97,8 +95,6 @@ impl SalesOrderSubmissionData {
         submission_no: u32,
         submitted_at: Instant,
         submitted_by: impl Into<String>,
-        customer_external_identity: Option<&str>,
-        voucher_category_external_identity: Option<&str>,
     ) -> Result<Self> {
         let (gross_amount, net_amount, tax_amount) = SalesOrderWorkingCopyLine::amount_totals(lines);
         let line_datas = lines
@@ -119,9 +115,6 @@ impl SalesOrderSubmissionData {
             business_remark: working_copy.business_remark.clone(),
             voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
             voucher_expiry_at: working_copy.voucher_expiry_at,
-            target_mall_id: working_copy.target_mall_id.clone(),
-            customer_external_identity: customer_external_identity.map(str::to_string),
-            voucher_category_external_identity: voucher_category_external_identity.map(str::to_string),
             receivable_due_date: working_copy.receivable_due_date,
             gross_amount,
             net_amount,
@@ -143,7 +136,7 @@ mod tests {
     use crate::common::time::{BusinessDate, Instant};
     use crate::ids::{
         ContractId, ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
-        SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId, SourceSystemId,
+        SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId,
     };
 
     fn goods_copy() -> (SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>) {
@@ -173,7 +166,6 @@ mod tests {
             business_remark: Some("按合同执行".to_string()),
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
             receivable_due_date: None,
             gross_amount: amt("29.97"),
             net_amount: amt("26.07"),
@@ -238,8 +230,6 @@ mod tests {
             2,
             submitted_at,
             "sales-1",
-            None,
-            None,
         )
         .unwrap();
 
@@ -256,7 +246,6 @@ mod tests {
         assert_eq!(data.tax_amount, amt("3.90"));
         assert_eq!(data.submitted_at, submitted_at);
         assert_eq!(data.submitted_by, "sales-1");
-        assert!(data.customer_external_identity.is_none());
         assert_eq!(data.lines.len(), 1);
         assert_line_copied_from_working_copy(&lines[0], &data.lines[0]);
         let goods = data.lines[0].goods.as_ref().expect("实物行必须复制商品字段组");
@@ -267,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn voucher_copies_external_identities_and_card_fields() {
+    fn voucher_copies_card_fields() {
         let line = SalesOrderWorkingCopyLine::new(
             SalesOrderWorkingCopyLineId::new("wcl-v"),
             SalesOrderWorkingCopyId::new("wc-v"),
@@ -300,7 +289,6 @@ mod tests {
             business_remark: None,
             voucher_category_sku_id: Some(SkuId::new("vcat-1")),
             voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            target_mall_id: Some(SourceSystemId::new("mall-1")),
             receivable_due_date: Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()),
             gross_amount: amt("270.00"),
             net_amount: amt("238.94"),
@@ -314,20 +302,10 @@ mod tests {
             1,
             Instant::from_unix_secs(1_790_000_000),
             "sales-1",
-            Some("mall-customer-1"),
-            Some("mall-voucher-1"),
         )
         .unwrap();
 
         assert_eq!(submission.business_type, BusinessType::Voucher);
-        assert_eq!(
-            submission.customer_external_identity.as_deref(),
-            Some("mall-customer-1")
-        );
-        assert_eq!(
-            submission.voucher_category_external_identity.as_deref(),
-            Some("mall-voucher-1")
-        );
         assert_eq!(submission.snapshot.contract_no, None);
         assert_eq!(submission.voucher_category_sku_id, Some(SkuId::new("vcat-1")));
         assert_line_copied_from_working_copy(&line, &submission.lines[0]);

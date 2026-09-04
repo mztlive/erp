@@ -22,7 +22,7 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::{
-    AccessControlExt, BulkJobExt, PublicationExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
+    AccessControlExt, BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
 };
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
@@ -795,9 +795,8 @@ impl<'a> SupplierApiRepository<'a> {
     /// 汇总连接停用前必须重验的活动业务影响。
     ///
     /// 跨聚合事实包：外聚合读经由所属仓储访问器（`supplier_offerings`、
-    /// `product_publications`、`supplier_fulfillment_orders`、`background_jobs`）
-    /// 编排，本类型不直连外聚合集合。
-    /// 供给、发布、履约订单和目录同步任务都使用各自集合的正式状态；查询不读取
+    /// `supplier_fulfillment_orders`、`background_jobs`）编排，本类型不直连外聚合集合。
+    /// 供给、履约订单和目录同步任务都使用各自集合的正式状态；查询不读取
     /// 地址或密钥引用，也不返回业务对象明细。
     ///
     /// # 参数
@@ -805,7 +804,7 @@ impl<'a> SupplierApiRepository<'a> {
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回活动供给、发布、未完成订单和目录同步任务计数。
+    /// 返回活动供给、未完成订单和目录同步任务计数。
     ///
     /// # 错误
     /// 任一 MongoDB 查询或反序列化失败时返回错误。
@@ -814,11 +813,8 @@ impl<'a> SupplierApiRepository<'a> {
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
     ) -> Result<SupplierConnectionImpact> {
-        let (active_offerings, active_offering_revisions) =
+        let (active_offerings, _) =
             self.active_offering_revisions(connection_id, executor).await?;
-        let active_publications = self
-            .active_publication_count(&active_offering_revisions, executor)
-            .await?;
         let open_supplier_orders = mongo_ops::count_documents(
             &self.db.supplier_fulfillment_orders().collection(),
             doc! {
@@ -842,7 +838,6 @@ impl<'a> SupplierApiRepository<'a> {
         .await?;
         Ok(SupplierConnectionImpact {
             active_offerings,
-            active_publications,
             open_supplier_orders,
             active_sync_jobs,
         })
@@ -892,64 +887,6 @@ impl<'a> SupplierApiRepository<'a> {
             .filter_map(|row| row.current_revision_id)
             .collect();
         Ok((count, revision_ids))
-    }
-
-    /// 统计指定供给修订关联的当前有效商品发布数量。
-    ///
-    /// # 参数
-    /// * `offering_revision_ids` - 活动供给当前修订 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回状态为商城生效的商品发布数量；输入为空时返回零。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    async fn active_publication_count(
-        &self,
-        offering_revision_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        if offering_revision_ids.is_empty() {
-            return Ok(0);
-        }
-        #[derive(Deserialize)]
-        struct PublicationRevisionRow {
-            product_publication_id: String,
-        }
-        let revisions = mongo_ops::find_many(
-            &self
-                .db
-                .product_publication_revisions()
-                .collection()
-                .clone_with_type::<PublicationRevisionRow>(),
-            doc! {
-                "supplier_offering_revision_id": { "$in": offering_revision_ids },
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            FindOptions::builder()
-                .projection(doc! { "product_publication_id": 1 })
-                .build(),
-            executor,
-        )
-        .await?;
-        let publication_ids: Vec<String> = revisions
-            .into_iter()
-            .map(|row| row.product_publication_id)
-            .collect();
-        if publication_ids.is_empty() {
-            return Ok(0);
-        }
-        mongo_ops::count_documents(
-            &self.db.product_publications().collection(),
-            doc! {
-                "id": { "$in": publication_ids },
-                "status": "mall_effective",
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            executor,
-        )
-        .await
     }
 }
 

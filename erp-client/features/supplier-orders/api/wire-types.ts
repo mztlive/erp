@@ -9,7 +9,6 @@ import type { WorkItemDto } from "@/features/work-items/types"
 export type BackendOrder = {
     id: string
     fulfillment_order_no: string
-    mall_order_id: string
     supplier_id: string
     connection_id: string
     split_no: number
@@ -27,7 +26,6 @@ export type BackendOrder = {
 export type BackendItem = {
     id: string
     supplier_fulfillment_order_id: string
-    mall_order_item_id: string
     supplier_offering_revision_id: string
     supplier_sku_code_snapshot: string
     supplier_product_code_snapshot?: string | null
@@ -53,7 +51,6 @@ export type BackendAction = {
     id: string
     supplier_fulfillment_order_id: string
     action_type: string
-    after_sales_request_id?: string | null
     status: string
     external_request_id?: string | null
     request_summary?: string | null
@@ -113,7 +110,6 @@ export type BackendDetail = {
         refunded_at: number
     }>
     supplier_name?: string | null
-    mall_order_no?: string | null
     address: {
         masked?: string | null
         can_reveal: boolean

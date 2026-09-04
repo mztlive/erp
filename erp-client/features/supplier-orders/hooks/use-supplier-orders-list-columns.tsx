@@ -76,22 +76,6 @@ export function useSupplierOrdersListColumns({
                 ),
             },
             {
-                id: "mall",
-                accessorKey: "mallOrderNo",
-                header: "商城单号",
-                meta: { label: "商城订单", width: "reference" },
-                cell: ({ row }) => (
-                    <Link
-                        id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-mall-link`}
-                        href={`/commerce/consumption-orders?q=${encodeURIComponent(row.original.mallOrderNo)}`}
-                        className="num text-sm text-primary underline-offset-2 hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {row.original.mallOrderNo}
-                    </Link>
-                ),
-            },
-            {
                 id: "tracks",
                 header: "履约 / 取消 / 退款",
                 meta: { label: "三轨状态", width: "tracks" },

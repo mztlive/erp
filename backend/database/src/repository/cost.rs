@@ -11,7 +11,7 @@
 
 use entities::common::time::Instant;
 use entities::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
-use entities::ids::{CostEntryId, MallConsumptionEntryId, SalesOrderId, SupplierAccountId};
+use entities::ids::{CostEntryId, SalesOrderId, SupplierAccountId};
 use entities::money::{Amount, Rate};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -141,8 +141,6 @@ pub struct CostAllocationRow {
     pub sales_order_id: Option<String>,
     /// 经营归属销售明细。
     pub sales_order_line_id: Option<String>,
-    /// 二期消费成本归属。
-    pub mall_consumption_entry_id: Option<String>,
     /// 分配含税金额。
     pub allocated_gross_amount: Amount,
     /// 分配不含税金额。
@@ -162,8 +160,6 @@ pub struct CostAllocationFilter {
     pub cost_entry_id: Option<CostEntryId>,
     /// 经营归属销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
-    /// 二期消费成本归属；`None` 表示不筛选。
-    pub mall_consumption_entry_id: Option<MallConsumptionEntryId>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -186,9 +182,6 @@ impl QueryFilter for CostAllocationFilter {
         }
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
-        }
-        if let Some(mall_consumption_entry_id) = &self.mall_consumption_entry_id {
-            filter.insert("mall_consumption_entry_id", mall_consumption_entry_id.to_string());
         }
         filter
     }
@@ -248,8 +241,7 @@ impl<'a> Repository<'a, CostEntry> {
 impl<'a> Repository<'a, CostAllocation> {
     /// 分页检索成本分配列表（投影查询）。
     ///
-    /// 只返回 [`CostAllocationRow`] 所需的列表字段；支持按成本事实、销售单
-    /// 与二期消费归集筛选。
+    /// 只返回 [`CostAllocationRow`] 所需的列表字段；支持按成本事实与销售单筛选。
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
@@ -426,7 +418,6 @@ fn cost_allocation_projection() -> Document {
         "cost_entry_id": 1,
         "sales_order_id": 1,
         "sales_order_line_id": 1,
-        "mall_consumption_entry_id": 1,
         "allocated_gross_amount": 1,
         "allocated_net_amount": 1,
         "rounding_residual_flag": 1,
@@ -469,7 +460,6 @@ mod tests {
         let filter = CostAllocationFilter {
             cost_entry_id: None,
             sales_order_id: Some(entities::ids::SalesOrderId::new("so-1")),
-            mall_consumption_entry_id: None,
             page: 1,
             page_size: 20,
             sort_by: Some("$where".to_string()),

@@ -13,6 +13,7 @@
 use database::{AccessControlExt, CostExt, NoTransaction, SalesOrderExt, Transactional};
 use entities::cost::{
     CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
+    CostScope,
 };
 use entities::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
@@ -138,6 +139,10 @@ impl CostService {
         actor: &AuditActor,
     ) -> Result<CostEntryView> {
         req.validate()?;
+        // 商城已移除：拒绝商城消费范围的新增写入口；历史数据仅可读。
+        if req.cost_scope == CostScope::MallConsumption {
+            return Err(Error::BusinessLogicError("商城消费成本范围已停用".to_string()));
+        }
         // 归属销售单存在性：先去重、一次批量读取存在性事实，再解释缺失订单；
         // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Service。
         let requested_order_ids = req
@@ -202,8 +207,6 @@ impl CostService {
                     cost_entry_id: entry_id.clone(),
                     sales_order_id: Some(line.sales_order_id),
                     sales_order_line_id: line.sales_order_line_id,
-                    mall_consumption_entry_id: None,
-                    mall_payment_source_id: None,
                     allocated_gross_amount: line.allocated_gross_amount,
                     allocated_net_amount: line.allocated_net_amount,
                     rounding_residual_flag: line.rounding_residual_flag,
@@ -247,7 +250,6 @@ impl CostService {
         let filter = CostAllocationFilter {
             cost_entry_id: query.cost_entry_id,
             sales_order_id: query.sales_order_id,
-            mall_consumption_entry_id: None,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -268,7 +270,6 @@ impl CostService {
                 cost_entry_id: row.cost_entry_id,
                 sales_order_id: row.sales_order_id,
                 sales_order_line_id: row.sales_order_line_id,
-                mall_consumption_entry_id: row.mall_consumption_entry_id,
                 allocated_gross_amount: row.allocated_gross_amount,
                 allocated_net_amount: row.allocated_net_amount,
                 rounding_residual_flag: row.rounding_residual_flag,
@@ -435,7 +436,6 @@ fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView
         cost_entry_id: allocation.cost_entry_id.to_string(),
         sales_order_id: allocation.sales_order_id.map(|id| id.to_string()),
         sales_order_line_id: allocation.sales_order_line_id.map(|id| id.to_string()),
-        mall_consumption_entry_id: allocation.mall_consumption_entry_id.map(|id| id.to_string()),
         allocated_gross_amount: allocation.allocated_gross_amount,
         allocated_net_amount: allocation.allocated_net_amount,
         rounding_residual_flag: allocation.rounding_residual_flag,
@@ -533,8 +533,6 @@ mod tests {
                 cost_entry_id: CostEntryId::new("entry-1"),
                 sales_order_id: Some(SalesOrderId::new("sales-order-1")),
                 sales_order_line_id: None,
-                mall_consumption_entry_id: None,
-                mall_payment_source_id: None,
                 allocated_gross_amount: Amount::from_str("1.00").unwrap(),
                 allocated_net_amount: Amount::from_str("0.10").unwrap(),
                 rounding_residual_flag: true,

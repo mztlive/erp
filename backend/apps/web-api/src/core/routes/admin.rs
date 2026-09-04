@@ -11,10 +11,9 @@ use crate::{
         handler::admin,
         middleware::{authenticate, with_permission},
         routes::{
-            access_control, approval_instance, bulk_job, card_instance, catalog, contract, cost, customer,
+            access_control, approval_instance, bulk_job, catalog, contract, cost, customer,
             document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import,
-            mall_after_sales, mall_backfill, mall_order, mall_sync, party, payable, projection, publication,
-            purchase_order, receivable, returns, sales_order, sales_review, source_registry, supplier,
+            party, payable, purchase_order, receivable, returns, sales_order, sales_review, source_registry, supplier,
             supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, warehouse, work_item,
         },
     },
@@ -35,7 +34,6 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(access_control::routes(&rbac_service))
         .merge(approval_instance::routes(&rbac_service))
         .merge(bulk_job::routes(&rbac_service))
-        .merge(card_instance::routes(&rbac_service))
         .merge(catalog::routes(&rbac_service))
         .merge(contract::routes(&rbac_service))
         .merge(cost::routes(&rbac_service))
@@ -46,14 +44,8 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(integration_ops::routes(&rbac_service))
         .merge(inventory::routes(&rbac_service))
         .merge(legacy_import::routes(&rbac_service))
-        .merge(mall_after_sales::routes(&rbac_service))
-        .merge(mall_backfill::routes(&rbac_service))
-        .merge(mall_order::routes(&rbac_service))
-        .merge(mall_sync::routes(&rbac_service))
         .merge(party::routes(&rbac_service))
         .merge(payable::routes(&rbac_service))
-        .merge(projection::routes(&rbac_service))
-        .merge(publication::routes(&rbac_service))
         .merge(purchase_order::routes(&rbac_service))
         .merge(receivable::routes(&rbac_service))
         .merge(returns::routes(&rbac_service))

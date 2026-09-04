@@ -395,7 +395,7 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
         {
             id: "collaboration",
             label: "协同",
-            hint: "商城同步与执行投影",
+            hint: "商城对接已移除，执行投影待未来重做时恢复",
             show: order.nature === "card_voucher",
         },
         {

@@ -235,7 +235,7 @@ fn simulate_investigation(
 mod tests {
     use super::{simulate_investigation, simulate_outcome, DispatchOutcome, InvestigationOutcome};
     use entities::common::time::Instant;
-    use entities::ids::{MallOrderId, SupplierAccountId, SupplierApiConnectionId};
+    use entities::ids::{SupplierAccountId, SupplierApiConnectionId};
     use entities::supplier_api::{
         ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
@@ -268,7 +268,6 @@ mod tests {
             SupplierFulfillmentOrderId::new("order-1"),
             SupplierFulfillmentOrderData {
                 fulfillment_order_no: "FO-2026-001".to_string(),
-                mall_order_id: MallOrderId::new("mall-order-1"),
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_id: SupplierApiConnectionId::new("connection-1"),
                 split_no: 1,
@@ -287,15 +286,11 @@ mod tests {
     }
 
     fn sample_action(action_type: SupplierOrderActionType) -> SupplierOrderAction {
-        let after_sales_request_id = action_type
-            .requires_after_sales_request()
-            .then(|| entities::ids::MallAfterSalesRequestId::new("request-1"));
         SupplierOrderAction::new(
             SupplierOrderActionId::new("action-1"),
             SupplierOrderActionData {
                 supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
                 action_type,
-                after_sales_request_id,
                 idempotency_key: "FO-2026-001".to_string(),
                 status: SupplierOrderActionStatus::Pending,
                 external_request_id: None,

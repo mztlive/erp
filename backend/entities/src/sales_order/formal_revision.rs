@@ -495,7 +495,6 @@ fn build_revision_header(
             sales_order_id: header.sales_order_id,
             revision_no: context.revision_no,
             revision_source: context.revision_source,
-            source_snapshot_id: None,
             previous_revision_id: context.previous_revision_id.clone(),
             content_hash: header.content_hash,
             customer_revision_id: None,
@@ -696,7 +695,6 @@ mod tests {
     use super::*;
     use crate::ids::{
         CustomerAccountId, PartyId, SalesOrderSubmissionId, SalesOrderSubmissionLineId, SkuRevisionId,
-        SourceSystemId,
     };
     use crate::money::{Quantity, UnitPrice};
     use crate::sales_order::submission::SalesOrderSubmissionData;
@@ -801,9 +799,6 @@ mod tests {
             business_remark: Some("按合同执行".to_string()),
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
-            customer_external_identity: None,
-            voucher_category_external_identity: None,
             receivable_due_date: None,
             gross_amount,
             net_amount,
@@ -821,9 +816,6 @@ mod tests {
             business_type: BusinessType::Voucher,
             voucher_category_sku_id: Some(SkuId::new("vcat-1")),
             voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            target_mall_id: Some(SourceSystemId::new("mall-1")),
-            customer_external_identity: Some("mall-customer-1".to_string()),
-            voucher_category_external_identity: Some("mall-voucher-1".to_string()),
             receivable_due_date: Some(crate::common::time::BusinessDate::from_ymd(2026, 10, 31).unwrap()),
             submitted_at: Instant::from_unix_secs(1_790_000_000),
             gross_amount: amt("270.00"),

@@ -98,8 +98,8 @@ export function TaskDetailCard({
                 </div>
                 <CardDescription>
                     数据版本 r{task.salesOrder.revisionNo} · 同步于{" "}
-                    {task.salesOrder.snapshotAt} · {task.account.mallName} ·
-                    往来 {task.account.counterpartyPartyName}
+                    {task.salesOrder.snapshotAt} · 往来{" "}
+                    {task.account.counterpartyPartyName}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

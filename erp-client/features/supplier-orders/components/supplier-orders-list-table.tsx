@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import type {
     ColumnDef,
     PaginationState,
@@ -107,7 +106,7 @@ export function SupplierOrdersListTable({
                                 description={
                                     hasActiveFilters
                                         ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                        : "调整视图、供应商或支付时间，或从商城消费订单钻取。"
+                                        : "调整视图、供应商或支付时间后重试。"
                                 }
                                 action={
                                     hasActiveFilters ? (
@@ -121,20 +120,7 @@ export function SupplierOrdersListTable({
                                         >
                                             清除筛选
                                         </Button>
-                                    ) : (
-                                        <Button
-                                            id="supplier-orders-list-table-empty-open-commerce"
-                                            type="button"
-                                            size="sm"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            render={
-                                                <Link href="/commerce/consumption-orders" />
-                                            }
-                                        >
-                                            打开商城消费订单
-                                        </Button>
-                                    )
+                                    ) : undefined
                                 }
                             />
                         ) : undefined

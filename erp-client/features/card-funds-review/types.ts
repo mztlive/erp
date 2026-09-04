@@ -132,7 +132,6 @@ export type CardFundsReviewItemView = Readonly<{
         customerName: string
         counterpartyPartyId: string
         counterpartyPartyName: string
-        mallName: string
         reviewStatus: string
         grossTotal: string
         settledTotal: string

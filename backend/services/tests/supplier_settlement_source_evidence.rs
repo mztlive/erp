@@ -11,7 +11,7 @@ use std::str::FromStr;
 use database::{ensure_indexes, NoTransaction, SupplierFulfillmentExt, SupplierSettlementExt};
 use entities::common::time::Instant;
 use entities::ids::{
-    CostAllocationId, CostEntryId, InboxMessageId, MallOrderId, MallOrderItemId, PayableEntryId,
+    CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId,
     SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
     SupplierOfferingRevisionId, SupplierRefundAllocationId, SupplierRefundFactId,
 };
@@ -48,7 +48,6 @@ fn completed_order(
         SupplierFulfillmentOrderId::new(id),
         SupplierFulfillmentOrderData::submitting(
             format!("SO-{id}"),
-            MallOrderId::new(format!("mall-{id}")),
             supplier_id.clone(),
             SupplierApiConnectionId::new("connection-1"),
             1,
@@ -80,7 +79,6 @@ fn fulfillment_item(id: &str, order_id: &SupplierFulfillmentOrderId) -> Supplier
         SupplierFulfillmentItemId::new(id),
         SupplierFulfillmentItemData {
             supplier_fulfillment_order_id: order_id.clone(),
-            mall_order_item_id: MallOrderItemId::new(format!("mall-item-{id}")),
             supplier_offering_revision_id: SupplierOfferingRevisionId::new("offering-rev-1"),
             supplier_sku_code_snapshot: format!("SKU-{id}"),
             supplier_product_code_snapshot: None,

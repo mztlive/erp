@@ -175,7 +175,6 @@ export type BackendWorkingCopy = {
     business_remark?: string | null
     voucher_category_sku_id?: string | null
     voucher_expiry_at?: number | null
-    target_mall_id?: string | null
     receivable_due_date?: string | null
     gross_amount: string
     net_amount: string
@@ -200,9 +199,6 @@ export type BackendSubmission = {
     business_remark?: string | null
     voucher_category_sku_id?: string | null
     voucher_expiry_at?: number | null
-    target_mall_id?: string | null
-    customer_external_identity?: string | null
-    voucher_category_external_identity?: string | null
     receivable_due_date?: string | null
     gross_amount: string
     net_amount: string

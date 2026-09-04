@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use entities::source_registry::{
-    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MallSyncStage,
+    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType,
     MappingStatus, RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType,
     TargetStatus,
 };
@@ -44,8 +44,6 @@ pub struct SourceSystemRow {
     pub system_type: SourceSystemType,
     /// 启停状态。
     pub status: SourceSystemStatus,
-    /// 商城同步执行阶段；仅 `MALL` 来源存在。
-    pub mall_sync_stage: Option<MallSyncStage>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -686,7 +684,6 @@ fn source_system_projection() -> Document {
         "name": 1,
         "system_type": 1,
         "status": 1,
-        "mall_sync_stage": 1,
         "version": 1,
         "created_at": 1,
     }

@@ -114,19 +114,13 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
     W14: "基础资料",
     W15: "客户经营质量",
     W16: "实际经营盈亏",
-    W17: "商城同步与映射",
     W18: "导入与期初",
     W19: "权限与审计",
     W20: "API 供应商连接",
     W21: "商品供给",
-    W22: "商品发布",
-    W23: "执行信息",
-    W25: "商城消费订单",
     W26: "供应商订单",
     W27: "API 结算",
-    W28: "卡券经营分析",
     W29: "接口错误与对账中心",
-    W30: "历史消费回填",
 }
 
 const workspaceNameById = new Map(

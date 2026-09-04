@@ -3,9 +3,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use database::{
-    Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, ReturnsExt, SupplierFulfillmentExt,
-};
+use database::{Executor, IntegrationOpsExt, ReturnsExt, SupplierFulfillmentExt};
 use entities::integration_ops::{
     difference_terminal_policy, error_terminal_policy,
     reconciliation_reason_registry as domain_reason_registry, CanonicalEvidenceReference, DirectConclusion,
@@ -13,7 +11,6 @@ use entities::integration_ops::{
     IntegrationErrorTask, MessageType, ReconciliationDifference, ReplayOriginalReference,
     RequiredEvidenceKind, ResolutionAction, TerminalEvidencePolicy,
 };
-use entities::mall_order::ProcessingStatus;
 use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
 use mongodb::Database;
 
@@ -218,27 +215,14 @@ impl IntegrationEvidenceAuthority for Database {
 
     fn verify_reattribution<'a>(
         &'a self,
-        subject: &'a EvidenceSubject,
-        executor: &'a mut dyn Executor,
+        _subject: &'a EvidenceSubject,
+        _executor: &'a mut dyn Executor,
     ) -> EvidenceFuture<'a, String> {
         Box::pin(async move {
-            let fact = find_subject_mall_fact(self, subject, executor)
-                .await?
-                .ok_or_else(|| {
-                    Error::BusinessLogicError("当前对象类型没有已注册的重新归集事实".to_string())
-                })?;
-            if fact.processing_status != ProcessingStatus::Attributed {
-                return Err(Error::BusinessLogicError(
-                    "关联商城事实尚未完成重新归集".to_string(),
-                ));
-            }
-            Ok(canonical_verified(
-                "mall_order_fact",
-                &fact.base.id,
-                Some(fact.base.version),
-                "attributed",
-            )?
-            .into_wire())
+            // 商城事实已移除，当前无已注册的重新归集事实。
+            Err(Error::BusinessLogicError(
+                "当前对象类型没有已注册的重新归集事实".to_string(),
+            ))
         })
     }
 
@@ -272,35 +256,6 @@ impl IntegrationEvidenceAuthority for Database {
                         &message.base.id,
                         Some(message.base.version),
                         "processed",
-                    )?
-                }
-                "mall_order_fact" => {
-                    if evidence.kind != ControlledEvidenceKind::BusinessObjectVerification {
-                        return kind_mismatch();
-                    }
-                    let fact = self
-                        .mall_order_facts()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的商城事实不存在".to_string()))?;
-                    if fact.processing_status != ProcessingStatus::Attributed {
-                        return Err(Error::BusinessLogicError(
-                            "证据引用的商城事实尚未完成归集".to_string(),
-                        ));
-                    }
-                    ensure_association(
-                        subject,
-                        &[
-                            fact.base.id.clone(),
-                            fact.inbox_message_id.to_string(),
-                            fact.business_fact_key.clone(),
-                        ],
-                    )?;
-                    canonical_verified(
-                        "mall_order_fact",
-                        &fact.base.id,
-                        Some(fact.base.version),
-                        "attributed",
                     )?
                 }
                 "customer_refund" => {
@@ -386,29 +341,6 @@ impl IntegrationEvidenceAuthority for Database {
                         "posted",
                     )?
                 }
-                "mall_refund" => {
-                    ensure_compensation_kind(evidence.kind)?;
-                    let refund = self
-                        .mall_refunds()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的商城退款不存在".to_string()))?;
-                    ensure_association(
-                        subject,
-                        &[
-                            refund.base.id.clone(),
-                            refund.mall_order_fact_id.to_string(),
-                            refund.after_sales_request_id.to_string(),
-                            refund.mall_order_id.to_string(),
-                        ],
-                    )?;
-                    canonical_verified(
-                        "mall_refund",
-                        &refund.base.id,
-                        Some(refund.base.version),
-                        "succeeded",
-                    )?
-                }
                 "supplier_refund_fact" => {
                     ensure_compensation_kind(evidence.kind)?;
                     let fact = self
@@ -429,29 +361,6 @@ impl IntegrationEvidenceAuthority for Database {
                         "supplier_refund_fact",
                         &fact.base.id,
                         Some(fact.base.version),
-                        "succeeded",
-                    )?
-                }
-                "mall_balance_restoration" => {
-                    ensure_compensation_kind(evidence.kind)?;
-                    let restoration = self
-                        .mall_balance_restorations()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的余额恢复事实不存在".to_string()))?;
-                    ensure_association(
-                        subject,
-                        &[
-                            restoration.base.id.clone(),
-                            restoration.mall_order_fact_id.to_string(),
-                            restoration.after_sales_request_id.to_string(),
-                            restoration.mall_refund_id.to_string(),
-                        ],
-                    )?;
-                    canonical_verified(
-                        "mall_balance_restoration",
-                        &restoration.base.id,
-                        Some(restoration.base.version),
                         "succeeded",
                     )?
                 }
@@ -515,16 +424,6 @@ impl IntegrationEvidenceAuthority for Database {
                             "已处理入站结果",
                         )?);
                     }
-                }
-            }
-            if let Some(fact) = find_subject_mall_fact(self, subject, executor).await? {
-                if fact.processing_status == ProcessingStatus::Attributed {
-                    evidence.push(controlled_ref(
-                        ControlledEvidenceKind::BusinessObjectVerification,
-                        "mall_order_fact",
-                        &fact.base.id,
-                        "已归集商城事实",
-                    )?);
                 }
             }
             if subject.business_object_type.as_deref() == Some("reconciliation_difference")
@@ -824,17 +723,7 @@ pub(super) fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String
 }
 
 async fn known_result_exists(db: &Database, message_id: &str, executor: &mut dyn Executor) -> Result<bool> {
-    if db
-        .mall_order_facts()
-        .find_by_inbox_message(
-            &entities::ids::InboxMessageId::new(message_id.to_string()),
-            executor,
-        )
-        .await?
-        .is_some()
-    {
-        return Ok(true);
-    }
+    // 商城事实已移除，仅以供应商退款事实判断已知结果。
     db.supplier_refund_facts()
         .exists_by_inbox_message(message_id, executor)
         .await
@@ -851,48 +740,6 @@ fn replay_adapter_registered(message_type: MessageType, payload_reference: Optio
             | MessageType::CardBalanceRestored
     ) || (message_type == MessageType::SupplierCallback
         && payload_reference.is_some_and(|value| value.starts_with("supplier-refund-order:")))
-}
-
-async fn find_subject_mall_fact(
-    db: &Database,
-    subject: &EvidenceSubject,
-    executor: &mut dyn Executor,
-) -> Result<Option<entities::mall_order::MallOrderFact>> {
-    if let Some(message_id) = subject.message_id.as_deref() {
-        if let Some(fact) = db
-            .mall_order_facts()
-            .find_by_inbox_message(
-                &entities::ids::InboxMessageId::new(message_id.to_string()),
-                executor,
-            )
-            .await?
-        {
-            return Ok(Some(fact));
-        }
-    }
-    let bindings = EvidenceSubjectBindings::new(
-        subject.message_id.as_deref(),
-        subject.business_object_id.as_deref(),
-        &subject.fact_references,
-    );
-    let candidate = subject
-        .business_object_id
-        .as_deref()
-        .filter(|_| {
-            subject
-                .business_object_type
-                .as_deref()
-                .is_none_or(|kind| kind.eq_ignore_ascii_case("mall_order_fact"))
-        })
-        .or_else(|| bindings.referenced_id("mall_order_fact"));
-    match candidate {
-        Some(id) => db
-            .mall_order_facts()
-            .find_by_id(id, executor)
-            .await
-            .map_err(Into::into),
-        None => Ok(None),
-    }
 }
 
 async fn discover_compensation(
@@ -925,12 +772,6 @@ async fn discover_compensation(
             }
         }
     }
-    if kind.is_empty() || kind == "mall_refund" {
-        if let Some(refund) = db.mall_refunds().find_by_id(id, executor).await? {
-            push_compensation_refs(evidence, "mall_refund", &refund.base.id, "商城退款成功事实")?;
-            return Ok(());
-        }
-    }
     if kind.is_empty() || kind == "supplier_refund_fact" {
         if let Some(refund) = db.supplier_refund_facts().find_by_id(id, executor).await? {
             push_compensation_refs(
@@ -940,16 +781,6 @@ async fn discover_compensation(
                 "供应商退款成功事实",
             )?;
             return Ok(());
-        }
-    }
-    if kind.is_empty() || kind == "mall_balance_restoration" {
-        if let Some(restoration) = db.mall_balance_restorations().find_by_id(id, executor).await? {
-            push_compensation_refs(
-                evidence,
-                "mall_balance_restoration",
-                &restoration.base.id,
-                "余额恢复成功事实",
-            )?;
         }
     }
     Ok(())

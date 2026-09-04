@@ -372,7 +372,6 @@ pub struct SafeReferencesView {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
 pub struct RelatedImpactView {
     pub active_offerings: u64,
-    pub active_publications: u64,
     pub open_supplier_orders: u64,
     pub active_sync_jobs: u64,
 }

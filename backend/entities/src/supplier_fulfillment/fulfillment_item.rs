@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::{Error, Result};
 use crate::ids::{
-    MallOrderItemId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
+    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
 };
 use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -24,8 +24,6 @@ const SUPPLIER_ITEM_CODE_MAX_LEN: usize = 128;
 pub struct SupplierFulfillmentItemData {
     /// 所属供应商子订单。
     pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
-    /// 来源商城商品明细。
-    pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
     /// 下单时固定的供应商侧订货 SKU 编码。
@@ -49,7 +47,6 @@ impl SupplierFulfillmentItemData {
     ///
     /// # 参数
     /// * `supplier_fulfillment_order_id` - 所属供应商子订单
-    /// * `mall_order_item_id` - 来源商城订单明细
     /// * `supplier_offering_revision_id` - 下单时固定供给修订
     /// * `supplier_sku_code_snapshot` - 供应商 SKU 编码快照
     /// * `supplier_product_code_snapshot` - 供应商商品编码快照
@@ -62,7 +59,6 @@ impl SupplierFulfillmentItemData {
     #[allow(clippy::too_many_arguments)]
     pub fn from_unit_cost(
         supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
-        mall_order_item_id: MallOrderItemId,
         supplier_offering_revision_id: SupplierOfferingRevisionId,
         supplier_sku_code_snapshot: impl Into<String>,
         supplier_product_code_snapshot: Option<String>,
@@ -76,7 +72,6 @@ impl SupplierFulfillmentItemData {
         .map_err(|_| Error::from("明细成本快照金额无效"))?;
         Ok(Self {
             supplier_fulfillment_order_id,
-            mall_order_item_id,
             supplier_offering_revision_id,
             supplier_sku_code_snapshot: supplier_sku_code_snapshot.into(),
             supplier_product_code_snapshot,
@@ -90,16 +85,13 @@ impl SupplierFulfillmentItemData {
 
 /// 供应商履约明细实体（数据模型 §6.19）。
 ///
-/// 随子订单同事务创建，创建后不可修改（后续供给关系变化不影响已支付订单）；
-/// 一条商城商品明细只属于一个供应商子订单（跨记录唯一性由唯一索引保证，P3）。
+/// 随子订单同事务创建，创建后不可修改（后续供给关系变化不影响已支付订单）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct SupplierFulfillmentItem {
     #[serde(flatten)]
     pub base: BaseModel,
     /// 所属供应商子订单。
     pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
-    /// 来源商城商品明细。
-    pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
     /// 下单时固定的供应商侧订货 SKU 编码。
@@ -152,7 +144,6 @@ impl SupplierFulfillmentItem {
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
-            mall_order_item_id: data.mall_order_item_id,
             supplier_offering_revision_id: data.supplier_offering_revision_id,
             supplier_sku_code_snapshot,
             supplier_product_code_snapshot,
@@ -216,7 +207,6 @@ mod tests {
     fn sample_item_data() -> SupplierFulfillmentItemData {
         SupplierFulfillmentItemData {
             supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
-            mall_order_item_id: MallOrderItemId::new("mall-item-1"),
             supplier_offering_revision_id: SupplierOfferingRevisionId::new("offering-rev-1"),
             supplier_sku_code_snapshot: "SUP-SKU-1".to_string(),
             supplier_product_code_snapshot: Some("SUP-SPU-1".to_string()),
@@ -245,7 +235,6 @@ mod tests {
     fn data_factory_calculates_total_cost_snapshot() {
         let data = SupplierFulfillmentItemData::from_unit_cost(
             SupplierFulfillmentOrderId::new("order-1"),
-            MallOrderItemId::new("mall-item-1"),
             SupplierOfferingRevisionId::new("offering-rev-1"),
             "SUP-SKU-1",
             None,

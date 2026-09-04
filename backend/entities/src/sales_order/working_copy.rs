@@ -14,7 +14,7 @@ use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ContractId, ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesOrderId,
-    SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId, SourceSystemId,
+    SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId,
 };
 use crate::money::Amount;
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -72,8 +72,6 @@ pub struct SalesOrderWorkingCopyData {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限（卡券单必填，非卡券单为空）。
     pub voucher_expiry_at: Option<Instant>,
-    /// 目标商城（卡券提交前必填，非卡券单为空）。
-    pub target_mall_id: Option<SourceSystemId>,
     /// 应收到期日（卡券提交前必填，非卡券单为空）。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行汇总（含税）。
@@ -109,8 +107,6 @@ pub struct SalesOrderWorkingCopyUpdate {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限；`None` 表示不修改。
     pub voucher_expiry_at: Option<Instant>,
-    /// 目标商城；`None` 表示不修改。
-    pub target_mall_id: Option<SourceSystemId>,
     /// 应收到期日；`None` 表示不修改。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行汇总（含税）；`None` 表示不修改。
@@ -173,8 +169,6 @@ pub struct SalesOrderWorkingCopy {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限。
     pub voucher_expiry_at: Option<Instant>,
-    /// 卡券执行投影的目标商城。
-    pub target_mall_id: Option<SourceSystemId>,
     /// 卡券生效时形成应收的到期日。
     pub receivable_due_date: Option<BusinessDate>,
     /// 草稿行汇总（含税）。
@@ -214,7 +208,6 @@ impl PartialEq for SalesOrderWorkingCopy {
             && self.business_remark == other.business_remark
             && self.voucher_category_sku_id == other.voucher_category_sku_id
             && self.voucher_expiry_at == other.voucher_expiry_at
-            && self.target_mall_id == other.target_mall_id
             && self.receivable_due_date == other.receivable_due_date
             && self.gross_amount == other.gross_amount
             && self.net_amount == other.net_amount
@@ -273,7 +266,6 @@ impl SalesOrderWorkingCopy {
             data.sales_change_order_id.clone(),
             data.voucher_category_sku_id.clone(),
             data.voucher_expiry_at,
-            data.target_mall_id.clone(),
             data.receivable_due_date,
         )?;
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
@@ -315,7 +307,6 @@ impl SalesOrderWorkingCopy {
             business_remark,
             voucher_category_sku_id: data.voucher_category_sku_id,
             voucher_expiry_at: data.voucher_expiry_at,
-            target_mall_id: data.target_mall_id,
             receivable_due_date: data.receivable_due_date,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
@@ -389,9 +380,6 @@ impl SalesOrderWorkingCopy {
         if let Some(voucher_expiry_at) = update.voucher_expiry_at {
             self.voucher_expiry_at = Some(voucher_expiry_at);
         }
-        if let Some(target_mall_id) = update.target_mall_id {
-            self.target_mall_id = Some(target_mall_id);
-        }
         if let Some(receivable_due_date) = update.receivable_due_date {
             self.receivable_due_date = Some(receivable_due_date);
         }
@@ -409,7 +397,6 @@ impl SalesOrderWorkingCopy {
             self.sales_change_order_id.clone(),
             self.voucher_category_sku_id.clone(),
             self.voucher_expiry_at,
-            self.target_mall_id.clone(),
             self.receivable_due_date,
         )?;
         validate_amount_triple(self.gross_amount, self.net_amount, self.tax_amount)?;
@@ -448,27 +435,20 @@ impl SalesOrderWorkingCopy {
             && &self.settlement_party_id == settlement_party_id
     }
 
-    /// 返回卡券提交所需的目标商城与卡券类目。
+    /// 返回卡券提交所需的卡券类目。
     ///
     /// # 参数
     /// * `today` - 服务端提交业务日
     ///
     /// # 返回
-    /// 非卡券工作副本返回 `None`；卡券字段完整且到期日合法时返回目标商城与类目引用。
+    /// 非卡券工作副本返回 `None`；卡券字段完整且到期日合法时返回类目引用。
     ///
     /// # 错误
-    /// 卡券缺目标商城、应收到期日、卡券类目，或应收到期日早于提交日时返回错误。
-    pub fn voucher_submission_identity_refs(
-        &self,
-        today: BusinessDate,
-    ) -> Result<Option<(&SourceSystemId, &SkuId)>> {
+    /// 卡券缺应收到期日、卡券类目，或应收到期日早于提交日时返回错误。
+    pub fn voucher_submission_identity_refs(&self, today: BusinessDate) -> Result<Option<&SkuId>> {
         if !self.business_type.is_voucher() {
             return Ok(None);
         }
-        let target_mall_id = self
-            .target_mall_id
-            .as_ref()
-            .ok_or_else(|| Error::from("卡券销售提交前必须选择目标商城"))?;
         let receivable_due_date = self
             .receivable_due_date
             .ok_or_else(|| Error::from("卡券销售提交前必须填写应收到期日"))?;
@@ -479,7 +459,7 @@ impl SalesOrderWorkingCopy {
             .voucher_category_sku_id
             .as_ref()
             .ok_or_else(|| Error::from("卡券销售提交前必须选择卡券类目"))?;
-        Ok(Some((target_mall_id, voucher_category_id)))
+        Ok(Some(voucher_category_id))
     }
 
     /// 判断工作副本是否已经提交锁定。
@@ -598,7 +578,6 @@ impl SalesOrderWorkingCopy {
     /// * `sales_change_order_id` - 销售变更单
     /// * `voucher_category_sku_id` - 卡券类目 SKU
     /// * `voucher_expiry_at` - 卡券履约期限
-    /// * `target_mall_id` - 卡券执行投影目标商城
     /// * `receivable_due_date` - 卡券应收到期日
     ///
     /// # 返回
@@ -612,8 +591,7 @@ impl SalesOrderWorkingCopy {
         sales_change_order_id: Option<SalesChangeOrderId>,
         voucher_category_sku_id: Option<SkuId>,
         voucher_expiry_at: Option<Instant>,
-        target_mall_id: Option<SourceSystemId>,
-        receivable_due_date: Option<BusinessDate>,
+        _receivable_due_date: Option<BusinessDate>,
     ) -> Result<()> {
         let is_change = matches!(working_purpose, WorkingPurpose::SalesChange);
         if sales_change_order_id.is_some() != is_change {
@@ -623,9 +601,6 @@ impl SalesOrderWorkingCopy {
         }
         if voucher_category_sku_id.is_some() != voucher_expiry_at.is_some() {
             return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
-        }
-        if target_mall_id.is_some() != receivable_due_date.is_some() {
-            return Err(Error::from("目标商城与应收到期日必须同时提供或同时省略"));
         }
         Ok(())
     }
@@ -664,7 +639,6 @@ mod tests {
             business_remark: None,
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
-            target_mall_id: None,
             receivable_due_date: None,
             gross_amount: amt("29.97"),
             net_amount: amt("26.07"),
@@ -719,18 +693,16 @@ mod tests {
         assert!(copy
             .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
             .is_err());
-        copy.target_mall_id = Some(SourceSystemId::new("mall-1"));
         copy.voucher_category_sku_id = Some(SkuId::new("voucher-1"));
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 24).unwrap());
         assert!(copy
             .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
             .is_err());
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 25).unwrap());
-        let (mall, category) = copy
+        let category = copy
             .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
             .unwrap()
             .unwrap();
-        assert_eq!(mall.as_ref(), "mall-1");
         assert_eq!(category.as_ref(), "voucher-1");
     }
 
@@ -802,18 +774,14 @@ mod tests {
                 .is_err()
         );
 
-        // 目标商城与应收到期日必须成对，外部身份由提交服务端解析，草稿不接收
-        let half_projection_input = SalesOrderWorkingCopyData {
-            target_mall_id: Some(SourceSystemId::new("mall-1")),
-            receivable_due_date: None,
+        // 应收到期日可独立出现，不再与商城配对
+        let due_only = SalesOrderWorkingCopyData {
+            receivable_due_date: Some(BusinessDate::from_ymd(2026, 8, 25).unwrap()),
             ..header_data()
         };
-        assert!(SalesOrderWorkingCopy::new(
-            SalesOrderWorkingCopyId::new("wc-1"),
-            half_projection_input,
-            "admin-1"
-        )
-        .is_err());
+        assert!(
+            SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), due_only, "admin-1").is_ok()
+        );
 
         // 金额三元组不一致
         let broken_amount = SalesOrderWorkingCopyData {

@@ -2,6 +2,11 @@
 
 > 状态：执行中
 >
+> 商城二期移除声明（2026-09-04）：商城（mall）域因预测性编程已整体移除，以代码为准。
+> 本合同中 `mall_order`、`mall_sync`、`mall_after_sales`、`mall_backfill`、`card_instance`、
+> `projection`、`publication` 相关 `INT` 项随代码删除而作废，不作为验收依据，不复用编号；
+> 未来重做商城对接时重新编号、重新验收。
+>
 > 盘点日期：2026-08-31
 >
 > 当前仓库基线：`0448b05577ff3cb3e6025baae76670b77641262c`

@@ -72,7 +72,7 @@ function latestSubmission(
 
 /**
  * 选择详情当前应展示的商业快照：可编辑工作副本优先，否则取最新提交。
- * 合同精确修订和目标商城等附属显示必须复用同一来源，避免字段跨版本拼接。
+ * 合同精确修订等附属显示必须复用同一来源，避免字段跨版本拼接。
  */
 export function pickSalesOrderCommercialSource(
     detail: BackendSalesOrderDetail,
@@ -147,7 +147,6 @@ export function mapDetailToListItem(
         customerName?: string
         contractNumber?: string
         contractRevisionLabel?: string
-        targetMallName?: string
         ownerUserId?: string
         ownerName?: string
         activeChangeOrder?: SalesChangeOrderSummary | null
@@ -210,7 +209,6 @@ export function mapDetailToListItem(
             taxRatePercent: commercial.taxRatePercent,
             welfareScene: commercial.welfareScene,
             fulfillmentDeadline: commercial.fulfillmentDeadline,
-            targetMallName: extras?.targetMallName,
             receivableDueDate: commercial.receivableDueDate,
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),

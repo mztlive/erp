@@ -93,7 +93,6 @@ export function useSalesOrderCreateSubmission({
             paymentTerms:
                 paymentTermLabel(value.paymentTerms) || value.paymentTerms,
             fulfillmentDeadline: value.fulfillmentDeadline,
-            targetMallId: value.targetMallId,
             receivableDueDate: value.receivableDueDate,
             taxRatePercent: value.taxRatePercent,
             remark: value.remark,
