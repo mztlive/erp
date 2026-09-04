@@ -134,6 +134,27 @@ decimal_newtype!(Quantity, 6);
 decimal_newtype!(Rate, 6);
 
 impl Amount {
+    /// 零金额（`0.00`，构造期即满足两位小数约束）。
+    ///
+    /// # 用途
+    /// 为纯金额折叠提供无失败的求和起点，避免在领域与服务层使用 `expect`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回精确 `0.00` 金额（保留两位小数显示）。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 关键约束
+    /// 常量零值由确定性构造直接产生，不做字符串解析；求和仍使用
+    /// [`Amount::checked_add`] 保持精度。
+    pub fn zero() -> Amount {
+        Amount(Decimal::new(0, 2))
+    }
+
     /// 两个金额相加（精确，不触发舍入）。
     pub fn checked_add(self, other: Amount) -> Amount {
         Amount(self.0 + other.0)
@@ -293,6 +314,15 @@ mod tests {
             quantity: Quantity::from_str("3.000000").unwrap(),
             rate: Rate::from_str("0.130000").unwrap(),
         }
+    }
+
+    /// 零金额：确定性构造为精确 `0.00`，保留两位小数显示。
+    #[test]
+    fn zero_is_exact_with_two_decimal_display() {
+        let zero = Amount::zero();
+        assert_eq!(zero.to_decimal(), Decimal::new(0, 2));
+        assert_eq!(zero.to_string(), "0.00");
+        assert_eq!(zero, Amount::from_str("0.00").unwrap());
     }
 
     /// 小数位上限校验：超位（含有效尾数）拒绝构造，禁止静默舍入。
