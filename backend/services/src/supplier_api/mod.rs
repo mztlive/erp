@@ -16,11 +16,9 @@
 use std::sync::Arc;
 
 use database::{AccessControlExt, NoTransaction, SupplierApiExt, SupplierExt, Transactional};
-use entities::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use entities::integration_ops::ErrorClass;
 use entities::supplier_api::{
-    SupplierApiCapability, SupplierApiCapabilityData, SupplierApiConnection, SupplierApiConnectionData,
-    SupplierApiConnectionStatus,
+    PreparedSupplierConnectionCreate, SupplierApiConnection, SupplierApiConnectionData,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -259,22 +257,13 @@ impl SupplierApiService {
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionView> {
         req.validate()?;
-        if req.endpoint_reference.is_some() || req.credential_reference.is_some() {
-            return Err(Error::ValidationError(
-                "创建连接只建立身份；技术引用必须通过不透明引用绑定命令提交".to_string(),
-            ));
-        }
-        if req
-            .status
-            .is_some_and(|status| status != SupplierApiConnectionStatus::Disabled)
-        {
-            return Err(Error::ValidationError("新连接必须从停用状态开始".to_string()));
-        }
-        if !req.capabilities.is_empty() {
-            return Err(Error::ValidationError(
-                "初始能力必须通过独立能力配置命令提交".to_string(),
-            ));
-        }
+        let prepared = PreparedSupplierConnectionCreate::try_new(
+            req.endpoint_reference.as_deref(),
+            req.credential_reference.as_deref(),
+            req.status,
+            req.capabilities.len(),
+        )
+        .map_err(governance::map_command_shape_rejection)?;
         self.db
             .supplier_accounts()
             .find_by_id(&req.supplier_id, &mut NoTransaction)
@@ -294,11 +283,10 @@ impl SupplierApiService {
                     .rate_limit_policy
                     .map(RateLimitPolicyRequest::into_policy)
                     .transpose()?,
-                status: SupplierApiConnectionStatus::Disabled,
+                status: prepared.status(),
             },
             actor.id(),
         )?;
-        let capabilities = self.build_capabilities(&connection, req.capabilities)?;
         let audit = actor.clone().resource_log(
             "supplier_api_connection.create",
             "supplier_api_connection",
@@ -312,7 +300,7 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.supplier_api()
-                        .create_connection_with_capabilities(&connection_tx, &capabilities, session)
+                        .create_connection_with_capabilities(&connection_tx, &[], session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
@@ -463,43 +451,6 @@ impl SupplierApiService {
             page: filter.page,
             page_size: filter.page_size,
         })
-    }
-
-    /// 由能力行请求构建能力实体清单（能力代码去重，保留首次出现顺序）。
-    ///
-    /// # 参数
-    /// * `connection` - 所属连接
-    /// * `items` - 能力行请求
-    ///
-    /// # 返回
-    /// 返回能力实体清单。
-    ///
-    /// # 错误
-    /// 能力约束快照超长时返回错误。
-    fn build_capabilities(
-        &self,
-        connection: &SupplierApiConnection,
-        items: Vec<CapabilityItemRequest>,
-    ) -> Result<Vec<SupplierApiCapability>> {
-        let mut seen = Vec::new();
-        let mut capabilities = Vec::with_capacity(items.len());
-        for item in items {
-            if !seen.contains(&item.capability_code) {
-                seen.push(item.capability_code);
-                capabilities.push(SupplierApiCapability::new(
-                    SupplierApiCapabilityId::new(next_id()),
-                    SupplierApiCapabilityData {
-                        connection_id: SupplierApiConnectionId::new(connection.base.id.clone()),
-                        capability_code: item.capability_code,
-                        status: item
-                            .status
-                            .unwrap_or(entities::supplier_api::SupplierApiCapabilityStatus::Active),
-                        constraint_snapshot: item.constraint_snapshot,
-                    },
-                )?);
-            }
-        }
-        Ok(capabilities)
     }
 }
 

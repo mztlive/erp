@@ -29,6 +29,8 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+mod capability_change_batch;
+
 /// `supplier_api_connection` 集合名（单一来源：`SupplierApiExt` 关联常量）。
 const SUPPLIER_API_CONNECTIONS: &str = <mongodb::Database as SupplierApiExt>::SUPPLIER_API_CONNECTIONS;
 /// `supplier_api_capability` 集合名（单一来源：`SupplierApiExt` 关联常量）。

@@ -22,12 +22,18 @@
 //!   不直接依赖供应商专用协议（phase-2 §6.2）。
 
 pub mod capability;
+pub mod capability_change_set;
 pub mod connection;
 pub mod governance;
+pub mod prepared_commands;
 
 pub use capability::{
     SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
     SupplierApiCapabilityUpdate,
+};
+pub use capability_change_set::{
+    CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, ClassifiedCapabilityChangeSet,
+    PendingCapabilityChange, ValidatedCapabilityChange,
 };
 pub use connection::{
     ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
@@ -39,6 +45,10 @@ pub use governance::{
     SupplierConnectionAction, SupplierConnectionBusinessImpact, SupplierConnectionCommandReceipt,
     SupplierConnectionCommandReceiptData, SupplierConnectionGovernance, SupplierGovernanceBlocker,
     SupplierHealthCheckRun, SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+};
+pub use prepared_commands::{
+    CommandOptionalField, PreparedSupplierConnectionCommand, PreparedSupplierConnectionCreate,
+    SupplierCommandShapeRejection,
 };
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

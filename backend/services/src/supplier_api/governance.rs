@@ -7,7 +7,10 @@ use database::{
     AccessControlExt, BulkJobExt, IntegrationOpsExt, NoTransaction, PartyExt, SupplierApiExt, SupplierExt,
     Transactional, WorkItemExt,
 };
-use entities::bulk_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
+use entities::bulk_job::{
+    BackgroundJob, JobStatus, SupplierGovernanceJobKind, SupplierGovernanceJobSpec,
+    SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
+};
 use entities::common::time::Instant;
 use entities::ids::{
     BackgroundJobId, IntegrationErrorTaskId, PartyId, SupplierAccountId, SupplierApiCapabilityId,
@@ -15,12 +18,14 @@ use entities::ids::{
 };
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData};
 use entities::supplier_api::{
-    ensure_unique_capability_codes, BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData,
-    CapabilityVersionSnapshot, HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityData,
-    SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
-    SupplierConnectionAction, SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData,
-    SupplierConnectionGovernance, SupplierGovernanceBlocker, SupplierHealthCheckRun,
-    SupplierHealthCheckRunData, SupplierHealthCheckType,
+    BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, CapabilityChangeInput,
+    CapabilityChangeSet, CapabilityChangeSetRejection, CapabilityVersionSnapshot,
+    ClassifiedCapabilityChangeSet, HealthCheckResult, PreparedSupplierConnectionCommand,
+    SupplierApiCapability, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
+    SupplierApiCapabilityUpdate, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
+    SupplierCommandShapeRejection, SupplierConnectionAction, SupplierConnectionCommandReceipt,
+    SupplierConnectionCommandReceiptData, SupplierConnectionGovernance, SupplierGovernanceBlocker,
+    SupplierHealthCheckRun, SupplierHealthCheckRunData, SupplierHealthCheckType,
 };
 use entities::Permission;
 use id_generator::next_id;
@@ -43,8 +48,6 @@ use crate::errors::{Error, Result};
 use crate::iam::subject;
 use crate::integration_ops::{error_owner_role, error_work_item};
 
-const HEALTH_JOB_TYPE: &str = "SUPPLIER_HEALTH_CHECK";
-const CATALOG_JOB_TYPE: &str = "SUPPLIER_CATALOG_SYNC";
 const CONFIRM_CAPABILITY_ACTION: &str = "CONFIRM_BUSINESS_CAPABILITY_REQUIREMENT";
 const UPDATE_CAPABILITIES_ACTION: &str = "UPDATE_CAPABILITIES";
 
@@ -188,20 +191,87 @@ impl SupplierApiService {
         if let Some(result) = self.replay_command(&identity).await? {
             return Ok(result);
         }
-        match command.action {
-            SupplierConnectionAction::UpdateBusinessProfile
-            | SupplierConnectionAction::BindEndpointReference
-            | SupplierConnectionAction::BindCredentialReference => {
-                self.execute_reference_command(id, command, identity, actor).await
+        let prepared = PreparedSupplierConnectionCommand::try_from_parts(
+            command.action,
+            command.expected_version,
+            command.payload_reference.as_deref(),
+            command.reason_code.as_deref(),
+            command.check_type,
+        )
+        .map_err(map_command_shape_rejection)?;
+        match prepared {
+            PreparedSupplierConnectionCommand::UpdateBusinessProfile {
+                expected_version,
+                payload_reference,
+            } => {
+                self.execute_reference_command(
+                    id,
+                    SupplierConnectionAction::UpdateBusinessProfile,
+                    &payload_reference,
+                    expected_version,
+                    identity,
+                    actor,
+                )
+                .await
             }
-            SupplierConnectionAction::RunHealthCheck => {
-                self.create_health_job(id, command, identity, actor).await
+            PreparedSupplierConnectionCommand::BindEndpointReference {
+                expected_version,
+                payload_reference,
+            } => {
+                self.execute_reference_command(
+                    id,
+                    SupplierConnectionAction::BindEndpointReference,
+                    &payload_reference,
+                    expected_version,
+                    identity,
+                    actor,
+                )
+                .await
             }
-            SupplierConnectionAction::Enable | SupplierConnectionAction::Disable => {
-                self.execute_status_command(id, command, identity, actor).await
+            PreparedSupplierConnectionCommand::BindCredentialReference {
+                expected_version,
+                payload_reference,
+            } => {
+                self.execute_reference_command(
+                    id,
+                    SupplierConnectionAction::BindCredentialReference,
+                    &payload_reference,
+                    expected_version,
+                    identity,
+                    actor,
+                )
+                .await
             }
-            SupplierConnectionAction::StartCatalogSync => {
-                self.create_catalog_job(id, command, identity, actor).await
+            PreparedSupplierConnectionCommand::RunHealthCheck {
+                expected_version,
+                check_type,
+            } => {
+                self.create_health_job(id, check_type, expected_version, identity, actor)
+                    .await
+            }
+            PreparedSupplierConnectionCommand::Enable { expected_version } => {
+                self.execute_status_command(
+                    id,
+                    SupplierConnectionAction::Enable,
+                    expected_version,
+                    identity,
+                    actor,
+                )
+                .await
+            }
+            PreparedSupplierConnectionCommand::Disable { expected_version, .. } => {
+                self.execute_status_command(
+                    id,
+                    SupplierConnectionAction::Disable,
+                    expected_version,
+                    identity,
+                    actor,
+                )
+                .await
+            }
+            PreparedSupplierConnectionCommand::StartCatalogSync { expected_version } => {
+                self.create_catalog_job(id, expected_version, identity, actor)
+                    .await
             }
         }
     }
@@ -317,8 +387,19 @@ impl SupplierApiService {
         command.validate()?;
         self.ensure_permission(actor, "supplier_api_capability:update")
             .await?;
-        ensure_unique_capability_codes(command.capability_changes.iter().map(|change| change.code))
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let change_set = CapabilityChangeSet::new(
+            command
+                .capability_changes
+                .iter()
+                .map(|change| CapabilityChangeInput {
+                    code: change.code,
+                    enabled: change.enabled,
+                    constraint_snapshot: change.constraint_snapshot.clone(),
+                })
+                .collect(),
+            &command.expected_capability_versions,
+        )
+        .map_err(map_capability_change_rejection)?;
         let fingerprint = capability_update_fingerprint(id, &command);
         let audit_id = format!(
             "w20-cap-audit-{}",
@@ -362,7 +443,7 @@ impl SupplierApiService {
                             "连接启用期间不能修改能力，请先停用连接".to_string(),
                         ));
                     }
-                    let mut capabilities = db
+                    let capabilities = db
                         .supplier_api()
                         .connection_capabilities(
                             &SupplierApiConnectionId::new(connection_id_value.clone()),
@@ -376,15 +457,18 @@ impl SupplierApiService {
                             session,
                         )
                         .await?;
-                    apply_capability_changes(
-                        &db,
+                    let classified = change_set
+                        .classify(&capabilities)
+                        .map_err(map_capability_change_rejection)?;
+                    let (mut updates, creates) = apply_validated_changes(
                         &connection_id_value,
-                        &command,
+                        &classified,
                         &confirmations,
-                        &mut capabilities,
-                        session,
-                    )
-                    .await?;
+                        &capabilities,
+                    )?;
+                    db.supplier_api()
+                        .persist_capability_changes(&mut updates, &creates, session)
+                        .await?;
                     connection.record_capability_configuration(actor_tx.id())?;
                     db.supplier_api_connections()
                         .update(&mut connection, session)
@@ -426,7 +510,7 @@ impl SupplierApiService {
             .connection_job(
                 &SupplierApiConnectionId::new(connection_id),
                 job_id,
-                &[HEALTH_JOB_TYPE, CATALOG_JOB_TYPE],
+                &[SUPPLIER_HEALTH_CHECK_JOB_TYPE, SUPPLIER_CATALOG_SYNC_JOB_TYPE],
                 &mut NoTransaction,
             )
             .await?
@@ -452,8 +536,8 @@ impl SupplierApiService {
             return Ok(());
         }
         match job.domain_job_type.as_deref() {
-            Some(HEALTH_JOB_TYPE) => self.process_health_job(job, actor).await,
-            Some(CATALOG_JOB_TYPE) => self.process_catalog_job(job, actor).await,
+            Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE) => self.process_health_job(job, actor).await,
+            Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE) => self.process_catalog_job(job, actor).await,
             _ => Err(Error::BusinessLogicError("任务不属于 W20 连接治理".to_string())),
         }
     }
@@ -461,19 +545,20 @@ impl SupplierApiService {
     async fn execute_reference_command(
         &self,
         id: &str,
-        command: SupplierConnectionCommand,
+        action: SupplierConnectionAction,
+        payload_reference: &str,
+        expected_version: u64,
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
-        let payload_reference = required(command.payload_reference.as_deref(), "缺少不透明引用")?;
         let connection = self.load_connection(id, &mut NoTransaction).await?;
-        ensure_version(connection.base.version, command.expected_version)?;
+        ensure_version(connection.base.version, expected_version)?;
         if connection.stable.status == SupplierApiConnectionStatus::Active {
             return Err(Error::BusinessLogicError(
                 "连接启用期间不能变更配置，请先停用连接".to_string(),
             ));
         }
-        let kind = match command.action {
+        let kind = match action {
             SupplierConnectionAction::UpdateBusinessProfile => SupplierReferenceKind::BusinessProfile,
             SupplierConnectionAction::BindEndpointReference => SupplierReferenceKind::Endpoint,
             SupplierConnectionAction::BindCredentialReference => SupplierReferenceKind::Credential,
@@ -484,14 +569,15 @@ impl SupplierApiService {
             .resolve(kind, payload_reference, connection.environment)
             .await
             .map_err(reference_error)?;
-        self.commit_reference_command(id, command, identity, resolved, actor)
+        self.commit_reference_command(id, action, expected_version, identity, resolved, actor)
             .await
     }
 
     async fn commit_reference_command(
         &self,
         id: &str,
-        command: SupplierConnectionCommand,
+        action: SupplierConnectionAction,
+        expected_version: u64,
         identity: CommandIdentity,
         resolved: ResolvedSupplierReference,
         actor: &AuditActor,
@@ -508,13 +594,13 @@ impl SupplierApiService {
                         .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
-                    ensure_version(connection.base.version, command.expected_version)?;
+                    ensure_version(connection.base.version, expected_version)?;
                     if connection.stable.status == SupplierApiConnectionStatus::Active {
                         return Err(Error::BusinessLogicError(
                             "连接启用期间不能变更配置，请先停用连接".to_string(),
                         ));
                     }
-                    match command.action {
+                    match action {
                         SupplierConnectionAction::UpdateBusinessProfile => {
                             connection.update_business_profile(resolved.internal_reference, actor.id())?
                         }
@@ -533,7 +619,7 @@ impl SupplierApiService {
                         &db,
                         CommandReceiptWrite {
                             connection: &connection,
-                            action: command.action,
+                            action,
                             identity: &identity,
                             outcome: SupplierCommandOutcome::Succeeded,
                             job_id: None,
@@ -550,13 +636,11 @@ impl SupplierApiService {
     async fn execute_status_command(
         &self,
         id: &str,
-        command: SupplierConnectionCommand,
+        action: SupplierConnectionAction,
+        expected_version: u64,
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
-        if command.action == SupplierConnectionAction::Disable {
-            required(command.reason_code.as_deref(), "停用原因不能为空")?;
-        }
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -569,7 +653,7 @@ impl SupplierApiService {
                         .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
-                    ensure_version(connection.base.version, command.expected_version)?;
+                    ensure_version(connection.base.version, expected_version)?;
                     let context = db
                         .supplier_api()
                         .governance_data(&SupplierApiConnectionId::new(&connection_id_value), 50, session)
@@ -580,11 +664,11 @@ impl SupplierApiService {
                         confirmations: &context.confirmations,
                         health_runs: &context.health_runs,
                     };
-                    let blockers = governance.blockers(command.action, context.impact, true);
+                    let blockers = governance.blockers(action, context.impact, true);
                     if let Some(blocker) = blockers.first() {
                         return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
-                    match command.action {
+                    match action {
                         SupplierConnectionAction::Enable => connection.enable(actor.id()),
                         SupplierConnectionAction::Disable => connection.disable(actor.id()),
                         _ => return Err(Error::Internal("状态命令分派错误".to_string())),
@@ -596,7 +680,7 @@ impl SupplierApiService {
                         &db,
                         CommandReceiptWrite {
                             connection: &connection,
-                            action: command.action,
+                            action,
                             identity: &identity,
                             outcome: SupplierCommandOutcome::Succeeded,
                             job_id: None,
@@ -613,13 +697,11 @@ impl SupplierApiService {
     async fn create_health_job(
         &self,
         id: &str,
-        command: SupplierConnectionCommand,
+        check_type: SupplierHealthCheckType,
+        expected_version: u64,
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
-        let check_type = command
-            .check_type
-            .ok_or_else(|| Error::ValidationError("健康检查类型不能为空".to_string()))?;
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -632,7 +714,7 @@ impl SupplierApiService {
                         .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
-                    ensure_version(connection.base.version, command.expected_version)?;
+                    ensure_version(connection.base.version, expected_version)?;
                     let capabilities = db
                         .supplier_api()
                         .connection_capabilities(
@@ -647,18 +729,18 @@ impl SupplierApiService {
                         health_runs: &[],
                     };
                     if let Some(blocker) = governance
-                        .blockers(command.action, Default::default(), true)
+                        .blockers(SupplierConnectionAction::RunHealthCheck, Default::default(), true)
                         .first()
                     {
                         return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
-                    let job = build_job(
-                        &connection_id_value,
-                        HEALTH_JOB_TYPE,
-                        command.action,
-                        actor.id(),
-                        &identity,
-                    )?;
+                    let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
+                        job_id: BackgroundJobId::new(next_id()),
+                        connection_id: connection_id_value.clone(),
+                        kind: SupplierGovernanceJobKind::HealthCheck,
+                        requested_by: actor.id().to_string(),
+                        idempotency_hash: identity.idempotency_hash.clone(),
+                    })?;
                     let run = SupplierHealthCheckRun::new(
                         format!("w20-health-{}", digest(&[&job.base.id])),
                         SupplierHealthCheckRunData {
@@ -685,7 +767,7 @@ impl SupplierApiService {
                         &db,
                         CommandReceiptWrite {
                             connection: &connection,
-                            action: command.action,
+                            action: SupplierConnectionAction::RunHealthCheck,
                             identity: &identity,
                             outcome: SupplierCommandOutcome::Processing,
                             job_id: Some(job.base.id.clone()),
@@ -702,7 +784,7 @@ impl SupplierApiService {
     async fn create_catalog_job(
         &self,
         id: &str,
-        command: SupplierConnectionCommand,
+        expected_version: u64,
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
@@ -718,7 +800,7 @@ impl SupplierApiService {
                         .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
-                    ensure_version(connection.base.version, command.expected_version)?;
+                    ensure_version(connection.base.version, expected_version)?;
                     let capabilities = db
                         .supplier_api()
                         .connection_capabilities(
@@ -732,23 +814,27 @@ impl SupplierApiService {
                         confirmations: &[],
                         health_runs: &[],
                     };
-                    let blockers = governance.blockers(command.action, Default::default(), true);
+                    let blockers = governance.blockers(
+                        SupplierConnectionAction::StartCatalogSync,
+                        Default::default(),
+                        true,
+                    );
                     if let Some(blocker) = blockers.first() {
                         return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
-                    let job = build_job(
-                        &connection_id_value,
-                        CATALOG_JOB_TYPE,
-                        command.action,
-                        actor.id(),
-                        &identity,
-                    )?;
+                    let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
+                        job_id: BackgroundJobId::new(next_id()),
+                        connection_id: connection_id_value.clone(),
+                        kind: SupplierGovernanceJobKind::CatalogSync,
+                        requested_by: actor.id().to_string(),
+                        idempotency_hash: identity.idempotency_hash.clone(),
+                    })?;
                     db.background_jobs().create(&job, session).await?;
                     persist_command_receipt(
                         &db,
                         CommandReceiptWrite {
                             connection: &connection,
-                            action: command.action,
+                            action: SupplierConnectionAction::StartCatalogSync,
                             identity: &identity,
                             outcome: SupplierCommandOutcome::Processing,
                             job_id: Some(job.base.id.clone()),
@@ -1280,100 +1366,111 @@ async fn persist_command_receipt(
     })
 }
 
-fn build_job(
+/// 将已分类能力变更应用于事务内快照，并拆分为更新与新增两组持久化输入。
+///
+/// 已存在能力逐项重验实时版本与采购确认覆盖后变更内存状态；新增能力以停用
+/// 状态构造实体（ID 由调用方注入）。本函数只做内存装配，实际写库由
+/// Repository 批量 primitive 在同一执行器下完成；调用方事务保证整体回滚。
+///
+/// # 参数
+/// * `connection_id` - 所属连接 ID（新增实体归属）
+/// * `classified` - 已分类变更集（保持输入顺序）
+/// * `confirmations` - 最新优先的采购确认历史
+/// * `capabilities` - 事务内加载的既有能力快照（只读，不就地变更）
+///
+/// # 返回
+/// 返回 `(待 CAS 写回的已更新实体, 待批量插入的新增实体)`。
+///
+/// # 错误
+/// 当实时版本冲突、启用缺少采购确认或实体构造校验失败时返回错误；任一失败
+/// 由调用方事务整体回滚。
+///
+/// # 约束
+/// 不访问数据库、不开事务；跨聚合确认结论只读取不解释归属。
+fn apply_validated_changes(
     connection_id: &str,
-    domain_job_type: &str,
-    _action: SupplierConnectionAction,
-    actor_id: &str,
-    identity: &CommandIdentity,
-) -> Result<BackgroundJob> {
-    let prefix = if domain_job_type == HEALTH_JOB_TYPE {
-        "W20-HC"
-    } else {
-        "W20-CS"
-    };
-    BackgroundJob::new(
-        BackgroundJobId::new(next_id()),
-        BackgroundJobData {
-            job_no: format!("{prefix}-{}", &identity.idempotency_hash[..16]),
-            job_type: JobType::Sync,
-            domain_job_type: Some(domain_job_type.to_string()),
-            domain_job_id: Some(connection_id.to_string()),
-            selection_snapshot_id: None,
-            requested_by: actor_id.to_string(),
-            request_id: format!("w20:{}", identity.idempotency_hash),
-            input_file_asset_id: None,
-            result_file_asset_id: None,
-            total_count: 1,
-        },
-    )
-    .map_err(Into::into)
-}
-
-async fn apply_capability_changes(
-    db: &mongodb::Database,
-    connection_id: &str,
-    command: &UpdateSupplierCapabilitiesCommand,
+    classified: &ClassifiedCapabilityChangeSet,
     confirmations: &[BusinessCapabilityConfirmation],
-    capabilities: &mut Vec<SupplierApiCapability>,
-    executor: &mut dyn database::Executor,
-) -> Result<()> {
-    for change in &command.capability_changes {
-        let key = change.code.as_str();
-        let expected = command
-            .expected_capability_versions
-            .get(key)
-            .copied()
-            .ok_or_else(|| Error::ValidationError(format!("缺少能力 {key} 的期望版本")))?;
-        if let Some(capability) = capabilities
-            .iter_mut()
+    capabilities: &[SupplierApiCapability],
+) -> Result<(Vec<SupplierApiCapability>, Vec<SupplierApiCapability>)> {
+    let mut updates = Vec::with_capacity(classified.len());
+    let mut creates = Vec::new();
+    for change in classified.changes() {
+        match capabilities
+            .iter()
             .find(|capability| capability.capability_code == change.code)
         {
-            ensure_version(capability.base.version, expected)?;
-            if change.enabled
-                && !BusinessCapabilityConfirmation::latest_for(confirmations, change.code)
-                    .is_some_and(|confirmation| confirmation.covers(capability))
-            {
-                return Err(Error::BusinessLogicError(
-                    "能力缺少与当前配置匹配的采购业务确认".to_string(),
-                ));
+            Some(existing) => {
+                ensure_version(existing.base.version, change.expected_version)?;
+                if change.enabled
+                    && !BusinessCapabilityConfirmation::latest_for(confirmations, change.code)
+                        .is_some_and(|confirmation| confirmation.covers(existing))
+                {
+                    return Err(Error::BusinessLogicError(
+                        "能力缺少与当前配置匹配的采购业务确认".to_string(),
+                    ));
+                }
+                let mut updated = existing.clone();
+                updated.update(SupplierApiCapabilityUpdate {
+                    status: Some(if change.enabled {
+                        SupplierApiCapabilityStatus::Active
+                    } else {
+                        SupplierApiCapabilityStatus::Disabled
+                    }),
+                    constraint_snapshot: change.constraint_snapshot.clone(),
+                })?;
+                updates.push(updated);
             }
-            capability.update(entities::supplier_api::SupplierApiCapabilityUpdate {
-                status: Some(if change.enabled {
-                    SupplierApiCapabilityStatus::Active
-                } else {
-                    SupplierApiCapabilityStatus::Disabled
-                }),
-                constraint_snapshot: change.constraint_snapshot.clone(),
-            })?;
-            db.supplier_api_capabilities()
-                .update(capability, executor)
-                .await?;
-            continue;
+            None => {
+                creates.push(SupplierApiCapability::new(
+                    SupplierApiCapabilityId::new(next_id()),
+                    SupplierApiCapabilityData {
+                        connection_id: SupplierApiConnectionId::new(connection_id),
+                        capability_code: change.code,
+                        status: SupplierApiCapabilityStatus::Disabled,
+                        constraint_snapshot: change.constraint_snapshot.clone(),
+                    },
+                )?);
+            }
         }
-        if expected != 0 {
-            return Err(Error::ConflictError(format!("新能力 {key} 的期望版本必须为0")));
-        }
-        if change.enabled {
-            return Err(Error::BusinessLogicError(
-                "新能力必须先以停用状态登记，再由采购确认后启用".to_string(),
-            ));
-        }
-        let capability = SupplierApiCapability::new(
-            SupplierApiCapabilityId::new(next_id()),
-            SupplierApiCapabilityData {
-                connection_id: SupplierApiConnectionId::new(connection_id),
-                capability_code: change.code,
-                status: SupplierApiCapabilityStatus::Disabled,
-                constraint_snapshot: change.constraint_snapshot.clone(),
-            },
-        )?;
-        db.supplier_api_capabilities()
-            .create(&capability, executor)
-            .await?;
-        capabilities.push(capability);
     }
-    Ok(())
+    Ok((updates, creates))
+}
+
+/// 将能力变更集拒绝映射为历史 Service 错误语义（保持 HTTP 状态与文本）。
+///
+/// # 参数
+/// * `rejection` - 变更集校验拒绝原因
+///
+/// # 返回
+/// 形态问题映射为 `ValidationError`，新能力版本映射为 `ConflictError`，
+/// 新能力启用映射为 `BusinessLogicError`。
+fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) -> Error {
+    match rejection {
+        CapabilityChangeSetRejection::EmptyOrTooMany
+        | CapabilityChangeSetRejection::DuplicateCodes
+        | CapabilityChangeSetRejection::MissingExpectedVersion(_)
+        | CapabilityChangeSetRejection::UnexpectedExpectedVersion(_) => {
+            Error::ValidationError(rejection.to_string())
+        }
+        CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero(_) => {
+            Error::ConflictError(rejection.to_string())
+        }
+        CapabilityChangeSetRejection::NewCapabilityMustStartDisabled(_) => {
+            Error::BusinessLogicError(rejection.to_string())
+        }
+    }
+}
+
+/// 将命令形态拒绝映射为参数校验错误（保持历史必填校验语义）。
+///
+/// # 参数
+/// * `rejection` - 命令形态校验拒绝原因
+///
+/// # 返回
+/// 一律映射为 `ValidationError`（含新增的多余字段拒绝）。
+pub(crate) fn map_command_shape_rejection(rejection: SupplierCommandShapeRejection) -> Error {
+    Error::ValidationError(rejection.to_string())
 }
 
 fn action_permission(action: SupplierConnectionAction) -> &'static str {
@@ -1601,6 +1698,10 @@ fn digest(parts: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use entities::supplier_api::{
+        BusinessCapabilityRequirement, SupplierApiCapabilityCode, SupplierApiCapabilityData,
+    };
+    use std::collections::BTreeMap;
 
     #[test]
     fn command_identity_hashes_raw_idempotency_key() {
@@ -1615,5 +1716,147 @@ mod tests {
         let identity = CommandIdentity::new("connection-1", "actor-1", &command).unwrap();
         assert!(!identity.idempotency_hash.contains("raw-secret-like-key"));
         assert_eq!(identity.idempotency_hash.len(), 64);
+    }
+
+    #[test]
+    fn capability_change_rejections_keep_legacy_error_semantics() {
+        assert!(matches!(
+            map_capability_change_rejection(CapabilityChangeSetRejection::DuplicateCodes),
+            Error::ValidationError(message) if message == "能力变更代码不能重复"
+        ));
+        assert!(matches!(
+            map_capability_change_rejection(
+                CapabilityChangeSetRejection::MissingExpectedVersion("order")
+            ),
+            Error::ValidationError(message) if message == "缺少能力 order 的期望版本"
+        ));
+        assert!(matches!(
+            map_capability_change_rejection(CapabilityChangeSetRejection::UnexpectedExpectedVersion(
+                "product".to_string()
+            )),
+            Error::ValidationError(_)
+        ));
+        assert!(matches!(
+            map_capability_change_rejection(
+                CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero("product")
+            ),
+            Error::ConflictError(message) if message == "新能力 product 的期望版本必须为0"
+        ));
+        assert!(matches!(
+            map_capability_change_rejection(CapabilityChangeSetRejection::NewCapabilityMustStartDisabled(
+                "product"
+            )),
+            Error::BusinessLogicError(_)
+        ));
+    }
+
+    #[test]
+    fn command_shape_rejections_map_to_validation_errors() {
+        let error = map_command_shape_rejection(SupplierCommandShapeRejection::TechnicalReferenceOnCreate);
+        assert!(matches!(error, Error::ValidationError(_)));
+    }
+
+    /// 构造既有能力声明测试夹具（版本固定为 `1`）。
+    fn existing_capability(code: SupplierApiCapabilityCode) -> SupplierApiCapability {
+        SupplierApiCapability::new(
+            SupplierApiCapabilityId::new(format!("cap-{}", code.as_str())),
+            SupplierApiCapabilityData {
+                connection_id: SupplierApiConnectionId::new("conn-1"),
+                capability_code: code,
+                status: SupplierApiCapabilityStatus::Disabled,
+                constraint_snapshot: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 构造覆盖指定能力的采购确认测试夹具。
+    fn covering_confirmation(capability: &SupplierApiCapability) -> BusinessCapabilityConfirmation {
+        BusinessCapabilityConfirmation::new(
+            format!("confirm-{}", capability.capability_code.as_str()),
+            BusinessCapabilityConfirmationData {
+                connection_id: SupplierApiConnectionId::new("conn-1"),
+                capability_id: SupplierApiCapabilityId::new(capability.base.id.clone()),
+                capability_code: capability.capability_code,
+                requirement: BusinessCapabilityRequirement::Required,
+                applicability_reference: None,
+                evidence_references: vec![],
+                reason_code: "REQUIRED".to_string(),
+                connection_version: 1,
+                capability_version: capability.base.version,
+                operation_id: "operation-1".to_string(),
+                idempotency_key_hash: "hash-1".to_string(),
+                request_fingerprint: "fingerprint-1".to_string(),
+                confirmed_by: "buyer-1".to_string(),
+                confirmed_at: Instant::from_unix_secs(1),
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn apply_validated_changes_splits_updates_and_creates() {
+        let mut capabilities = vec![existing_capability(SupplierApiCapabilityCode::Order)];
+        let confirmations = vec![covering_confirmation(&capabilities[0])];
+        let classified = CapabilityChangeSet::new(
+            vec![
+                CapabilityChangeInput {
+                    code: SupplierApiCapabilityCode::Order,
+                    enabled: true,
+                    constraint_snapshot: None,
+                },
+                CapabilityChangeInput {
+                    code: SupplierApiCapabilityCode::Product,
+                    enabled: false,
+                    constraint_snapshot: None,
+                },
+            ],
+            &BTreeMap::from([("order".to_string(), 1_u64), ("product".to_string(), 0_u64)]),
+        )
+        .unwrap()
+        .classify(&capabilities)
+        .unwrap();
+
+        let (updates, creates) =
+            apply_validated_changes("conn-1", &classified, &confirmations, &mut capabilities).unwrap();
+        assert_eq!(updates.len(), 1);
+        assert!(updates[0].is_active());
+        assert_eq!(creates.len(), 1);
+        assert_eq!(creates[0].capability_code, SupplierApiCapabilityCode::Product);
+        assert!(!creates[0].is_active());
+    }
+
+    #[test]
+    fn apply_validated_changes_rejects_version_conflict_and_missing_confirmation() {
+        let mut capabilities = vec![existing_capability(SupplierApiCapabilityCode::Order)];
+        let classified = CapabilityChangeSet::new(
+            vec![CapabilityChangeInput {
+                code: SupplierApiCapabilityCode::Order,
+                enabled: true,
+                constraint_snapshot: None,
+            }],
+            &BTreeMap::from([("order".to_string(), 1_u64)]),
+        )
+        .unwrap()
+        .classify(&capabilities)
+        .unwrap();
+
+        assert!(matches!(
+            apply_validated_changes("conn-1", &classified, &[], &mut capabilities.clone()),
+            Err(Error::BusinessLogicError(_))
+        ));
+
+        capabilities[0].base.version = 99;
+        assert!(matches!(
+            apply_validated_changes(
+                "conn-1",
+                &classified,
+                &[covering_confirmation(&existing_capability(
+                    SupplierApiCapabilityCode::Order
+                ))],
+                &mut capabilities
+            ),
+            Err(Error::ConflictError(_))
+        ));
     }
 }
