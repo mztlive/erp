@@ -39,6 +39,7 @@ const SKU_INBOUND = "狮峰明前龙井礼盒";
 const SKU_DIRECT = "狮峰陈皮普洱礼盒";
 const SUPPLIER_SHORT = "狮峰茶叶";
 const WAREHOUSE_NAME = "北京通州仓";
+const WAREHOUSE_CODE = "BJ-TZ-01";
 const SALES_QTY = "1";
 const PAYMENT_TERM_CUSTOMER = "货到 15 天";
 const PAYMENT_TERM_SUPPLIER = "先款 50%";
@@ -126,6 +127,15 @@ async function openSession(browser: Browser, login: LoginName): Promise<Session>
 async function expectToast(page: Page, title: string | RegExp) {
     const toast = page.locator('[data-slot="toast"]').filter({ hasText: title });
     await expect(toast.first()).toBeVisible({ timeout: UI_TIMEOUT });
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first();
+        if (!(await dismiss.count())) break;
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
+    }
 }
 
 async function chooseOption(page: Page, input: Locator, option: string | RegExp, typed?: string) {
@@ -145,7 +155,7 @@ async function chooseOption(page: Page, input: Locator, option: string | RegExp,
 
 async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
     await trigger.click();
-    const calendar = page.locator('[data-slot="calendar"]').last();
+    const calendar = page.locator('[data-slot="calendar"]:visible');
     await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT });
     const byId = calendar.locator(`[id$="-day-${isoDate}"]`);
     if (await byId.count()) {
@@ -175,7 +185,8 @@ async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
             await calendar.locator("button").last().click();
         }
     }
-    const dayButtons = calendar.getByRole("button", { name: day, exact: true });
+    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
+    const dayButtons = calendar.getByRole("button", { name: day });
     const total = await dayButtons.count();
     for (let i = 0; i < total; i += 1) {
         const button = dayButtons.nth(i);
@@ -199,11 +210,8 @@ async function searchWorkspace(page: Page, hint?: string) {
     });
     const refresh = page.locator("#workspace-home-refresh");
     if (await refresh.count()) await refresh.click();
-    const search = page.locator("#workspace-queue-toolbar-search-input");
-    if (hint && (await search.count())) {
-        await search.fill(hint);
-        await search.press("Enter");
-    }
+    // 后端工作台搜索不匹配单号与往来方，填 hint 会把列表滤空；
+    // 调用方已用任务名正则（含单号）匹配，不再使用搜索框。
 }
 
 async function openWorkspaceTask(
@@ -268,6 +276,15 @@ async function confirmFormal(page: Page, title: string | RegExp, confirmName: st
 
 async function ensureDefaultProcurementOwner(page: Page) {
     await gotoHeading(page, "/master-data/procurement-responsibilities", "采购责任规则");
+    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
+    await page
+        .waitForResponse(
+            (response) =>
+                response.request().method() === "GET" &&
+                response.url().includes("procurement-responsibility-rules"),
+            { timeout: UI_TIMEOUT },
+        )
+        .catch(() => undefined);
     if (await page.getByText("默认调度人").count()) return;
     const create = page.locator("#procurement-responsibility-rules-create");
     if (await create.count()) {
@@ -341,7 +358,8 @@ async function chooseSourcing(
     if (warehouse) {
         const warehouseInput = row.locator('[id$="-warehouse"]');
         await expect(warehouseInput).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(page, warehouseInput, warehouse, "通州");
+        // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
+        await chooseOption(page, warehouseInput, warehouse, WAREHOUSE_CODE);
     } else {
         await expect(row.getByText("不适用")).toBeVisible({ timeout: UI_TIMEOUT });
     }
@@ -564,8 +582,8 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByText(customerName).first()).toBeVisible({ timeout: UI_TIMEOUT });
 
         // 2) 上传合同 PDF
-        await gotoHeading(page, "/sales/contracts", "合同");
-        await page.getByRole("button", { name: "上传合同 PDF" }).click();
+        await gotoHeading(page, "/sales/contracts", /^合同$/);
+        await page.locator("#page-actions-action-upload").click();
         const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" });
         await expect(contractDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await contractDialog.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdf());
@@ -576,9 +594,9 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
             customerName,
             customerName,
         );
-        await expect(contractDialog.getByText(customerName).first()).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
+        await expect(
+            contractDialog.locator("#card-contracts-upload-settlement-party"),
+        ).not.toHaveValue("", { timeout: UI_TIMEOUT });
         if (await contractDialog.locator("#card-contracts-upload-payment-terms").count()) {
             await chooseOption(
                 page,
@@ -632,7 +650,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByText(/审批中|审核中/).first()).toBeVisible({ timeout: UI_TIMEOUT });
         salesOrderNo = (await page.locator("span.num.text-foreground").first().innerText()).trim();
         expect(salesOrderNo).toBeTruthy();
-        await expect(page.getByText(/采购单 0 笔/)).toBeVisible();
+        await page.getByRole("tab", { name: /采购/ }).click();
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+            timeout: UI_TIMEOUT,
+        });
 
         // 4) 负向：销售单未生效不得建采购单、不得履约
         page = await switchTo("caigou");
@@ -685,7 +706,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
         await expect(page.getByText("已生效").first()).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByText(/采购单 2 笔/)).toBeVisible({ timeout: UI_TIMEOUT });
+        await page.getByRole("tab", { name: /采购/ }).click();
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 2 笔/, {
+            timeout: UI_TIMEOUT,
+        });
         await expect(page.getByText("草稿")).toHaveCount(0);
 
         // 6) 财务审批两张采购单生效，形成付款任务；履约仍被先款拦住

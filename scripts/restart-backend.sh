@@ -7,7 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BACKEND_DIR="$(cd "${E2E_DIR}/backend" && pwd)"
-WEB_API_BIN="${BACKEND_DIR}/target/debug/web-api"
+# cargo 实际产物目录可能被 ~/.cargo/config.toml 的 target-dir 改到别处（如外接硬盘）：
+# 用 cargo metadata 解析，失败时回退到 backend/target。
+TARGET_DIR="$(cd "${BACKEND_DIR}" && cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("target_directory", ""))' 2>/dev/null || true)"
+if [[ -z "${TARGET_DIR}" ]]; then
+    TARGET_DIR="${BACKEND_DIR}/target"
+fi
+WEB_API_BIN="${TARGET_DIR}/debug/web-api"
 API_HEALTH="http://127.0.0.1:10001/health"
 
 mkdir -p "${E2E_DIR}/logs"

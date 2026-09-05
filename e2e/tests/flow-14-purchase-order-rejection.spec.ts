@@ -42,6 +42,7 @@ const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:10001"
 const SKU_KEYWORD = "龙井"
 const SKU_NAME = "狮峰明前龙井礼盒"
 const WAREHOUSE_NAME = "北京通州仓"
+const WAREHOUSE_CODE = "BJ-TZ-01"
 const SALES_QTY = "2"
 const REJECT_REASON = "供应商报价超预算，本轮采购单不通过"
 
@@ -279,6 +280,15 @@ async function listPurchasesBySalesOrder(
 async function expectToast(page: Page, title: string | RegExp): Promise<void> {
     const toast = page.locator('[data-slot="toast"]').filter({ hasText: title })
     await expect(toast.first()).toBeVisible(VISIBLE)
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first()
+        if (!(await dismiss.count())) break
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+    }
 }
 
 async function chooseOption(
@@ -305,7 +315,7 @@ async function chooseOption(
 
 async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string): Promise<void> {
     await trigger.click()
-    const calendar = page.locator('[data-slot="calendar"]').last()
+    const calendar = page.locator('[data-slot="calendar"]:visible')
     await expect(calendar).toBeVisible(VISIBLE)
     const dayId = calendar.locator(`[id$="-day-${isoDate}"]`).first()
     if ((await dayId.count()) === 0) {
@@ -369,11 +379,8 @@ async function openWorkspaceTask(
                 ? "fulfillment"
                 : "finance"
     await page.locator(`#workspace-family-nav-${familyId}`).click()
-    if (query) {
-        const search = page.locator("#workspace-queue-toolbar-search-input")
-        await search.fill(query)
-        await search.press("Enter")
-    }
+    // 后端工作台搜索不匹配单号，填单号会把列表滤空；调用方已用任务名正则匹配，不再使用搜索框。
+    void query
     const list = page.getByRole("list", { name: "待办列表" })
     const task = list.getByRole("button", { name })
     await expect(task).toBeVisible(VISIBLE)
@@ -415,6 +422,15 @@ async function rejectCurrentDocument(page: Page, reason: string): Promise<void> 
 async function ensureDefaultProcurementOwner(page: Page): Promise<void> {
     await page.goto("/master-data/procurement-responsibilities")
     await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible(VISIBLE)
+    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
+    await page
+        .waitForResponse(
+            (response) =>
+                response.request().method() === "GET" &&
+                response.url().includes("procurement-responsibility-rules"),
+            { timeout: VISIBLE.timeout },
+        )
+        .catch(() => undefined)
     if (await page.getByText("默认调度人").count()) return
     await page.locator("#procurement-responsibility-rules-create").click()
     const dialog = page.getByRole("dialog", { name: "新增采购责任规则" })
@@ -542,8 +558,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByLabel("履约责任")).toHaveCount(0)
         await expect(page.getByLabel("采购成本")).toHaveCount(0)
 
-        await page.getByRole("button", { name: "选择商品" }).click()
-        const skuDialog = page.getByRole("dialog", { name: "选择商品" })
+        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
         const skuSearch = skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格")
         await skuSearch.fill(SKU_KEYWORD)
@@ -609,7 +625,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         }
         await expect(page.getByLabel(/采购入库目标仓/)).toBeVisible(VISIBLE)
         if (await page.getByPlaceholder("选择目标仓").count()) {
-            await chooseOption(page, page.getByLabel(/采购入库目标仓/), WAREHOUSE_NAME)
+            await chooseOption(page, page.getByLabel(/采购入库目标仓/), WAREHOUSE_CODE)
         }
         await fillEmptyDatePickers(page, dueDate)
         await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText("1 张")
@@ -637,7 +653,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         let listed = await listPurchasesBySalesOrder(caigouToken, salesOrderId)
         if (listed.length === 0) {
             await page.goto("/procurement/orders")
-            await expect(page.getByRole("heading", { name: "采购单" })).toBeVisible(VISIBLE)
+            await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible(VISIBLE)
             await page.locator("#procurement-orders-list-search").fill(salesOrderNo)
             await page.locator("#procurement-orders-list-search").press("Enter")
             const fallbackOpen = page.getByRole("link", { name: /打开采购单/ })
@@ -668,7 +684,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
         await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(page.getByText("草稿")).toHaveCount(0)
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("审批中")
+        // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示审批中。
+        await expect(page.getByTestId("sales-order-purchase-count-only")).toContainText("已创建 1 张采购单")
 
         // 4) 财务在采购单审批首节点驳回
         page = await switchTo("caiwu")
@@ -700,7 +717,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         // 5) 驳回后：不生效、不形成应付、内容不变、禁止变更单/履约/付款
         page = await switchTo("caigou")
         await page.goto("/procurement/orders")
-        await expect(page.getByRole("heading", { name: "采购单" })).toBeVisible(VISIBLE)
+        await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible(VISIBLE)
         await page.locator("#procurement-orders-list-search").fill(salesOrderNo)
         await page.locator("#procurement-orders-list-search").press("Enter")
         const openPo = page.getByRole("link", { name: new RegExp(`打开采购单 ${snap.purchaseNo}`) })
@@ -767,9 +784,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await page.locator("#workspace-family-nav-fulfillment").click()
-        const warehouseSearch = page.locator("#workspace-queue-toolbar-search-input")
-        await warehouseSearch.fill(salesOrderNo)
-        await warehouseSearch.press("Enter")
+        // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无履约任务。
         await expect(
             page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /履约处理/ }),
         ).toHaveCount(0)
@@ -778,9 +793,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await page.locator("#workspace-family-nav-finance").click()
-        const cashierSearch = page.locator("#workspace-queue-toolbar-search-input")
-        await cashierSearch.fill(salesOrderNo)
-        await cashierSearch.press("Enter")
+        // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无付款任务。
         await expect(
             page
                 .getByRole("list", { name: "待办列表" })
@@ -829,8 +842,10 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("xiaoshou")
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(documentHeader(page).getByText("已生效")).toBeVisible(VISIBLE)
+        await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("已生效")
+        // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示已生效。
+        await expect(page.getByTestId("sales-order-purchase-count-only")).toContainText("已创建 1 张采购单")
     } finally {
         await closeSession(session)
     }

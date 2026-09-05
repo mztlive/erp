@@ -39,16 +39,25 @@ export async function loginViaUi(
     await page.locator("#governance-auth-login-submit").click()
 
     const loginError = page.getByRole("alert").filter({ hasText: "无法登录" })
-    try {
-        await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-            timeout: LOGIN_TIMEOUT,
-        })
-    } catch (error) {
-        if (await loginError.isVisible().catch(() => false)) {
-            const detail = (await loginError.textContent())?.trim() ?? "无法登录"
-            throw new Error(`UI 登录失败 (${cred.account}): ${detail}`)
+    // 后端登录限流为每账号每 60 秒 5 次；多会话流程可能撞限，等待窗口滑过后重试。
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+                timeout: LOGIN_TIMEOUT,
+            })
+            break
+        } catch (error) {
+            if (await loginError.isVisible().catch(() => false)) {
+                const detail = (await loginError.textContent())?.trim() ?? "无法登录"
+                if (detail.includes("频繁") && attempt < 2) {
+                    await page.waitForTimeout(35_000)
+                    await page.locator("#governance-auth-login-submit").click()
+                    continue
+                }
+                throw new Error(`UI 登录失败 (${cred.account}): ${detail}`)
+            }
+            throw error
         }
-        throw error
     }
 
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({

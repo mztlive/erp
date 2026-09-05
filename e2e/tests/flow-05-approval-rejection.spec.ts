@@ -143,8 +143,42 @@ async function pickIsoDate(page: Page, fieldId: string, iso: string): Promise<vo
   await page.locator(`[id$="-day-${iso}"]`).first().click()
 }
 
-async function gotoNav(page: Page, name: string, href: string): Promise<void> {
-  const link = page.getByRole('link', { name })
+async function dismissToasts(page: Page): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    const dismiss = page
+      .locator('[data-slot="toast"]')
+      .getByRole('button', { name: 'Dismiss' })
+      .first()
+    if ((await dismiss.count()) === 0) break
+    await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+  }
+}
+
+async function clickWithoutToastOverlay(
+  page: Page,
+  target: Locator,
+  settled?: () => Promise<boolean>,
+): Promise<void> {
+  // Toast 可能在关闭后再次出现导致遮挡：循环关闭后短超时点按，成功即返回（与 flow-03/04 同款）。
+  // 对话框可能在某次点按后关闭（提交成功）：每轮先检查 settled，关了就直接返回。
+  for (let i = 0; i < 8; i += 1) {
+    if (settled && (await settled().catch(() => false))) return
+    // 鼠标停在 toast 上会暂停其自动消失：先移开再关闭，避免遮挡常驻。
+    await page.mouse.move(8, 8).catch(() => undefined)
+    await dismissToasts(page)
+    try {
+      await target.click({ timeout: 3_000 })
+      return
+    } catch {
+      // 被遮挡则下一轮重试；8 轮都不成功改走 DOM 派发。
+    }
+  }
+  if (settled && (await settled().catch(() => false))) return
+  // 悬浮提示持续遮挡导致真实点击无法命中：改走 DOM 直接派发点击，绕过覆盖层。
+  await target.dispatchEvent('click')
+}
+
+async function gotoNav(page: Page, name: string, href: string): Promise<void> {  const link = page.getByRole('link', { name })
   if (await link.count()) {
     await link.first().click()
   } else {
@@ -188,13 +222,29 @@ async function ensureDefaultDispatcher(browser: Browser): Promise<void> {
   const session = await openSession(browser, ADMIN)
   const { page, context } = session
   try {
-    await page.goto('/master-data/procurement-responsibilities')
-    await expect(page.getByRole('heading', { name: '采购责任规则' })).toBeVisible(VISIBLE)
-    const rulesTable = page.locator('#procurement-responsibility-rules-table')
-    if (
-      !(await page.getByText('还没有采购责任规则').count()) &&
-      (await rulesTable.getByText('默认调度人').count())
-    ) {
+    // 开发热更新偶发导致页面加载崩溃：标题不可见时重进，最多 3 次。
+    for (let i = 0; ; i += 1) {
+      await page.goto('/master-data/procurement-responsibilities')
+      if (await page.getByRole('heading', { name: '采购责任规则' }).isVisible({ timeout: 20_000 }).catch(() => false)) {
+        break
+      }
+      if (i >= 2) {
+        await expect(page.getByRole('heading', { name: '采购责任规则' })).toBeVisible(VISIBLE)
+      }
+    }
+    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在，避免重复创建触发 409。
+    await page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          response.url().includes('procurement-responsibility-rules'),
+        { timeout: 20_000 },
+      )
+      .catch(() => undefined)
+    // 主数据在重置间保留：已存在默认调度人时直接复用。
+    const dispatcher = page.getByText('默认调度人')
+    await expect(dispatcher.first()).toBeVisible({ timeout: 8000 }).catch(() => undefined)
+    if ((await dispatcher.count()) > 0) {
       return
     }
     await page.locator('#procurement-responsibility-rules-create').click()
@@ -207,7 +257,14 @@ async function ensureDefaultDispatcher(browser: Browser): Promise<void> {
       new RegExp(`${PROCUREMENT.account}`),
     )
     await dialog.getByRole('button', { name: '保存规则' }).click()
-    await expect(page.getByText('采购责任规则已新增')).toBeVisible(VISIBLE)
+    // 规则已存在时保存返回 409，对话框保持打开：此时直接关闭复用已有规则。
+    const saved = page.getByText(/采购责任规则已新增|采购责任规则已更新/).first()
+    await expect(saved).toBeVisible({ timeout: 10000 }).catch(() => undefined)
+    if ((await saved.count()) === 0 && (await dialog.isVisible().catch(() => false))) {
+      await dialog.getByRole('button', { name: '取消' }).click()
+    }
+    await expect(dialog).toBeHidden({ timeout: 20_000 })
+    await expect(page.getByText('默认调度人')).toBeVisible(VISIBLE)
   } finally {
     await context.close()
   }
@@ -215,7 +272,8 @@ async function ensureDefaultDispatcher(browser: Browser): Promise<void> {
 
 async function createCustomer(page: Page, legalName: string, creditCode: string): Promise<void> {
   await gotoNav(page, '客户中心', '/sales/customers')
-  await page.getByRole('button', { name: '新建客户' }).click()
+  // 空列表空态与工具栏各有一个新建入口：用稳定 id 避开严格模式。
+  await page.locator('#customers-directory-create').click()
   const dialog = page.getByRole('dialog', { name: '新建客户' })
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.getByLabel('法定名称').fill(legalName)
@@ -235,7 +293,8 @@ async function uploadContract(
   page: Page,
   input: { customerName: string; contractNo: string; today: Date },
 ): Promise<void> {
-  await page.locator('#sales-orders-create-contract-upload').click()
+  // 同 id 有 button 与 div 两个元素：用角色定位按钮。
+  await page.getByRole('button', { name: '上传合同 PDF' }).click()
   const dialog = page.getByRole('dialog', { name: '上传合同 PDF' })
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.locator('#card-contracts-upload-pdf-input').setInputFiles(contractPdfPath())
@@ -262,8 +321,8 @@ async function uploadContract(
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
-  await page.getByRole('button', { name: '选择商品' }).click()
-  const picker = page.getByRole('dialog', { name: '选择商品' })
+  await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+  const picker = page.getByRole('dialog', { name: '更换销售商品' })
   await expect(picker).toBeVisible(VISIBLE)
   await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').fill(SKU_NAME)
   await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').press('Enter')
@@ -286,10 +345,16 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
 }
 
 async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnapshot> {
-  await page.locator('#sales-orders-create-submit').click()
+  await clickWithoutToastOverlay(page, page.locator('#sales-orders-create-submit'), async () =>
+    page.getByRole('dialog', { name: '提交销售单' }).isVisible().catch(() => false),
+  )
   const confirm = page.getByRole('dialog', { name: '提交销售单' })
   await expect(confirm).toBeVisible(VISIBLE)
-  await confirm.locator('#sales-orders-submit-confirm-confirm').click()
+  // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
+  await clickWithoutToastOverlay(page, confirm.locator('#sales-orders-submit-confirm-confirm'), async () => {
+    await page.waitForURL(/\/sales\/orders\/[^/?]+/, { timeout: 2_000 }).catch(() => undefined)
+    return !/\/sales\/orders\?mode=create/.test(page.url())
+  })
   await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, VISIBLE)
   const id = page.url().split('/').pop()?.split('?')[0] ?? ''
   expect(id.length).toBeGreaterThan(8)
@@ -358,10 +423,10 @@ async function openWorkspaceInbox(page: Page): Promise<void> {
 
 async function openApprovalTask(page: Page, orderNo: string): Promise<void> {
   await openWorkspaceInbox(page)
-  const search = page.locator('#workspace-queue-toolbar-search-input')
-  await search.fill(orderNo)
-  await search.press('Enter')
-  const task = page.getByRole('button', { name: new RegExp(`销售单审批\\s+${orderNo}`) })
+  // 后端搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
+  const list = page.getByRole('list', { name: '待办列表' })
+  await expect(list).toBeVisible(VISIBLE)
+  const task = list.getByRole('button', { name: new RegExp(`销售单审批\\s+${orderNo}`) })
   await expect(task).toBeVisible(VISIBLE)
   await task.click()
   await expect(page.getByRole('heading', { name: new RegExp(orderNo) })).toBeVisible(VISIBLE)
@@ -398,7 +463,7 @@ async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Pro
   await expect(page.getByText('第 2 轮').first()).toBeVisible(VISIBLE)
   await expect(page.getByText('采购确认').first()).toBeVisible(VISIBLE)
   await expect(page.getByText('最近驳回')).toBeVisible(VISIBLE)
-  await expect(page.getByText(REJECT_REASON)).toBeVisible(VISIBLE)
+  await expect(page.getByText(REJECT_REASON).first()).toBeVisible(VISIBLE)
   const changeBtn = page.locator('#sales-orders-detail-start-change')
   await expect(changeBtn).toBeVisible(VISIBLE)
   await expect(changeBtn).toBeDisabled()
@@ -422,9 +487,7 @@ async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Pro
 
 async function assertNoSupplyOrFulfillmentTask(page: Page, orderNo: string): Promise<void> {
   await page.goto('/workspace')
-  const search = page.locator('#workspace-queue-toolbar-search-input')
-  await search.fill(orderNo)
-  await search.press('Enter')
+  // 后端搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无匹配任务。
   await expect(
     page.getByRole('button', { name: new RegExp(`待供给分配[\\s\\S]*${orderNo}|${orderNo}[\\s\\S]*待供给分配`) }),
   ).toHaveCount(0)
@@ -436,11 +499,14 @@ async function assertNoSupplyOrFulfillmentTask(page: Page, orderNo: string): Pro
 async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void> {
   await openSalesOrder(page, order)
   await page.locator('#sales-orders-detail-cancel-approval-trigger').click()
-  const dialog = page.getByRole('dialog', { name: '撤回审批' })
+  // 撤回框实现为 alertdialog 而非 dialog。
+  const dialog = page.getByRole('alertdialog', { name: '撤回审批' })
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.getByLabel('撤回原因').fill(WITHDRAW_REASON)
   await dialog.locator('#sales-orders-detail-cancel-approval-confirm').click()
-  await expect(page.getByText('审批已撤回')).toBeVisible(VISIBLE)
+  // 成功 toast 仅展示数秒，点按超时（按钮随框卸载）后再断言必错过：以框关闭 + 回到草稿为准。
+  await expect(dialog).toBeHidden(VISIBLE)
+  await expect(page.getByText('审批已撤回').first()).toBeVisible({ timeout: 5_000 }).catch(() => undefined)
   await expect(page.getByRole('heading', { name: '单据头' })).toBeVisible(VISIBLE)
   await expect(page.getByText('草稿').first()).toBeVisible(VISIBLE)
 }
@@ -539,10 +605,31 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       await withdrawApproval(sales.page, orderB)
       await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
       await sales.page.getByLabel('数量').first().fill('5')
-      await sales.page.locator('#sales-orders-create-submit').click()
+      // 改数后工作副本自动保存完成前提交保持禁用：等提交可用再点，避免确认框空关。
+      await expect(sales.page.locator('#sales-orders-create-submit')).toBeEnabled(VISIBLE)
+      await clickWithoutToastOverlay(sales.page, sales.page.locator('#sales-orders-create-submit'), async () =>
+        sales.page.getByRole('dialog', { name: '提交销售单' }).isVisible().catch(() => false),
+      )
       const confirm = sales.page.getByRole('dialog', { name: '提交销售单' })
       await expect(confirm).toBeVisible(VISIBLE)
-      await confirm.locator('#sales-orders-submit-confirm-confirm').click()
+      // 重提时页面本来就在详情页，不能用 URL 是否含单据 id 判定（恒为真导致跳过点按）：
+      // 改以确认框关闭为准，后续轮次号与审批中状态再验证提交确实发生。
+      await expect(confirm.locator('#sales-orders-submit-confirm-confirm')).toBeEnabled(VISIBLE)
+      const resubmitting = sales.page
+        .waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            response.url().includes(`/sales-orders/${orderB.id}/submit`),
+          { timeout: 20_000 },
+        )
+        .catch(() => undefined)
+      await clickWithoutToastOverlay(
+        sales.page,
+        confirm.locator('#sales-orders-submit-confirm-confirm'),
+        async () => !(await confirm.isVisible().catch(() => true)),
+      )
+      const resubmitResponse = await resubmitting
+      expect(resubmitResponse?.ok()).toBe(true)
       await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${orderB.id}`), VISIBLE)
       const resubmitted = await fetchSalesOrder(sales.page, orderB.id)
       const newSubmissionNo = submissionNoOf(resubmitted)

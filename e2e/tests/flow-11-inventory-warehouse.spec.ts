@@ -104,6 +104,15 @@ function orderTitleRow(page: Page, customerName: string) {
 async function expectToast(page: Page, title: string | RegExp) {
     const toast = page.locator('[data-slot="toast-title"]').filter({ hasText: title });
     await expect(toast.first()).toBeVisible({ timeout: UI_TIMEOUT });
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first();
+        if (!(await dismiss.count())) break;
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
+    }
 }
 
 async function chooseOption(page: Page, input: Locator, option: string | RegExp) {
@@ -125,7 +134,7 @@ async function chooseOption(page: Page, input: Locator, option: string | RegExp)
 
 async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
     await trigger.click();
-    const calendar = page.locator('[data-slot="calendar"]').last();
+    const calendar = page.locator('[data-slot="calendar"]:visible');
     await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT });
     const target = new Date(`${isoDate}T00:00:00`);
     const year = target.getFullYear();
@@ -165,7 +174,8 @@ async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
             await calendar.locator("button").last().click();
         }
     }
-    const dayButtons = calendar.getByRole("button", { name: day, exact: true });
+    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
+    const dayButtons = calendar.getByRole("button", { name: day });
     const total = await dayButtons.count();
     for (let i = 0; i < total; i += 1) {
         const button = dayButtons.nth(i);
@@ -178,23 +188,47 @@ async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
     await dayButtons.first().click();
 }
 
+function escapeRe(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function openWorkspaceTask(page: Page, typeLabel: string, hint?: string) {
     await page.goto("/workspace");
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
         timeout: UI_TIMEOUT,
     });
-    const search = page.locator("#workspace-queue-toolbar-search-input");
-    if (hint && (await search.count())) {
-        await search.fill(hint);
-        await search.press("Enter");
+    // 工作台后端搜索只匹配单据 ID、类型码等字段，不匹配单号与往来方，
+    // 在搜索框填写 hint 会把列表滤空；改为在待办列表中匹配任务。
+    // 单号可能只出现在无障碍名中，客户名只出现在可见文本中，两处取并集后点选。
+    const list = page.getByRole("list", { name: "待办列表" });
+    await expect(list).toBeVisible({ timeout: UI_TIMEOUT });
+    const label = `(?:${typeLabel})`;
+    const union = hint
+        ? list
+              .getByRole("button", {
+                  name: new RegExp(
+                      `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
+                  ),
+              })
+              .or(
+                  list
+                      .getByRole("button", { name: new RegExp(label) })
+                      .filter({ hasText: hint }),
+              )
+              .first()
+        : list.getByRole("button", { name: new RegExp(label) }).first();
+    try {
+        await expect(union).toBeVisible({ timeout: hint ? 8_000 : UI_TIMEOUT });
+        await union.click();
+        return;
+    } catch {
+        if (!hint) throw new Error(`工作台未找到任务: ${typeLabel}`);
     }
-    const type = `(?:${typeLabel})`;
-    const matcher = hint
-        ? new RegExp(`${type}[\\s\\S]*${hint}|${hint}[\\s\\S]*${type}`)
-        : new RegExp(type);
-    const task = page.getByRole("button", { name: matcher }).first();
-    await expect(task).toBeVisible({ timeout: UI_TIMEOUT });
-    await task.click();
+    // 兜底：履约任务按钮仅显示采购单号，不含销售单号与客户名，hint 无法匹配；
+    // 同类型仅有一项时直接点选，多项时显式失败避免点错任务。
+    const sameType = list.getByRole("button", { name: new RegExp(label) });
+    await expect(sameType).toHaveCount(1, { timeout: UI_TIMEOUT });
+    await sameType.first().click();
 }
 
 async function approveCurrentDocument(page: Page) {
@@ -230,6 +264,15 @@ async function ensureDefaultProcurementOwner(page: Page) {
     await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible({
         timeout: UI_TIMEOUT,
     });
+    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
+    await page
+        .waitForResponse(
+            (response) =>
+                response.request().method() === "GET" &&
+                response.url().includes("procurement-responsibility-rules"),
+            { timeout: UI_TIMEOUT },
+        )
+        .catch(() => undefined);
     if (await page.getByText("默认调度人").count()) {
         return;
     }
@@ -365,7 +408,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
 
         // 2) caiwu 审批库存调整，余额才增加
         page = await switchTo("caiwu");
-        await openWorkspaceTask(page, "单据审批");
+        await openWorkspaceTask(page, "库存调整单审批");
         await approveCurrentDocument(page);
 
         page = await switchTo("cangchu");
@@ -403,10 +446,12 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         });
 
         await page.goto("/sales/contracts");
-        await expect(page.getByRole("heading", { name: "合同" })).toBeVisible({
+        await expect(
+            page.getByRole("heading", { name: "合同", exact: true }),
+        ).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await page.getByRole("button", { name: "上传合同 PDF" }).click();
+        await page.locator("#page-actions-action-upload").click();
         const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" });
         await expect(contractDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await contractDialog
@@ -429,7 +474,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         });
 
         await page.goto("/sales/orders");
-        await expect(page.getByRole("heading", { name: "销售单" })).toBeVisible({
+        await expect(page.getByRole("heading", { name: "销售单", exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await page.locator("#sales-orders-list-header-create").click();
@@ -452,8 +497,8 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             page.locator("#sales-orders-create-header-payment-terms"),
             "货到 15 天",
         );
-        await page.getByRole("button", { name: "选择商品" }).click();
-        const skuDialog = page.getByRole("dialog", { name: "选择商品" });
+        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click();
+        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await skuDialog
             .locator("#master-data-list-sellable-list-toolbar-search-input")
@@ -497,12 +542,15 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             await page.locator("span.num.text-foreground").first().innerText()
         ).trim();
         expect(salesOrderNo).toBeTruthy();
-        await expect(page.getByText(/采购单 0 笔/)).toBeVisible();
+        await page.getByRole("tab", { name: /采购/ }).click();
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+            timeout: UI_TIMEOUT,
+        });
         await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
 
         // 4) caigou 采购确认：只通过，不选源
         page = await switchTo("caigou");
-        await openWorkspaceTask(page, "单据审批", salesOrderNo);
+        await openWorkspaceTask(page, "销售单审批", salesOrderNo);
         await expect(page.getByRole("button", { name: "预览供给分配" })).toHaveCount(0);
         await approveCurrentDocument(page);
 
@@ -548,15 +596,17 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         // 6) 负向：零张采购单；库存 available 减少、reserved 增加；不得出现入库
         page = await switchTo("caigou");
         await page.goto("/procurement/orders");
-        await expect(page.getByRole("heading", { name: "采购单" })).toBeVisible({
+        await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
-        await expect(page.getByText(/采购单 0 笔/)).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByRole("tab", { name: /采购/ }).click();
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+            timeout: UI_TIMEOUT,
+        });
         await expect(page.getByText("本单还没有采购单。")).toBeVisible({
             timeout: UI_TIMEOUT,
         });

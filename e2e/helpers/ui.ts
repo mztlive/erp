@@ -4,7 +4,8 @@ import { expect, type Page } from "@playwright/test"
 export const UI_TIMEOUT = 20_000
 
 /**
- * 等待 sonner/shadcn toast 标题出现。
+ * 等待 sonner/shadcn toast 标题出现，确认后关闭悬浮提示，
+ * 避免提示遮挡后续按钮造成偶发点击失败。
  */
 export async function expectToast(
     page: Page,
@@ -14,6 +15,21 @@ export async function expectToast(
         .locator('[data-slot="toast-title"]')
         .filter({ hasText: title })
     await expect(toast.first()).toBeVisible({ timeout: UI_TIMEOUT })
+    await dismissToasts(page)
+}
+
+/**
+ * 关闭当前全部可关闭的悬浮提示。
+ */
+export async function dismissToasts(page: Page): Promise<void> {
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first()
+        if (!(await dismiss.count())) return
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+    }
 }
 
 /**

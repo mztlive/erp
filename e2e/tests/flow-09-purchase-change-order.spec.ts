@@ -29,6 +29,7 @@ const SAMPLE_CONTRACT_PDF = path.join(
 )
 const SKU_NAME = "狮峰明前龙井礼盒"
 const WAREHOUSE_NAME = "北京通州仓"
+const WAREHOUSE_CODE = "BJ-TZ-01"
 const VISIBLE = { timeout: 20_000 } as const
 
 type LoginName = "xiaoshou" | "caigou" | "cangchu" | "caiwu" | "admin"
@@ -87,6 +88,15 @@ async function expectToast(page: Page, title: string) {
     await expect(
         page.locator("[data-slot=toast-title]").filter({ hasText: title }),
     ).toBeVisible(VISIBLE)
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator("[data-slot=toast]")
+            .getByRole("button", { name: "Dismiss" })
+            .first()
+        if ((await dismiss.count()) === 0) break
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+    }
 }
 
 async function chooseComboboxOption(
@@ -271,8 +281,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             "年节礼包",
             "年节礼包",
         )
-        await sales.page.getByRole("button", { name: "选择商品" }).click()
-        const skuDialog = sales.page.getByRole("dialog", { name: "选择商品" })
+        await sales.page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+        const skuDialog = sales.page.getByRole("dialog", { name: "更换销售商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
         await skuDialog
             .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
@@ -351,11 +361,12 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             ).toBeVisible(VISIBLE)
             const warehouseInput = procurement.page.getByPlaceholder("选择目标仓")
             if ((await warehouseInput.count()) > 0) {
+                // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
                 await chooseComboboxOption(
                     procurement.page,
                     warehouseInput,
-                    WAREHOUSE_NAME,
-                    new RegExp(WAREHOUSE_NAME),
+                    WAREHOUSE_CODE,
+                    new RegExp(`${WAREHOUSE_CODE}|${WAREHOUSE_NAME}`),
                 )
             }
             await fillEmptyDatePickers(procurement.page)
@@ -408,7 +419,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
     try {
         await procurement.page.goto("/procurement/orders")
         await expect(
-            procurement.page.getByRole("heading", { name: "采购单" }),
+            procurement.page.getByRole("heading", { name: "采购单", exact: true }),
         ).toBeVisible(VISIBLE)
         const openPo = procurement.page.getByRole("link", {
             name: /打开采购单/,

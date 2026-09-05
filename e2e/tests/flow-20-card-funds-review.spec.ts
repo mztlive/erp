@@ -593,11 +593,10 @@ async function openWorkspaceFamily(page: Page, family: "approval" | "finance" | 
     await page.locator(`#workspace-family-nav-${family}`).click()
 }
 
-async function searchWorkspace(page: Page, hint: string) {
-    const search = page.locator("#workspace-queue-toolbar-search-input")
-    await expect(search).toBeVisible({ timeout: TIMEOUT })
-    await search.fill(hint)
-    await search.press("Enter")
+// 工作台后端搜索只匹配单据 ID、类型码等字段，不匹配单号与往来方，
+// 在搜索框填写 hint 会把列表滤空；任务统一用标签加可见文本匹配，不再使用搜索框。
+async function searchWorkspace(_page: Page, _hint: string) {
+    return Promise.resolve();
 }
 
 async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string) {

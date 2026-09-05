@@ -310,7 +310,11 @@ async function main() {
     }));
     const updated = await call("PUT", `/admin/approval-process-definitions/${definitionId}/nodes`, {
       token: adminToken,
-      body: { expected_definition_lock_version: String(lockVersion), nodes },
+      body: {
+        expected_definition_lock_version: String(lockVersion),
+        nodes,
+        idempotency_key: `dev-${def.type}-nodes-${Date.now()}`,
+      },
     });
     lockVersion = updated.definition_lock_version;
 

@@ -134,9 +134,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
             timeout: LONG,
         })
         await kaipiao.page.locator("#workspace-family-nav-finance").click()
-        const invoiceSearch = kaipiao.page.locator("#workspace-queue-toolbar-search-input")
-        await invoiceSearch.fill(order.orderNo)
-        await invoiceSearch.press("Enter")
+        // 后端工作台搜索不匹配单号，不填搜索框，直接断言无开票任务。
         await expect(
             kaipiao.page.getByRole("button", {
                 name: new RegExp(`销项开票处理[\\s\\S]*${escapeRe(order.orderNo)}`),
@@ -191,20 +189,23 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
             timeout: LONG,
         })
         await kaipiao.page.locator("#workspace-family-nav-finance").click()
-        const reopenSearch = kaipiao.page.locator("#workspace-queue-toolbar-search-input")
-        await reopenSearch.fill(order.orderNo)
-        await reopenSearch.press("Enter")
-        await expect(
-            kaipiao.page.getByRole("button", {
-                name: new RegExp(`销项开票处理[\\s\\S]*${escapeRe(order.orderNo)}`),
-            }).first(),
-        ).toBeVisible({ timeout: LONG })
-        await kaipiao.page
+        // 后端工作台搜索不匹配单号，不填搜索框，直接在待办列表中匹配任务。
+        const reopenList = kaipiao.page.getByRole("list", { name: "待办列表" })
+        await expect(reopenList).toBeVisible({ timeout: LONG })
+        const reopenTask = reopenList
             .getByRole("button", {
-                name: new RegExp(`销项开票处理[\\s\\S]*${escapeRe(order.orderNo)}`),
+                name: new RegExp(
+                    `销项开票处理[\\s\\S]*${escapeRe(order.orderNo)}|${escapeRe(order.orderNo)}[\\s\\S]*销项开票处理`,
+                ),
             })
+            .or(
+                reopenList.getByRole("button", { name: /销项开票处理/ }).filter({
+                    hasText: order.orderNo,
+                }),
+            )
             .first()
-            .click()
+        await expect(reopenTask).toBeVisible({ timeout: LONG })
+        await reopenTask.click()
         await expect(kaipiao.page.getByLabel("当前开票任务")).toBeVisible({ timeout: LONG })
         await assertNoInvoiceApprovalUi(kaipiao.page)
         await expect(kaipiao.page.getByRole("button", { name: /发票审批|销项发票审批/ })).toHaveCount(0)
@@ -539,8 +540,8 @@ async function createAndSubmitPhysicalSalesOrder(
         "sales-orders-create-header-payment-terms-option-postpay-net30",
     )
 
-    await page.getByRole("button", { name: "选择商品" }).click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "选择商品" })).toBeVisible({
+    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
     const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
@@ -550,7 +551,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(skuCheckbox.first()).toBeVisible({ timeout: LONG })
     await skuCheckbox.first().check()
     await page.locator("#sales-orders-sku-picker-confirm").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "选择商品" })).toBeHidden({
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeHidden({
         timeout: TIMEOUT,
     })
     await expect(page.getByText(SKU_NAME)).toBeVisible({ timeout: TIMEOUT })
@@ -637,37 +638,58 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint?: string
     await waitHeading(page, "我的工作台")
     await page.locator("#workspace-family-nav-approval").click()
     const list = page.getByRole("list", { name: "待办列表" })
-    if (hint) {
-        const search = page.locator("#workspace-queue-toolbar-search-input")
-        await search.fill(hint)
-        await search.press("Enter")
+    // 后端工作台搜索不匹配单号与往来方，不填搜索框，用无障碍名与可见文本并集匹配任务。
+    await expect(list).toBeVisible({ timeout: LONG })
+    const label = `(?:${escapeRe(typeLabel)})`
+    const union = hint
+        ? list
+              .getByRole("button", {
+                  name: new RegExp(
+                      `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
+                  ),
+              })
+              .or(
+                  list.getByRole("button", { name: new RegExp(label) }).filter({ hasText: hint }),
+              )
+              .first()
+        : list.getByRole("button", { name: new RegExp(label) }).first()
+    try {
+        await expect(union).toBeVisible({ timeout: LONG })
+        await union.click()
+    } catch {
+        if (!hint) throw new Error(`工作台未找到任务: ${typeLabel}`)
+        // 兜底：hint 无法匹配时，同类型仅有一项则直接点选，否则显式失败避免点错任务。
+        const sameType = list.getByRole("button", { name: new RegExp(label) })
+        await expect(sameType).toHaveCount(1, { timeout: TIMEOUT })
+        await sameType.first().click()
     }
-    const task = hint
-        ? list.getByRole("button", {
-              name: new RegExp(`${escapeRe(typeLabel)}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${escapeRe(typeLabel)}`),
-          })
-        : list.getByRole("button", { name: new RegExp(escapeRe(typeLabel)) })
-    await expect(task.first()).toBeVisible({ timeout: LONG })
-    await task.first().click()
     const approve = page.getByRole("button", { name: "通过", exact: true })
     await expect(approve).toBeVisible({ timeout: LONG })
     await approve.click()
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible({ timeout: TIMEOUT })
     await page.getByRole("button", { name: "确认通过" }).click()
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeHidden({ timeout: LONG })
-    await expect(task.first()).toBeHidden({ timeout: LONG })
+    await expect(union.first()).toBeHidden({ timeout: LONG })
 }
 
 async function allocateAndSubmitPurchaseOrder(page: Page, orderNo: string) {
     await page.goto("/workspace")
     await waitHeading(page, "我的工作台")
     await page.locator("#workspace-family-nav-procurement").click()
-    const search = page.locator("#workspace-queue-toolbar-search-input")
-    await search.fill(orderNo)
-    await search.press("Enter")
-    const task = page.getByRole("list", { name: "待办列表" }).getByRole("button", {
-        name: new RegExp(`待供给分配[\\s\\S]*${escapeRe(orderNo)}`),
-    })
+    // 后端工作台搜索不匹配单号，不填搜索框，直接在待办列表中匹配任务。
+    const task = page
+        .getByRole("list", { name: "待办列表" })
+        .getByRole("button", {
+            name: new RegExp(
+                `待供给分配[\\s\\S]*${escapeRe(orderNo)}|${escapeRe(orderNo)}[\\s\\S]*待供给分配`,
+            ),
+        })
+        .or(
+            page
+                .getByRole("list", { name: "待办列表" })
+                .getByRole("button", { name: /待供给分配/ })
+                .filter({ hasText: orderNo }),
+        )
     await expect(task.first()).toBeVisible({ timeout: LONG })
     await task.first().click()
     await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({ timeout: LONG })
@@ -695,12 +717,11 @@ async function registerSalesInvoiceFromWorkspace(
     await page.goto("/workspace")
     await waitHeading(page, "我的工作台")
     await page.locator("#workspace-family-nav-finance").click()
-    const search = page.locator("#workspace-queue-toolbar-search-input")
-    await search.fill(orderNo)
-    await search.press("Enter")
-    const task = page.getByRole("list", { name: "待办列表" }).getByRole("button", {
-        name: new RegExp(`销项开票处理[\\s\\S]*${escapeRe(orderNo)}`),
-    })
+    // 后端工作台搜索不匹配单号，不填搜索框，直接在待办列表中匹配任务。
+    const task = page
+        .getByRole("list", { name: "待办列表" })
+        .getByRole("button", { name: /销项开票处理/ })
+        .filter({ hasText: orderNo })
     await expect(task.first()).toBeVisible({ timeout: LONG })
     await task.first().click()
     await expect(page.getByLabel("当前开票任务")).toBeVisible({ timeout: LONG })

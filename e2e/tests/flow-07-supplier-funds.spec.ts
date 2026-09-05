@@ -97,6 +97,15 @@ function contractPdfPath(): string {
 
 async function expectToast(page: Page, title: string | RegExp): Promise<void> {
     await expect(page.getByText(title).first()).toBeVisible({ timeout: 20_000 });
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first();
+        if ((await dismiss.count()) === 0) break;
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
+    }
 }
 
 async function chooseOption(
@@ -179,7 +188,8 @@ async function openRole(
 }
 
 async function switchSupplierView(page: Page, view: "payable" | "payment" | "purchase_invoice") {
-    await page.locator(`#supplier-payables-view-tabs-trigger-${view}`).click();
+    // 前端 id 经 toAutomationIdSegment 归一：下划线转连字符。
+    await page.locator(`#supplier-payables-view-tabs-trigger-${view.replace(/_/g, "-")}`).click();
 }
 
 test("供应商票款：W01 付款任务分次入账、进项发票核销与付款冲正", async ({
@@ -215,11 +225,13 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await createCustomer.locator("#customers-form-submit").click();
     await expectToast(page, "客户已创建");
     await expect(createCustomer).toBeHidden({ timeout: 20_000 });
-    await expect(page.getByText(customerLegal).first()).toBeVisible({ timeout: 20_000 });
+    // 客户目录行内仅展示简称与编号（法定名称只在详情页标题展示）。
+    await expect(page.getByText(customerShort).first()).toBeVisible({ timeout: 20_000 });
 
     await page.goto("/sales/orders?mode=create");
     await expect(page.getByText("单据头")).toBeVisible({ timeout: 20_000 });
-    await page.locator("#sales-orders-create-contract-upload").click();
+    // 上传合同按钮与占位 div 重复 id：按角色点击避开严格模式。
+    await page.getByRole("button", { name: "上传合同 PDF" }).click();
     const uploadContract = page.getByRole("dialog", { name: "上传合同 PDF" });
     await expect(uploadContract).toBeVisible({ timeout: 20_000 });
     await uploadContract
@@ -251,7 +263,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     }
 
     await page.getByRole("button", { name: "选择商品" }).first().click();
-    const skuDialog = page.getByRole("dialog", { name: "选择商品" });
+    const skuDialog = page.getByRole("dialog", { name: "更换销售商品" });
     await expect(skuDialog).toBeVisible({ timeout: 20_000 });
     const skuSearch = skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input");
     await skuSearch.fill(SKU_NAME);
@@ -260,7 +272,10 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await skuDialog.getByRole("checkbox", { name: new RegExp(SKU_NAME) }).click();
     await skuDialog.locator("#sales-orders-sku-picker-confirm").click();
     await expect(skuDialog).toBeHidden({ timeout: 20_000 });
-    await expect(page.getByRole("button", { name: new RegExp(SKU_NAME) })).toBeVisible({
+    // 同名多处出现（搜索 chip、已选 chip）：用行内更换按钮精确命中已选行。
+    await expect(
+        page.getByRole("button", { name: new RegExp(`更换销售项目[\\s\\S]*${SKU_NAME}`) }).first(),
+    ).toBeVisible({
         timeout: 20_000,
     });
     await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
@@ -299,14 +314,72 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     });
     await expect(caigouPage.getByText("将创建采购单")).toBeVisible({ timeout: 20_000 });
     await expect(caigouPage.getByText(/1 张/)).toBeVisible({ timeout: 20_000 });
-    await caigouPage.locator("#procurement-orders-create-preview").click();
-    const preview = caigouPage.getByRole("dialog", { name: "预览供给分配" });
-    await expect(preview).toBeVisible({ timeout: 20_000 });
-    await expect(preview.getByText("本次全部由现有库存满足")).toHaveCount(0);
-    await preview.locator("#procurement-orders-create-preview-confirm").click();
-    const confirmAlloc = caigouPage.getByRole("alertdialog").filter({ hasText: "确认供给分配" });
-    await expect(confirmAlloc).toBeVisible({ timeout: 20_000 });
-    await confirmAlloc.locator("#procurement-orders-create-confirm").click();
+    // 供给行缺入库目标仓时预览被校验拦截（只弹 toast 不开框）：
+    // 落定方案 = 一键匹配推荐 + 应用到选中行（幂等），缺仓横幅消失才可预览。
+    await expect(caigouPage.getByText(/待分配明细/)).toBeVisible({ timeout: 20_000 })
+    const missingWarehouse = caigouPage.getByText(/请选择采购入库目标仓/)
+    const matchBtn = caigouPage.locator("#procurement-orders-create-batch-match")
+    if (await matchBtn.isEnabled().catch(() => false)) {
+        await matchBtn.click()
+    }
+    const applyBtn = caigouPage.locator("#procurement-orders-create-batch-apply")
+    if (await applyBtn.isEnabled().catch(() => false)) {
+        await applyBtn.click()
+    }
+    await expect(missingWarehouse).toHaveCount(0, { timeout: 20_000 })
+    // 创建依据接口每次后台重取完成都会强制关闭预览框
+    // （setPreviewOpen(false) 副作用）：预览→二次确认必须在同一次开启窗口内
+    // 快速点完。紧凑循环：重开→快点→判定，最多 12 次。提交带幂等键。
+    let sourced: boolean | null = null
+    const previewDialog = () => caigouPage.getByRole("dialog", { name: "预览供给分配" })
+    const confirmAllocDialog = () =>
+        caigouPage.getByRole("alertdialog").filter({ hasText: "确认供给分配" })
+    for (let attempt = 0; attempt < 12 && sourced !== true; attempt += 1) {
+        if (
+            !(await caigouPage
+                .getByRole("heading", { name: "供给分配" })
+                .isVisible()
+                .catch(() => false))
+        ) {
+            await gotoWorkspace(caigouPage)
+            await caigouPage.locator("#workspace-family-nav-procurement").click()
+            await openWorkspaceTask(caigouPage, /待供给分配/)
+            await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
+                timeout: 20_000,
+            })
+        }
+        if (await confirmAllocDialog().isVisible({ timeout: 2_000 }).catch(() => false)) {
+            const postPromise = caigouPage
+                .waitForResponse(
+                    (res) =>
+                        res.request().method() === "POST" &&
+                        res.url().includes("/admin/purchase-orders/from-sourcing"),
+                    { timeout: 15_000 },
+                )
+                .then(
+                    (res) => res.ok(),
+                    () => null,
+                )
+            await confirmAllocDialog()
+                .locator("#procurement-orders-create-confirm")
+                .click({ force: true, timeout: 5_000 })
+                .catch(() => undefined)
+            sourced = await postPromise
+            continue
+        }
+        if (await previewDialog().isVisible({ timeout: 2_000 }).catch(() => false)) {
+            await previewDialog()
+                .locator("#procurement-orders-create-preview-confirm")
+                .click({ force: true, timeout: 3_000 })
+                .catch(() => undefined)
+            continue
+        }
+        await caigouPage
+            .locator("#procurement-orders-create-preview")
+            .click({ force: true, timeout: 5_000 })
+            .catch(() => undefined)
+    }
+    if (sourced !== true) throw new Error("供给分配多次尝试仍未提交成功")
     await expectToast(caigouPage, /已创建 1 张采购单并提交审批|已将缺口拆成/);
 
     await gotoWorkspace(caigouPage);
@@ -352,7 +425,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     });
     await expect(fukuanPage.getByText("收款户名")).toBeVisible({ timeout: 20_000 });
     await expect(fukuanPage.getByText("开户行")).toBeVisible();
-    await expect(fukuanPage.getByText("收款账号")).toBeVisible();
+    await expect(fukuanPage.getByText("收款账号", { exact: true })).toBeVisible();
     await expect(fukuanPage.getByText(/招商银行杭州西湖支行/).first()).toBeVisible({
         timeout: 20_000,
     });
@@ -362,10 +435,11 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await assertNoSupplierPaymentApproval(fukuanPage);
     await expect(fukuanPage.getByRole("button", { name: "登记付款并核销" })).toBeVisible();
 
+    // “待付款”纯标签也含“待付”二字：限定带金额的行。
     const pendingPay = fukuanPage
         .locator('[aria-label="当前付款任务"]')
-        .getByText(/待付/)
-        .locator("xpath=..");
+        .getByText(/待付\s*¥/)
+        .first();
     await expect(pendingPay).toBeVisible({ timeout: 20_000 });
     flow.openTotal = parseAmount(await pendingPay.innerText());
     const split = splitHalf(flow.openTotal);
@@ -381,7 +455,21 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await expect(payConfirm).toBeVisible({ timeout: 20_000 });
     await expect(payConfirm.getByText(flow.firstAmount)).toBeVisible();
     await expect(payConfirm.getByText("提交审批")).toHaveCount(0);
+    // 提交是慢事务：先挂响应等待再点确认，以提交落定为准（残留 toast 会造成假通过，
+    // 随后的页面跳转还会取消在途请求导致静默丢失）。
+    const commit1 = fukuanPage
+        .waitForResponse(
+            (res) =>
+                res.request().method() === "POST" &&
+                res.url().includes("/admin/supplier-payments/commit"),
+            { timeout: 60_000 },
+        )
+        .then(
+            (res) => res.ok(),
+            () => false,
+        );
     await payConfirm.locator("#supplier-payables-payment-submit-confirm-confirm").click();
+    await expect(await commit1).toBe(true);
     await expectToast(fukuanPage, "付款已登记");
     await expect(fukuanPage.getByText(/已过账并核销/).first()).toBeVisible({ timeout: 20_000 });
 
@@ -403,7 +491,19 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await fukuanPage.locator("#supplier-payables-allocation-form-submit").click();
     const payConfirm2 = fukuanPage.getByRole("alertdialog").filter({ hasText: "确认付款" });
     await expect(payConfirm2).toBeVisible({ timeout: 20_000 });
+    const commit2 = fukuanPage
+        .waitForResponse(
+            (res) =>
+                res.request().method() === "POST" &&
+                res.url().includes("/admin/supplier-payments/commit"),
+            { timeout: 60_000 },
+        )
+        .then(
+            (res) => res.ok(),
+            () => false,
+        );
     await payConfirm2.locator("#supplier-payables-payment-submit-confirm-confirm").click();
+    await expect(await commit2).toBe(true);
     await expectToast(fukuanPage, "付款已登记");
 
     await gotoWorkspace(fukuanPage);
@@ -441,30 +541,72 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         timeout: 20_000,
     });
     await expect(caiwuPage.getByRole("button", { name: "提交审批" })).toHaveCount(0);
-    const poolSelect = caiwuPage
-        .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-select"]')
-        .first();
-    await expect(poolSelect).toBeVisible({ timeout: 20_000 });
-    if (!(await poolSelect.isChecked())) {
-        await caiwuPage.locator("#supplier-payables-allocation-pool-select-all").click();
+    // 池内可能混入开放余额为 0 的历史目标：全选会将其勾上，其 0 金额
+    // 触发"分配金额须为正数"导致提交永久禁用。逐行勾选，只保留正余额行。
+    // （测试 id 挂在 Radix 内层隐藏 input 上，直接点击会因视口外超时；
+    // 状态从隐藏 input 读，點擊落在可访问的复选框按钮上。）
+    const poolSection = caiwuPage.locator('section[aria-label="同供应商待核销池"]');
+    const poolBoxInputs = poolSection.locator(
+        '[id^="supplier-payables-allocation-pool-row-"][id$="-select"]',
+    );
+    const poolChecks = poolSection.getByRole("checkbox");
+    await expect(poolBoxInputs.first()).toBeVisible({ timeout: 20_000 });
+    const checkCount = await poolChecks.count();
+    for (let i = 0; i < checkCount; i += 1) {
+        if ((await poolChecks.nth(i).getAttribute("aria-checked")) !== "true") {
+            await poolChecks.nth(i).click();
+        }
     }
     await caiwuPage.locator("#supplier-payables-allocation-pool-fill-all").click();
-    const allocatedInput = caiwuPage.locator(
-        '[id^="supplier-payables-allocation-pool-row-"][id$="-amount"]',
-    ).first();
-    await expect(allocatedInput).toHaveValue(/.+/, { timeout: 20_000 });
-    const gross = parseAmount(await allocatedInput.inputValue());
+    const amountCells = await poolSection
+        .locator('input[id$="-amount"]')
+        .evaluateAll((els) =>
+            els.map((el) => ({
+                id: el.id,
+                value: (el as HTMLInputElement).value,
+            })),
+        );
+    const selectIds = await poolBoxInputs.evaluateAll((els) => els.map((el) => el.id));
+    let grossCents = 0;
+    for (const cell of amountCells) {
+        const cents = Math.round(Number(parseAmount(cell.value || "0")) * 100);
+        if (cents <= 0) {
+            const selectId = cell.id.replace(/-amount$/, "-select");
+            const index = selectIds.indexOf(selectId);
+            if (index >= 0) await poolChecks.nth(index).click();
+            continue;
+        }
+        grossCents += cents;
+    }
+    if (grossCents <= 0) throw new Error("进项发票池内无正余额目标可核销");
+    const gross = (grossCents / 100).toFixed(2);
     const { net, tax } = splitGross(gross);
     await caiwuPage.locator("#supplier-payables-allocation-form-gross-amount").fill(gross);
     await caiwuPage.locator("#supplier-payables-allocation-form-invoice-no").fill(invoiceNo);
     await caiwuPage.locator("#supplier-payables-allocation-form-net-amount").fill(net);
     await caiwuPage.locator("#supplier-payables-allocation-form-tax-amount").fill(tax);
+    await expect(
+        caiwuPage.locator("#supplier-payables-allocation-form-submit"),
+    ).toBeEnabled({ timeout: 20_000 });
     await caiwuPage.locator("#supplier-payables-allocation-form-submit").click();
     const invoiceConfirm = caiwuPage.getByRole("alertdialog").filter({
         hasText: "确认登记进项发票并核销",
     });
     await expect(invoiceConfirm).toBeVisible({ timeout: 20_000 });
+    // 进项发票提交同样是慢事务：先挂响应等待再点确认，以落定为准再断言 toast。
+    const invoiceCommit = caiwuPage
+        .waitForResponse(
+            (res) =>
+                res.request().method() === "POST" &&
+                res.url().includes("/admin/purchase-invoice-allocations"),
+            { timeout: 60_000 },
+        )
+        .then(
+            (res) => res.ok(),
+            () => false,
+        );
     await invoiceConfirm.locator("#supplier-payables-invoice-allocate-confirm-confirm").click();
+    await expect(await invoiceCommit).toBe(true);
     await expect(caiwuPage.getByText("进项发票已登记").first()).toBeVisible({ timeout: 20_000 });
     await caiwuPage.locator("#supplier-payables-allocation-result-close").click();
     await switchSupplierView(caiwuPage, "purchase_invoice");

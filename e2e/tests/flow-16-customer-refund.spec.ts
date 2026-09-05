@@ -139,12 +139,10 @@ test.describe("flow-16 客户退款单", () => {
             expect(refundNo.length).toBeGreaterThan(2)
             expect(refundId.length).toBeGreaterThan(2)
 
-            // 提交后财务总监尚不是当前节点
+            // 提交后财务总监尚不是当前节点（后端搜索不匹配单号，不填搜索框，直接断言无任务）。
             const caiwuEarly = await openRole(browser, extra, "caiwu")
             await caiwuEarly.page.goto("/workspace")
             await waitHeading(caiwuEarly.page, "我的工作台")
-            await caiwuEarly.page.locator("#workspace-queue-toolbar-search-input").fill(refundNo)
-            await caiwuEarly.page.locator("#workspace-queue-toolbar-search-input").press("Enter")
             await expect(
                 caiwuEarly.page.getByRole("button", { name: /客户退款审批/ }),
             ).toHaveCount(0)
@@ -656,8 +654,8 @@ async function createAndSubmitPhysicalSalesOrder(
         "sales-orders-create-header-payment-terms-option-postpay-net30",
     )
 
-    await page.getByRole("button", { name: "选择商品" }).click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "选择商品" })).toBeVisible({
+    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
     const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
@@ -667,7 +665,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(skuCheckbox.first()).toBeVisible({ timeout: LONG })
     await skuCheckbox.first().check()
     await page.locator("#sales-orders-sku-picker-confirm").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "选择商品" })).toBeHidden({
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeHidden({
         timeout: TIMEOUT,
     })
     await expect(page.getByText(SKU_NAME)).toBeVisible({ timeout: TIMEOUT })
@@ -731,14 +729,14 @@ async function expectNotClosed(page: Page) {
 
 async function openWorkspaceApprovalTask(page: Page, typeLabel: string, hint: string) {
     await gotoWorkspace(page)
-    const search = page.locator("#workspace-queue-toolbar-search-input")
-    await search.fill(hint)
-    await search.press("Enter")
+    // 后端搜索不匹配单号与往来方，填 hint 会把列表滤空；改为在待办列表中用可见文本匹配任务。
     const list = page.getByRole("list", { name: "待办列表" })
     await expect(list).toBeVisible({ timeout: TIMEOUT })
-    const withHint = list.getByRole("button", {
-        name: new RegExp(`${escapeRe(typeLabel)}[\\s\\S]*${escapeRe(hint)}`),
-    })
+    const withHint = list
+        .getByRole("button", {
+            name: new RegExp(escapeRe(typeLabel)),
+        })
+        .filter({ hasText: hint })
     const byType = list.getByRole("button", { name: new RegExp(escapeRe(typeLabel)) })
     const task = (await withHint.count()) > 0 ? withHint : byType
     await expect(task).toBeVisible({ timeout: LONG })

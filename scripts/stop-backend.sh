@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # 停止 web-api（E2E 重置前停写、修复后重启用）。
-# 只匹配 backend/target/debug 下的 web-api 进程，避免误杀其他同名进程。
+# 只匹配 cargo 产物目录下的 web-api 进程，避免误杀其他同名进程。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(cd "${SCRIPT_DIR}/../backend" && pwd)"
-WEB_API_BIN="${BACKEND_DIR}/target/debug/web-api"
+# 与 restart-backend.sh 同源：产物目录以 cargo metadata 为准，避免误杀其他同名进程。
+TARGET_DIR="$(cd "${BACKEND_DIR}" && cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("target_directory", ""))' 2>/dev/null || true)"
+if [[ -z "${TARGET_DIR}" ]]; then
+    TARGET_DIR="${BACKEND_DIR}/target"
+fi
+WEB_API_BIN="${TARGET_DIR}/debug/web-api"
 PIDS="$(pgrep -f "${WEB_API_BIN}" || true)"
 if [[ -z "${PIDS}" ]]; then
     echo "web-api 未在运行"

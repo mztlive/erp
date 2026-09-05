@@ -212,16 +212,36 @@ async function startAdjustmentFromBalance(page: Page): Promise<void> {
     await expectHeading(page, "发起库存调整")
 }
 
+function escapeRe(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 async function searchWorkspaceTask(page: Page, documentNo: string): Promise<void> {
     await gotoWorkspace(page)
-    const search = page.getByLabel(/搜索待办|搜索我发起的审批/)
-    await search.fill(documentNo)
-    await search.press("Enter")
-    const task = page.getByRole("button", {
-        name: new RegExp(`库存调整单审批[\\s\\S]*${documentNo}|${documentNo}`),
-    })
-    await expect(task).toBeVisible(VISIBLE)
-    await task.click()
+    // 后端工作台搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
+    const list = page.getByRole("list", { name: "待办列表" })
+    await expect(list).toBeVisible(VISIBLE)
+    const task = list
+        .getByRole("button", {
+            name: new RegExp(
+                `库存调整单审批[\\s\\S]*${escapeRe(documentNo)}|${escapeRe(documentNo)}[\\s\\S]*库存调整单审批|${escapeRe(documentNo)}`,
+            ),
+        })
+        .or(
+            list
+                .getByRole("button", { name: /库存调整单审批/ })
+                .filter({ hasText: documentNo }),
+        )
+        .first()
+    try {
+        await expect(task).toBeVisible(VISIBLE)
+        await task.click()
+    } catch {
+        // 兜底：hint 无法匹配时，同类型仅有一项则直接点选，否则显式失败避免点错任务。
+        const sameType = list.getByRole("button", { name: /库存调整单审批/ })
+        await expect(sameType).toHaveCount(1, VISIBLE)
+        await sameType.first().click()
+    }
     await expect(page.getByText(documentNo)).toBeVisible(VISIBLE)
 }
 

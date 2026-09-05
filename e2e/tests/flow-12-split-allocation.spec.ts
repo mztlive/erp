@@ -114,6 +114,15 @@ async function closeSession(session: Session | undefined) {
 async function expectToast(page: Page, title: string | RegExp) {
     const toast = page.locator('[data-slot="toast"]').filter({ hasText: title }).first()
     await expect(toast).toBeVisible({ timeout: TIMEOUT })
+    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
+    for (let i = 0; i < 5; i += 1) {
+        const dismiss = page
+            .locator('[data-slot="toast"]')
+            .getByRole("button", { name: "Dismiss" })
+            .first()
+        if (!(await dismiss.count())) break
+        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+    }
 }
 
 async function chooseOption(page: Page, input: Locator, optionName: string | RegExp) {
@@ -130,9 +139,20 @@ async function searchAndSubmit(input: Locator, query: string) {
 
 async function pickVisibleDay(page: Page, trigger: Locator, dayOfMonth: number) {
     await trigger.click()
-    const dayButton = page.getByRole("button", { name: String(dayOfMonth), exact: true })
-    await expect(dayButton).toBeVisible({ timeout: TIMEOUT })
-    await dayButton.click()
+    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
+    const calendar = page.locator('[data-slot="calendar"]:visible')
+    await expect(calendar).toBeVisible({ timeout: TIMEOUT })
+    const dayButtons = calendar.getByRole("button", { name: String(dayOfMonth) })
+    const total = await dayButtons.count()
+    for (let i = 0; i < total; i += 1) {
+        const button = dayButtons.nth(i)
+        const disabled = await button.getAttribute("aria-disabled")
+        const outside = await button.getAttribute("data-outside")
+        if (disabled === "true" || outside === "true") continue
+        await button.click()
+        return
+    }
+    await dayButtons.first().click()
 }
 
 async function openWorkspaceTask(
@@ -150,13 +170,33 @@ async function openWorkspaceTask(
     if (options.family) {
         await page.getByRole("button", { name: new RegExp(`^${options.family}`) }).click()
     }
-    if (options.query) {
-        await searchAndSubmit(page.getByLabel("搜索待办"), options.query)
+    // 后端工作台搜索不匹配单号，填单号会把列表滤空；任务名正则已包含单号，直接匹配。
+    // 单号也可能只出现在无障碍名或可见文本一侧，取并集兜底。
+    const list = page.getByRole("list", { name: "待办列表" })
+    await expect(list).toBeVisible({ timeout: TIMEOUT })
+    const union = options.query
+        ? list
+              .getByRole("button", { name: options.name })
+              .or(
+                  list
+                      .getByRole("button", { name: /审批|待供给分配|供给分配|客户验收|履约/ })
+                      .filter({ hasText: options.query }),
+              )
+              .first()
+        : list.getByRole("button", { name: options.name }).first()
+    try {
+        await expect(union).toBeVisible({ timeout: TIMEOUT })
+        await union.click()
+    } catch {
+        if (!options.query) throw new Error(`工作台未找到任务: ${options.name}`)
+        // 兜底：hint 无法匹配时，同类型仅有一项则直接点选，否则显式失败避免点错任务。
+        const sameType = list.getByRole("button", { name: options.name })
+        await expect(sameType).toHaveCount(1, { timeout: TIMEOUT })
+        await sameType.first().click()
     }
-    const task = page.getByRole("button", { name: options.name })
-    await expect(task).toBeVisible({ timeout: TIMEOUT })
-    await task.click()
-    await expect(task).toHaveAttribute("aria-current", "true")
+    await expect(list.locator('button[aria-current="true"]').first()).toBeVisible({
+        timeout: TIMEOUT,
+    })
 }
 
 async function approveOpenTask(page: Page) {
@@ -365,8 +405,8 @@ async function createSalesOrderWithContract(
     await expect(page.getByText(customerName)).toBeVisible({ timeout: TIMEOUT })
 
     await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
-    await page.getByRole("button", { name: "选择商品" }).click()
-    const skuDialog = page.getByRole("dialog", { name: "选择商品" })
+    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
+    const skuDialog = page.getByRole("dialog", { name: "更换销售商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await searchAndSubmit(skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格"), SKU_NO)
     await expect(skuDialog.getByText(SKU_NO)).toBeVisible({ timeout: TIMEOUT })
@@ -427,7 +467,7 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await purchaseRow.getByLabel("本次分配数量").fill(PURCHASE_QTY)
     const warehouseInput = purchaseRow.getByLabel(/采购入库目标仓/)
     await warehouseInput.click()
-    await warehouseInput.fill("通州")
+    await warehouseInput.fill(WAREHOUSE_CODE)
     await expect(page.getByRole("option", { name: new RegExp(WAREHOUSE_NAME) })).toBeVisible({
         timeout: TIMEOUT,
     })
@@ -463,7 +503,7 @@ async function assertReservationAndPurchase(page: Page, salesOrderNo: string) {
     await expect(page.getByText("有效")).toBeVisible({ timeout: TIMEOUT })
 
     await page.goto(`${FRONTEND_BASE}/procurement/orders`)
-    await expect(page.getByRole("heading", { name: "采购单" })).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({ timeout: TIMEOUT })
     await searchAndSubmit(page.getByLabel("搜索采购单"), salesOrderNo)
     await expect(page.getByText(salesOrderNo)).toBeVisible({ timeout: TIMEOUT })
     await expect(page.getByText("审批中")).toBeVisible({ timeout: TIMEOUT })
@@ -483,7 +523,7 @@ async function completeFulfillment(
         timeout: TIMEOUT,
     })
     await page.getByRole("button", { name: /^履约/ }).click()
-    await searchAndSubmit(page.getByLabel("搜索待办"), salesOrderNo)
+    // 后端工作台搜索不匹配单号，不填搜索框；下方循环逐个点开任务辨认所需类型。
     const queue = page.getByRole("list", { name: "待办列表" }).getByRole("button")
     const count = await queue.count()
     expect(count).toBeGreaterThan(0)
