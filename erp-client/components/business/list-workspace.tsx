@@ -28,7 +28,7 @@ export const listWorkspaceStyles = {
     toolbar:
         "flex shrink-0 items-start gap-0 py-[18px] md:gap-3 [&_[data-slot=button]]:text-[13px] [&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:bg-background [&_[data-slot=input-group]]:text-[13px] [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]:focus-within]:outline-2 [&_[data-slot=input-group]:focus-within]:outline-offset-2 [&_[data-slot=input-group]:focus-within]:outline-foreground",
     filters: "min-w-0 flex-1",
-    columnSettings: "shrink-0",
+    columnSettings: "shrink-0 empty:hidden",
     table: [
         "min-h-0 flex-1",
         "[&_[data-slot=data-table]]:h-full [&_[data-slot=data-table]]:gap-0",
@@ -141,7 +141,7 @@ export function ListWorkSurface({
             aria-label={ariaLabel}
         >
             {views}
-            <div className={styles.toolbar}>
+            <div className={styles.toolbar} data-slot="list-workspace-toolbar">
                 <div className={styles.filters}>{toolbar}</div>
                 <div
                     className={styles.columnSettings}

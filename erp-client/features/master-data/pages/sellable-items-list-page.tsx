@@ -26,7 +26,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { sellableItemsListStyles as productStyles } from "./sellable-items-list-styles"
-import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
+import { SellableItemsFilterBar } from "@/features/master-data/components/list/sellable-items-filter-bar"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
@@ -158,65 +158,16 @@ export function SellableItemsListPage() {
                     />
                 }
                 toolbar={
-                    <SellableListToolbar
-                        variant="quiet"
-                        applyHint="筛选结果同时用于导出"
-                        idPrefix="master-data-sellable-items-list-toolbar"
+                    <SellableItemsFilterBar
                         searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
+                        filters={filters}
                         appliedChips={state.appliedChips}
-                        removeFilter={filters.removeFilter}
-                        supplyPreset={filters.supplyPreset ?? "all"}
-                        supplyPresetCounts={state.supplyPresetCounts}
-                        applySupplyPreset={filters.applySupplyPreset}
-                        showSupplyPreset={false}
-                        sellableFilterPanelOpen={
-                            filters.sellableFilterPanelOpen
+                        filterOptions={state.productFilterOptionsQuery}
+                        resultCount={
+                            state.listQuery.data ? state.rows.length : undefined
                         }
-                        setSellableFilterPanelOpen={
-                            filters.setSellableFilterPanelOpen
-                        }
-                        hasStructuredSellableFilters={
-                            filters.hasStructuredSellableFilters
-                        }
-                        applySellableFilters={filters.applySellableFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        supplyRegionDraft={filters.supplyRegionDraft}
-                        setSupplyRegionDraft={filters.setSupplyRegionDraft}
-                        productKindDraft={filters.productKindDraft}
-                        setProductKindDraft={filters.setProductKindDraft}
-                        productCategoryIdDraft={filters.productCategoryIdDraft}
-                        setProductCategoryIdDraft={
-                            filters.setProductCategoryIdDraft
-                        }
-                        productBrandIdDraft={filters.productBrandIdDraft}
-                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
-                        productSupplierIdDraft={filters.productSupplierIdDraft}
-                        setProductSupplierIdDraft={
-                            filters.setProductSupplierIdDraft
-                        }
-                        productSalesPriceMinDraft={
-                            filters.productSalesPriceMinDraft
-                        }
-                        setProductSalesPriceMinDraft={
-                            filters.setProductSalesPriceMinDraft
-                        }
-                        productSalesPriceMaxDraft={
-                            filters.productSalesPriceMaxDraft
-                        }
-                        setProductSalesPriceMaxDraft={
-                            filters.setProductSalesPriceMaxDraft
-                        }
-                        productSalesPriceError={filters.productSalesPriceError}
-                        setProductSalesPriceError={
-                            filters.setProductSalesPriceError
-                        }
-                        productFilterOptionsQuery={
-                            state.productFilterOptionsQuery
-                        }
+                        loading={state.listQuery.isFetching}
+                        failed={state.listQuery.isError}
                     />
                 }
                 tableClassName={productStyles.table}

@@ -6,6 +6,7 @@ import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 import {
     FilterChip,
     FixedOptionRadioFilter,
+    ListFilterGrid,
     ListToolbar,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -236,7 +237,7 @@ export function SupplierOfferingsToolbar({
                                             AVAILABILITY_STATUS_FILTER_OPTIONS
                                         }
                                     />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    <ListFilterGrid>
                                         {!skuLocked ? (
                                             <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                                                 <span className="text-muted-foreground">
@@ -313,7 +314,7 @@ export function SupplierOfferingsToolbar({
                                                 aria-label="供应商"
                                             />
                                         </div>
-                                    </div>
+                                    </ListFilterGrid>
                                     <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                                         <p className="text-xs text-muted-foreground">
                                             将同时应用上方关键词和以下筛选条件；结果也用于导出。

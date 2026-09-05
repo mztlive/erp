@@ -121,6 +121,10 @@ function ListToolbar({
                         </div>
                     </div>
                 ) : null}
+                <div
+                    data-slot="list-toolbar-view-options"
+                    className="shrink-0 self-end empty:hidden lg:self-center"
+                />
             </div>
 
             {secondary ? (
@@ -132,6 +136,20 @@ function ListToolbar({
                 </div>
             ) : null}
         </div>
+    )
+}
+
+/** 筛选字段统一按窄屏一列、中屏两列、大屏四列排列；区间字段可声明跨列。 */
+function ListFilterGrid({ className, ...props }: DivProps) {
+    return (
+        <div
+            data-slot="list-filter-grid"
+            className={cn(
+                "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4",
+                className,
+            )}
+            {...props}
+        />
     )
 }
 
@@ -542,6 +560,7 @@ function QuickPreviewSheet({
 
 export {
     BusinessTableFrame,
+    ListFilterGrid,
     ListToolbar,
     QuickPreviewSheet,
     SelectionScopeBar,

@@ -378,7 +378,10 @@ function DataTable<TData>({
             "[data-business-component=table-frame]",
         )
         setFrameViewOptionsSlot(
-            frame?.querySelector("[data-slot=table-frame-view-options]") ??
+            frame?.querySelector(
+                "[data-slot=list-workspace-toolbar] [data-slot=list-toolbar-view-options]",
+            ) ??
+                frame?.querySelector("[data-slot=table-frame-view-options]") ??
                 null,
         )
     }, [layout, renderToolbar, showColumnVisibility])

@@ -7,6 +7,7 @@ import {
     CategoryCombobox,
     FilterChip,
     FixedOptionRadioFilter,
+    ListFilterGrid,
     ListToolbar,
     OptionCombobox,
 } from "@/components/business"
@@ -296,13 +297,7 @@ export function SellableListToolbar({
                                                 ),
                                         )}
                                     />
-                                    <div
-                                        className={cn(
-                                            "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4",
-                                            variant === "quiet" &&
-                                                "gap-x-5 gap-y-4 lg:grid-cols-3",
-                                        )}
-                                    >
+                                    <ListFilterGrid>
                                         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                                             <span className="text-muted-foreground">
                                                 分类
@@ -466,7 +461,7 @@ export function SellableListToolbar({
                                                 </span>
                                             ) : null}
                                         </div>
-                                    </div>
+                                    </ListFilterGrid>
                                     <div
                                         className={cn(
                                             "flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between",
