@@ -99,8 +99,7 @@ function GlobalTopbar({
         <header
             data-slot="global-topbar"
             className={cn(
-                // 白顶栏浮在灰画布上，操作右对齐；仅移动端显示菜单按钮
-                "flex h-topbar shrink-0 items-center gap-3 border-b border-border bg-card px-page-inline md:px-page-inline-lg py-8",
+                "flex h-topbar shrink-0 items-center gap-3 border-b border-border/70 bg-card/90 backdrop-blur-sm px-page-inline md:px-page-inline-lg shadow-2xs",
                 className,
             )}
             {...props}

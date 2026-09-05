@@ -2,7 +2,6 @@ import { apiGet, apiPost, getErrorMessage } from "@/lib/api"
 
 import {
     mapCommandViewDto,
-    mapDocumentApprovalViewDto,
     mapHistoryItemDto,
     mapInstanceListItemDto,
     mapRecoveryOptionsDto,
@@ -18,7 +17,6 @@ import {
     type ApprovalInstanceListView,
     type CancelApprovalRequest,
     type CancelBlockedRequest,
-    type DocumentApprovalViewDto,
     type RecoveryOptions,
     type RecoveryOptionsDto,
     type ResumeApproverRequest,

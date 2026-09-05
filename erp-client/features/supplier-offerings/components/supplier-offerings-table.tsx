@@ -156,11 +156,13 @@ export function SupplierOfferingsTable({
                             </div>
                         </TableCell>
                         <TableCell>
-                            <div>
-                                代发 {money(item.dropship_supply_price_gross)}
+                            <div className="text-sm">
+                                <span className="text-xs text-muted-foreground mr-1.5">代发</span>
+                                <span className="tabular-nums font-semibold text-foreground">{money(item.dropship_supply_price_gross)}</span>
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                                集采 {money(item.bulk_supply_price_gross)}
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                                <span className="mr-1.5">集采</span>
+                                <span className="tabular-nums font-medium text-foreground/80">{money(item.bulk_supply_price_gross)}</span>
                             </div>
                         </TableCell>
                         <TableCell>
@@ -207,12 +209,13 @@ export function SupplierOfferingsTable({
                                     </span>
                                 )
                             ) : (
-                                <div className="flex gap-1">
+                                <div className="flex items-center gap-1.5">
                                     <Button
                                         id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-update-availability`}
                                         type="button"
-                                        size="sm"
-                                        variant="ghost"
+                                        size="xs"
+                                        variant="outline"
+                                        className="h-7 px-2.5 text-xs font-normal border-border/80 hover:bg-muted hover:text-foreground shadow-2xs"
                                         onClick={() =>
                                             onUpdateAvailability(item)
                                         }
@@ -220,19 +223,22 @@ export function SupplierOfferingsTable({
                                         <PackageCheckIcon
                                             data-icon="inline-start"
                                             aria-hidden="true"
+                                            className="size-3.5"
                                         />
                                         更新可供
                                     </Button>
                                     <Button
                                         id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-revise`}
                                         type="button"
-                                        size="sm"
+                                        size="xs"
                                         variant="ghost"
+                                        className="h-7 px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
                                         onClick={() => onReviseOffering(item)}
                                     >
                                         <FilePenLineIcon
                                             data-icon="inline-start"
                                             aria-hidden="true"
+                                            className="size-3.5"
                                         />
                                         修订条款
                                     </Button>

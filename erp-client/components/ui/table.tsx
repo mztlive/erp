@@ -24,7 +24,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
         <thead
             data-slot="table-header"
             className={cn(
-                "bg-table-header [&_tr]:border-b [&_tr]:border-border [&_tr]:hover:bg-transparent",
+                "bg-table-header [&_tr]:border-b [&_tr]:border-border/80 [&_tr]:hover:bg-transparent",
                 className,
             )}
             {...props}
@@ -60,7 +60,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
         <tr
             data-slot="table-row"
             className={cn(
-                "group/row border-b border-grid transition-colors hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected [[data-placeholder]_&]:hover:bg-transparent [[data-placeholder]_&]:has-aria-expanded:bg-transparent",
+                "group/row border-b border-grid/80 transition-colors duration-100 hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected [[data-placeholder]_&]:hover:bg-transparent [[data-placeholder]_&]:has-aria-expanded:bg-transparent",
                 className,
             )}
             {...props}
@@ -73,7 +73,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
         <th
             data-slot="table-head"
             className={cn(
-                "h-(--table-row-height) bg-table-header px-(--table-cell-inline) py-(--table-cell-block) text-left align-middle text-xs font-medium tracking-wide whitespace-nowrap text-muted-foreground data-[align=end]:text-right data-[align=center]:text-center",
+                "h-(--table-row-height) bg-table-header px-(--table-cell-inline) py-(--table-cell-block) text-left align-middle text-xs font-semibold tracking-wider text-muted-foreground/90 whitespace-nowrap data-[align=end]:text-right data-[align=center]:text-center select-none",
                 className,
             )}
             {...props}
@@ -86,7 +86,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         <td
             data-slot="table-cell"
             className={cn(
-                "min-h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap data-[align=end]:text-right data-[align=center]:text-center",
+                "min-h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap text-foreground/90 data-[align=end]:text-right data-[align=center]:text-center",
                 className,
             )}
             {...props}

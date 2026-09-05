@@ -4,14 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 import { PlusIcon } from "lucide-react"
 
-import {
-    BusinessTableFrame,
-    MetricItem,
-    MetricStrip,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+import { PageHeader, PageScaffold } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/components/dialogs/register-supply-for-sku-dialog"
 import { ReviseOfferingDialog } from "@/features/supplier-offerings/components/dialogs/revise-offering-dialog"
 import { UpdateAvailabilityDialog } from "@/features/supplier-offerings/components/dialogs/update-availability-dialog"
@@ -157,114 +152,182 @@ export const SupplierOfferingsPage = () => {
             ) : null}
 
             {!state.taskMode || taskQuery.data ? (
-                <>
-                    {/* 只读指标：不属于筛选表单（§2.1、§7）。 */}
-                    <MetricStrip
-                        columns={3}
-                        density="compact"
-                        aria-label="供给列表指标"
-                    >
-                        <MetricItem
-                            label="当前结果"
-                            value={query.data?.total ?? 0}
-                        />
-                        <MetricItem label="本页启用关系" value={activeCount} />
-                        <MetricItem
-                            label="本页当前可供"
-                            value={availableCount}
-                        />
-                    </MetricStrip>
-
-                    <BusinessTableFrame
-                        showHeader
-                        title={
-                            <span className="inline-flex items-baseline gap-2">
-                                供给关系列表
+                <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-2xs transition-all">
+                    {/* 1. 快捷状态分段筛选条：高反差精密轨道，彻底告别低透明度发虚 */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-muted/35 px-4 py-2.5 sm:px-5">
+                        <div className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-surface-sunken p-1 text-xs shadow-2xs">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    state.patchUrl({
+                                        status: undefined,
+                                        availabilityStatus: undefined,
+                                        page: 1,
+                                    })
+                                }
+                                className={cn(
+                                    "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
+                                    !state.urlState.status &&
+                                        !state.urlState.availabilityStatus
+                                        ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-card/50",
+                                )}
+                            >
+                                全部供给
                                 <span
-                                    className="font-normal text-muted-foreground"
-                                    aria-live="polite"
+                                    className={cn(
+                                        "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
+                                        !state.urlState.status &&
+                                            !state.urlState.availabilityStatus
+                                            ? "bg-foreground text-background"
+                                            : "bg-muted-foreground/15 text-foreground/75",
+                                    )}
                                 >
-                                    {query.data?.total ?? 0} 条
+                                    {query.data?.total ?? 0}
                                 </span>
-                            </span>
-                        }
-                        description={
-                            state.appliedFilterLabels.length > 0
-                                ? `筛选条件：${state.appliedFilterLabels.join("、")}`
-                                : "商业条款按版本追加；可供状态与数量独立更新。"
-                        }
-                        toolbar={
-                            <SupplierOfferingsToolbar
-                                searchInputRef={state.searchInputRef}
-                                searchDraft={state.searchDraft}
-                                onSearchDraftChange={state.setSearchDraft}
-                                filterPanelOpen={state.filterPanelOpen}
-                                onFilterPanelOpenChange={
-                                    state.setFilterPanelOpen
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    state.patchUrl({
+                                        status: "ACTIVE",
+                                        availabilityStatus: undefined,
+                                        page: 1,
+                                    })
                                 }
-                                hasStructuredFilters={
-                                    state.hasStructuredFilters
+                                className={cn(
+                                    "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
+                                    state.urlState.status === "ACTIVE"
+                                        ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-card/50",
+                                )}
+                            >
+                                已启用
+                                <span
+                                    className={cn(
+                                        "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
+                                        state.urlState.status === "ACTIVE"
+                                            ? "bg-foreground text-background"
+                                            : "bg-muted-foreground/15 text-foreground/75",
+                                    )}
+                                >
+                                    {activeCount}
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    state.patchUrl({
+                                        availabilityStatus: "AVAILABLE",
+                                        status: undefined,
+                                        page: 1,
+                                    })
                                 }
-                                appliedChips={appliedChips}
-                                removeFilter={state.removeFilter}
-                                onApplyFilters={state.applyFilters}
-                                onClearFilters={state.clearFilters}
-                                onResetMoreFilters={state.resetMoreFilters}
-                                statusDraft={state.statusDraft}
-                                onStatusDraftChange={state.setStatusDraft}
-                                sourceTypeDraft={state.sourceTypeDraft}
-                                onSourceTypeDraftChange={
-                                    state.setSourceTypeDraft
-                                }
-                                availabilityStatusDraft={
-                                    state.availabilityStatusDraft
-                                }
-                                onAvailabilityStatusDraftChange={
-                                    state.setAvailabilityStatusDraft
-                                }
-                                skuLocked={state.skuLocked}
-                                skuIdDraft={state.skuIdDraft}
-                                onSkuIdDraftChange={state.setSkuIdDraft}
-                                skuNoDraft={state.skuNoDraft}
-                                onSkuNoDraftChange={state.setSkuNoDraft}
-                                productNoDraft={state.productNoDraft}
-                                onProductNoDraftChange={state.setProductNoDraft}
-                                supplierIdDraft={state.supplierIdDraft}
-                                onSupplierIdDraftChange={
-                                    state.setSupplierIdDraft
-                                }
-                            />
-                        }
-                        table={
-                            <SupplierOfferingsTable
-                                items={items}
-                                isPending={query.isPending}
-                                isError={query.isError}
-                                error={query.error}
-                                hasFilters={state.hasFilters}
-                                taskMode={state.taskMode}
-                                taskBusinessObjectId={
-                                    taskQuery.data?.businessObjectId
-                                }
-                                onRetry={() => void query.refetch()}
-                                onClearFilters={state.clearFilters}
-                                onCreateOffering={() => setCreateOpen(true)}
-                                onUpdateAvailability={setAvailabilityOffering}
-                                onReviseOffering={setReviseOffering}
-                            />
-                        }
-                        footer={
-                            <SupplierOfferingsPagination
-                                page={state.urlState.page}
-                                totalPages={totalPages}
-                                disabled={query.isPending}
-                                onPageChange={(page) =>
-                                    state.patchUrl({ page })
-                                }
-                            />
-                        }
-                    />
-                </>
+                                className={cn(
+                                    "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
+                                    state.urlState.availabilityStatus ===
+                                        "AVAILABLE"
+                                        ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-card/50",
+                                )}
+                            >
+                                当前可供
+                                <span
+                                    className={cn(
+                                        "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
+                                        state.urlState.availabilityStatus ===
+                                            "AVAILABLE"
+                                            ? "bg-foreground text-background"
+                                            : "bg-muted-foreground/15 text-foreground/75",
+                                    )}
+                                >
+                                    {availableCount}
+                                </span>
+                            </button>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-medium">
+                            {state.appliedFilterLabels.length > 0
+                                ? `已生效筛选：${state.appliedFilterLabels.join("、")}`
+                                : "商业条款按版本追加 · 状态与数量独立更新"}
+                        </div>
+                    </div>
+
+                    {/* 2. 内嵌工具栏（搜索框已收敛比例，筛选成组紧邻） */}
+                    <div className="px-4 py-3 sm:px-5">
+                        <SupplierOfferingsToolbar
+                            searchInputRef={state.searchInputRef}
+                            searchDraft={state.searchDraft}
+                            onSearchDraftChange={state.setSearchDraft}
+                            filterPanelOpen={state.filterPanelOpen}
+                            onFilterPanelOpenChange={
+                                state.setFilterPanelOpen
+                            }
+                            hasStructuredFilters={
+                                state.hasStructuredFilters
+                            }
+                            appliedChips={appliedChips}
+                            removeFilter={state.removeFilter}
+                            onApplyFilters={state.applyFilters}
+                            onClearFilters={state.clearFilters}
+                            onResetMoreFilters={state.resetMoreFilters}
+                            statusDraft={state.statusDraft}
+                            onStatusDraftChange={state.setStatusDraft}
+                            sourceTypeDraft={state.sourceTypeDraft}
+                            onSourceTypeDraftChange={
+                                state.setSourceTypeDraft
+                            }
+                            availabilityStatusDraft={
+                                state.availabilityStatusDraft
+                            }
+                            onAvailabilityStatusDraftChange={
+                                state.setAvailabilityStatusDraft
+                            }
+                            skuLocked={state.skuLocked}
+                            skuIdDraft={state.skuIdDraft}
+                            onSkuIdDraftChange={state.setSkuIdDraft}
+                            skuNoDraft={state.skuNoDraft}
+                            onSkuNoDraftChange={state.setSkuNoDraft}
+                            productNoDraft={state.productNoDraft}
+                            onProductNoDraftChange={state.setProductNoDraft}
+                            supplierIdDraft={state.supplierIdDraft}
+                            onSupplierIdDraftChange={
+                                state.setSupplierIdDraft
+                            }
+                        />
+                    </div>
+
+                    {/* 3. 核心数据表（无缝嵌入，去除了多余的二次标题卡片） */}
+                    <div className="border-t border-border/70">
+                        <SupplierOfferingsTable
+                            items={items}
+                            isPending={query.isPending}
+                            isError={query.isError}
+                            error={query.error}
+                            hasFilters={state.hasFilters}
+                            taskMode={state.taskMode}
+                            taskBusinessObjectId={
+                                taskQuery.data?.businessObjectId
+                            }
+                            onRetry={() => void query.refetch()}
+                            onClearFilters={state.clearFilters}
+                            onCreateOffering={() => setCreateOpen(true)}
+                            onUpdateAvailability={setAvailabilityOffering}
+                            onReviseOffering={setReviseOffering}
+                        />
+                    </div>
+
+                    {/* 4. 底部分页栏（内嵌整洁对齐） */}
+                    <div className="border-t border-border/70 bg-muted/10 px-4 py-2.5 sm:px-5">
+                        <SupplierOfferingsPagination
+                            page={state.urlState.page}
+                            totalPages={totalPages}
+                            disabled={query.isPending}
+                            onPageChange={(page) =>
+                                state.patchUrl({ page })
+                            }
+                        />
+                    </div>
+                </div>
             ) : null}
 
             {!state.taskMode ? (

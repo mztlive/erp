@@ -65,12 +65,13 @@ function StatusBadge({
         <Badge
             variant={toneVariant[tone]}
             className={cn(
+                "gap-1 px-1.5 py-0 text-[11px] font-medium tracking-tight border shadow-2xs",
                 tone === "void" && "line-through opacity-80",
                 className,
             )}
             {...props}
         >
-            <Icon data-icon="inline-start" aria-hidden="true" />
+            <Icon data-icon="inline-start" aria-hidden="true" className="size-3 text-current/85 shrink-0" />
             {label}
         </Badge>
     )

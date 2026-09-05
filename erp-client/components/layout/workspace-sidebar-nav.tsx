@@ -7,7 +7,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -84,8 +83,8 @@ export function WorkspaceSidebarAccount() {
                             />
                         }
                     >
-                        <Avatar size="sm">
-                            <AvatarFallback>
+                        <Avatar size="sm" className="size-7 rounded-md">
+                            <AvatarFallback className="rounded-md bg-zinc-900 font-semibold text-zinc-100 text-xs dark:bg-zinc-100 dark:text-zinc-900">
                                 {displayInitial(
                                     profileQuery.data?.name,
                                     profileQuery.data?.account,
@@ -240,12 +239,11 @@ export function WorkspaceSidebarNav() {
                                             <Icon aria-hidden="true" />
                                             <span>{item.label}</span>
                                             {badgeCount && badgeCount > 0 ? (
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="ml-auto border-0 bg-card group-data-[collapsible=icon]:hidden"
+                                                <span
+                                                    className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-sidebar-accent px-1.5 text-[10px] font-semibold text-sidebar-accent-foreground tabular-nums group-data-[collapsible=icon]:hidden"
                                                 >
                                                     {badgeCount}
-                                                </Badge>
+                                                </span>
                                             ) : null}
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>

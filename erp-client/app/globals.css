@@ -22,7 +22,18 @@
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-    --font-sans: var(--font-sans);
+    --font-sans:
+        var(--font-sans),
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Microsoft YaHei",
+        "WenQuanYi Micro Hei",
+        sans-serif;
     --font-mono:
         ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
         "Liberation Mono", "Courier New", monospace;
@@ -163,240 +174,243 @@
     --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
     --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
-    /* 辅助标注字号 —— 高密度表格、徽标与预览面板的小字，低于默认 text-xs(12px) */
+    /* 辅助标注字号 */
     --text-2xs: 0.625rem; /* 10px */
     --text-tiny: 0.6875rem; /* 11px */
 
-    /* 圆角 —— 单一旋钮；卡片 8px，控件略小于基线，大浮层封顶 10px */
-    --radius-sm: calc(var(--radius) * 0.5);
-    --radius-md: calc(var(--radius) * 0.75);
-    --radius-lg: var(--radius);
-    --radius-xl: var(--radius);
-    --radius-2xl: calc(var(--radius) + 0.0625rem);
-    --radius-3xl: calc(var(--radius) + 0.125rem);
-    --radius-4xl: calc(var(--radius) + 0.125rem);
+    /* 比例协调的圆角阶梯体系 */
+    --radius-xs: 0.125rem; /* 2px */
+    --radius-sm: 0.25rem;  /* 4px - 状态点/极小标记 */
+    --radius-md: 0.375rem; /* 6px - 徽章/紧凑小控件 */
+    --radius-lg: var(--radius); /* 8px - 默认按钮/输入框 */
+    --radius-xl: 0.625rem; /* 10px - 内部面板 */
+    --radius-2xl: 0.75rem; /* 12px - 核心卡片表面 */
+    --radius-3xl: 1rem;    /* 16px - 大浮层/弹窗 */
+    --radius-4xl: 1.25rem; /* 20px */
 
-    /* 阴影 —— 中性黑低透明度；卡片用 xs/sm，弹层才用 md/lg */
-    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    /* Vercel / Notion 极简精密微投影：克制、精密、发丝级浮层 */
+    --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-sm:
-        0 1px 2px 0 rgb(0 0 0 / 0.03), 0 1px 6px -1px rgb(0 0 0 / 0.02),
-        0 2px 4px 0 rgb(0 0 0 / 0.02);
+        0 1px 3px 0 rgb(0 0 0 / 0.07),
+        0 1px 2px -1px rgb(0 0 0 / 0.05);
     --shadow-md:
-        0 3px 6px -4px rgb(0 0 0 / 0.12), 0 6px 16px 0 rgb(0 0 0 / 0.08),
-        0 9px 28px 8px rgb(0 0 0 / 0.05);
+        0 4px 6px -1px rgb(0 0 0 / 0.07),
+        0 2px 4px -2px rgb(0 0 0 / 0.05);
     --shadow-lg:
-        0 6px 16px 0 rgb(0 0 0 / 0.08), 0 9px 28px 8px rgb(0 0 0 / 0.05),
-        0 12px 48px 16px rgb(0 0 0 / 0.03);
+        0 10px 15px -3px rgb(0 0 0 / 0.07),
+        0 4px 6px -4px rgb(0 0 0 / 0.04);
+    --shadow-xl:
+        0 20px 25px -5px rgb(0 0 0 / 0.08),
+        0 8px 10px -6px rgb(0 0 0 / 0.04);
 }
 
 /* --------------------------------------------------------------------------
-   浅色模式：shadcn Neutral 表面（浅画布 + 白壳 + 近黑主色）
+   浅色模式：Notion / Vercel 纯净高级灰阶（素净冷白 + 纯黑曜石主键 + 克制低饱和度）
    -------------------------------------------------------------------------- */
 :root {
-    /* 8px 基线，对齐浅底白卡工作面 */
     --radius: 0.5rem;
 
-    /* 浅灰画布：明确沉于白卡片/白页头一档，让工作面浮得起来 */
-    --background: oklch(0.976 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    /* Vercel / Notion 风格：极简纯净画布 + 纯白微边卡片 */
+    --background: oklch(0.99 0.001 260); /* #fafafa 极其纯净的素净灰白画布 */
+    --foreground: oklch(0.14 0.005 260); /* #18181b 沉着冷峻的极致石墨黑 */
+    --card: oklch(1 0 0);                /* #ffffff 纯白卡片表面 */
+    --card-foreground: oklch(0.14 0.005 260);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
+    --popover-foreground: oklch(0.14 0.005 260);
 
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.958 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.958 0 0);
-    /* 略深于 shadcn 默认 0.556，保证高密度次要文案可读 */
-    --muted-foreground: oklch(0.45 0 0);
+    /* Vercel 经典黑白主色体系：黑曜石核心按键与焦点，极度克制高级 */
+    --primary: oklch(0.14 0.005 260);    /* #18181b 经典实心黑底按键 */
+    --primary-foreground: oklch(0.99 0 0); /* 纯白文字 */
+    --secondary: oklch(0.96 0.003 260);  /* #f4f4f5 沉静浅灰衬底 */
+    --secondary-foreground: oklch(0.20 0.005 260);
+    --muted: oklch(0.962 0.002 260);     /* 柔和微冷灰 */
+    --muted-foreground: oklch(0.48 0.008 260); /* #71717a 次级灰度文字 */
 
-    --accent: oklch(0.958 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --accent: oklch(0.955 0.003 260);
+    --accent-foreground: oklch(0.14 0.005 260);
 
-    /* 状态色：仅用于徽章 / Alert / 进度，不当页面主色 */
-    --destructive: oklch(0.6732 0.2143 24.5); /* #ff4d4f */
+    /* 语义状态色 —— Notion 极简低饱和度典雅配色（告别刺眼荧光与俗气大红大绿） */
+    --destructive: oklch(0.55 0.18 25);
     --destructive-foreground: oklch(1 0 0);
-    --destructive-soft: oklch(0.9708 0.0143 28); /* #fff2f0 */
-    --destructive-soft-foreground: oklch(0.5434 0.2132 25.9); /* #cf1322 */
-    --destructive-border: oklch(0.885 0.06 24);
+    --destructive-soft: oklch(0.975 0.015 25);
+    --destructive-soft-foreground: oklch(0.44 0.15 25);
+    --destructive-border: oklch(0.90 0.035 25);
 
-    --success: oklch(0.6154 0.1912 139.4); /* #389e0d */
+    --success: oklch(0.52 0.12 155);     /* 克制深鼠尾草绿 */
     --success-foreground: oklch(1 0 0);
-    --success-soft: oklch(0.9884 0.0254 128.7); /* #f6ffed */
-    --success-soft-foreground: oklch(0.6154 0.1912 139.4);
-    --success-border: oklch(0.88 0.08 138);
+    --success-soft: oklch(0.968 0.012 155); /* 极其清淡温润的草木灰底 */
+    --success-soft-foreground: oklch(0.32 0.06 155); /* 沉静且极高可读性的灰绿文字 */
+    --success-border: oklch(0.88 0.025 155);
 
-    --warning: oklch(0.689 0.148 70.1); /* #d48806 */
+    --warning: oklch(0.62 0.13 75);      /* 沉稳琥珀金 */
     --warning-foreground: oklch(1 0 0);
-    --warning-soft: oklch(0.9856 0.0278 98.1); /* #fffbe6 */
-    --warning-soft-foreground: oklch(0.689 0.148 70.1);
-    --warning-border: oklch(0.9 0.08 85);
+    --warning-soft: oklch(0.975 0.02 75);
+    --warning-soft-foreground: oklch(0.42 0.10 75);
+    --warning-border: oklch(0.89 0.04 75);
 
-    --info: oklch(0.5987 0.2194 259); /* #1677ff */
+    --info: oklch(0.52 0.14 250);        /* 矿物石板蓝 */
     --info-foreground: oklch(1 0 0);
-    --info-soft: oklch(0.96 0.021 241.3); /* #e6f4ff */
-    --info-soft-foreground: oklch(0.5044 0.2095 261); /* #0958d9 */
-    --info-border: oklch(0.8897 0.0586 243); /* #bae0ff */
+    --info-soft: oklch(0.97 0.015 250);
+    --info-soft-foreground: oklch(0.35 0.10 250);
+    --info-border: oklch(0.89 0.035 250);
 
-    --neutral-soft: oklch(0.985 0 0);
-    --neutral-soft-foreground: oklch(0.45 0 0);
-    --neutral-border: oklch(0.902 0 0);
+    --neutral-soft: oklch(0.965 0.002 260);
+    --neutral-soft-foreground: oklch(0.38 0.005 260);
+    --neutral-border: oklch(0.895 0.004 260);
 
-    --orange-soft: oklch(0.98 0.03 55);
-    --orange-soft-foreground: oklch(0.55 0.15 50);
-    --orange-border: oklch(0.9 0.07 55);
-    --teal-soft: oklch(0.97 0.03 195);
-    --teal-soft-foreground: oklch(0.42 0.1 195);
-    --teal-border: oklch(0.88 0.06 195);
-    --violet-soft: oklch(0.97 0.02 295);
-    --violet-soft-foreground: oklch(0.45 0.18 295);
-    --violet-border: oklch(0.88 0.06 295);
-    --lime-soft: oklch(0.98 0.04 125);
-    --lime-soft-foreground: oklch(0.45 0.14 125);
-    --lime-border: oklch(0.88 0.08 125);
-    --rose-soft: oklch(0.97 0.02 8);
-    --rose-soft-foreground: oklch(0.52 0.16 8);
-    --rose-border: oklch(0.88 0.06 8);
-    --indigo-soft: oklch(0.96 0.03 278);
-    --indigo-soft-foreground: oklch(0.42 0.16 278);
-    --indigo-border: oklch(0.88 0.06 278);
-    --cyan-soft: oklch(0.97 0.03 210);
-    --cyan-soft-foreground: oklch(0.42 0.1 210);
-    --cyan-border: oklch(0.88 0.06 210);
+    /* 业务种类色标 —— 莫兰迪低饱和度高级色标 */
+    --orange-soft: oklch(0.97 0.02 55);
+    --orange-soft-foreground: oklch(0.46 0.11 55);
+    --orange-border: oklch(0.89 0.035 55);
+    --teal-soft: oklch(0.968 0.018 190);
+    --teal-soft-foreground: oklch(0.36 0.09 190);
+    --teal-border: oklch(0.88 0.035 190);
+    --violet-soft: oklch(0.968 0.018 290);
+    --violet-soft-foreground: oklch(0.40 0.10 290);
+    --violet-border: oklch(0.88 0.035 290);
+    --lime-soft: oklch(0.97 0.02 135);
+    --lime-soft-foreground: oklch(0.38 0.08 135);
+    --lime-border: oklch(0.88 0.035 135);
+    --rose-soft: oklch(0.97 0.018 15);
+    --rose-soft-foreground: oklch(0.45 0.10 15);
+    --rose-border: oklch(0.88 0.03 15);
+    --indigo-soft: oklch(0.968 0.018 265);
+    --indigo-soft-foreground: oklch(0.38 0.10 265);
+    --indigo-border: oklch(0.88 0.035 265);
+    --cyan-soft: oklch(0.968 0.018 220);
+    --cyan-soft-foreground: oklch(0.36 0.08 220);
+    --cyan-border: oklch(0.88 0.035 220);
 
-    --border: oklch(0.902 0 0);
-    --overlay: oklch(0 0 0 / 45%);
-    --input: oklch(0.898 0 0);
-    --ring: oklch(0.708 0 0);
+    /* 极细微高精边框与发丝线（单像素微发丝质感） */
+    --border: oklch(0.915 0.003 260);    /* #e4e4e7 精密浅灰细线 */
+    --overlay: oklch(0.12 0.005 260 / 30%);
+    --input: oklch(0.895 0.004 260);     /* #d4d4d8 控件微边框 */
+    --ring: oklch(0.14 0.005 260 / 15%); /* 黑灰极细微环 */
 
-    --surface-sunken: oklch(0.968 0 0);
-    /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
-     disabled 态灰度太接近而被误读成「已禁用」 */
+    --surface-sunken: oklch(0.975 0.002 260);
     --surface-control: oklch(1 0 0);
-    /* 表头与卡片同色，靠字号/字重和底边线压住内容，不用灰底条 */
-    --table-header: var(--card);
-    --row-hover: oklch(0.97 0 0);
-    --row-selected: oklch(0.945 0 0);
-    --row-striped: oklch(0.985 0 0);
-    /* 行线浅于 --border，避免和卡片轮廓同重 */
-    --grid: oklch(0.928 0 0);
+    --table-header: oklch(0.985 0.002 260);
+    --row-hover: oklch(0.975 0.002 260);
+    --row-selected: oklch(0.955 0.003 260);
+    --row-striped: oklch(0.99 0.001 260);
+    --grid: oklch(0.935 0.003 260);
 
-    --chart-1: oklch(0.5987 0.2194 259);
-    --chart-2: oklch(0.7444 0.1724 58.5);
-    --chart-3: oklch(0.7381 0.1238 194.8);
-    --chart-4: oklch(0.8016 0.1651 76);
-    --chart-5: oklch(0.4942 0.2284 295.6);
+    --chart-1: oklch(0.20 0.005 260);
+    --chart-2: oklch(0.45 0.01 260);
+    --chart-3: oklch(0.65 0.01 260);
+    --chart-4: oklch(0.55 0.12 155);
+    --chart-5: oklch(0.62 0.13 75);
 
-    --sidebar: oklch(0.185 0 0);
-    --sidebar-foreground: oklch(0.72 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.185 0 0);
-    --sidebar-accent: oklch(0.285 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.708 0 0);
+    /* Notion / Vercel 纯净浅色侧栏：与白底形成微妙克制层次，告别紫色与花哨色块 */
+    --sidebar: oklch(0.982 0.002 260);   /* #f9f9fb 微冷素净灰 */
+    --sidebar-foreground: oklch(0.42 0.008 260); /* 次级导航灰 */
+    --sidebar-primary: oklch(0.14 0.005 260);    /* 纯粹黑曜石 */
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.945 0.003 260);    /* #e4e4e7 浅灰底 */
+    --sidebar-accent-foreground: oklch(0.14 0.005 260); /* 选中项纯黑粗体 */
+    --sidebar-border: oklch(0.92 0.003 260);     /* 精致单像素侧边分隔线 */
+    --sidebar-ring: oklch(0.14 0.005 260 / 15%);
 }
 
 /* --------------------------------------------------------------------------
-   深色模式：对齐 shadcn Neutral dark，状态色保持色相
+   深色模式：Notion / Vercel 曜石暗夜黑灰
    -------------------------------------------------------------------------- */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
+    --background: oklch(0.12 0.005 260); /* #09090b 曜石纯黑背景 */
+    --foreground: oklch(0.98 0 0);
+    --card: oklch(0.16 0.005 260);       /* #18181b 浮动卡片 */
+    --card-foreground: oklch(0.98 0 0);
+    --popover: oklch(0.16 0.005 260);
+    --popover-foreground: oklch(0.98 0 0);
 
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
+    --primary: oklch(0.98 0 0);          /* 纯白主按钮 */
+    --primary-foreground: oklch(0.12 0.005 260);
+    --secondary: oklch(0.22 0.005 260);
+    --secondary-foreground: oklch(0.98 0 0);
+    --muted: oklch(0.22 0.005 260);
+    --muted-foreground: oklch(0.65 0.005 260);
 
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --accent: oklch(0.22 0.005 260);
+    --accent-foreground: oklch(0.98 0 0);
 
-    --destructive: oklch(0.6732 0.2143 24.5);
+    --destructive: oklch(0.60 0.18 25);
     --destructive-foreground: oklch(1 0 0);
-    --destructive-soft: oklch(0.32 0.07 24);
-    --destructive-soft-foreground: oklch(0.85 0.1 24);
-    --destructive-border: oklch(0.42 0.1 24);
+    --destructive-soft: oklch(0.25 0.04 25);
+    --destructive-soft-foreground: oklch(0.85 0.08 25);
+    --destructive-border: oklch(0.35 0.06 25);
 
-    --success: oklch(0.7256 0.2182 138.5);
-    --success-foreground: oklch(0.18 0 0);
-    --success-soft: oklch(0.32 0.06 140);
-    --success-soft-foreground: oklch(0.85 0.1 140);
-    --success-border: oklch(0.42 0.08 140);
+    --success: oklch(0.65 0.12 155);
+    --success-foreground: oklch(0.12 0.005 155);
+    --success-soft: oklch(0.22 0.03 155);
+    --success-soft-foreground: oklch(0.85 0.06 155);
+    --success-border: oklch(0.32 0.04 155);
 
-    --warning: oklch(0.8016 0.1651 76);
-    --warning-foreground: oklch(0.18 0 0);
-    --warning-soft: oklch(0.34 0.06 80);
-    --warning-soft-foreground: oklch(0.88 0.1 80);
-    --warning-border: oklch(0.45 0.08 80);
+    --warning: oklch(0.72 0.13 75);
+    --warning-foreground: oklch(0.12 0.005 75);
+    --warning-soft: oklch(0.25 0.04 75);
+    --warning-soft-foreground: oklch(0.88 0.07 75);
+    --warning-border: oklch(0.35 0.05 75);
 
-    --info: oklch(0.6726 0.176 255.3);
-    --info-foreground: oklch(0.18 0 0);
-    --info-soft: oklch(0.32 0.06 259);
-    --info-soft-foreground: oklch(0.85 0.1 250);
-    --info-border: oklch(0.42 0.08 259);
+    --info: oklch(0.65 0.13 250);
+    --info-foreground: oklch(0.12 0.005 250);
+    --info-soft: oklch(0.24 0.03 250);
+    --info-soft-foreground: oklch(0.85 0.06 250);
+    --info-border: oklch(0.34 0.05 250);
 
-    --neutral-soft: oklch(0.269 0 0);
-    --neutral-soft-foreground: oklch(0.8 0 0);
-    --neutral-border: oklch(1 0 0 / 12%);
+    --neutral-soft: oklch(0.22 0.005 260);
+    --neutral-soft-foreground: oklch(0.80 0.005 260);
+    --neutral-border: oklch(1 0 0 / 10%);
 
-    --orange-soft: oklch(0.34 0.06 55);
-    --orange-soft-foreground: oklch(0.86 0.1 55);
-    --orange-border: oklch(0.45 0.08 55);
-    --teal-soft: oklch(0.32 0.05 195);
-    --teal-soft-foreground: oklch(0.84 0.08 195);
-    --teal-border: oklch(0.42 0.07 195);
-    --violet-soft: oklch(0.32 0.06 295);
-    --violet-soft-foreground: oklch(0.86 0.1 295);
-    --violet-border: oklch(0.44 0.08 295);
-    --lime-soft: oklch(0.32 0.06 125);
-    --lime-soft-foreground: oklch(0.86 0.1 125);
-    --lime-border: oklch(0.44 0.08 125);
-    --rose-soft: oklch(0.32 0.06 8);
-    --rose-soft-foreground: oklch(0.86 0.1 8);
-    --rose-border: oklch(0.44 0.08 8);
-    --indigo-soft: oklch(0.32 0.06 278);
-    --indigo-soft-foreground: oklch(0.86 0.1 278);
-    --indigo-border: oklch(0.44 0.08 278);
-    --cyan-soft: oklch(0.32 0.05 210);
-    --cyan-soft-foreground: oklch(0.84 0.08 210);
-    --cyan-border: oklch(0.42 0.07 210);
+    --orange-soft: oklch(0.28 0.05 55);
+    --orange-soft-foreground: oklch(0.85 0.08 55);
+    --orange-border: oklch(0.38 0.06 55);
+    --teal-soft: oklch(0.26 0.04 190);
+    --teal-soft-foreground: oklch(0.85 0.06 190);
+    --teal-border: oklch(0.36 0.05 190);
+    --violet-soft: oklch(0.26 0.05 290);
+    --violet-soft-foreground: oklch(0.85 0.08 290);
+    --violet-border: oklch(0.36 0.06 290);
+    --lime-soft: oklch(0.26 0.04 135);
+    --lime-soft-foreground: oklch(0.85 0.06 135);
+    --lime-border: oklch(0.36 0.05 135);
+    --rose-soft: oklch(0.26 0.05 15);
+    --rose-soft-foreground: oklch(0.85 0.07 15);
+    --rose-border: oklch(0.36 0.06 15);
+    --indigo-soft: oklch(0.26 0.05 265);
+    --indigo-soft-foreground: oklch(0.85 0.07 265);
+    --indigo-border: oklch(0.36 0.06 265);
+    --cyan-soft: oklch(0.26 0.04 220);
+    --cyan-soft-foreground: oklch(0.85 0.06 220);
+    --cyan-border: oklch(0.36 0.05 220);
 
     --border: oklch(1 0 0 / 10%);
-    --overlay: oklch(0 0 0 / 65%);
+    --overlay: oklch(0 0 0 / 70%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --ring: oklch(1 0 0 / 15%);
 
-    --surface-sunken: oklch(0.18 0 0);
-    --surface-control: oklch(0.205 0 0);
-    --table-header: var(--card);
-    --row-hover: oklch(0.269 0 0);
-    --row-selected: oklch(0.3 0 0);
-    --row-striped: oklch(0.18 0 0);
+    --surface-sunken: oklch(0.14 0.005 260);
+    --surface-control: oklch(0.16 0.005 260);
+    --table-header: oklch(0.15 0.005 260);
+    --row-hover: oklch(0.20 0.005 260);
+    --row-selected: oklch(0.24 0.005 260);
+    --row-striped: oklch(0.14 0.005 260);
     --grid: oklch(1 0 0 / 8%);
 
-    --chart-1: oklch(0.6726 0.176 255.3);
-    --chart-2: oklch(0.7444 0.1724 58.5);
-    --chart-3: oklch(0.7381 0.1238 194.8);
-    --chart-4: oklch(0.8016 0.1651 76);
-    --chart-5: oklch(0.6 0.2 295);
+    --chart-1: oklch(0.95 0 0);
+    --chart-2: oklch(0.75 0 0);
+    --chart-3: oklch(0.55 0 0);
+    --chart-4: oklch(0.65 0.12 155);
+    --chart-5: oklch(0.72 0.13 75);
 
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.8 0 0);
-    --sidebar-primary: oklch(0.922 0 0);
-    --sidebar-primary-foreground: oklch(0.205 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar: oklch(0.14 0.005 260);
+    --sidebar-foreground: oklch(0.75 0.005 260);
+    --sidebar-primary: oklch(0.98 0 0);
+    --sidebar-primary-foreground: oklch(0.12 0.005 260);
+    --sidebar-accent: oklch(0.22 0.005 260);
+    --sidebar-accent-foreground: oklch(0.98 0 0);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(1 0 0 / 15%);
 }
 
 /* 金额、数量、税率、日期用等宽数字，便于纵向核对（交互规范 §19）。 */
@@ -417,6 +431,9 @@
     }
     html {
         @apply font-sans;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
     }
     /* 表格内的数字列默认等宽右对齐，避免逐处标注（金额右对齐见 §4.4） */
     th[data-align="end"],

@@ -89,7 +89,7 @@ function ListToolbar({
                         {search ? (
                             <div
                                 data-slot="list-toolbar-search"
-                                className="min-w-0 w-full flex-1 sm:min-w-search-min"
+                                className="min-w-0 w-full sm:w-72 lg:w-80 sm:flex-initial"
                             >
                                 {search}
                             </div>
@@ -381,7 +381,7 @@ function BusinessTableFrame({
                     {toolbar ? (
                         <div
                             data-slot="table-frame-toolbar"
-                            className="rounded-lg border bg-card p-toolbar-inset shadow-xs"
+                            className="rounded-lg border border-border/75 bg-card p-toolbar-inset shadow-2xs"
                         >
                             {toolbar}
                         </div>
@@ -389,7 +389,7 @@ function BusinessTableFrame({
                     {selectionBar}
                     <div
                         data-slot="business-table-frame-result"
-                        className="overflow-hidden rounded-lg border bg-card shadow-xs"
+                        className="overflow-hidden rounded-lg border border-border/75 bg-card shadow-2xs"
                     >
                         <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-table-cell-inline py-toolbar-inset sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">

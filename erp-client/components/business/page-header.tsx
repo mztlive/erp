@@ -74,8 +74,7 @@ function PageHeader({
             data-density={objectChrome ? "compact" : density}
             data-variant={variant}
             className={cn(
-                // 白壳：与侧栏同色，压在浅色内容区之上，吸顶时发丝底边托住滚上来的卡片。
-                "sticky top-0 z-20 flex shrink-0 flex-col border-b border-border bg-card",
+                "sticky top-0 z-20 flex shrink-0 flex-col border-b border-border/75 bg-card/95 backdrop-blur-sm shadow-2xs",
                 objectChrome ? "gap-1.5" : compact ? "gap-1.5" : "gap-2.5",
                 className,
             )}
@@ -111,7 +110,7 @@ function PageHeader({
                             {title != null ? (
                                 <h1
                                     className={cn(
-                                        "font-semibold tracking-tight text-foreground",
+                                        "font-bold tracking-tight text-foreground",
                                         compact
                                             ? "text-xl leading-7"
                                             : "text-2xl leading-8",
@@ -182,7 +181,7 @@ function PageHeaderMetaItem({
         <span
             data-slot="page-header-meta-item"
             className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-background px-2 py-0.5 text-xs text-muted-foreground [&_svg]:size-3.5",
+                "inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground [&_svg]:size-3.5",
                 className,
             )}
             {...props}

@@ -166,8 +166,8 @@ function MetricItem({
     const labelNode = (
         <span
             className={cn(
-                "block text-muted-foreground",
-                compact ? "text-xs" : "text-sm",
+                "block font-medium text-muted-foreground/80 tracking-wide",
+                compact ? "text-[11px]" : "text-xs tracking-wider",
             )}
         >
             {label}
@@ -180,42 +180,34 @@ function MetricItem({
             data-density={density}
             data-detail-mode={detailMode}
             className={cn(
-                "min-w-0 rounded-lg border border-border bg-card",
-                compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
+                "group relative min-w-0 rounded-lg border border-border/75 bg-card px-3.5 py-2.5 shadow-2xs transition-all duration-150 hover:border-border hover:shadow-xs",
                 className,
             )}
             {...props}
         >
-            {showTooltipDetail ? (
-                <MetricDetailTooltip content={detail}>
-                    {labelNode}
-                </MetricDetailTooltip>
-            ) : (
-                labelNode
-            )}
-            <div className={compact ? "mt-0.5" : "mt-1"}>
+            <div className="flex items-center justify-between gap-2">
+                {showTooltipDetail ? (
+                    <MetricDetailTooltip content={detail}>
+                        {labelNode}
+                    </MetricDetailTooltip>
+                ) : (
+                    labelNode
+                )}
+                {status ? <StatusBadge {...status} /> : null}
+            </div>
+            <div className={cn("flex items-baseline gap-2", compact ? "mt-1" : "mt-1.5")}>
                 <div
                     className={cn(
                         "num font-semibold tracking-tight text-foreground",
-                        compact ? "text-lg" : "text-xl",
+                        compact ? "text-xl" : "text-2xl",
                     )}
                 >
                     {value}
                 </div>
-                {status || showInlineDetail ? (
-                    <div
-                        className={cn(
-                            "flex flex-wrap items-center gap-2",
-                            compact ? "mt-1" : "mt-1.5",
-                        )}
-                    >
-                        {status ? <StatusBadge {...status} /> : null}
-                        {showInlineDetail ? (
-                            <span className="text-xs text-muted-foreground">
-                                {detail}
-                            </span>
-                        ) : null}
-                    </div>
+                {showInlineDetail ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                        {detail}
+                    </span>
                 ) : null}
             </div>
         </div>
@@ -236,6 +228,7 @@ export type MetricFilterItemProps = Omit<
     active?: boolean
     detailMode?: MetricDetailMode
     density?: MetricDensity
+    id?: string
 }
 
 /** 可作为列表/待办过滤器的指标项，提供按钮语义与明确选中态。 */
@@ -261,40 +254,43 @@ function MetricFilterItem({
                 aria-pressed={active}
                 data-density={density}
                 className={cn(
-                    "h-full w-full rounded-lg border border-border bg-card text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
+                    "h-full w-full rounded-lg border border-border/75 bg-card px-3.5 py-2.5 text-left shadow-2xs transition-all duration-150 hover:border-foreground/30 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active &&
-                        "border-primary/30 bg-accent text-accent-foreground shadow-none",
+                        "border-foreground/80 bg-muted/60 text-foreground shadow-xs ring-1 ring-foreground/20",
                     className,
                 )}
                 {...props}
             >
-                <span
-                    className={cn(
-                        "block text-muted-foreground xl:shrink-0",
-                        compact ? "text-xs" : "text-sm",
-                    )}
-                >
-                    {label}
-                </span>
-                <span
-                    className={cn(
-                        "num mt-1 block font-semibold tracking-tight text-foreground xl:mt-0",
-                        compact ? "text-lg" : "text-xl",
-                    )}
-                >
-                    {value}
-                </span>
-                {showInlineDetail ? (
-                    <span className="mt-1 block text-xs text-muted-foreground xl:ml-auto xl:mt-0 xl:truncate">
-                        {detail}
+                <div className="flex items-center justify-between gap-2">
+                    <span
+                        className={cn(
+                            "block font-medium text-muted-foreground/80 tracking-wide xl:shrink-0",
+                            compact ? "text-[11px]" : "text-xs tracking-wider",
+                        )}
+                    >
+                        {label}
                     </span>
-                ) : null}
-                {status ? (
-                    <span className="mt-1 block shrink-0 xl:mt-0">
-                        <StatusBadge {...status} />
+                    {status ? (
+                        <span className="shrink-0">
+                            <StatusBadge {...status} />
+                        </span>
+                    ) : null}
+                </div>
+                <div className={cn("flex items-baseline gap-2", compact ? "mt-1" : "mt-1.5")}>
+                    <span
+                        className={cn(
+                            "num font-semibold tracking-tight text-foreground",
+                            compact ? "text-xl" : "text-2xl",
+                        )}
+                    >
+                        {value}
                     </span>
-                ) : null}
+                    {showInlineDetail ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                            {detail}
+                        </span>
+                    ) : null}
+                </div>
             </button>
         </div>
     )
@@ -443,7 +439,7 @@ function PageScaffold({
 
 /** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
 const surfacePanelClassName =
-    "erp-raised-surface rounded-lg border border-border bg-card shadow-xs"
+    "erp-raised-surface rounded-xl border border-border/80 bg-card shadow-xs transition-shadow duration-200"
 
 /** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
 const surfaceFlatClassName =
