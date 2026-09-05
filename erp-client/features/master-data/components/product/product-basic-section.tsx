@@ -58,92 +58,74 @@ function ProductBasicSection({
     return (
         <ProductSectionFrame
             id="product-section-basic"
-            title={masterDataCopy.fieldIdentitySection}
-            description={
-                isCreate
-                    ? masterDataCopy.productCreateDesc
-                    : masterDataCopy.productEditDesc
-            }
+            title="基础资料"
             disabled={!canRevise}
         >
-            <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                    <Label htmlFor={`${prefix}-product-no`}>商品编号</Label>
-                    <Input
-                        id={`${prefix}-product-no`}
-                        value={fields.productNo}
-                        disabled={!isCreate}
-                        onChange={(event) =>
-                            setFields((previous) => ({
-                                ...previous,
-                                productNo: event.target.value,
-                            }))
-                        }
-                        placeholder="请输入全局唯一商品编号"
-                    />
-                    {!isCreate ? (
-                        <p className="text-xs text-muted-foreground">
-                            商品编号创建后不可修改。
-                        </p>
-                    ) : null}
-                </div>
-                <div className="space-y-1.5">
-                    <Label htmlFor={`${prefix}-name`}>名称</Label>
+            <div className="grid gap-5 sm:grid-cols-6">
+                {isCreate ? (
+                    <div className="space-y-1.5 sm:col-span-3">
+                        <Label htmlFor={`${prefix}-product-no`}>
+                            商品编号 *
+                        </Label>
+                        <Input
+                            id={`${prefix}-product-no`}
+                            value={fields.productNo}
+                            disabled={!isCreate}
+                            onChange={(event) =>
+                                setFields((previous) => ({
+                                    ...previous,
+                                    productNo: event.target.value,
+                                }))
+                            }
+                            placeholder="请输入全局唯一商品编号"
+                        />
+                    </div>
+                ) : null}
+                <div
+                    className={
+                        isCreate
+                            ? "space-y-1.5 sm:col-span-3"
+                            : "space-y-1.5 sm:col-span-6"
+                    }
+                >
+                    <Label htmlFor={`${prefix}-name`}>商品名称 *</Label>
                     <Input
                         id={`${prefix}-name`}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="商品名称（SPU）"
+                        placeholder="请输入商品名称"
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor={`${prefix}-description`}>商品描述</Label>
-                    <Textarea
-                        id={`${prefix}-description`}
-                        value={fields.description ?? ""}
-                        onChange={(event) =>
+                <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor={`${prefix}-kind-combobox`}>
+                        商品类型 *
+                    </Label>
+                    <OptionCombobox
+                        id={`${prefix}-kind-combobox`}
+                        value={fields.productKind || null}
+                        disabled={!isCreate || !canRevise}
+                        onValueChange={(value) =>
                             setFields((previous) => ({
                                 ...previous,
-                                description: event.target.value,
+                                productKind: (value ?? "") as ProductKind,
                             }))
                         }
-                        placeholder="公司审核后的商品描述"
-                        rows={3}
+                        options={PRODUCT_KIND_VALUES.map((kind) => ({
+                            value: kind,
+                            label: PRODUCT_KIND_LABELS[kind],
+                        }))}
+                        allowClear={false}
+                        placeholder="请选择商品类型"
+                        className="w-full"
                     />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>商品类型</Label>
-                    {isCreate ? (
-                        <OptionCombobox
-                            id={`${prefix}-kind-combobox`}
-                            value={fields.productKind || null}
-                            onValueChange={(value) =>
-                                setFields((previous) => ({
-                                    ...previous,
-                                    productKind: (value ?? "") as ProductKind,
-                                }))
-                            }
-                            options={PRODUCT_KIND_VALUES.map((kind) => ({
-                                value: kind,
-                                label: PRODUCT_KIND_LABELS[kind],
-                            }))}
-                            allowClear={false}
-                            placeholder="请选择商品类型"
-                            className="w-full"
-                        />
-                    ) : (
-                        <p className="flex h-9 items-center text-sm font-medium">
-                            {fields.productKind
-                                ? PRODUCT_KIND_LABELS[fields.productKind]
-                                : "—"}
-                        </p>
-                    )}
                     <p className="text-xs text-muted-foreground">
                         决定商品业务作用；创建后不可变，也不随分类变化。
                     </p>
                 </div>
-                <div className="space-y-1.5">
-                    <Label>{masterDataCopy.fBaseUnit}</Label>
+                <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor={`${prefix}-unit-combobox`}>
+                        {masterDataCopy.fBaseUnit} *
+                    </Label>
                     <OptionCombobox
                         id={`${prefix}-unit-combobox`}
                         value={fields.baseUnitId || null}
@@ -171,8 +153,10 @@ function ProductBasicSection({
                         className="w-full"
                     />
                 </div>
-                <div className="space-y-1.5">
-                    <Label>{masterDataCopy.fCategory}</Label>
+                <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor={`${prefix}-category-combobox`}>
+                        {masterDataCopy.fCategory} *
+                    </Label>
                     <CategoryCombobox
                         id={`${prefix}-category-combobox`}
                         categories={categoryOptions}
@@ -193,8 +177,10 @@ function ProductBasicSection({
                         className="w-full"
                     />
                 </div>
-                <div className="space-y-1.5">
-                    <Label>{masterDataCopy.fBrand}</Label>
+                <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor={`${prefix}-brand-combobox`}>
+                        {masterDataCopy.fBrand} *
+                    </Label>
                     <BrandCombobox
                         id={`${prefix}-brand-combobox`}
                         brands={brandOptions}
@@ -213,6 +199,21 @@ function ProductBasicSection({
                         placeholder="请选择品牌"
                         emptyLabel="暂无可用品牌，请先在品牌中维护"
                         className="w-full"
+                    />
+                </div>
+                <div className="space-y-1.5 sm:col-span-6">
+                    <Label htmlFor={`${prefix}-description`}>商品描述</Label>
+                    <Textarea
+                        id={`${prefix}-description`}
+                        value={fields.description ?? ""}
+                        onChange={(event) =>
+                            setFields((previous) => ({
+                                ...previous,
+                                description: event.target.value,
+                            }))
+                        }
+                        placeholder="公司审核后的商品描述"
+                        rows={3}
                     />
                 </div>
             </div>

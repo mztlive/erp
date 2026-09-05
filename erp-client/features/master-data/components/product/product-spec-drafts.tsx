@@ -1,19 +1,10 @@
 "use client"
 
-import {
-    ArrowDownIcon,
-    ArrowUpIcon,
-    GripVerticalIcon,
-    PlusIcon,
-    XIcon,
-} from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
 import type { ProductSpecDraft } from "@/features/master-data/lib/product-editor-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -34,16 +25,8 @@ function ProductSpecDraftsEditor({
     idPrefix = "master-data-product-spec",
 }: ProductSpecDraftsEditorProps) {
     return (
-        <ProductSectionFrame
-            title="商品规格"
-            description={masterDataCopy.productSpecsHint}
-            disabled={!canRevise}
-            extra={
-                <Badge variant="secondary">
-                    {specDrafts.length} 个规格项 · {skuCount} 个 SKU
-                </Badge>
-            }
-        >
+        <fieldset disabled={!canRevise} className="min-w-0 space-y-3">
+            <legend className="sr-only">商品规格</legend>
             <div className="space-y-3">
                 {specDrafts.map((draft, index) => {
                     const specSegment = toAutomationIdSegment(
@@ -53,111 +36,35 @@ function ProductSpecDraftsEditor({
                     return (
                         <div
                             key={`${specSegment}-${index}`}
-                            className="rounded-xl border border-border bg-surface-sunken"
+                            className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
                         >
-                            <div className="flex flex-wrap items-end gap-3 border-b border-border px-3 py-3">
-                                <div className="flex items-center gap-2 self-center">
-                                    <GripVerticalIcon
-                                        className="size-4 text-muted-foreground"
-                                        aria-hidden
-                                    />
-                                    <Badge variant="outline">
-                                        规格项 {index + 1}
-                                    </Badge>
-                                </div>
-                                <div className="min-w-48 flex-1 space-y-1.5 sm:max-w-sm">
-                                    <Label
-                                        htmlFor={`${specItemId}-name`}
-                                        className="text-sm font-medium text-foreground"
-                                    >
-                                        规格名称
-                                    </Label>
-                                    <Input
-                                        id={`${specItemId}-name`}
-                                        className="bg-card font-medium shadow-sm"
-                                        value={draft.name}
-                                        onChange={(event) => {
-                                            const next = [...specDrafts]
-                                            next[index] = {
-                                                ...draft,
-                                                name: event.target.value,
-                                            }
-                                            syncSpecDrafts(next)
-                                        }}
-                                        placeholder="规格名称，如：颜色"
-                                    />
-                                </div>
-                                <div className="ml-auto flex items-center gap-1">
-                                    <Button
-                                        id={`${specItemId}-move-up`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        disabled={index === 0}
-                                        aria-label={`规格项 ${index + 1} 上移`}
-                                        onClick={() =>
-                                            syncSpecDrafts(
-                                                moveListItem(
-                                                    specDrafts,
-                                                    index,
-                                                    index - 1,
-                                                ),
-                                            )
-                                        }
-                                    >
-                                        <ArrowUpIcon />
-                                    </Button>
-                                    <Button
-                                        id={`${specItemId}-move-down`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        disabled={
-                                            index === specDrafts.length - 1
-                                        }
-                                        aria-label={`规格项 ${index + 1} 下移`}
-                                        onClick={() =>
-                                            syncSpecDrafts(
-                                                moveListItem(
-                                                    specDrafts,
-                                                    index,
-                                                    index + 1,
-                                                ),
-                                            )
-                                        }
-                                    >
-                                        <ArrowDownIcon />
-                                    </Button>
-                                    <Button
-                                        id={`${specItemId}-remove`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        aria-label={`删除规格项 ${index + 1}`}
-                                        onClick={() => {
-                                            if (
-                                                !window.confirm(
-                                                    "删除规格项会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？",
-                                                )
-                                            ) {
-                                                return
-                                            }
-                                            syncSpecDrafts(
-                                                specDrafts.filter(
-                                                    (_, i) => i !== index,
-                                                ),
-                                            )
-                                        }}
-                                    >
-                                        <XIcon />
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="space-y-2 p-3">
-                                <Label className="text-xs text-muted-foreground">
-                                    规格值
+                            <div className="min-w-0 space-y-1.5">
+                                <Label
+                                    htmlFor={`${specItemId}-name`}
+                                    className="text-xs text-muted-foreground"
+                                >
+                                    规格名称
                                 </Label>
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                <Input
+                                    id={`${specItemId}-name`}
+                                    className="h-8 bg-card"
+                                    value={draft.name}
+                                    onChange={(event) => {
+                                        const next = [...specDrafts]
+                                        next[index] = {
+                                            ...draft,
+                                            name: event.target.value,
+                                        }
+                                        syncSpecDrafts(next)
+                                    }}
+                                    placeholder="规格名称，如：颜色"
+                                />
+                            </div>
+                            <div className="min-w-0 space-y-1.5">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    规格值
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2">
                                     {draft.values.map(
                                         (specValue, valueIndex) => {
                                             const valueSegment =
@@ -169,7 +76,7 @@ function ProductSpecDraftsEditor({
                                             return (
                                                 <div
                                                     key={`${valueSegment}-${valueIndex}`}
-                                                    className="flex items-center gap-1"
+                                                    className="flex w-40 max-w-full items-center gap-1"
                                                 >
                                                     <Input
                                                         id={valueId}
@@ -229,45 +136,118 @@ function ProductSpecDraftsEditor({
                                             )
                                         },
                                     )}
+                                    <Button
+                                        id={`${specItemId}-add-value`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8"
+                                        onClick={() => {
+                                            const next = [...specDrafts]
+                                            next[index] = {
+                                                ...draft,
+                                                values: [...draft.values, ""],
+                                            }
+                                            syncSpecDrafts(next)
+                                        }}
+                                    >
+                                        <PlusIcon
+                                            data-icon="inline-start"
+                                            aria-hidden
+                                        />
+                                        添加规格值
+                                    </Button>
                                 </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-1 sm:pt-6">
                                 <Button
-                                    id={`${specItemId}-add-value`}
+                                    id={`${specItemId}-move-up`}
                                     type="button"
-                                    variant="outline"
-                                    size="xs"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    disabled={index === 0}
+                                    aria-label={`规格项 ${index + 1} 上移`}
+                                    onClick={() =>
+                                        syncSpecDrafts(
+                                            moveListItem(
+                                                specDrafts,
+                                                index,
+                                                index - 1,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    <ArrowUpIcon />
+                                </Button>
+                                <Button
+                                    id={`${specItemId}-move-down`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    disabled={index === specDrafts.length - 1}
+                                    aria-label={`规格项 ${index + 1} 下移`}
+                                    onClick={() =>
+                                        syncSpecDrafts(
+                                            moveListItem(
+                                                specDrafts,
+                                                index,
+                                                index + 1,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    <ArrowDownIcon />
+                                </Button>
+                                <Button
+                                    id={`${specItemId}-remove`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    aria-label={`删除规格项 ${index + 1}`}
                                     onClick={() => {
-                                        const next = [...specDrafts]
-                                        next[index] = {
-                                            ...draft,
-                                            values: [...draft.values, ""],
+                                        if (
+                                            !window.confirm(
+                                                "删除规格项会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？",
+                                            )
+                                        ) {
+                                            return
                                         }
-                                        syncSpecDrafts(next)
+                                        syncSpecDrafts(
+                                            specDrafts.filter(
+                                                (_, i) => i !== index,
+                                            ),
+                                        )
                                     }}
                                 >
-                                    <PlusIcon
-                                        data-icon="inline-start"
-                                        aria-hidden
-                                    />
-                                    添加规格值
+                                    <XIcon />
                                 </Button>
                             </div>
                         </div>
                     )
                 })}
             </div>
-            <Button
-                id={`${idPrefix}-add`}
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                    syncSpecDrafts([...specDrafts, { name: "", values: [""] }])
-                }
-            >
-                <PlusIcon data-icon="inline-start" aria-hidden />
-                添加规格项
-            </Button>
-        </ProductSectionFrame>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                    {specDrafts.length} 个规格项 · {skuCount} 个
+                    SKU，按规格值自动组合
+                </p>
+                <Button
+                    id={`${idPrefix}-add`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                        syncSpecDrafts([
+                            ...specDrafts,
+                            { name: "", values: [""] },
+                        ])
+                    }
+                >
+                    <PlusIcon data-icon="inline-start" aria-hidden />
+                    添加规格项
+                </Button>
+            </div>
+        </fieldset>
     )
 }
 

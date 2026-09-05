@@ -42,11 +42,11 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
     id: ProductEditorSectionId
     label: string
 }> = [
-    { id: "basic", label: "基础信息" },
-    { id: "media", label: "图文信息" },
+    { id: "basic", label: "商品资料" },
     { id: "sku", label: "规格与 SKU" },
+    { id: "media", label: "图片与详情" },
     { id: "effective", label: "生效信息" },
-    { id: "history", label: "历史与引用" },
+    { id: "history", label: "变更记录与引用" },
 ]
 
 function applySpecsFromDrafts(

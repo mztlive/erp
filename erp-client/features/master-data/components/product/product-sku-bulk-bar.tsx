@@ -11,12 +11,6 @@ type SkuBulkPriceBarProps = {
     setBatchSalePrice: (next: string) => void
     setBatchMarketPrice: (next: string) => void
     onApplyBatchReferencePrices: () => void
-    inventoryActionHint: string | undefined
-    onOpenInventory: (
-        skuId: string | undefined,
-        trigger: HTMLButtonElement,
-    ) => void
-    inventoryPreviewSkuId: string | undefined
 }
 
 function SkuBulkPriceBar({
@@ -26,12 +20,9 @@ function SkuBulkPriceBar({
     setBatchSalePrice,
     setBatchMarketPrice,
     onApplyBatchReferencePrices,
-    inventoryActionHint,
-    onOpenInventory,
-    inventoryPreviewSkuId,
 }: SkuBulkPriceBarProps) {
     return (
-        <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto]">
+        <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-[repeat(2,minmax(0,1fr))_auto]">
             <div className="space-y-1">
                 <Label
                     htmlFor="master-data-product-sku-bulk-sale-price"
@@ -78,21 +69,7 @@ function SkuBulkPriceBar({
                 }
                 onClick={onApplyBatchReferencePrices}
             >
-                批量设置
-            </Button>
-            <Button
-                id="master-data-product-product-sku-bulk-bar-button-2"
-                type="button"
-                variant="outline"
-                size="sm"
-                className="self-end"
-                disabled={Boolean(inventoryActionHint)}
-                title={inventoryActionHint}
-                onClick={(event) =>
-                    onOpenInventory(inventoryPreviewSkuId, event.currentTarget)
-                }
-            >
-                查看商品库存
+                应用到全部 SKU
             </Button>
         </div>
     )

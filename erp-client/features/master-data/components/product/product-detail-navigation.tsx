@@ -63,7 +63,9 @@ function ProductSectionTabs({
                 className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
             >
                 {PRODUCT_EDITOR_SECTIONS.filter(
-                    (section) => !isCreate || section.id !== "history",
+                    (section) =>
+                        section.id !== "effective" &&
+                        (!isCreate || section.id !== "history"),
                 ).map((section) => (
                     <TabsTrigger
                         key={section.id}

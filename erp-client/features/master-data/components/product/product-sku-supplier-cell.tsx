@@ -3,10 +3,10 @@
 import Link from "next/link"
 
 import {
-    HoverCard,
-    HoverCardContent,
-    HoverCardTrigger,
-} from "@/components/ui/hover-card"
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell } from "@/components/ui/table"
@@ -49,12 +49,14 @@ function SkuSupplierCell({
         <TableCell className="h-auto whitespace-normal align-top">
             <div className="space-y-1.5">
                 {sku.skuId && !isCreate ? (
-                    <HoverCard>
-                        <HoverCardTrigger
+                    <Popover>
+                        <PopoverTrigger
+                            id={`master-data-product-sku-${skuSegment}-suppliers`}
                             render={
-                                <Badge
+                                <Button
+                                    type="button"
                                     variant="outline"
-                                    className="cursor-pointer"
+                                    size="xs"
                                 />
                             }
                         >
@@ -63,8 +65,8 @@ function SkuSupplierCell({
                                 : supplierCountsError != null
                                   ? "供给暂不可查"
                                   : `${supplierCount ?? 0} 家供应商`}
-                        </HoverCardTrigger>
-                        <HoverCardContent
+                        </PopoverTrigger>
+                        <PopoverContent
                             align="start"
                             className="w-64 space-y-3"
                         >
@@ -76,9 +78,9 @@ function SkuSupplierCell({
                                     {supplierCountsError != null
                                         ? getErrorMessage(
                                               supplierCountsError,
-                                              "当前无法读取正式供给，请稍后重试。",
+                                              "当前无法读取供给，请稍后重试。",
                                           )
-                                        : `当前共有 ${supplierCount ?? 0} 家供应商具备已启用且已形成当前修订的供给关系；供应商及有效期明细以供给中心为准。`}
+                                        : `当前共有 ${supplierCount ?? 0} 家供应商具备当前有效的供给关系；供应商及有效期明细以供给中心为准。`}
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
@@ -99,13 +101,15 @@ function SkuSupplierCell({
                                 <Link
                                     id={`master-data-product-sku-${skuSegment}-view-supplies`}
                                     className="text-xs text-primary hover:underline"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     href={`/procurement/supplier-offerings?skuId=${encodeURIComponent(sku.skuId)}&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
                                 >
-                                    查看全部供给
+                                    查看全部供给（新窗口）
                                 </Link>
                             </div>
-                        </HoverCardContent>
-                    </HoverCard>
+                        </PopoverContent>
+                    </Popover>
                 ) : (
                     <Badge variant="outline">
                         {supplierCountsPending

@@ -7,6 +7,8 @@ import { ProductSectionFrame } from "@/features/master-data/components/product/p
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 type ProductEffectiveSectionProps = {
+    reasonInvalid?: boolean
+    reasonRef?: React.Ref<HTMLTextAreaElement>
     idPrefix?: string
     isCreate: boolean
     canRevise: boolean
@@ -28,6 +30,8 @@ function ProductEffectiveSection({
     setEffectiveFrom,
     setEffectiveTo,
     setChangeReason,
+    reasonInvalid,
+    reasonRef,
 }: ProductEffectiveSectionProps) {
     const prefix = idPrefix ?? "master-data-product-effective"
     return (
@@ -61,10 +65,15 @@ function ProductEffectiveSection({
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor={`${prefix}-reason`}>
-                        {masterDataCopy.fieldChangeReason}
+                        {masterDataCopy.fieldChangeReason} *
                     </Label>
                     <Textarea
                         id={`${prefix}-reason`}
+                        ref={reasonRef}
+                        aria-invalid={reasonInvalid || undefined}
+                        aria-describedby={
+                            reasonInvalid ? `${prefix}-reason-error` : undefined
+                        }
                         value={changeReason}
                         onChange={(e) => setChangeReason(e.target.value)}
                         rows={2}
@@ -74,6 +83,15 @@ function ProductEffectiveSection({
                                 : "说明本次修改内容，保存后形成新版本"
                         }
                     />
+                    {reasonInvalid ? (
+                        <p
+                            id={`${prefix}-reason-error`}
+                            className="text-sm text-destructive"
+                            role="alert"
+                        >
+                            请填写至少 2 个字的变更原因。
+                        </p>
+                    ) : null}
                 </div>
             </div>
         </ProductSectionFrame>

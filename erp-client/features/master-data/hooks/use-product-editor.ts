@@ -84,6 +84,8 @@ export function useProductEditor(stableId: string) {
         newIdempotencyKey(isCreate ? "create-product" : "revise-product"),
     )
     const [disableOpen, setDisableOpen] = React.useState(false)
+    const [saveOpen, setSaveOpen] = React.useState(false)
+    const [saveAttempted, setSaveAttempted] = React.useState(false)
     const [discardOpen, setDiscardOpen] = React.useState(false)
     const [pendingNav, setPendingNav] = React.useState<string | null>(null)
     const [supplierDialogSku, setSupplierDialogSku] = React.useState<FixedSku>()
@@ -106,6 +108,12 @@ export function useProductEditor(stableId: string) {
         isCreate,
         data?.stableId,
     )
+    React.useEffect(() => {
+        if (activeSection === "effective") {
+            setSaveOpen(true)
+            setActiveSection("basic")
+        }
+    }, [activeSection, setActiveSection])
     useProductDirtyGuard(() => form.state.isDirty)
 
     const initialFormValues = React.useMemo(
@@ -119,6 +127,8 @@ export function useProductEditor(stableId: string) {
     const form = useAppForm({
         defaultValues: initialFormValues,
         onSubmit: async ({ value }) => {
+            if (!canRevise) return
+            setSaveAttempted(true)
             setFormError(null)
             setCheckPassed(false)
             setResult(null)
@@ -132,7 +142,13 @@ export function useProductEditor(stableId: string) {
             if (validation) {
                 setFormErrorTitle("填写检查未通过")
                 setFormError(validation)
-                setActiveSection(productSectionForValidationError(validation))
+                const section = productSectionForValidationError(validation)
+                if (section === "effective") {
+                    setSaveOpen(true)
+                } else {
+                    setSaveOpen(false)
+                    setActiveSection(section)
+                }
                 return
             }
 
@@ -156,6 +172,7 @@ export function useProductEditor(stableId: string) {
                         pendingAssetUploads: prepared.pendingAssetUploads,
                     })
                     if (response.outcome === "succeeded") {
+                        setSaveOpen(false)
                         toast.add({
                             title: masterDataCopy.reviseSuccessTitle,
                             description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
@@ -182,6 +199,7 @@ export function useProductEditor(stableId: string) {
                     pendingAssetUploads: prepared.pendingAssetUploads,
                 })
                 if (response.outcome === "succeeded") {
+                    setSaveOpen(false)
                     toast.add({
                         title: masterDataCopy.createSuccessTitle,
                         description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
@@ -298,6 +316,30 @@ export function useProductEditor(stableId: string) {
         setCheckPassed(true)
     }
 
+    const requestSave = (values: ProductEditorFormValues) => {
+        if (!canRevise || pending) return
+        setFormError(null)
+        setResult(null)
+        setSaveAttempted(false)
+        const fields = applySpecsFromDrafts(
+            values.specDrafts,
+            values.fields,
+            values.name,
+        )
+        // The reason is collected in the save dialog, after the product fields pass validation.
+        const validation = validateProductEditor(
+            { ...values, changeReason: "准备保存" },
+            fields,
+        )
+        if (validation) {
+            setFormErrorTitle("请先完善商品资料")
+            setFormError(validation)
+            setActiveSection(productSectionForValidationError(validation))
+            return
+        }
+        setSaveOpen(true)
+    }
+
     return {
         isCreate,
         router,
@@ -318,6 +360,11 @@ export function useProductEditor(stableId: string) {
         result,
         setResult,
         disableOpen,
+        saveOpen,
+        setSaveOpen,
+        saveAttempted,
+        requestSave,
+        initialFormValues,
         setDisableOpen,
         discardOpen,
         setDiscardOpen,

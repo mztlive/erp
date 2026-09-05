@@ -1,5 +1,16 @@
 "use client"
 
+import * as React from "react"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +23,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     MoneyInput,
     SkuMainImageField,
@@ -65,109 +75,170 @@ function SkuRow({
     stableId,
 }: SkuRowProps) {
     const skuSegment = toAutomationIdSegment(
-        sku.skuId || sku.skuNo || sku.specificationSignature || `sku-${index}`,
+        sku.skuId || sku.specificationSignature || sku.skuNo || `sku-${index}`,
     )
-    const cellPad = "h-auto whitespace-normal align-top"
-
+    const [detailsOpen, setDetailsOpen] = React.useState(false)
+    const cellPad = "h-auto whitespace-normal align-top py-4"
     return (
         <TableRow className="align-top">
-            {activeSpecs.length > 0 ? (
-                activeSpecs.map((spec, specIndex) => (
-                    <TableCell
-                        key={`${spec.name}-${specIndex}`}
-                        className={cellPad}
+            <TableCell className="sticky left-0 z-10 min-w-64 max-w-80 whitespace-normal bg-card py-4 align-top">
+                <div className="flex items-start gap-3">
+                    <div
+                        className="shrink-0"
+                        role="group"
+                        aria-label={`${sku.name || sku.specLabel} 主图`}
                     >
-                        <Badge variant="secondary">
-                            {sku.attributeValues[specIndex] || "—"}
-                        </Badge>
-                    </TableCell>
-                ))
-            ) : (
-                <TableCell className={cellPad}>
-                    <Badge variant="secondary">
-                        {masterDataCopy.productDefaultSpec}
-                    </Badge>
-                </TableCell>
-            )}
-            <TableCell className={cellPad}>
-                <Input
-                    id={`master-data-product-sku-${skuSegment}-code`}
-                    className="h-8"
-                    value={sku.skuNo}
-                    disabled={!canRevise}
-                    onChange={(event) =>
-                        updateSku(index, {
-                            skuNo: event.target.value,
-                        })
-                    }
-                    aria-label={`${sku.specLabel} 产品编码`}
-                    title="系统默认生成，可手动覆盖"
-                />
+                        <SkuMainImageField
+                            idPrefix={`master-data-product-sku-${skuSegment}-main-image`}
+                            value={sku.mainImage}
+                            previewUrl={sku.mainImagePreviewUrl}
+                            disabled={!canRevise}
+                            onChange={(mainImage) =>
+                                updateSku(
+                                    index,
+                                    mainImage
+                                        ? {
+                                              mainImage,
+                                          }
+                                        : {
+                                              mainImage: "",
+                                              mainImagePreviewUrl: undefined,
+                                              mainImageAssetId: undefined,
+                                          },
+                                )
+                            }
+                            onFilesSelected={(files) => {
+                                const file = files[0]
+                                rememberSkuFile(index, file)
+                                if (file) {
+                                    updateSku(index, {
+                                        mainImage: file.name,
+                                        mainImagePreviewUrl:
+                                            URL.createObjectURL(file),
+                                        mainImageAssetId: undefined,
+                                    })
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-medium">
+                            {sku.name || name || "未填写 SKU 名称"}
+                        </p>
+                        <p className="mt-1 break-all text-xs text-muted-foreground">
+                            {sku.skuNo || "待填写编码"}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                            {activeSpecs.length
+                                ? activeSpecs
+                                      .map(
+                                          (spec, i) =>
+                                              `${spec.name}：${sku.attributeValues[i] || "未填写"}`,
+                                      )
+                                      .join(" · ")
+                                : "默认规格"}
+                        </p>
+                        <Button
+                            id={`master-data-product-sku-${skuSegment}-edit`}
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="mt-2 h-auto px-0"
+                            onClick={() => setDetailsOpen(true)}
+                        >
+                            {canRevise ? "编辑详情" : "查看详情"}
+                        </Button>
+                    </div>
+                </div>
+                <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+                    <DialogContent
+                        className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+                        closeButtonId={`master-data-product-sku-${skuSegment}-close`}
+                    >
+                        <DialogHeader>
+                            <DialogTitle>SKU 资料</DialogTitle>
+                            <DialogDescription>
+                                修改后返回商品页统一保存；关闭此窗口会保留本次编辑内容。
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor={`master-data-product-sku-${skuSegment}-code`}
+                                >
+                                    产品编码
+                                </Label>
+                                <Input
+                                    id={`master-data-product-sku-${skuSegment}-code`}
+                                    className="h-8"
+                                    value={sku.skuNo}
+                                    disabled={!canRevise}
+                                    onChange={(event) =>
+                                        updateSku(index, {
+                                            skuNo: event.target.value,
+                                        })
+                                    }
+                                    aria-label={`${sku.specLabel} 产品编码`}
+                                    title="系统默认生成，可手动覆盖"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor={`master-data-product-sku-${skuSegment}-name`}
+                                >
+                                    SKU 名称
+                                </Label>
+                                <Input
+                                    id={`master-data-product-sku-${skuSegment}-name`}
+                                    className="h-8"
+                                    value={sku.name}
+                                    disabled={!canRevise}
+                                    onChange={(event) =>
+                                        updateSku(index, {
+                                            name: event.target.value,
+                                        })
+                                    }
+                                    placeholder={
+                                        name.trim() || "请输入 SKU 名称"
+                                    }
+                                    aria-label={`${sku.specLabel} SKU 名称`}
+                                    title="可与商品名称不同，保存后写入 SKU 修订"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor={`master-data-product-sku-${skuSegment}-barcode`}
+                                >
+                                    条码
+                                </Label>
+                                <Input
+                                    id={`master-data-product-sku-${skuSegment}-barcode`}
+                                    className="h-8"
+                                    value={sku.barcode ?? ""}
+                                    disabled={!canRevise}
+                                    onChange={(event) =>
+                                        updateSku(index, {
+                                            barcode:
+                                                event.target.value || undefined,
+                                        })
+                                    }
+                                    aria-label={`${sku.specLabel} 条形码`}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                id={`master-data-product-sku-${skuSegment}-done`}
+                                type="button"
+                                onClick={() => setDetailsOpen(false)}
+                            >
+                                完成编辑
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </TableCell>
-            <TableCell className={cellPad}>
-                <Input
-                    id={`master-data-product-sku-${skuSegment}-name`}
-                    className="h-8"
-                    value={sku.name}
-                    disabled={!canRevise}
-                    onChange={(event) =>
-                        updateSku(index, {
-                            name: event.target.value,
-                        })
-                    }
-                    placeholder={name.trim() || "请输入 SKU 名称"}
-                    aria-label={`${sku.specLabel} SKU 名称`}
-                    title="可与商品名称不同，保存后写入 SKU 修订"
-                />
-            </TableCell>
-            <TableCell className={cellPad}>
-                <Input
-                    id={`master-data-product-sku-${skuSegment}-barcode`}
-                    className="h-8"
-                    value={sku.barcode ?? ""}
-                    disabled={!canRevise}
-                    onChange={(event) =>
-                        updateSku(index, {
-                            barcode: event.target.value || undefined,
-                        })
-                    }
-                    aria-label={`${sku.specLabel} 条形码`}
-                />
-            </TableCell>
-            <TableCell className={cellPad}>
-                <SkuMainImageField
-                    idPrefix={`master-data-product-sku-${skuSegment}-main-image`}
-                    value={sku.mainImage}
-                    previewUrl={sku.mainImagePreviewUrl}
-                    disabled={!canRevise}
-                    onChange={(mainImage) =>
-                        updateSku(
-                            index,
-                            mainImage
-                                ? {
-                                      mainImage,
-                                  }
-                                : {
-                                      mainImage: "",
-                                      mainImagePreviewUrl: undefined,
-                                      mainImageAssetId: undefined,
-                                  },
-                        )
-                    }
-                    onFilesSelected={(files) => {
-                        const file = files[0]
-                        rememberSkuFile(index, file)
-                        if (file) {
-                            updateSku(index, {
-                                mainImage: file.name,
-                                mainImagePreviewUrl: URL.createObjectURL(file),
-                                mainImageAssetId: undefined,
-                            })
-                        }
-                    }}
-                />
-            </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
@@ -180,7 +251,7 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 销售价`}
                 />
             </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-market-price`}
                     value={sku.marketPrice ?? ""}
@@ -237,9 +308,8 @@ function SkuRow({
                 >
                     {sku.listingStatus === "LISTED" ? "已上架" : "已下架"}
                 </Badge>
-            </TableCell>
-            <TableCell className={cellPad}>
-                <div className="flex items-center gap-2">
+
+                <div className="mt-2 flex items-center gap-2">
                     <Switch
                         id={`master-data-product-sku-${skuSegment}-enable`}
                         size="sm"
@@ -309,53 +379,16 @@ function ProductSkuTable({
         <div className="w-full max-w-full overflow-hidden rounded-lg border">
             <Table
                 data-density="comfortable"
-                className="min-w-[64rem] [&_thead_th]:!static"
+                className="min-w-[48rem] [&_thead_th]:!static"
             >
                 <TableHeader>
                     <TableRow>
-                        {activeSpecs.length > 0 ? (
-                            <TableHead colSpan={activeSpecs.length}>
-                                规格
-                            </TableHead>
-                        ) : (
-                            <TableHead>规格</TableHead>
-                        )}
-                        <TableHead colSpan={4}>身份</TableHead>
-                        <TableHead colSpan={2}>公司商品池价格</TableHead>
-                        <TableHead colSpan={4}>关联与状态</TableHead>
-                    </TableRow>
-                    <TableRow>
-                        {activeSpecs.length > 0 ? (
-                            activeSpecs.map((spec) => (
-                                <TableHead key={spec.name} className="min-w-24">
-                                    {spec.name}
-                                </TableHead>
-                            ))
-                        ) : (
-                            <TableHead className="min-w-24">—</TableHead>
-                        )}
-                        <TableHead className="min-w-32">
-                            {masterDataCopy.fProductCode}
-                        </TableHead>
-                        <TableHead className="min-w-40">
-                            {masterDataCopy.fSkuName}
-                        </TableHead>
-                        <TableHead className="min-w-32">
-                            {masterDataCopy.fBarcode}
-                        </TableHead>
-                        <TableHead className="min-w-36">
-                            {masterDataCopy.fMainImage}
-                        </TableHead>
-                        <TableHead className="min-w-28">
-                            {masterDataCopy.fSalePrice}
-                        </TableHead>
-                        <TableHead className="min-w-28">
-                            {masterDataCopy.fMarketPrice}
-                        </TableHead>
-                        <TableHead className="min-w-32">供给</TableHead>
-                        <TableHead className="min-w-28">库存</TableHead>
-                        <TableHead className="min-w-24">上架</TableHead>
-                        <TableHead className="min-w-24">启用</TableHead>
+                        <TableHead className="min-w-64">商品规格</TableHead>
+                        <TableHead className="w-32 min-w-28">销售价</TableHead>
+                        <TableHead className="w-32 min-w-28">市场价</TableHead>
+                        <TableHead className="w-36 min-w-28">供给</TableHead>
+                        <TableHead className="w-28 min-w-24">库存</TableHead>
+                        <TableHead className="w-32 min-w-28">状态</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -365,7 +398,11 @@ function ProductSkuTable({
                             : 0
                         return (
                             <SkuRow
-                                key={`${sku.skuNo}-${index}`}
+                                key={
+                                    sku.skuId ||
+                                    sku.specificationSignature ||
+                                    "default"
+                                }
                                 sku={sku}
                                 index={index}
                                 isCreate={isCreate}
