@@ -15,7 +15,8 @@ use entities::receivable::{
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 
-use super::{amount_bson, progress_pipeline, ReceivableRepository, SettlementBatchResult};
+use super::account::{amount_bson, progress_pipeline};
+use super::{ReceivableRepository, SettlementBatchResult};
 use crate::executor::Executor;
 use crate::repository::extensions::ReceivableExt;
 use crate::repository::Repository;
@@ -321,7 +322,7 @@ mod tests {
 
     #[test]
     fn settlement_guard_matches_single_apply_filter() {
-        let amount = super::super::amount_bson(&Amount::from_str("100.50").unwrap()).unwrap();
+        let amount = super::super::account::amount_bson(&Amount::from_str("100.50").unwrap()).unwrap();
         let guard = settlement_guard("acct-1", &amount);
         assert_eq!(guard.get_str("id").unwrap(), "acct-1");
         assert_eq!(guard.get_i64("deleted_at").unwrap(), 0);

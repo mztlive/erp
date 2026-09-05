@@ -443,9 +443,7 @@ impl SupplierConnectionBusinessImpact {
     /// # 返回
     /// 任一计数大于零时返回 `true`。
     pub fn has_blockers(self) -> bool {
-        self.active_offerings > 0
-            || self.open_supplier_orders > 0
-            || self.active_sync_jobs > 0
+        self.active_offerings > 0 || self.open_supplier_orders > 0 || self.active_sync_jobs > 0
     }
 }
 
@@ -606,9 +604,7 @@ impl SupplierConnectionGovernance<'_> {
                 "ACTIVE_BUSINESS_IMPACT",
                 &format!(
                     "仍有{}条供给、{}张订单和{}个同步任务受影响",
-                    impact.active_offerings,
-                    impact.open_supplier_orders,
-                    impact.active_sync_jobs
+                    impact.active_offerings, impact.open_supplier_orders, impact.active_sync_jobs
                 ),
                 Some("W21"),
             )];

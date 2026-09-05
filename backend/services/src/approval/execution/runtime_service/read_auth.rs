@@ -1,0 +1,329 @@
+//! 运行读取授权矩阵与当前责任链判定。
+
+use std::collections::{HashMap, HashSet};
+
+use bpm::engine::Eligibility;
+use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
+use database::repository::bpm::ApprovalInstanceSummary;
+use database::{AccessControlExt, Executor};
+use entities::approval_integration::ApprovalSubjectSnapshot;
+use entities::document_registry::DocumentType;
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
+use mongodb::Database;
+
+use super::super::authorization::{converge_eligibility, AuthorizationFailure};
+use super::hidden_not_found;
+use crate::approval::business_adapter::{
+    adapter_object_read_decision, adapter_spec_of, ensure_separation_of_duties, BindingRevalidationContext,
+};
+use crate::approval::policy::{policy_of, DocumentApprovalPolicy, SeparationOfDutiesPolicy};
+use crate::approval::process_kind::process_kind_of;
+use crate::approval::{approval_decide_scope_with_executor, approval_document_read_scope_with_executor};
+use crate::audit::AuditActor;
+use crate::errors::{Error, ErrorCode, Result};
+use crate::iam::SharedRbacService;
+
+/// 单实例读取授权所需的持久化事实。
+pub(super) struct RuntimeReadSubject {
+    pub(super) instance: ApprovalProcessInstance,
+    pub(super) current_execution: Option<ApprovalNodeExecution>,
+    pub(super) snapshot: ApprovalSubjectSnapshot,
+    pub(super) document_type: DocumentType,
+}
+
+/// 纯授权矩阵输入；I/O 与政策解析由 Service 先完成。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct RuntimeReadAuthorizationFacts {
+    pub(super) actor_active: bool,
+    pub(super) initiator: bool,
+    pub(super) current_responsibility: bool,
+    pub(super) object_readable: bool,
+    pub(super) scope_covers: bool,
+    pub(super) runtime_admin: bool,
+}
+
+/// 按冻结快照重验审批人账号、动作权限、对象读取、DataScope 与岗位分离。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn revalidate_decision_approver(
+    db: &Database,
+    rbac: &SharedRbacService,
+    assignee_id: &str,
+    assignee_name: &str,
+    authenticated_actor: Option<&AuditActor>,
+    snapshot: &ApprovalSubjectSnapshot,
+    spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
+    separation_policy: SeparationOfDutiesPolicy,
+    executor: &mut dyn Executor,
+) -> Result<Eligibility> {
+    let account = db
+        .accounts()
+        .find_approval_assignee_by_id(assignee_id, executor)
+        .await?;
+    let failure = match account {
+        None => Some(AuthorizationFailure::AccountInactive),
+        Some(account)
+            if !account.is_active_backoffice()
+                || authenticated_actor
+                    .is_some_and(|actor| actor.id() != account.base.id || actor.kind() != account.kind) =>
+        {
+            Some(AuthorizationFailure::AccountInactive)
+        }
+        Some(account) => {
+            let scope_actor = authenticated_actor.cloned().unwrap_or_else(|| {
+                AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind)
+            });
+            let decide_scope = approval_decide_scope_with_executor(db, rbac, &scope_actor, executor).await?;
+            if decide_scope.is_empty() {
+                Some(AuthorizationFailure::NotEligible)
+            } else if !decide_scope.covers(&snapshot.payload.responsible_org_id) {
+                Some(AuthorizationFailure::OutOfDataScope)
+            } else {
+                let read_scope = approval_document_read_scope_with_executor(
+                    db,
+                    rbac,
+                    &scope_actor,
+                    snapshot.document_type,
+                    executor,
+                )
+                .await?;
+                if read_scope.is_empty() {
+                    Some(AuthorizationFailure::CannotReadSubject)
+                } else if !read_scope.covers(&snapshot.payload.responsible_org_id) {
+                    Some(AuthorizationFailure::OutOfDataScope)
+                } else {
+                    let context = BindingRevalidationContext {
+                        organization_id: snapshot.payload.responsible_org_id.clone(),
+                        creator_id: snapshot.payload.submitted_by.clone(),
+                    };
+                    match runtime_object_readable(spec, &context, assignee_id, true)? {
+                        true => {
+                            if ensure_separation_of_duties(
+                                separation_policy,
+                                &snapshot.payload.submitted_by,
+                                &[assignee_id.to_string()],
+                            )
+                            .is_err()
+                            {
+                                Some(AuthorizationFailure::SeparationOfDuties)
+                            } else {
+                                None
+                            }
+                        }
+                        false => Some(AuthorizationFailure::CannotReadSubject),
+                    }
+                }
+            }
+        }
+    };
+    converge_eligibility(assignee_id, assignee_name, failure)
+}
+
+/// 按当前已签署对象读取端口判定审批运行可读性。
+///
+/// `StockAdjustment` 的真实读取端口是 Entity 登记的
+/// `stock_adjustment:detail` 与当前组织 DataScope 交集；不得回退到已删除的
+/// 常量 helper。其它类型仍要求业务 Adapter 显式接线。
+pub(super) fn runtime_object_readable(
+    spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
+    context: &BindingRevalidationContext,
+    actor_id: &str,
+    read_scope_covers: bool,
+) -> Result<bool> {
+    if spec.document_type == DocumentType::StockAdjustment {
+        return Ok(read_scope_covers);
+    }
+    Ok(adapter_object_read_decision(spec, context, actor_id)?.unwrap_or(false))
+}
+
+/// 读取必须审批政策唯一签署的岗位分离规则。
+pub(super) fn process_required_separation_policy(
+    document_type: DocumentType,
+) -> Result<SeparationOfDutiesPolicy> {
+    match policy_of(document_type)? {
+        DocumentApprovalPolicy::ProcessRequired(policy) => Ok(policy.separation_of_duties_policy),
+        DocumentApprovalPolicy::NoApproval(_) => {
+            Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered))
+        }
+    }
+}
+
+/// 校验当前执行与实例持有的运行令牌完全一致。
+pub(super) fn current_execution_matches_instance(
+    instance: &ApprovalProcessInstance,
+    current: Option<&ApprovalNodeExecution>,
+) -> bool {
+    match (&instance.current_node_execution_id, current) {
+        (None, None) => true,
+        (Some(expected), Some(execution)) => {
+            expected.as_ref() == execution.base.id
+                && execution.process_instance_id.as_ref() == instance.base.id
+        }
+        _ => false,
+    }
+}
+
+/// 普通详情/历史读取允许发起人、当前责任人，或对象读取与 DataScope 同时成立。
+pub(super) fn ordinary_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active
+        && (facts.initiator || facts.current_responsibility || (facts.object_readable && facts.scope_covers))
+}
+
+/// 管理读取必须同时具备类型级运行管理、对象读取与 DataScope。
+pub(super) fn management_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active && facts.runtime_admin && facts.object_readable && facts.scope_covers
+}
+
+/// Started 视图由 BPM 启动人事实独立证明普通读取权。
+pub(super) fn started_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active && facts.initiator
+}
+
+/// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。
+pub(super) fn task_proves_current_responsibility(
+    task: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    subject: &RuntimeReadSubject,
+    actor_id: &str,
+    expected_owner_role: &str,
+) -> bool {
+    subject.instance.status == ApprovalProcessInstanceStatus::Running
+        && execution.status == ApprovalNodeExecutionStatus::Active
+        && execution.round_no == subject.instance.current_round_no
+        && execution.assignee_participant_id.as_str() == actor_id
+        && task.work_item_type == WorkItemType::DocumentApproval
+        && task.status == WorkItemStatus::Open
+        && task.assignment_source == AssignmentSource::ApprovalRuntime
+        && task.owner_user_id.as_deref() == Some(actor_id)
+        && task.owner_role == expected_owner_role
+        && task.owner_organization_id == subject.snapshot.payload.responsible_org_id
+        && task.approval_node_execution_id.as_ref().is_some_and(|id| {
+            id.as_ref() == execution.base.id
+                && subject.instance.current_node_execution_id.as_ref() == Some(id)
+        })
+        && task.business_object_type == subject.document_type.as_str()
+        && task.business_object_id == subject.instance.subject.subject_id()
+        && task.subject_version == subject.instance.subject_version.to_string()
+        && execution.process_instance_id.as_ref() == subject.instance.base.id
+        && execution.node_key.trim() == execution.node_key
+        && !execution.node_key.is_empty()
+}
+
+/// Mine 页的 WorkItem、当前 execution 与实例摘要是否构成同一当前责任链。
+pub(super) fn mine_runtime_chain_matches(
+    task: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    summary: &ApprovalInstanceSummary,
+    snapshot: Option<&ApprovalSubjectSnapshot>,
+    actor_id: &str,
+) -> Result<bool> {
+    let document_type =
+        entities::approval_integration::document_type_from_subject_kind(summary.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
+    let spec = adapter_spec_of(document_type)?;
+    let canonical_subject_version = summary.subject_version.to_string();
+    let runtime_chain_matches = task.work_item_type == WorkItemType::DocumentApproval
+        && task.status == WorkItemStatus::Open
+        && task.assignment_source == AssignmentSource::ApprovalRuntime
+        && task.owner_user_id.as_deref() == Some(actor_id)
+        && task.owner_role == spec.owner_role.as_str()
+        && task.approval_node_execution_id.as_ref().is_some_and(|id| {
+            id.as_ref() == execution.base.id && summary.current_node_execution_id.as_ref() == Some(id)
+        })
+        && task.business_object_type == document_type.as_str()
+        && task.business_object_id == summary.subject.subject_id()
+        && task.subject_version == canonical_subject_version
+        && summary.process_kind == process_kind_of(document_type)
+        && summary.status == ApprovalProcessInstanceStatus::Running
+        && execution.status == ApprovalNodeExecutionStatus::Active
+        && execution.process_instance_id.as_ref() == summary.id
+        && execution.round_no == summary.current_round_no
+        && execution.assignee_participant_id.as_str() == actor_id
+        && summary.current_node_key.as_deref() == Some(execution.node_key.as_str())
+        && summary.current_node_name.as_deref() == Some(execution.node_name.as_str())
+        && summary.current_assignee_participant_id.as_deref()
+            == Some(execution.assignee_participant_id.as_str())
+        && summary.current_assignee_name.as_deref() == Some(execution.assignee_name_snapshot.as_str());
+    if !runtime_chain_matches {
+        return Ok(false);
+    }
+    let snapshot_owner_matches = snapshot
+        .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == summary.id)
+        .filter(|snapshot| {
+            snapshot
+                .ensure_matches_runtime_subject(
+                    document_type,
+                    summary.subject.subject_id(),
+                    summary.subject_version,
+                )
+                .is_ok()
+        })
+        .is_none_or(|snapshot| snapshot.payload.responsible_org_id == task.owner_organization_id);
+    Ok(snapshot_owner_matches)
+}
+
+/// 提取 Mine 当前页的 execution ID，并在服务边界拒绝重复责任投影。
+///
+/// 不得依赖唯一索引或静默去重；重复 WorkItem 会同时污染当前页行与
+/// Repository 返回的 total，因此必须按隐藏实例存在性的稳定语义整页失败。
+pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeExecutionId>> {
+    let mut seen = HashSet::with_capacity(tasks.len());
+    let mut execution_ids = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let execution_id = task
+            .approval_node_execution_id
+            .clone()
+            .ok_or_else(hidden_not_found)?;
+        if !seen.insert(execution_id.to_string()) {
+            return Err(hidden_not_found());
+        }
+        execution_ids.push(execution_id);
+    }
+    Ok(execution_ids)
+}
+
+/// 把 Repository 在完整过滤集合中发现的责任链冲突映射为隐藏式拒绝。
+pub(super) fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
+    if conflict_count == 0 {
+        return Ok(());
+    }
+    Err(hidden_not_found())
+}
+
+/// 由 Mine 当前页 execution 解析实例 ID，并拒绝两个执行指向同一实例。
+///
+/// 执行结果缺失或实例重复均表示当前责任链不能形成唯一列表行，整页失败关闭。
+pub(super) fn mine_instance_ids(
+    execution_ids: &[ApprovalNodeExecutionId],
+    execution_by_id: &HashMap<String, ApprovalNodeExecution>,
+) -> Result<Vec<ApprovalProcessInstanceId>> {
+    let mut seen = HashSet::with_capacity(execution_ids.len());
+    let mut instance_ids = Vec::with_capacity(execution_ids.len());
+    for execution_id in execution_ids {
+        let instance_id = execution_by_id
+            .get(execution_id.as_ref())
+            .map(|execution| execution.process_instance_id.clone())
+            .ok_or_else(hidden_not_found)?;
+        if !seen.insert(instance_id.to_string()) {
+            return Err(hidden_not_found());
+        }
+        instance_ids.push(instance_id);
+    }
+    Ok(instance_ids)
+}
+
+/// 将批量读取结果按稳定 ID 建表；重复 ID 按持久化身份损坏失败关闭。
+pub(super) fn unique_by_id<T, F>(items: Vec<T>, key_of: F) -> Result<HashMap<String, T>>
+where
+    F: Fn(&T) -> String,
+{
+    let mut by_id = HashMap::with_capacity(items.len());
+    for item in items {
+        let key = key_of(&item);
+        if by_id.insert(key, item).is_some() {
+            return Err(hidden_not_found());
+        }
+    }
+    Ok(by_id)
+}

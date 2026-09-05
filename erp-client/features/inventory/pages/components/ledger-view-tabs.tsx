@@ -25,7 +25,6 @@ export function LedgerViewTabs({
     return (
         <ListWorkspaceViews
             ariaLabel="库存台账工作视图"
-            hint="选择记录查看详情"
             items={LEDGER_VIEWS.map((item) => ({
                 id: `inventory-ledger-view-${item}`,
                 label: VIEW_LABEL[item],

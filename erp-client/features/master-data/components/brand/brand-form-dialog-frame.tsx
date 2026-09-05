@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { DiscardConfirmDialog, FormalActionResult } from "@/components/business"
+import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -29,8 +29,6 @@ export function BrandFormDialogFrame({
     form,
     result,
     pending,
-    discardOpen,
-    setDiscardOpen,
     submitLabel,
     onReset,
     logoPreviewUrl,
@@ -67,13 +65,9 @@ export function BrandFormDialogFrame({
             disabled?: boolean
         }>
         handleSubmit: () => unknown
-        state: { isDirty: boolean }
-        reset: () => void
     }
     result: MasterDataMutationResult | null
     pending: boolean
-    discardOpen: boolean
-    setDiscardOpen: (open: boolean) => void
     submitLabel: string
     onReset?: () => void
     logoPreviewUrl: string
@@ -81,21 +75,15 @@ export function BrandFormDialogFrame({
     idPrefix?: string
 }) {
     const prefix = idPrefix ?? "master-data-brand-form-dialog"
-    const requestClose = (next: boolean) => {
-        if (next) {
-            onOpenChange(true)
-            return
-        }
-        if (form.state.isDirty || result) {
-            setDiscardOpen(true)
-            return
-        }
-        onReset?.()
-        onOpenChange(false)
-    }
 
     return (
-        <Dialog open={open} onOpenChange={requestClose}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next) onReset?.()
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
                 closeButtonId={`${prefix}-close`}
@@ -196,19 +184,6 @@ export function BrandFormDialogFrame({
                     ) : null}
                 </DialogScrollBody>
             </DialogContent>
-            <DiscardConfirmDialog
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                title="放弃本次填写？"
-                description="关闭后本次填写的内容将丢失。"
-                confirmLabel="放弃填写"
-                cancelLabel="继续编辑"
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    onReset?.()
-                    onOpenChange(false)
-                }}
-            />
         </Dialog>
     )
 }

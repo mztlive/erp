@@ -74,6 +74,7 @@ export function BatchListView({
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <ListWorkspaceHeader
+                className="pb-6 md:pb-6"
                 eyebrow="治理"
                 title="导入与期初"
                 description={
@@ -101,7 +102,7 @@ export function BatchListView({
                 }
             />
 
-            <MetricStrip columns={4} aria-label="导入批次指标">
+            <MetricStrip className="mb-6" columns={4} aria-label="导入批次指标">
                 <MetricItem
                     label="待校验"
                     value={data?.metrics.pendingValidate ?? "—"}
@@ -130,6 +131,7 @@ export function BatchListView({
             </Alert>
 
             <ListWorkSurface
+                toolbarClassName="pt-3 pb-2"
                 ariaLabel="导入批次列表"
                 views={
                     <ListWorkspaceViews

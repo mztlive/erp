@@ -77,7 +77,6 @@ export function useContractUploadForm({
         "customer_scope:detail",
     )
     const uploadMutation = useUploadContractPdfMutation()
-    const [discardOpen, setDiscardOpen] = React.useState(false)
 
     const form = useAppForm({
         defaultValues: {
@@ -208,7 +207,5 @@ export function useContractUploadForm({
         uploadMutation,
         canReadAllCustomers,
         customerPartyId: customerQuery.data?.partyId ?? "",
-        discardOpen,
-        setDiscardOpen,
     }
 }

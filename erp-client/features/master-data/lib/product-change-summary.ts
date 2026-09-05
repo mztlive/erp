@@ -1,3 +1,4 @@
+import { specDraftsToSpecs } from "./product-editor-model"
 import type { ProductEditorFormValues } from "./product-editor-model"
 
 /** Compare business fields only; batch-input drafts and local preview URLs are not saved changes. */
@@ -19,7 +20,10 @@ export function productChangeSummary(
     ] as const) {
         if (old[key] !== fields[key]) changes.push(label)
     }
-    if (JSON.stringify(previous.specDrafts) !== JSON.stringify(next.specDrafts))
+    if (
+        JSON.stringify(specDraftsToSpecs(previous.specDrafts)) !==
+        JSON.stringify(specDraftsToSpecs(next.specDrafts))
+    )
         changes.push("商品规格")
     for (const [key, label] of [
         ["carouselImages", "轮播图"],

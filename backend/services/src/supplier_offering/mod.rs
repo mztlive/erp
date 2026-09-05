@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 
 use database::{
-    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt,
+    Transactional, WorkItemExt,
 };
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
 use entities::common::time::{BusinessDate, Instant};

@@ -109,6 +109,7 @@ function SettlementList({
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <ListWorkspaceHeader
+                className="pb-6 md:pb-6"
                 eyebrow="供应商"
                 title="供应商结算"
                 description={
@@ -205,17 +206,15 @@ function SettlementList({
                     hasDifference={data.metrics.hasDifference}
                     pendingReview={data.metrics.pendingReview}
                     confirmedAmount={data.metrics.confirmedAmount}
-                    urlState={urlState}
-                    patchUrl={patchUrl}
                 />
             ) : null}
 
             <ListWorkSurface
+                toolbarClassName="pt-3 pb-2"
                 ariaLabel="供应商结算列表"
                 views={
                     <ListWorkspaceViews
                         ariaLabel="供应商结算工作视图"
-                        hint="选择记录查看详情"
                         items={(
                             Object.keys(VIEW_LABEL) as Array<
                                 keyof typeof VIEW_LABEL

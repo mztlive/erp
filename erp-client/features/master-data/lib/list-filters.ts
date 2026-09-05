@@ -72,11 +72,11 @@ const SUPPLIER_QUALIFICATION_TYPE_OPTIONS = [
 ] as const
 
 const SUPPLIER_QUALIFICATION_HEALTH_OPTIONS = [
-    { value: "all", label: "资质状态：全部" },
-    { value: "valid", label: "资质状态：有效" },
-    { value: "expiring_30", label: "资质状态：30 天内到期" },
-    { value: "expired", label: "资质状态：已过期" },
-    { value: "not_registered", label: "资质状态：未登记" },
+    { value: "all", label: "全部" },
+    { value: "valid", label: "有效" },
+    { value: "expiring_30", label: "30 天内到期" },
+    { value: "expired", label: "已过期" },
+    { value: "not_registered", label: "未登记" },
 ] as const
 
 /** 读取 URL 中逗号分隔的多选条件，去空、去重并固定排序。 */

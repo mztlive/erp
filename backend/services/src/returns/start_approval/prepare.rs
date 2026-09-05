@@ -1,0 +1,212 @@
+use bpm::engine::DefinitionGraph;
+use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::SubjectRef;
+use database::{BpmExt, Executor, NoTransaction};
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use entities::document_registry::DocumentType;
+use mongodb::Database;
+
+use crate::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+};
+use crate::approval::process_kind::process_kind_of;
+use crate::approval::{
+    approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
+    approval_document_read_scope_with_executor,
+};
+use crate::audit::AuditActor;
+use crate::errors::{Error, Result};
+use crate::iam::SharedRbacService;
+
+/// 在读取具体退款/冲正资源前先重验认证主体仍有效。
+pub async fn ensure_return_start_actor_active(
+    db: &Database,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+        return Err(Error::Forbidden("当前账号不可提交该退款或冲正单".to_string()));
+    }
+    Ok(())
+}
+
+/// 重放前在同一 fresh session 内重验账号、提交动作和对象读取 DataScope。
+pub async fn ensure_return_start_replay_authorized(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    submit_permission: &str,
+    organization_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    ensure_return_start_actor_active(db, actor, executor).await?;
+    let action_scope =
+        approval_document_action_scope_with_executor(db, rbac, actor, submit_permission, executor).await?;
+    let read_scope =
+        approval_document_read_scope_with_executor(db, rbac, actor, document_type, executor).await?;
+    if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
+        return Err(Error::Forbidden("无权提交该责任组织的退款或冲正单".to_string()));
+    }
+    Ok(())
+}
+
+/// 顺序重试先查当前已冻结版本；草稿首次/重提再查严格下一版本。
+pub fn replay_subject_versions(current: u32) -> Result<Vec<u32>> {
+    let mut versions = Vec::with_capacity(2);
+    if current > 0 {
+        versions.push(current);
+    }
+    let next = current
+        .checked_add(1)
+        .ok_or_else(|| Error::ConflictError("审批主题版本已达上限".to_string()))?;
+    if !versions.contains(&next) {
+        versions.push(next);
+    }
+    Ok(versions)
+}
+
+/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `binding` - 创建时冻结的定义绑定
+///
+/// # 返回
+/// 返回已持久化的定义图。
+///
+/// # 错误
+/// 定义不存在或仓储失败时返回冲突或仓储错误。
+pub async fn load_bound_definition_graph(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+) -> Result<DefinitionGraph> {
+    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器加载冻结绑定的定义图。
+pub async fn load_bound_definition_graph_with_executor(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(&binding.approval_process_definition_id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("客户退款单绑定的审批定义不存在".to_string()))?;
+    Ok(engine_graph(graph))
+}
+
+/// 将仓储定义图转为引擎定义图。字段一一对应，不得在此补默认节点。
+///
+/// # 参数
+/// * `graph` - 仓储一次批量读取结果
+///
+/// # 返回
+/// 返回引擎可消费的定义图。
+fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
+    DefinitionGraph {
+        definition: graph.definition,
+        nodes: graph.nodes,
+        transitions: graph.transitions,
+    }
+}
+
+/// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。
+pub async fn load_start_receipt_for_document_type(
+    db: &Database,
+    document_type: DocumentType,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(document_type);
+    let scopes = start_scope_candidates(
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+    )?;
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                &scope,
+                &key,
+                &mut NoTransaction,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
+}
+
+/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的退款/冲正启动结果。
+#[allow(clippy::too_many_arguments)]
+pub async fn replay_return_start_with_executor(
+    db: &Database,
+    document_type: DocumentType,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    binding: &ApprovalDefinitionBinding,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(document_type);
+    let identity = start_identity(
+        key,
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+        actor_id,
+    )?;
+    let mut receipt = None;
+    for scope in identity.scope_candidates() {
+        receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            break;
+        }
+    }
+    let receipt = match identity.classify(receipt.as_ref()) {
+        ReceiptBranch::Fresh => return Ok(None),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::SamePayload(receipt) => receipt,
+    };
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("退款/冲正启动收据引用的审批实例不存在".to_string()))?;
+    if instance.base.id != receipt.result_ref
+        || instance.process_kind != process_kind
+        || instance.subject.subject_kind() != subject.subject_kind()
+        || instance.subject.subject_id() != subject.subject_id()
+        || instance.subject_version != subject_version
+        || instance.started_by.as_str() != actor_id
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "退款/冲正启动收据与冻结运行事实不一致".to_string(),
+        ));
+    }
+    Ok(Some(instance.base.id))
+}

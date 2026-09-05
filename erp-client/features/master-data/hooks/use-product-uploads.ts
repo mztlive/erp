@@ -10,22 +10,25 @@ import type {
 
 /**
  * 商品编辑器的待上传媒体：
- * - 本会话选择但尚未上传的图片文件（SPU 轮播/详情图按 fileName、SKU 主图按行号记录）；
+ * - 本会话选择但尚未上传的图片文件（SPU 轮播/详情图按 fileName、SKU 主图按本地预览引用记录）；
  * - 保存时只生成 multipart 临时引用；文件与商品命令由一个后端入口接收。
  */
 export function useProductUploads() {
     const [uploadingMedia, setUploadingMedia] = React.useState(false)
     const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
-    const pendingSkuFilesRef = React.useRef<Map<number, File>>(new Map())
+    const pendingSkuFilesRef = React.useRef<Map<string, File>>(new Map())
 
     const rememberPendingFiles = React.useCallback((files: File[]) => {
         for (const file of files) {
             pendingFilesRef.current.set(file.name, file)
         }
     }, [])
-    const rememberSkuFile = React.useCallback((index: number, file?: File) => {
-        if (file) pendingSkuFilesRef.current.set(index, file)
-    }, [])
+    const rememberSkuFile = React.useCallback(
+        (previewUrl: string, file: File) => {
+            pendingSkuFilesRef.current.set(previewUrl, file)
+        },
+        [],
+    )
 
     /** 把本地 blob 映射为临时资产引用，并返回单次业务命令携带的文件集合。 */
     const preparePendingUploads = React.useCallback(
@@ -97,7 +100,7 @@ export function useProductUploads() {
                 const previewUrl = sku.mainImagePreviewUrl?.trim()
                 if (!previewUrl) continue
                 if (!previewUrl.startsWith("blob:")) continue
-                const file = pendingSkuFilesRef.current.get(index)
+                const file = pendingSkuFilesRef.current.get(previewUrl)
                 if (!file) {
                     throw new Error(
                         `找不到待上传主图「${sku.mainImage}」的文件内容，请重新选择`,

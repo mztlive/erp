@@ -347,15 +347,6 @@ export function InventoryLedgerPage() {
         return <InventoryLedgerNoScope />
     }
 
-    const metricActive =
-        availability === "zero"
-            ? "zero"
-            : availability === "reserved"
-              ? "reserved"
-              : view === "adjustment"
-                ? "pending"
-                : "combos"
-
     const detail = detailQuery.data
 
     return (
@@ -415,17 +406,7 @@ export function InventoryLedgerPage() {
                 </details>
             ) : null}
 
-            {data ? (
-                <LedgerMetricStrip
-                    metrics={data.metrics}
-                    metricActive={metricActive}
-                    view={view}
-                    onSelect={(patch) => {
-                        patchUrl(patch, { replace: true })
-                        resetPagination()
-                    }}
-                />
-            ) : null}
+            {data ? <LedgerMetricStrip metrics={data.metrics} /> : null}
 
             <LedgerTableFrame
                 view={view}

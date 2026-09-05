@@ -4,7 +4,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{NoTransaction, PayableExt, PurchaseOrderExt, ReturnsExt, SupplierSettlementExt};
+use database::{
+    NoTransaction, PartyExt, PayableExt, PurchaseOrderExt, ReturnsExt, SupplierExt, SupplierSettlementExt,
+};
 use entities::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use entities::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use entities::returns::PaymentReversal;
@@ -380,6 +382,78 @@ fn map_allocation_sources(
         );
     }
     sources
+}
+
+/// 解析供应商展示信息（编号 + 名称）。
+///
+/// 供应商编号取自 `supplier_accounts`；名称取共用主体当前修订的法定名称
+/// （与 supplier_offering 的解析路径一致）。主数据缺失时返回 `None`，不阻断列表。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `supplier_id` - 供应商账号 ID
+///
+/// # 返回
+/// 返回 `(供应商编号, 供应商名称)`。
+pub(super) async fn resolve_supplier_display(
+    db: &mongodb::Database,
+    supplier_id: &str,
+) -> Result<(Option<String>, Option<String>)> {
+    let account = db
+        .supplier_accounts()
+        .find_by_id(supplier_id, &mut NoTransaction)
+        .await?;
+    let Some(account) = account else {
+        return Ok((None, None));
+    };
+    let supplier_no = Some(account.supplier_no.clone());
+    let party = db
+        .parties()
+        .find_by_id(account.party_id.as_ref(), &mut NoTransaction)
+        .await?;
+    let Some(party) = party else {
+        return Ok((supplier_no, None));
+    };
+    let Some(revision_id) = party.stable.current_revision_id.clone() else {
+        return Ok((supplier_no, None));
+    };
+    let revision = db
+        .party_revisions()
+        .find_by_id(&revision_id, &mut NoTransaction)
+        .await?;
+    Ok((supplier_no, revision.map(|value| value.legal_name)))
+}
+
+/// 解析应付子账来源单据的业务单号。
+///
+/// 采购单来源取采购单号；供应商结算来源取结算单号。空单号视为缺失。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `account` - 应付子账
+///
+/// # 返回
+/// 返回业务单号；未知来源或单据缺失时返回 `None`，不得回退内部 ID。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub(super) async fn resolve_source_document_no(
+    db: &mongodb::Database,
+    account: &PayableAccount,
+) -> Result<Option<String>> {
+    let document_no = match account.source_type {
+        entities::payable::PayableSourceType::PurchaseOrder => db
+            .purchase_orders()
+            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .await?
+            .map(|value| value.purchase_no),
+        entities::payable::PayableSourceType::SupplierSettlement => db
+            .supplier_settlement_statements()
+            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .await?
+            .map(|value| value.statement_no),
+    };
+    Ok(document_no.filter(|value| !value.trim().is_empty()))
 }
 
 #[cfg(test)]

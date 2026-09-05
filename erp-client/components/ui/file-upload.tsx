@@ -298,7 +298,7 @@ function FileUpload({
                                 className={cn(
                                     "font-medium text-foreground",
                                     density === "tile"
-                                        ? "truncate text-2xs"
+                                        ? "sr-only"
                                         : density === "compact"
                                           ? "text-xs"
                                           : "text-sm",

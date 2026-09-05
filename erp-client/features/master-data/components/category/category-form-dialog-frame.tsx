@@ -2,11 +2,7 @@
 
 import * as React from "react"
 
-import {
-    CategoryCombobox,
-    DiscardConfirmDialog,
-    FormalActionResult,
-} from "@/components/business"
+import { CategoryCombobox, FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -31,7 +27,7 @@ import type { MasterDataMutationResult } from "@/features/master-data/types"
 
 const PRODUCT_KIND_OPTIONS = ["实物", "虚拟", "服务", "卡券"] as const
 
-/** 新建 / 更新分类共用弹窗骨架：表单、阻断结果与放弃确认。 */
+/** 新建 / 更新分类共用弹窗骨架：表单与阻断结果。 */
 export function CategoryFormDialogFrame({
     open,
     onOpenChange,
@@ -40,8 +36,6 @@ export function CategoryFormDialogFrame({
     form,
     result,
     pending,
-    discardOpen,
-    setDiscardOpen,
     submitLabel,
     excludeStableId,
     onReset,
@@ -85,13 +79,9 @@ export function CategoryFormDialogFrame({
             disabled?: boolean
         }>
         handleSubmit: () => unknown
-        state: { isDirty: boolean }
-        reset: () => void
     }
     result: MasterDataMutationResult | null
     pending: boolean
-    discardOpen: boolean
-    setDiscardOpen: (open: boolean) => void
     submitLabel: string
     excludeStableId?: string
     onReset?: () => void
@@ -117,21 +107,14 @@ export function CategoryFormDialogFrame({
         [categoryListQuery.data?.rows, excludeCategoryIds],
     )
 
-    const requestClose = (next: boolean) => {
-        if (next) {
-            onOpenChange(true)
-            return
-        }
-        if (form.state.isDirty || result) {
-            setDiscardOpen(true)
-            return
-        }
-        onReset?.()
-        onOpenChange(false)
-    }
-
     return (
-        <Dialog open={open} onOpenChange={requestClose}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next) onReset?.()
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
                 closeButtonId={`${prefix}-close`}
@@ -257,19 +240,6 @@ export function CategoryFormDialogFrame({
                     ) : null}
                 </DialogScrollBody>
             </DialogContent>
-            <DiscardConfirmDialog
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                title="放弃本次填写？"
-                description="关闭后本次填写的内容将丢失。"
-                confirmLabel="放弃填写"
-                cancelLabel="继续编辑"
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    onReset?.()
-                    onOpenChange(false)
-                }}
-            />
         </Dialog>
     )
 }

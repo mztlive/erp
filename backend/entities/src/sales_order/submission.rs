@@ -456,17 +456,13 @@ impl SalesOrderSubmission {
             receivable_due_date,
             submitted_at,
         } = inputs;
-        let all_present = voucher_category_sku_id.is_some()
-            && voucher_expiry_at.is_some()
-            && receivable_due_date.is_some();
-        let any_present = voucher_category_sku_id.is_some()
-            || voucher_expiry_at.is_some()
-            || receivable_due_date.is_some();
+        let all_present =
+            voucher_category_sku_id.is_some() && voucher_expiry_at.is_some() && receivable_due_date.is_some();
+        let any_present =
+            voucher_category_sku_id.is_some() || voucher_expiry_at.is_some() || receivable_due_date.is_some();
         match business_type {
             BusinessType::Voucher if !all_present => {
-                return Err(Error::from(
-                    "卡券提交必须冻结卡券类目、履约期限和应收到期日",
-                ));
+                return Err(Error::from("卡券提交必须冻结卡券类目、履约期限和应收到期日"));
             }
             BusinessType::GoodsService if any_present => {
                 return Err(Error::from("非卡券提交不得携带卡券字段"));

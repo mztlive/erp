@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PackageIcon, SaveIcon } from "lucide-react"
+import { SaveIcon } from "lucide-react"
 import {
     DiscardConfirmDialog,
     PageScaffold,
@@ -79,6 +79,16 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         initialFormValues,
     } = editor
 
+    React.useEffect(() => {
+        if (activeSection !== "sku") return
+        const frame = window.requestAnimationFrame(() => {
+            document
+                .getElementById("product-section-sku")
+                ?.scrollIntoView({ block: "start" })
+        })
+        return () => window.cancelAnimationFrame(frame)
+    }, [activeSection, data?.stableId])
+
     return (
         <ProductDetailEntryGate
             isCreate={isCreate}
@@ -111,6 +121,8 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         setChangeReason,
                         setFields,
                         syncSpecDrafts,
+                        applySpecDrafts,
+                        resetSpecDrafts,
                         updateSku,
                         name,
                         effectiveFrom,
@@ -124,7 +136,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                     // Retain old deep links to the effective section, now shown as the save dialog.
                     const showSave = saveOpen || activeSection === "effective"
                     const section =
-                        activeSection === "effective" ? "basic" : activeSection
+                        activeSection === "effective" || activeSection === "sku"
+                            ? "basic"
+                            : activeSection
                     const changes = productChangeSummary(
                         initialFormValues,
                         values,
@@ -210,39 +224,78 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                         brandListQuery.isPending
                                                     }
                                                 />
-                                                <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/35 p-4">
-                                                    <PackageIcon
-                                                        className="size-5 text-muted-foreground"
-                                                        aria-hidden
-                                                    />
-                                                    <div className="min-w-0 flex-1 space-y-1">
-                                                        <p className="text-sm font-medium">
-                                                            {fields.skus.length}{" "}
-                                                            个 SKU
-                                                        </p>
-                                                        <p className="break-words text-sm text-muted-foreground">
-                                                            {activeSpecs
-                                                                .map(
-                                                                    (spec) =>
-                                                                        `${spec.name}：${spec.values.join("、")}`,
-                                                                )
-                                                                .join(" · ") ||
-                                                                "默认规格"}
-                                                        </p>
-                                                    </div>
-                                                    <Button
-                                                        id="master-data-product-detail-sku-shortcut"
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            setActiveSection(
-                                                                "sku",
+                                                <div className="border-t border-border pt-6">
+                                                    <ProductSkuSection
+                                                        idPrefix="master-data-product-detail-sku"
+                                                        isCreate={isCreate}
+                                                        canRevise={canRevise}
+                                                        name={name}
+                                                        fields={fields}
+                                                        specDrafts={specDrafts}
+                                                        activeSpecs={
+                                                            activeSpecs
+                                                        }
+                                                        inventoryPreviewSkus={
+                                                            inventoryPreviewSkus
+                                                        }
+                                                        syncSpecDrafts={
+                                                            syncSpecDrafts
+                                                        }
+                                                        applySpecDrafts={
+                                                            applySpecDrafts
+                                                        }
+                                                        resetSpecDrafts={
+                                                            resetSpecDrafts
+                                                        }
+                                                        updateSku={updateSku}
+                                                        batchSalePrice={
+                                                            values.batchSalePrice
+                                                        }
+                                                        batchMarketPrice={
+                                                            values.batchMarketPrice
+                                                        }
+                                                        setBatchSalePrice={(
+                                                            next,
+                                                        ) =>
+                                                            form.setFieldValue(
+                                                                "batchSalePrice",
+                                                                next,
                                                             )
                                                         }
-                                                    >
-                                                        管理规格与 SKU
-                                                    </Button>
+                                                        setBatchMarketPrice={(
+                                                            next,
+                                                        ) =>
+                                                            form.setFieldValue(
+                                                                "batchMarketPrice",
+                                                                next,
+                                                            )
+                                                        }
+                                                        onApplyBatchReferencePrices={
+                                                            applyBatchReferencePrices
+                                                        }
+                                                        inventoryActionHint={
+                                                            inventoryActionHint
+                                                        }
+                                                        onOpenInventory={
+                                                            openInventoryPreview
+                                                        }
+                                                        rememberSkuFile={
+                                                            rememberSkuFile
+                                                        }
+                                                        supplierCounts={
+                                                            supplierCountsQuery.data
+                                                        }
+                                                        supplierCountsPending={
+                                                            supplierCountsQuery.isPending
+                                                        }
+                                                        supplierCountsError={
+                                                            supplierCountsQuery.error
+                                                        }
+                                                        onRegisterSupply={
+                                                            setSupplierDialogSku
+                                                        }
+                                                        stableId={stableId}
+                                                    />
                                                 </div>
                                             </div>
                                         ) : null}
@@ -255,65 +308,6 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                 rememberPendingFiles={
                                                     rememberPendingFiles
                                                 }
-                                            />
-                                        ) : null}
-                                        {section === "sku" ? (
-                                            <ProductSkuSection
-                                                idPrefix="master-data-product-detail-sku"
-                                                isCreate={isCreate}
-                                                canRevise={canRevise}
-                                                name={name}
-                                                fields={fields}
-                                                specDrafts={specDrafts}
-                                                activeSpecs={activeSpecs}
-                                                inventoryPreviewSkus={
-                                                    inventoryPreviewSkus
-                                                }
-                                                syncSpecDrafts={syncSpecDrafts}
-                                                updateSku={updateSku}
-                                                batchSalePrice={
-                                                    values.batchSalePrice
-                                                }
-                                                batchMarketPrice={
-                                                    values.batchMarketPrice
-                                                }
-                                                setBatchSalePrice={(next) =>
-                                                    form.setFieldValue(
-                                                        "batchSalePrice",
-                                                        next,
-                                                    )
-                                                }
-                                                setBatchMarketPrice={(next) =>
-                                                    form.setFieldValue(
-                                                        "batchMarketPrice",
-                                                        next,
-                                                    )
-                                                }
-                                                onApplyBatchReferencePrices={
-                                                    applyBatchReferencePrices
-                                                }
-                                                inventoryActionHint={
-                                                    inventoryActionHint
-                                                }
-                                                onOpenInventory={
-                                                    openInventoryPreview
-                                                }
-                                                rememberSkuFile={
-                                                    rememberSkuFile
-                                                }
-                                                supplierCounts={
-                                                    supplierCountsQuery.data
-                                                }
-                                                supplierCountsPending={
-                                                    supplierCountsQuery.isPending
-                                                }
-                                                supplierCountsError={
-                                                    supplierCountsQuery.error
-                                                }
-                                                onRegisterSupply={
-                                                    setSupplierDialogSku
-                                                }
-                                                stableId={stableId}
                                             />
                                         ) : null}
                                         {section === "history" && !isCreate ? (

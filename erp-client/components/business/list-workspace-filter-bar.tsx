@@ -96,6 +96,7 @@ export function listWorkspaceFilterStatusText({
 }
 
 export function ListWorkspaceFilterBar({
+    density = "default",
     idPrefix,
     formAriaLabel,
     onSubmit,
@@ -124,6 +125,7 @@ export function ListWorkspaceFilterBar({
     resetMoreButtonId,
     clearButtonId,
 }: {
+    density?: "default" | "compact"
     idPrefix: string
     formAriaLabel: string
     onSubmit: () => void
@@ -164,7 +166,11 @@ export function ListWorkspaceFilterBar({
             }}
         >
             <ListToolbar
-                className={cn(listWorkspaceFilterBarClassName, className)}
+                className={cn(
+                    listWorkspaceFilterBarClassName,
+                    density === "compact" && "gap-2",
+                    className,
+                )}
                 search={search}
                 filters={
                     <>
@@ -208,7 +214,12 @@ export function ListWorkspaceFilterBar({
                 }
                 actions={actions}
                 secondary={
-                    <div className="w-full min-w-0 space-y-4">
+                    <div
+                        className={cn(
+                            "w-full min-w-0",
+                            density === "compact" ? "space-y-2" : "space-y-4",
+                        )}
+                    >
                         {commonFilters ? (
                             <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
                                 {commonFilters}
@@ -242,7 +253,14 @@ export function ListWorkspaceFilterBar({
                                 ) : null}
                             </section>
                         ) : null}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 pt-3 text-xs">
+                        <div
+                            className={cn(
+                                "flex flex-wrap items-center gap-x-3 gap-y-2 text-xs",
+                                density === "compact"
+                                    ? "pt-1"
+                                    : "border-t border-border/60 pt-3",
+                            )}
+                        >
                             <span
                                 role="status"
                                 className="shrink-0 text-muted-foreground"

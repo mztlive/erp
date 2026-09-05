@@ -59,7 +59,7 @@ export function CustomerFormActionBar({
     submitLabel: string
     dirty: boolean
     onCancel: () => void
-    onDiscardRequest: () => void
+    onDiscardRequest?: () => void
     onResetSession: () => void
 }) {
     const succeeded = result?.outcome === "succeeded"
@@ -76,7 +76,7 @@ export function CustomerFormActionBar({
                         onCancel()
                         return
                     }
-                    if (dirty) {
+                    if (dirty && onDiscardRequest) {
                         onDiscardRequest()
                         return
                     }

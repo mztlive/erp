@@ -14,8 +14,9 @@ use crate::common::revision::RevisionBase;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    ContractRevisionId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId,
-    SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId, SkuRevisionId,
+    ContractRevisionId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId,
+    SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId,
+    SkuRevisionId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};

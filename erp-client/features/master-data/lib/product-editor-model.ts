@@ -16,9 +16,67 @@ function newIdempotencyKey(prefix: string): string {
 }
 
 type ProductSpecDraft = Readonly<{
+    draftId: string
+    valueIds: readonly string[]
     name: string
     values: readonly string[]
 }>
+
+// Draft identities remain stable while typing, deleting and reordering unsaved specs.
+let specDraftSequence = 0
+function nextSpecDraftId(): string {
+    specDraftSequence += 1
+    return `draft-${specDraftSequence}`
+}
+
+function createSpecDraft(
+    name = "",
+    values: readonly string[] = [""],
+): ProductSpecDraft {
+    return {
+        draftId: nextSpecDraftId(),
+        name,
+        values: [...values],
+        valueIds: values.map(() => nextSpecDraftId()),
+    }
+}
+
+function specDraftsToSpecs(
+    drafts: readonly ProductSpecDraft[],
+): ProductSpecDimension[] {
+    return drafts.map((draft) => ({
+        name: draft.name.trim(),
+        values: draft.values.map((value) => value.trim()),
+    }))
+}
+
+function hasPendingSpecs(
+    drafts: readonly ProductSpecDraft[],
+    fields: ProductFields,
+): boolean {
+    return (
+        JSON.stringify(specDraftsToSpecs(drafts)) !==
+        JSON.stringify(fields.specs)
+    )
+}
+
+function validateSpecDrafts(
+    drafts: readonly ProductSpecDraft[],
+): string | null {
+    const names = new Set<string>()
+    for (const draft of drafts) {
+        const name = draft.name.trim()
+        if (!name) return "请填写规格名称，或删除空白规格项"
+        if (names.has(name)) return `规格名称「${name}」重复`
+        names.add(name)
+        const values = draft.values.map((value) => value.trim())
+        if (!values.length || values.some((value) => !value))
+            return `请补全规格「${name}」的取值，或删除空白取值`
+        if (new Set(values).size !== values.length)
+            return `规格「${name}」的取值重复`
+    }
+    return null
+}
 
 type ProductEditorFormValues = Readonly<{
     name: string
@@ -87,6 +145,8 @@ function validateProductEditor(
     values: ProductEditorFormValues,
     fields: ProductFields,
 ): string | null {
+    if (hasPendingSpecs(values.specDrafts, fields))
+        return "规格修改尚未应用，请先应用规格或取消规格修改"
     if (values.name.trim().length < 2) return "请填写商品名称"
     if (values.changeReason.trim().length < 2) {
         return "请填写本次保存的变更原因"
@@ -178,10 +238,7 @@ function hydrateFromCenter(
             ...fields,
             productKind: data.productKind ?? "",
         },
-        specDrafts: fields.specs.map((s) => ({
-            name: s.name,
-            values: [...s.values],
-        })),
+        specDrafts: fields.specs.map((s) => createSpecDraft(s.name, s.values)),
         ...EMPTY_BATCH_REFERENCE_PRICE_FIELDS,
     }
 }
@@ -200,6 +257,11 @@ function createProductDefaults(isCreate: boolean): ProductEditorFormValues {
 
 export {
     applySpecsFromDrafts,
+    createSpecDraft,
+    nextSpecDraftId,
+    hasPendingSpecs,
+    specDraftsToSpecs,
+    validateSpecDrafts,
     createProductDefaults,
     hydrateFromCenter,
     newIdempotencyKey,

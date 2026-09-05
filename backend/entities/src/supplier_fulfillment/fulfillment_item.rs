@@ -10,9 +10,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{Error, Result};
-use crate::ids::{
-    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
-};
+use crate::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId};
 use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 

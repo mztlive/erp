@@ -343,10 +343,10 @@ export function CustomerReceivablesTable({
     return (
         <ListWorkSurface
             ariaLabel="客户往来列表"
+            toolbarClassName="pt-3 pb-2"
             views={
                 <ListWorkspaceViews
                     ariaLabel="客户往来工作视图"
-                    hint="选择记录查看详情"
                     items={CUSTOMER_RECEIVABLE_VIEWS.map((item) => ({
                         id: `customer-receivables-view-${item}`,
                         label: VIEW_LABEL[item],

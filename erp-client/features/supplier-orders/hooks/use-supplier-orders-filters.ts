@@ -55,7 +55,7 @@ function sameCodeList(
  * - Draft：本地受控 state，变化不触发请求；
  * - UI：面板展开与校验提示。
  *
- * 快捷筛选（MetricStrip）直接写 URL，草稿由回填 effect 同步。
+ * 视图切换与前进后退后，草稿由回填 effect 同步。
  */
 export function useSupplierOrdersFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -72,12 +72,13 @@ export function useSupplierOrdersFilters(
         url.paidFrom ||
         url.paidTo,
     )
-    /** 结构化条件：不含 q 与快捷筛选。 */
+    /** 结构化条件：不含 q。 */
     const hasStructuredFilters = Boolean(
         url.supplierId ||
         url.fulfillmentStatuses?.length ||
         url.cancelStatuses?.length ||
         url.refundStatuses?.length ||
+        url.aftersalePending ||
         url.paidFrom ||
         url.paidTo,
     )
@@ -85,6 +86,7 @@ export function useSupplierOrdersFilters(
     const hasMoreFilters = Boolean(
         url.cancelStatuses?.length ||
         url.refundStatuses?.length ||
+        url.aftersalePending ||
         url.paidFrom ||
         url.paidTo,
     )
@@ -106,6 +108,9 @@ export function useSupplierOrdersFilters(
     const [refundStatusesDraft, setRefundStatusesDraft] = React.useState<
         RefundStatus[]
     >(url.refundStatuses ?? [])
+    const [aftersalePendingDraft, setAftersalePendingDraft] = React.useState(
+        Boolean(url.aftersalePending),
+    )
     const [paidFromDraft, setPaidFromDraft] = React.useState(url.paidFrom ?? "")
     const [paidToDraft, setPaidToDraft] = React.useState(url.paidTo ?? "")
 
@@ -145,12 +150,14 @@ export function useSupplierOrdersFilters(
                 refundStatusesDraft.length > 0
                     ? refundStatusesDraft
                     : undefined,
+            aftersalePending: aftersalePendingDraft || undefined,
             paidFrom: from || undefined,
             paidTo: to || undefined,
             page: 1,
         })
         setPanelOpen(false)
     }, [
+        aftersalePendingDraft,
         cancelStatusesDraft,
         fulfillmentStatusesDraft,
         paidFromDraft,
@@ -169,6 +176,7 @@ export function useSupplierOrdersFilters(
             if (key === "fulfillmentStatuses") setFulfillmentStatusesDraft([])
             if (key === "cancelStatuses") setCancelStatusesDraft([])
             if (key === "refundStatuses") setRefundStatusesDraft([])
+            if (key === "aftersalePending") setAftersalePendingDraft(false)
             if (key === "paidRange") {
                 setPaidFromDraft("")
                 setPaidToDraft("")
@@ -196,6 +204,7 @@ export function useSupplierOrdersFilters(
     const resetMoreFilters = React.useCallback(() => {
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
+        setAftersalePendingDraft(false)
         setPaidFromDraft("")
         setPaidToDraft("")
         setFilterError(null)
@@ -207,6 +216,7 @@ export function useSupplierOrdersFilters(
         !sameCodeList(fulfillmentStatusesDraft, url.fulfillmentStatuses) ||
         !sameCodeList(cancelStatusesDraft, url.cancelStatuses) ||
         !sameCodeList(refundStatusesDraft, url.refundStatuses) ||
+        aftersalePendingDraft !== Boolean(url.aftersalePending) ||
         paidFromDraft.trim() !== (url.paidFrom ?? "") ||
         paidToDraft.trim() !== (url.paidTo ?? "")
 
@@ -217,6 +227,7 @@ export function useSupplierOrdersFilters(
         setFulfillmentStatusesDraft([])
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
+        setAftersalePendingDraft(false)
         setPaidFromDraft("")
         setPaidToDraft("")
         setFilterError(null)
@@ -294,17 +305,19 @@ export function useSupplierOrdersFilters(
         url.supplierId,
     ])
 
-    // URL 回填：外部变化（快捷筛选 / 前进后退 / 刷新）同步结构化草稿；
+    // URL 回填：外部变化（前进后退 / 刷新）同步结构化草稿；
     // 面板展开态不受回填影响（提交成功后不会因回填再次强制展开）。
     React.useEffect(() => {
         setSupplierIdDraft(url.supplierId ?? null)
         setFulfillmentStatusesDraft(url.fulfillmentStatuses ?? [])
         setCancelStatusesDraft(url.cancelStatuses ?? [])
         setRefundStatusesDraft(url.refundStatuses ?? [])
+        setAftersalePendingDraft(Boolean(url.aftersalePending))
         setPaidFromDraft(url.paidFrom ?? "")
         setPaidToDraft(url.paidTo ?? "")
         setFilterError(null)
     }, [
+        url.aftersalePending,
         url.cancelStatuses,
         url.fulfillmentStatuses,
         url.paidFrom,
@@ -330,6 +343,8 @@ export function useSupplierOrdersFilters(
         setCancelStatusesDraft,
         refundStatusesDraft,
         setRefundStatusesDraft,
+        aftersalePendingDraft,
+        setAftersalePendingDraft,
         paidFromDraft,
         setPaidFromDraft,
         paidToDraft,

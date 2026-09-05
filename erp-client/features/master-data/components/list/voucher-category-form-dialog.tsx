@@ -3,7 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
-import { DiscardConfirmDialog, FormalActionResult } from "@/components/business"
+import { FormalActionResult } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -99,7 +99,6 @@ export function VoucherCategoryFormDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
 
     const form = useAppForm({
         defaultValues: defaultFormValues(),
@@ -171,20 +170,8 @@ export function VoucherCategoryFormDialog({
     }
 
     const requestClose = (next: boolean) => {
-        if (next) {
-            onOpenChange(true)
-            return
-        }
-        if (result?.outcome === "succeeded") {
-            reset()
-            onOpenChange(false)
-            return
-        }
-        if (form.state.isDirty || result) {
-            setDiscardOpen(true)
-            return
-        }
-        onOpenChange(false)
+        if (!next) reset()
+        onOpenChange(next)
     }
 
     React.useEffect(() => {
@@ -335,21 +322,6 @@ export function VoucherCategoryFormDialog({
                     ) : null}
                 </div>
             </DialogContent>
-
-            <DiscardConfirmDialog
-                id={`${baseId}-discard`}
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                title="放弃本次填写？"
-                description="关闭后本次填写的内容将丢失。"
-                confirmLabel="放弃填写"
-                cancelLabel="继续编辑"
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    reset()
-                    onOpenChange(false)
-                }}
-            />
         </Dialog>
     )
 }

@@ -58,12 +58,12 @@ function ProductBasicSection({
     return (
         <ProductSectionFrame
             id="product-section-basic"
-            title="基础资料"
+            title="基础信息"
             disabled={!canRevise}
         >
-            <div className="grid gap-5 sm:grid-cols-6">
+            <div className="grid gap-5 sm:grid-cols-12">
                 {isCreate ? (
-                    <div className="space-y-1.5 sm:col-span-3">
+                    <div className="space-y-1.5 sm:col-span-6">
                         <Label htmlFor={`${prefix}-product-no`}>
                             商品编号 *
                         </Label>
@@ -84,8 +84,8 @@ function ProductBasicSection({
                 <div
                     className={
                         isCreate
-                            ? "space-y-1.5 sm:col-span-3"
-                            : "space-y-1.5 sm:col-span-6"
+                            ? "space-y-1.5 sm:col-span-6"
+                            : "space-y-1.5 sm:col-span-12"
                     }
                 >
                     <Label htmlFor={`${prefix}-name`}>商品名称 *</Label>
@@ -96,7 +96,7 @@ function ProductBasicSection({
                         placeholder="请输入商品名称"
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-3">
+                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-kind-combobox`}>
                         商品类型 *
                     </Label>
@@ -122,7 +122,7 @@ function ProductBasicSection({
                         决定商品业务作用；创建后不可变，也不随分类变化。
                     </p>
                 </div>
-                <div className="space-y-1.5 sm:col-span-3">
+                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-unit-combobox`}>
                         {masterDataCopy.fBaseUnit} *
                     </Label>
@@ -153,7 +153,7 @@ function ProductBasicSection({
                         className="w-full"
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-3">
+                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-category-combobox`}>
                         {masterDataCopy.fCategory} *
                     </Label>
@@ -177,7 +177,7 @@ function ProductBasicSection({
                         className="w-full"
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-3">
+                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-brand-combobox`}>
                         {masterDataCopy.fBrand} *
                     </Label>
@@ -201,7 +201,7 @@ function ProductBasicSection({
                         className="w-full"
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-6">
+                <div className="space-y-1.5 sm:col-span-12">
                     <Label htmlFor={`${prefix}-description`}>商品描述</Label>
                     <Textarea
                         id={`${prefix}-description`}

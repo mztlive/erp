@@ -4,8 +4,8 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
 use entities::source_registry::{
-    ExternalIdentityMap, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
-    SourceSystemData, SourceSystemId, SourceSystemStatus, SourceSystemType,
+    ExternalIdentityMap, ExternalObjectType, MappingStatus, RelationRole, SourceSystem, SourceSystemData,
+    SourceSystemId, SourceSystemStatus, SourceSystemType,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -327,9 +327,7 @@ impl ExternalIdentityMapListParams {
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, ExternalIdentityMapListParams, SortDir, SourceSystemListParams};
-    use entities::source_registry::{
-        MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType,
-    };
+    use entities::source_registry::{MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType};
     use serde_json::json;
     use validator::Validate;
 

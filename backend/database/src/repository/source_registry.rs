@@ -11,9 +11,8 @@
 use std::collections::HashMap;
 
 use entities::source_registry::{
-    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType,
-    MappingStatus, RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType,
-    TargetStatus,
+    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
+    RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};

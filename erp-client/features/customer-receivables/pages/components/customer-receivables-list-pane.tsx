@@ -64,15 +64,7 @@ export function CustomerReceivablesListPane({
     const metrics = data?.metrics
     return (
         <>
-            {!isError ? (
-                <CustomerReceivablesMetrics
-                    view={urlState.view}
-                    due={urlState.due}
-                    metrics={metrics}
-                    queriedAt={data?.queriedAt}
-                    patchUrl={urlState.patchUrl}
-                />
-            ) : null}
+            {!isError ? <CustomerReceivablesMetrics metrics={metrics} /> : null}
 
             <CustomerReceivablesTable
                 view={urlState.view}

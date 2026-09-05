@@ -43,7 +43,6 @@ export function CategoryCreateDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const form = useAppForm({
         defaultValues: emptyCategoryForm(defaultParentId),
         validators: { onChange: categoryFormSchema },
@@ -86,8 +85,6 @@ export function CategoryCreateDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.createSubmit}
             onReset={reset}
         />
@@ -111,7 +108,6 @@ export function CategoryReviseDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const form = useAppForm({
         defaultValues: emptyCategoryForm(),
         validators: { onChange: categoryFormSchema },
@@ -175,8 +171,6 @@ export function CategoryReviseDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending || !target}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.reviseSubmit}
             excludeStableId={ids.stableId || undefined}
         />

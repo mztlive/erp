@@ -12,9 +12,10 @@ use crate::{
         middleware::{authenticate, with_permission},
         routes::{
             access_control, approval_instance, bulk_job, catalog, contract, cost, customer,
-            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import,
-            party, payable, purchase_order, receivable, returns, sales_order, sales_review, source_registry, supplier,
-            supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, warehouse, work_item,
+            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import, party,
+            payable, purchase_order, receivable, returns, sales_order, sales_review, source_registry,
+            supplier, supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, warehouse,
+            work_item,
         },
     },
 };

@@ -813,8 +813,7 @@ impl<'a> SupplierApiRepository<'a> {
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
     ) -> Result<SupplierConnectionImpact> {
-        let (active_offerings, _) =
-            self.active_offering_revisions(connection_id, executor).await?;
+        let (active_offerings, _) = self.active_offering_revisions(connection_id, executor).await?;
         let open_supplier_orders = mongo_ops::count_documents(
             &self.db.supplier_fulfillment_orders().collection(),
             doc! {

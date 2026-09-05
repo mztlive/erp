@@ -1244,10 +1244,7 @@ mod snapshot_tests {
 
     use mongodb::bson::{doc, Bson};
 
-    use super::{
-        financial_total_pipeline, first_total_or_zero,
-        zero_total, AmountTotalRow,
-    };
+    use super::{financial_total_pipeline, first_total_or_zero, zero_total, AmountTotalRow};
     use entities::ids::SupplierFulfillmentOrderId;
     use entities::money::Amount;
 

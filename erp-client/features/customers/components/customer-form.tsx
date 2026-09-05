@@ -63,7 +63,7 @@ export function CustomerForm({
     onCancel: () => void
     /** 成功回调；revisionNo 供页面展示「已保存 · 新版本 vN」反馈。 */
     onSucceeded: (customerId: string, revisionNo?: number) => void
-    /** 表单是否含未保存输入（对话框容器用于拦截 X / Esc / 遮罩关闭）。 */
+    /** 表单是否含未保存输入（详情页用于拦截分区切换）。 */
     onDirtyChange?: (isDirty: boolean) => void
 }) {
     const createMutation = useCreateCustomerMutation()
@@ -344,7 +344,9 @@ export function CustomerForm({
                 submitLabel={submitLabel}
                 dirty={dirty}
                 onCancel={onCancel}
-                onDiscardRequest={() => setDiscardOpen(true)}
+                onDiscardRequest={
+                    mode === "edit" ? () => setDiscardOpen(true) : undefined
+                }
                 onResetSession={resetSession}
             />
 

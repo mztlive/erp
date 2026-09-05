@@ -1795,7 +1795,7 @@ mod tests {
 
     #[test]
     fn apply_validated_changes_splits_updates_and_creates() {
-        let mut capabilities = vec![existing_capability(SupplierApiCapabilityCode::Order)];
+        let capabilities = vec![existing_capability(SupplierApiCapabilityCode::Order)];
         let confirmations = vec![covering_confirmation(&capabilities[0])];
         let classified = CapabilityChangeSet::new(
             vec![
@@ -1817,7 +1817,7 @@ mod tests {
         .unwrap();
 
         let (updates, creates) =
-            apply_validated_changes("conn-1", &classified, &confirmations, &mut capabilities).unwrap();
+            apply_validated_changes("conn-1", &classified, &confirmations, &capabilities).unwrap();
         assert_eq!(updates.len(), 1);
         assert!(updates[0].is_active());
         assert_eq!(creates.len(), 1);
@@ -1841,7 +1841,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            apply_validated_changes("conn-1", &classified, &[], &mut capabilities.clone()),
+            apply_validated_changes("conn-1", &classified, &[], &capabilities.clone()),
             Err(Error::BusinessLogicError(_))
         ));
 
@@ -1853,7 +1853,7 @@ mod tests {
                 &[covering_confirmation(&existing_capability(
                     SupplierApiCapabilityCode::Order
                 ))],
-                &mut capabilities
+                &capabilities
             ),
             Err(Error::ConflictError(_))
         ));

@@ -2,6 +2,8 @@ import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { emptyProductFields } from "@/features/master-data/lib/product-model"
 import { useProductEditor } from "./use-product-editor"
+import { createSpecDraft } from "../lib/product-editor-model"
+import { createProductFormBindings } from "../lib/product-form-bindings"
 
 const mocks = vi.hoisted(() => ({
     revise: vi.fn(),
@@ -41,7 +43,10 @@ vi.mock("./queries", () => ({
     }),
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+})
 beforeEach(() => {
     vi.clearAllMocks()
     window.history.replaceState(null, "", "/master-data/products/product-1")
@@ -81,6 +86,97 @@ beforeEach(() => {
 })
 
 describe("product save confirmation", () => {
+    function setupSpecs() {
+        const { result } = renderHook(() => useProductEditor("product-1"))
+        const bindings = () =>
+            createProductFormBindings(
+                result.current.form,
+                result.current.form.state.values,
+                false,
+                "礼盒",
+            )
+        return { result, bindings }
+    }
+    it("preserves SKU edits while typing, reverting and cancelling specification drafts", () => {
+        const { result, bindings } = setupSpecs()
+        act(() =>
+            bindings().updateSku(0, {
+                salePrice: "612.0001",
+                barcode: "CUSTOM",
+            }),
+        )
+        const before = structuredClone(
+            result.current.form.state.values.fields.skus,
+        )
+        act(() =>
+            bindings().syncSpecDrafts([createSpecDraft("颜色", ["红色"])]),
+        )
+        expect(result.current.form.state.values.fields.skus).toEqual(before)
+        act(() => bindings().syncSpecDrafts([]))
+        expect(result.current.form.state.values.fields.skus).toEqual(before)
+        act(() =>
+            bindings().syncSpecDrafts([createSpecDraft("颜色", ["红色款"])]),
+        )
+        act(() => bindings().resetSpecDrafts())
+        expect(result.current.form.state.values.specDrafts).toEqual([])
+        expect(result.current.form.state.values.fields.skus).toEqual(before)
+    })
+    it("blocks save and final submission until specification drafts are applied", async () => {
+        const { result, bindings } = setupSpecs()
+        act(() =>
+            bindings().syncSpecDrafts([createSpecDraft("颜色", ["红色"])]),
+        )
+        act(() => result.current.form.setFieldValue("changeReason", "规格调整"))
+        act(() => result.current.requestSave(result.current.form.state.values))
+        expect(result.current.saveOpen).toBe(false)
+        expect(result.current.activeSection).toBe("sku")
+        expect(result.current.formError).toContain("尚未应用")
+        await act(async () => {
+            await result.current.form.handleSubmit()
+        })
+        expect(mocks.revise).not.toHaveBeenCalled()
+        expect(result.current.form.state.values.fields.skus[0].salePrice).toBe(
+            "568.00",
+        )
+    })
+    it("requires confirmation for removed SKUs and preserves the table on cancellation", () => {
+        const { result, bindings } = setupSpecs()
+        const confirm = vi.spyOn(window, "confirm").mockReturnValue(false)
+        const before = structuredClone(result.current.form.state.values.fields)
+        act(() =>
+            bindings().syncSpecDrafts([createSpecDraft("颜色", ["红色"])]),
+        )
+        act(() => {
+            expect(bindings().applySpecDrafts()).toBeNull()
+        })
+        expect(confirm).toHaveBeenCalledWith(
+            expect.stringContaining("SKU-01 · 默认规格"),
+        )
+        expect(result.current.form.state.values.fields).toEqual(before)
+        confirm.mockReturnValue(true)
+        act(() => {
+            expect(bindings().applySpecDrafts()).toBeNull()
+        })
+        expect(result.current.form.state.values.fields.specs).toEqual([
+            { name: "颜色", values: ["红色"] },
+        ])
+        expect(mocks.revise).not.toHaveBeenCalled()
+    })
+    it("rejects incomplete and duplicate specifications before modifying SKUs", () => {
+        const { result, bindings } = setupSpecs()
+        const before = structuredClone(result.current.form.state.values.fields)
+        const confirm = vi.spyOn(window, "confirm")
+        act(() => bindings().syncSpecDrafts([createSpecDraft("颜色", [""])]))
+        expect(bindings().applySpecDrafts()).toContain("补全")
+        act(() =>
+            bindings().syncSpecDrafts([
+                createSpecDraft("颜色", ["红色", " 红色 "]),
+            ]),
+        )
+        expect(bindings().applySpecDrafts()).toContain("重复")
+        expect(result.current.form.state.values.fields).toEqual(before)
+        expect(confirm).not.toHaveBeenCalled()
+    })
     it("opens confirmation without writing or changing effective dates, and keeps edits when closed", () => {
         const { result } = renderHook(() => useProductEditor("product-1"))
         act(() => result.current.form.setFieldValue("name", "修改后的礼盒"))

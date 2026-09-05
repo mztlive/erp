@@ -104,6 +104,7 @@ export function SettlementListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            density="compact"
             idPrefix={prefix}
             formAriaLabel="结算单查询"
             onSubmit={applyFilters}
@@ -227,7 +228,6 @@ export function SettlementListToolbar({
             onClearAll={clearAllFilters}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

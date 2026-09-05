@@ -2,21 +2,13 @@
 
 import Link from "next/link"
 
-import { surfaceInsetClassName } from "@/components/business"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { MetricItem, MetricStrip } from "@/components/business"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
     return (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricStrip columns={3} aria-label="关联业务统计">
             {[
                 {
                     label: "活跃供给",
@@ -34,31 +26,20 @@ export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
                     href: "/procurement/supplier-offerings",
                 },
             ].map((item) => (
-                <Card
-                    key={item.label}
-                    size="sm"
-                    className={cn(surfaceInsetClassName, "shadow-none ring-0")}
-                >
-                    <CardHeader className="pb-1">
-                        <CardDescription>{item.label}</CardDescription>
-                        <CardTitle className="num text-2xl">
-                            {item.value}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Link
-                            id={`supplier-api-connections-related-${toAutomationIdSegment(item.label)}`}
-                            href={item.href}
-                            className="text-xs text-primary underline-offset-2 hover:underline"
-                        >
-                            打开关联页面
-                        </Link>
-                    </CardContent>
-                </Card>
+                <div key={item.label} className="min-w-0 space-y-1">
+                    <MetricItem label={item.label} value={item.value} />
+                    <Link
+                        id={`supplier-api-connections-related-${toAutomationIdSegment(item.label)}`}
+                        href={item.href}
+                        className="text-xs text-primary underline-offset-2 hover:underline"
+                    >
+                        打开关联页面
+                    </Link>
+                </div>
             ))}
-            <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+            <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
                 进入相关页面时将重新获取最新状态。
             </p>
-        </div>
+        </MetricStrip>
     )
 }

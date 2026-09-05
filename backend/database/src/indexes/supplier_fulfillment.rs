@@ -127,12 +127,10 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
 fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
-    vec![
-        named_index(
-            "idx_supplier_fulfillment_items_order",
-            doc! { "supplier_fulfillment_order_id": 1 },
-        ),
-    ]
+    vec![named_index(
+        "idx_supplier_fulfillment_items_order",
+        doc! { "supplier_fulfillment_order_id": 1 },
+    )]
 }
 
 /// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。

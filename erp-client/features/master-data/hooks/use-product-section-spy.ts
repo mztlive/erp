@@ -9,7 +9,7 @@ import {
 
 /**
  * 商品编辑分区 Tab。从 URL hash 恢复（如供给关系 returnTo），
- * 切换时写入 `#product-section-{id}`，不再做滚动 spy。
+ * 切换时写入 `#product-section-{id}`；旧 SKU 锚点仍定位商品资料内的 SKU 区域。
  */
 export function useProductSectionSpy(
     isCreate: boolean,

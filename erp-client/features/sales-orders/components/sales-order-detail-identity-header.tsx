@@ -2,9 +2,14 @@
 
 import * as React from "react"
 
-import { DocumentHeader, MoneyValue } from "@/components/business"
+import {
+    DocumentHeader,
+    MetricItem,
+    MetricStrip,
+    MoneyValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import { remainingReceivableAmount } from "@/features/sales-orders/lib/sales-order-receivable"
@@ -65,30 +70,6 @@ export function SalesOrderIdentityHeader({
     )
 }
 
-function AmountCell({
-    label,
-    value,
-    status,
-    className,
-}: {
-    label: string
-    value: React.ReactNode
-    status?: { label: string; tone: StatusTone }
-    className?: string
-}) {
-    return (
-        <div className={className}>
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                {value}
-                {status != null ? (
-                    <StatusBadge tone={status.tone} label={status.label} />
-                ) : null}
-            </dd>
-        </div>
-    )
-}
-
 function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
     const receivableLeft = remainingReceivableAmount(
         order.amountGross,
@@ -96,52 +77,45 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
     )
 
     return (
-        <dl
-            className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 sm:gap-0 sm:divide-x sm:divide-border"
-            aria-label="销售单金额摘要"
-        >
-            <AmountCell
-                className="min-w-0 sm:pr-4"
+        <MetricStrip columns={4} aria-label="销售单金额摘要">
+            <MetricItem
                 label="成交金额（含税）"
                 value={
                     <MoneyValue
                         value={order.amountGross}
-                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
+                        className="font-semibold"
                     />
                 }
             />
-            <AmountCell
-                className="min-w-0 sm:px-4"
+            <MetricItem
                 label="已回款"
                 value={
                     <MoneyValue
                         value={order.receivedAmount}
-                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
+                        className="font-semibold"
                     />
                 }
                 status={order.collection}
             />
-            <AmountCell
-                className="min-w-0 sm:px-4"
+            <MetricItem
                 label="待回款"
                 value={
                     <MoneyValue
                         value={receivableLeft}
-                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
+                        className="font-semibold"
                     />
                 }
             />
-            <AmountCell
-                className="min-w-0 sm:pl-4"
+            <MetricItem
                 label="已开票"
                 value={
                     <MoneyValue
                         value={order.invoicedAmount}
-                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
+                        className="font-semibold"
                     />
                 }
                 status={order.invoicing}
             />
-        </dl>
+        </MetricStrip>
     )
 }

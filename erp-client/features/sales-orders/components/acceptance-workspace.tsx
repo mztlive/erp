@@ -100,12 +100,11 @@ export function AcceptanceWorkspace({
     const [idempotencyKey, setIdempotencyKey] = React.useState(
         () => `acc-${salesOrderId}-${crypto.randomUUID()}`,
     )
-    const [exitDiscardOpen, setExitDiscardOpen] = React.useState(false)
     const resultRef = React.useRef<HTMLDivElement>(null)
     const submittedOverallRef = React.useRef<AcceptanceOverallResult>("PASS")
     const pendingPostLinesRef = React.useRef(selection.selected)
 
-    const { form, formDirty, clientIssues } = useAcceptanceForm({
+    const { form, clientIssues } = useAcceptanceForm({
         selected: selection.selected,
         onValidSubmit: () => {
             pendingPostLinesRef.current = selection.selected
@@ -257,11 +256,6 @@ export function AcceptanceWorkspace({
     const progress = buildOrderProgress(view.salesLines)
     const pendingCount = pendingFactsOf(view.salesLines).length
     const canRegister = canCreate && pendingCount > 0
-    const hasUnsavedInput =
-        formDirty ||
-        selection.hasExceptionResult ||
-        selection.selected.size !== pendingCount
-
     const closeRegister = () => {
         selection.reset()
         form.reset()
@@ -270,10 +264,6 @@ export function AcceptanceWorkspace({
 
     const requestCloseRegister = () => {
         if (postMutation.isPending || confirmOpen) return
-        if (hasUnsavedInput) {
-            setExitDiscardOpen(true)
-            return
-        }
         closeRegister()
     }
 
@@ -477,12 +467,6 @@ export function AcceptanceWorkspace({
                         reasonText: reverseReason.trim(),
                         idempotencyKey: reverseIdempotencyKeyRef.current,
                     })
-                }}
-                exitDiscardOpen={exitDiscardOpen}
-                onExitDiscardOpenChange={setExitDiscardOpen}
-                onConfirmExit={() => {
-                    setExitDiscardOpen(false)
-                    closeRegister()
                 }}
             />
         </div>

@@ -175,6 +175,7 @@ export function SupplierOrdersListPage() {
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
+                className="pb-6 md:pb-6"
                 eyebrow="供应商"
                 title="供应商订单"
                 description={
@@ -199,6 +200,7 @@ export function SupplierOrdersListPage() {
             >
                 <Button
                     id="supplier-orders-list-export-trigger"
+                    title="导出与当前查询结果一致"
                     type="button"
                     variant="outline"
                     disabled={
@@ -228,11 +230,7 @@ export function SupplierOrdersListPage() {
                 <SupplierOrdersListReturnBanner returnTo={returnTo} />
             ) : null}
 
-            <SupplierOrdersListMetricStrip
-                metrics={metrics}
-                url={url}
-                updateUrl={updateUrl}
-            />
+            <SupplierOrdersListMetricStrip metrics={metrics} />
 
             {actionResult ? (
                 <FormalActionResult
@@ -276,11 +274,11 @@ export function SupplierOrdersListPage() {
             ) : null}
 
             <ListWorkSurface
+                toolbarClassName="pt-3 pb-2"
                 ariaLabel="供应商订单列表"
                 views={
                     <ListWorkspaceViews
                         ariaLabel="供应商订单视图"
-                        hint="选择供应商订单查看详情"
                         items={SUPPLIER_ORDER_VIEWS.map((view) => ({
                             id: `supplier-orders-list-view-${toAutomationIdSegment(view)}`,
                             label: VIEW_LABEL[view],

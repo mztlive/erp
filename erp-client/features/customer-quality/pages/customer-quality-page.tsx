@@ -350,7 +350,6 @@ export function CustomerQualityPage() {
             tableSorting={nav.tableSorting}
             onSortingChange={nav.handleTableSortingChange}
             tableSectionRef={tableSectionRef}
-            onFocusTable={scrollToTableTop}
             tagDialog={tagDialog}
             onTagDialogOpenChange={(open) => {
                 if (!open) setTagDialog(null)

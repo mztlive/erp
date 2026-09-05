@@ -3,7 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
-import { DiscardConfirmDialog, FormalActionResult } from "@/components/business"
+import { FormalActionResult } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -81,7 +81,6 @@ export function UnitOfMeasureCreateDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const form = useAppForm({
         defaultValues: emptyUnitForm(),
         validators: { onChange: unitFormSchema },
@@ -125,8 +124,6 @@ export function UnitOfMeasureCreateDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.createSubmit}
             codeReadOnly={false}
             onReset={reset}
@@ -155,7 +152,6 @@ export function UnitOfMeasureReviseDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const form = useAppForm({
         defaultValues: emptyUnitForm(),
         validators: { onChange: unitFormSchema },
@@ -223,8 +219,6 @@ export function UnitOfMeasureReviseDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending || !target}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.reviseSubmit}
             codeReadOnly
         />
@@ -241,8 +235,6 @@ function UnitFormDialogFrame({
     form,
     result,
     pending,
-    discardOpen,
-    setDiscardOpen,
     submitLabel,
     codeReadOnly,
     onReset,
@@ -285,33 +277,23 @@ function UnitFormDialogFrame({
             disabled?: boolean
         }>
         handleSubmit: () => unknown
-        state: { isDirty: boolean }
-        reset: () => void
     }
     result: MasterDataMutationResult | null
     pending: boolean
-    discardOpen: boolean
-    setDiscardOpen: (open: boolean) => void
     submitLabel: string
     codeReadOnly: boolean
     onReset?: () => void
 }) {
     const baseId = idPrefix ?? id ?? "master-data-unit-of-measure-form-dialog"
-    const requestClose = (next: boolean) => {
-        if (next) {
-            onOpenChange(true)
-            return
-        }
-        if (form.state.isDirty || result) {
-            setDiscardOpen(true)
-            return
-        }
-        onReset?.()
-        onOpenChange(false)
-    }
 
     return (
-        <Dialog open={open} onOpenChange={requestClose}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next) onReset?.()
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId={`${baseId}-close`}
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
@@ -421,20 +403,6 @@ function UnitFormDialogFrame({
                     ) : null}
                 </DialogScrollBody>
             </DialogContent>
-            <DiscardConfirmDialog
-                id={`${baseId}-discard`}
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                title="放弃本次填写？"
-                description="关闭后本次填写的内容将丢失。"
-                confirmLabel="放弃填写"
-                cancelLabel="继续编辑"
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    onReset?.()
-                    onOpenChange(false)
-                }}
-            />
         </Dialog>
     )
 }

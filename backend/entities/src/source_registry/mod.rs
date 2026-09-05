@@ -778,9 +778,8 @@ impl ExternalIdentityTarget {
 mod tests {
     use super::{
         ExternalIdKey, ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityTarget,
-        ExternalIdentityTargetData, ExternalObjectType, MappingStatus, RelationRole,
-        SourceSystem, SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate,
-        TargetStatus,
+        ExternalIdentityTargetData, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
+        SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate, TargetStatus,
     };
     use crate::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
 

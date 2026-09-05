@@ -46,7 +46,7 @@ function SkuSupplierCell({
 }: SkuSupplierCellProps) {
     const skuSegment = toAutomationIdSegment(sku.skuId || sku.skuNo || name)
     return (
-        <TableCell className="h-auto whitespace-normal align-top">
+        <TableCell className="whitespace-normal align-middle">
             <div className="space-y-1.5">
                 {sku.skuId && !isCreate ? (
                     <Popover>

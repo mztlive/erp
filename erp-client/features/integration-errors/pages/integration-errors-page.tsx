@@ -238,16 +238,7 @@ export function IntegrationErrorsPage({
                 />
             ) : null}
 
-            {metrics ? (
-                <IntegrationErrorMetricStrip
-                    metrics={metrics}
-                    activeView={urlState.view}
-                    focusMode={focusMode}
-                    onSelectView={(view) =>
-                        replaceUrl({ view, taskId: null, differenceId: null })
-                    }
-                />
-            ) : null}
+            {metrics ? <IntegrationErrorMetricStrip metrics={metrics} /> : null}
 
             {!focusMode ? (
                 <IntegrationQueueToolbar

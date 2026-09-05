@@ -4,6 +4,9 @@ use std::collections::HashSet;
 
 use mongodb::ClientSession;
 
+use crate::approval::binding::{
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+};
 use database::{
     AccessControlExt, CatalogExt, ContractExt, CustomerExt, DocumentRegistryExt, Executor, NoTransaction,
     SalesOrderExt, Transactional,
@@ -17,14 +20,11 @@ use entities::ids::{
     SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use entities::sales_order::{
-    SalesContentHash, SalesOrder, SalesOrderData, SalesOrderWorkingCopy,
-    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate, WorkingPurpose,
+    SalesContentHash, SalesOrder, SalesOrderData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
+    SalesOrderWorkingCopyUpdate, WorkingPurpose,
 };
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
 use validator::Validate;
 
 use super::adapter::{

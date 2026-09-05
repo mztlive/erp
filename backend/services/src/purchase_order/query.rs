@@ -511,11 +511,18 @@ mod query_layering_tests {
     #[test]
     fn no_single_point_supplier_lookup_remains() {
         let shared = include_str!("shared.rs");
-        let change = include_str!("change.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let change = [
+            include_str!("change/submit.rs"),
+            include_str!("change/effect.rs"),
+            include_str!("change/query.rs"),
+            include_str!("change/mapping.rs"),
+            include_str!("change.rs"),
+        ]
+        .concat()
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap_or("")
+        .to_string();
         assert!(
             !shared.contains("fn resolve_supplier_name"),
             "单点供应商名称 helper 已删除"

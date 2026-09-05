@@ -69,7 +69,6 @@ export function CustomerQualityMainView({
     tableSorting,
     onSortingChange,
     tableSectionRef,
-    onFocusTable,
     tagDialog,
     onTagDialogOpenChange,
 }: {
@@ -113,7 +112,6 @@ export function CustomerQualityMainView({
     tableSorting: SortingState
     onSortingChange: (next: SortingState) => void
     tableSectionRef: React.RefObject<HTMLDivElement | null>
-    onFocusTable: () => void
     tagDialog: BusinessTag | null
     onTagDialogOpenChange: (open: boolean) => void
 }) {
@@ -183,7 +181,6 @@ export function CustomerQualityMainView({
 
                             <CustomerQualityMetricStrip
                                 metrics={data.metrics}
-                                onFocusTable={onFocusTable}
                             />
 
                             <CustomerQualityCharts

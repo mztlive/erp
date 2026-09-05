@@ -21,9 +21,9 @@ use crate::{
     query::{normalized_text, page_or_default, page_size_or_default},
 };
 
-use super::{
-    ensure_queue_context, has_execution_permissions, ActorAccess, WorkItemDueFilter, WorkItemService,
-};
+use super::access::{has_execution_permissions, ActorAccess};
+use super::query::ensure_queue_context;
+use super::{WorkItemDueFilter, WorkItemService};
 
 const ALL_OPERATION_TYPES: [FulfillmentQueueOperationType; 5] = [
     FulfillmentQueueOperationType::Receipt,

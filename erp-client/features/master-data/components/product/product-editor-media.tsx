@@ -388,7 +388,7 @@ function SkuMainImageField({
             label={masterDataCopy.fMainImage}
             description="1:1"
             density="tile"
-            className="aspect-square size-14"
+            className="aspect-square size-14 overflow-hidden"
             disabled={disabled}
             previewSelectedImage
             preview={

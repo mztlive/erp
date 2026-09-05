@@ -178,6 +178,7 @@ export function ApprovalProcessesPage() {
         return (
             <PageScaffold density="compact" className={styles.page}>
                 <ListWorkspaceHeader
+                    className="pb-6 md:pb-6"
                     eyebrow="系统"
                     title="审批流程配置"
                     description="按固定单据类型维护审批节点与审批人。"
@@ -206,6 +207,7 @@ export function ApprovalProcessesPage() {
         return (
             <PageScaffold density="compact" className={styles.page}>
                 <ListWorkspaceHeader
+                    className="pb-6 md:pb-6"
                     eyebrow="系统"
                     title="审批流程配置"
                     description="按固定单据类型维护审批节点与审批人。"
@@ -222,12 +224,13 @@ export function ApprovalProcessesPage() {
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
+                className="pb-6 md:pb-6"
                 eyebrow="系统"
                 title="审批流程配置"
                 description="按固定单据类型维护审批节点与审批人。"
             />
 
-            <MetricStrip columns={4}>
+            <MetricStrip className="mb-6" columns={4}>
                 <MetricItem
                     label="必须审批"
                     value={required.length}
@@ -251,11 +254,11 @@ export function ApprovalProcessesPage() {
             </MetricStrip>
 
             <ListWorkSurface
+                toolbarClassName="pt-3 pb-2"
                 ariaLabel="审批流程单据类型目录"
                 views={
                     <ListWorkspaceViews
                         ariaLabel="审批流程配置视图"
-                        hint="选择单据类型查看配置"
                         items={[
                             {
                                 id: "governance-approval-processes-catalog-view-all",
@@ -269,6 +272,7 @@ export function ApprovalProcessesPage() {
                 }
                 toolbar={
                     <ListWorkspaceFilterBar
+                        density="compact"
                         idPrefix="governance-approval-processes-catalog"
                         formAriaLabel="审批流程查询"
                         onSubmit={applyFilters}

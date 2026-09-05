@@ -224,14 +224,8 @@ mod tests {
     fn goods_service_copies_snapshot_amounts_and_line_fields() {
         let (copy, lines) = goods_copy();
         let submitted_at = Instant::from_unix_secs(1_790_000_000);
-        let data = SalesOrderSubmissionData::from_working_copy(
-            &copy,
-            &lines,
-            2,
-            submitted_at,
-            "sales-1",
-        )
-        .unwrap();
+        let data =
+            SalesOrderSubmissionData::from_working_copy(&copy, &lines, 2, submitted_at, "sales-1").unwrap();
 
         assert_eq!(data.sales_order_id, SalesOrderId::new("o-1"));
         assert_eq!(data.submission_no, 2);

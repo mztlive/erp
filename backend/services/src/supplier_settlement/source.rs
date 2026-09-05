@@ -599,8 +599,8 @@ mod tests {
 
     use entities::common::time::{BusinessDate, Instant};
     use entities::ids::{
-        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId,
-        SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
+        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
         SupplierOfferingRevisionId, SupplierRefundAllocationId, SupplierRefundFactId,
     };
     use entities::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};

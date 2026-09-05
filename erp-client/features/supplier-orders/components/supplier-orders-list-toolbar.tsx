@@ -37,6 +37,7 @@ const MORE_CHIP_KEYS: readonly SupplierOrdersFilterKey[] = [
     "cancelStatuses",
     "refundStatuses",
     "paidRange",
+    "aftersalePending",
 ]
 
 export function SupplierOrdersListToolbar({
@@ -58,6 +59,7 @@ export function SupplierOrdersListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            density="compact"
             idPrefix={prefix}
             formAriaLabel="供应商订单查询"
             onSubmit={f.applyFilters}
@@ -153,6 +155,34 @@ export function SupplierOrdersListToolbar({
                                 />
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-aftersale`}
+                                label="售后处理"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-aftersale`}
+                                    className="w-full"
+                                    value={
+                                        f.aftersalePendingDraft
+                                            ? "pending"
+                                            : "all"
+                                    }
+                                    onValueChange={(value) =>
+                                        f.setAftersalePendingDraft(
+                                            value === "pending",
+                                        )
+                                    }
+                                    options={[
+                                        { value: "all", label: "全部" },
+                                        {
+                                            value: "pending",
+                                            label: "售后待处理",
+                                        },
+                                    ]}
+                                    allowClear={false}
+                                    aria-label="售后处理"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
                                 htmlFor={`${prefix}-refund`}
                                 label="退款状态"
                             >
@@ -242,7 +272,6 @@ export function SupplierOrdersListToolbar({
             onClearAll={f.clearAllFilters}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

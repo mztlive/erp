@@ -1,9 +1,6 @@
 "use client"
 
-import {
-    DiscardConfirmDialog,
-    FormalActionConfirmDialog,
-} from "@/components/business"
+import { FormalActionConfirmDialog } from "@/components/business"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -30,9 +27,6 @@ export function AcceptanceDialogs({
     reverseReason,
     onReverseReasonChange,
     onConfirmReverse,
-    exitDiscardOpen,
-    onExitDiscardOpenChange,
-    onConfirmExit,
 }: {
     confirmOpen: boolean
     onConfirmOpenChange: (open: boolean) => void
@@ -44,9 +38,6 @@ export function AcceptanceDialogs({
     reverseReason: string
     onReverseReasonChange: (value: string) => void
     onConfirmReverse: () => Promise<void>
-    exitDiscardOpen: boolean
-    onExitDiscardOpenChange: (open: boolean) => void
-    onConfirmExit: () => void
 }) {
     const confirmLines = acceptanceConfirmLines(selected)
     const reverseAcceptanceNo = visibleAcceptanceNo(reverseTarget?.acceptanceNo)
@@ -111,17 +102,6 @@ export function AcceptanceDialogs({
                 }
                 confirmDisabled={!reverseReason.trim()}
                 onConfirm={onConfirmReverse}
-            />
-
-            <DiscardConfirmDialog
-                id="sales-orders-acceptance-exit-discard"
-                open={exitDiscardOpen}
-                onOpenChange={onExitDiscardOpenChange}
-                title="放弃本次验收登记？"
-                description="已勾选的批次和填写的结果还没提交，取消后会丢掉。"
-                confirmLabel="放弃并返回"
-                cancelLabel="继续登记"
-                onConfirm={onConfirmExit}
             />
         </>
     )

@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
-import type { ProductSpecDraft } from "@/features/master-data/lib/product-editor-model"
+import {
+    createSpecDraft,
+    nextSpecDraftId,
+    type ProductSpecDraft,
+} from "@/features/master-data/lib/product-editor-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type ProductSpecDraftsEditorProps = {
@@ -29,13 +33,11 @@ function ProductSpecDraftsEditor({
             <legend className="sr-only">商品规格</legend>
             <div className="space-y-3">
                 {specDrafts.map((draft, index) => {
-                    const specSegment = toAutomationIdSegment(
-                        draft.name.trim() || `spec-${index}`,
-                    )
+                    const specSegment = toAutomationIdSegment(draft.draftId)
                     const specItemId = `${idPrefix}-${specSegment}`
                     return (
                         <div
-                            key={`${specSegment}-${index}`}
+                            key={draft.draftId}
                             className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
                         >
                             <div className="min-w-0 space-y-1.5">
@@ -69,13 +71,16 @@ function ProductSpecDraftsEditor({
                                         (specValue, valueIndex) => {
                                             const valueSegment =
                                                 toAutomationIdSegment(
-                                                    specValue.trim() ||
-                                                        `value-${valueIndex}`,
+                                                    draft.valueIds[valueIndex],
                                                 )
-                                            const valueId = `${specItemId}-value-${valueSegment}-${valueIndex}-input`
+                                            const valueId = `${specItemId}-value-${valueSegment}-input`
                                             return (
                                                 <div
-                                                    key={`${valueSegment}-${valueIndex}`}
+                                                    key={
+                                                        draft.valueIds[
+                                                            valueIndex
+                                                        ]
+                                                    }
                                                     className="flex w-40 max-w-full items-center gap-1"
                                                 >
                                                     <Input
@@ -103,24 +108,26 @@ function ProductSpecDraftsEditor({
                                                         aria-label={`${draft.name || `规格项 ${index + 1}`}的第 ${valueIndex + 1} 个值`}
                                                     />
                                                     <Button
-                                                        id={`${specItemId}-value-${valueSegment}-${valueIndex}-remove`}
+                                                        id={`${specItemId}-value-${valueSegment}-remove`}
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon-xs"
                                                         aria-label={`删除规格值 ${specValue || valueIndex + 1}`}
                                                         onClick={() => {
-                                                            if (
-                                                                !window.confirm(
-                                                                    "删除规格取值会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？",
-                                                                )
-                                                            ) {
-                                                                return
-                                                            }
                                                             const next = [
                                                                 ...specDrafts,
                                                             ]
                                                             next[index] = {
                                                                 ...draft,
+                                                                valueIds:
+                                                                    draft.valueIds.filter(
+                                                                        (
+                                                                            _,
+                                                                            i,
+                                                                        ) =>
+                                                                            i !==
+                                                                            valueIndex,
+                                                                    ),
                                                                 values: draft.values.filter(
                                                                     (_, i) =>
                                                                         i !==
@@ -147,6 +154,10 @@ function ProductSpecDraftsEditor({
                                             next[index] = {
                                                 ...draft,
                                                 values: [...draft.values, ""],
+                                                valueIds: [
+                                                    ...draft.valueIds,
+                                                    nextSpecDraftId(),
+                                                ],
                                             }
                                             syncSpecDrafts(next)
                                         }}
@@ -205,13 +216,6 @@ function ProductSpecDraftsEditor({
                                     size="icon-xs"
                                     aria-label={`删除规格项 ${index + 1}`}
                                     onClick={() => {
-                                        if (
-                                            !window.confirm(
-                                                "删除规格项会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？",
-                                            )
-                                        ) {
-                                            return
-                                        }
                                         syncSpecDrafts(
                                             specDrafts.filter(
                                                 (_, i) => i !== index,
@@ -228,8 +232,7 @@ function ProductSpecDraftsEditor({
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                    {specDrafts.length} 个规格项 · {skuCount} 个
-                    SKU，按规格值自动组合
+                    {specDrafts.length} 个规格项 · {skuCount} 个 SKU 已应用
                 </p>
                 <Button
                     id={`${idPrefix}-add`}
@@ -237,10 +240,7 @@ function ProductSpecDraftsEditor({
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                        syncSpecDrafts([
-                            ...specDrafts,
-                            { name: "", values: [""] },
-                        ])
+                        syncSpecDrafts([...specDrafts, createSpecDraft()])
                     }
                 >
                     <PlusIcon data-icon="inline-start" aria-hidden />

@@ -65,6 +65,7 @@ function ProductSectionTabs({
                 {PRODUCT_EDITOR_SECTIONS.filter(
                     (section) =>
                         section.id !== "effective" &&
+                        section.id !== "sku" &&
                         (!isCreate || section.id !== "history"),
                 ).map((section) => (
                     <TabsTrigger

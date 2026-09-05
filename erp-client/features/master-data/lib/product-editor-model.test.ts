@@ -1,9 +1,43 @@
 import { describe, expect, it } from "vitest"
 
 import {
+    applySpecsFromDrafts,
+    createSpecDraft,
     parseProductSectionId,
     productSectionForValidationError,
 } from "@/features/master-data/lib/product-editor-model"
+import { emptyProductFields } from "./product-model"
+
+it("preserves matching SKU identities, precise prices and images when adding or reordering values", () => {
+    const fields = {
+        ...emptyProductFields(),
+        specs: [{ name: "颜色", values: ["红色"] }],
+    }
+    Object.assign(fields.skus[0], {
+        skuId: "red",
+        skuNo: "SKU-01",
+        specificationSignature: "颜色=红色",
+        attributeValues: ["红色"],
+        specLabel: "颜色：红色",
+        salePrice: "9007199254740993.0001",
+        barcode: "CUSTOM",
+        mainImage: "red.png",
+        mainImagePreviewUrl: "blob:red",
+        listingStatus: "LISTED",
+    })
+    const next = applySpecsFromDrafts(
+        [createSpecDraft("颜色", ["蓝色", "红色"])],
+        fields,
+    )
+    expect(next.skus[1]).toMatchObject(fields.skus[0])
+    expect(next.skus[0].skuNo).not.toBe("SKU-01")
+    const reordered = applySpecsFromDrafts(
+        [createSpecDraft("颜色", ["红色", "蓝色"])],
+        next,
+    )
+    expect(reordered.skus[0]).toEqual(next.skus[1])
+    expect(reordered.skus[1]).toEqual(next.skus[0])
+})
 
 describe("parseProductSectionId", () => {
     it("empty hash falls back to basic", () => {

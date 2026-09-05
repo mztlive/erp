@@ -37,7 +37,6 @@ export function BrandCreateDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
     const [logoAssetId, setLogoAssetId] = React.useState("")
     const [logoPreviewUrl, setLogoPreviewUrl] = React.useState("")
@@ -109,8 +108,6 @@ export function BrandCreateDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.createSubmit}
             onReset={reset}
             logoPreviewUrl={logoPreviewUrl}

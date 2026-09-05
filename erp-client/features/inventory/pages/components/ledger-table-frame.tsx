@@ -94,6 +94,7 @@ export function LedgerTableFrame({
 
     return (
         <ListWorkSurface
+            toolbarClassName="pt-3 pb-2"
             ariaLabel="库存台账列表"
             views={
                 <LedgerViewTabs

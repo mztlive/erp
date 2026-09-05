@@ -99,7 +99,17 @@ export function rebuildSkusFromSpecs(input: {
         }
     }
 
-    return combos.map((attributeValues, index) => {
+    const reservedCodes = new Set(input.existing.map((sku) => sku.skuNo))
+    let nextCode = 1
+    const allocateCode = () => {
+        let code: string
+        do {
+            code = `${prefix}-${String(nextCode++).padStart(2, "0")}`
+        } while (reservedCodes.has(code))
+        reservedCodes.add(code)
+        return code
+    }
+    return combos.map((attributeValues) => {
         const signature = computeSpecificationSignature(
             input.specs,
             attributeValues,
@@ -111,9 +121,7 @@ export function rebuildSkusFromSpecs(input: {
             requiresExplicitReenable: matched?.requiresExplicitReenable,
             specificationSignature: signature,
             /** 系统默认生成；已有编号或用户覆盖则保留。 */
-            skuNo:
-                matched?.skuNo ||
-                `${prefix}-${String(index + 1).padStart(2, "0")}`,
+            skuNo: matched?.skuNo || allocateCode(),
             /** 已有名称优先；新建行默认带入商品名称。 */
             name: matched?.name?.trim() || defaultSkuName,
             attributeValues: [...attributeValues],

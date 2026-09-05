@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import {
-    applySpecsFromDrafts,
     createProductDefaults,
     hydrateFromCenter,
     newIdempotencyKey,
@@ -133,11 +132,7 @@ export function useProductEditor(stableId: string) {
             setCheckPassed(false)
             setResult(null)
 
-            const nextFields = applySpecsFromDrafts(
-                value.specDrafts,
-                value.fields,
-                value.name,
-            )
+            const nextFields = value.fields
             const validation = validateProductEditor(value, nextFields)
             if (validation) {
                 setFormErrorTitle("填写检查未通过")
@@ -295,12 +290,7 @@ export function useProductEditor(stableId: string) {
         setFormError(null)
         setCheckPassed(false)
         setResult(null)
-        const nextFields = applySpecsFromDrafts(
-            values.specDrafts,
-            values.fields,
-            values.name,
-        )
-        form.setFieldValue("fields", nextFields)
+        const nextFields = values.fields
         const validation = validateProductEditor(values, nextFields)
         if (validation) {
             setFormErrorTitle("填写检查未通过")
@@ -321,11 +311,7 @@ export function useProductEditor(stableId: string) {
         setFormError(null)
         setResult(null)
         setSaveAttempted(false)
-        const fields = applySpecsFromDrafts(
-            values.specDrafts,
-            values.fields,
-            values.name,
-        )
+        const fields = values.fields
         // The reason is collected in the save dialog, after the product fields pass validation.
         const validation = validateProductEditor(
             { ...values, changeReason: "准备保存" },

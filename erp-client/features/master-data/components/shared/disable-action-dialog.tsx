@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 
-import { DiscardConfirmDialog, FormalActionResult } from "@/components/business"
+import { FormalActionResult } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -65,7 +65,6 @@ export function DisableActionDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const ids = revisionTargetIds(target)
 
     const form = useAppForm({
@@ -102,24 +101,8 @@ export function DisableActionDialog({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, ids.stableId])
 
-    const requestClose = (next: boolean) => {
-        if (next) {
-            onOpenChange(true)
-            return
-        }
-        if (result?.outcome === "succeeded") {
-            onOpenChange(false)
-            return
-        }
-        if (form.state.isDirty || result) {
-            setDiscardOpen(true)
-            return
-        }
-        onOpenChange(false)
-    }
-
     return (
-        <Dialog open={open} onOpenChange={requestClose}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 closeButtonId="master-data-shared-disable-close"
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
@@ -258,19 +241,6 @@ export function DisableActionDialog({
                     ) : null}
                 </DialogScrollBody>
             </DialogContent>
-
-            <DiscardConfirmDialog
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                title="放弃本次填写？"
-                description="关闭后本次填写的内容将丢失。"
-                confirmLabel="放弃填写"
-                cancelLabel="继续编辑"
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    onOpenChange(false)
-                }}
-            />
         </Dialog>
     )
 }

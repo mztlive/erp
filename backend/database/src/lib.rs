@@ -14,11 +14,10 @@ pub use executor::{Executor, NoTransaction};
 pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
 pub use repository::{
-    ApprovalBindingLookup, BackgroundJobRegistration, CustomerCenterContractRow,
-    CustomerCenterReceivableRow, CustomerCenterRelatedRow, CustomerCenterSalesOrderRow,
-    FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow,
-    FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow, ProcurementResponsibilityRuleFilter,
-    ReceivableListScope, Repository, ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SeparationAuditFact,
-    SkuRow, SupplierOfferingRow, WorkItemRow,
+    ApprovalBindingLookup, BackgroundJobRegistration, CustomerCenterContractRow, CustomerCenterReceivableRow,
+    CustomerCenterRelatedRow, CustomerCenterSalesOrderRow, FulfillmentQueueFilter, FulfillmentQueueItemRow,
+    FulfillmentQueueMetricRow, FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
+    ProcurementResponsibilityRuleFilter, ReceivableListScope, Repository, ScopedCustomerReceiptQuery,
+    ScopedInvoiceQuery, SeparationAuditFact, SkuRow, SupplierOfferingRow, WorkItemRow,
 };
 pub use transaction::Transactional;

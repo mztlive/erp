@@ -132,6 +132,7 @@ export function LedgerToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            density="compact"
             idPrefix="inventory-ledger-filter"
             formAriaLabel="库存台账查询"
             onSubmit={applyFilters}
@@ -284,7 +285,6 @@ export function LedgerToolbar({
             clearButtonId="inventory-ledger-clear-all"
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

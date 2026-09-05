@@ -98,6 +98,7 @@ export function BatchListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            density="compact"
             idPrefix={`${toolbarIdPrefix}-filter`}
             formAriaLabel="导入批次查询"
             onSubmit={applyBatchFilters}

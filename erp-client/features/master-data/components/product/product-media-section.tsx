@@ -24,9 +24,9 @@ function ProductMediaSection({
     const prefix = idPrefix ?? "master-data-product-media"
     return (
         <ProductSectionFrame
+            showHeading={false}
             id="product-section-media"
             title={masterDataCopy.fieldMediaSection}
-            description={masterDataCopy.productSpuMediaHint}
             disabled={!canRevise}
         >
             <section className="space-y-3">

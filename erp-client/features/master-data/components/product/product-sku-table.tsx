@@ -45,7 +45,7 @@ type SkuRowProps = {
     fields: ProductFields
     activeSpecs: readonly ProductSpecDimension[]
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
-    rememberSkuFile: (index: number, file?: File) => void
+    rememberSkuFile: (previewUrl: string, file: File) => void
     onOpenInventory: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
@@ -78,13 +78,23 @@ function SkuRow({
         sku.skuId || sku.specificationSignature || sku.skuNo || `sku-${index}`,
     )
     const [detailsOpen, setDetailsOpen] = React.useState(false)
-    const cellPad = "h-auto whitespace-normal align-top py-4"
+    const cellPad = "whitespace-normal align-middle"
+    const skuName = sku.name || name || "未填写 SKU 名称"
+    const specText = activeSpecs.length
+        ? activeSpecs
+              .map(
+                  (spec, i) =>
+                      `${spec.name}：${sku.attributeValues[i] || "未填写"}`,
+              )
+              .join(" · ")
+        : "默认规格"
+    const metaText = `${sku.skuNo || "待填写编码"} · ${specText}`
     return (
-        <TableRow className="align-top">
-            <TableCell className="sticky left-0 z-10 min-w-64 max-w-80 whitespace-normal bg-card py-4 align-top">
-                <div className="flex items-start gap-3">
+        <TableRow>
+            <TableCell className="sticky left-0 z-10 min-w-64 max-w-80 whitespace-normal bg-card align-middle">
+                <div className="flex items-center gap-3">
                     <div
-                        className="shrink-0"
+                        className="size-14 shrink-0"
                         role="group"
                         aria-label={`${sku.name || sku.specLabel} 主图`}
                     >
@@ -109,44 +119,42 @@ function SkuRow({
                             }
                             onFilesSelected={(files) => {
                                 const file = files[0]
-                                rememberSkuFile(index, file)
                                 if (file) {
+                                    const previewUrl = URL.createObjectURL(file)
+                                    rememberSkuFile(previewUrl, file)
                                     updateSku(index, {
                                         mainImage: file.name,
-                                        mainImagePreviewUrl:
-                                            URL.createObjectURL(file),
+                                        mainImagePreviewUrl: previewUrl,
                                         mainImageAssetId: undefined,
                                     })
                                 }
                             }}
                         />
                     </div>
-                    <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-medium">
-                            {sku.name || name || "未填写 SKU 名称"}
-                        </p>
-                        <p className="mt-1 break-all text-xs text-muted-foreground">
-                            {sku.skuNo || "待填写编码"}
-                        </p>
-                        <p className="mt-1 break-words text-xs text-muted-foreground">
-                            {activeSpecs.length
-                                ? activeSpecs
-                                      .map(
-                                          (spec, i) =>
-                                              `${spec.name}：${sku.attributeValues[i] || "未填写"}`,
-                                      )
-                                      .join(" · ")
-                                : "默认规格"}
-                        </p>
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <div className="min-w-0">
+                            <p
+                                className="truncate text-sm font-medium leading-5"
+                                title={skuName}
+                            >
+                                {skuName}
+                            </p>
+                            <p
+                                className="mt-0.5 truncate text-xs leading-4 text-muted-foreground"
+                                title={metaText}
+                            >
+                                {metaText}
+                            </p>
+                        </div>
                         <Button
                             id={`master-data-product-sku-${skuSegment}-edit`}
                             type="button"
-                            variant="link"
+                            variant="outline"
                             size="xs"
-                            className="mt-2 h-auto px-0"
+                            className="shrink-0"
                             onClick={() => setDetailsOpen(true)}
                         >
-                            {canRevise ? "编辑详情" : "查看详情"}
+                            {canRevise ? "编辑资料" : "查看资料"}
                         </Button>
                     </div>
                 </div>
@@ -158,7 +166,9 @@ function SkuRow({
                         <DialogHeader>
                             <DialogTitle>SKU 资料</DialogTitle>
                             <DialogDescription>
-                                修改后返回商品页统一保存；关闭此窗口会保留本次编辑内容。
+                                {canRevise
+                                    ? "修改后返回商品页统一保存；关闭此窗口会保留本次编辑内容。"
+                                    : "查看 SKU 编码、名称和条码。"}
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -166,7 +176,7 @@ function SkuRow({
                                 <Label
                                     htmlFor={`master-data-product-sku-${skuSegment}-code`}
                                 >
-                                    产品编码
+                                    SKU 编码
                                 </Label>
                                 <Input
                                     id={`master-data-product-sku-${skuSegment}-code`}
@@ -178,8 +188,12 @@ function SkuRow({
                                             skuNo: event.target.value,
                                         })
                                     }
-                                    aria-label={`${sku.specLabel} 产品编码`}
-                                    title="系统默认生成，可手动覆盖"
+                                    aria-label={`${sku.specLabel} SKU 编码`}
+                                    title={
+                                        canRevise
+                                            ? "系统默认生成，可手动覆盖"
+                                            : undefined
+                                    }
                                 />
                             </div>
                             <div className="space-y-2">
@@ -202,7 +216,11 @@ function SkuRow({
                                         name.trim() || "请输入 SKU 名称"
                                     }
                                     aria-label={`${sku.specLabel} SKU 名称`}
-                                    title="可与商品名称不同，保存后写入 SKU 修订"
+                                    title={
+                                        canRevise
+                                            ? "可与商品名称不同"
+                                            : undefined
+                                    }
                                 />
                             </div>
                             <div className="space-y-2">
@@ -232,7 +250,7 @@ function SkuRow({
                                 type="button"
                                 onClick={() => setDetailsOpen(false)}
                             >
-                                完成编辑
+                                {canRevise ? "完成编辑" : "关闭"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -276,65 +294,81 @@ function SkuRow({
                 supplierCountsError={supplierCountsError}
                 onRegisterSupply={onRegisterSupply}
             />
-            <TableCell className={cellPad}>
-                {fields.productKind && fields.productKind !== "PHYSICAL" ? (
-                    <span className="block text-xs text-muted-foreground">
-                        不适用
-                    </span>
-                ) : sku.skuId ? (
-                    <Button
-                        id={`master-data-product-sku-${skuSegment}-inventory`}
-                        type="button"
-                        variant="link"
-                        size="xs"
-                        className="h-auto px-0 text-xs"
-                        onClick={(event) =>
-                            onOpenInventory(sku.skuId, event.currentTarget)
-                        }
-                    >
-                        查看库存
-                    </Button>
-                ) : (
-                    <span className="block text-xs text-muted-foreground">
-                        保存后可查看
-                    </span>
-                )}
-            </TableCell>
-            <TableCell className={cellPad}>
-                <Badge
-                    variant={
-                        sku.listingStatus === "LISTED" ? "success" : "secondary"
-                    }
-                >
-                    {sku.listingStatus === "LISTED" ? "已上架" : "已下架"}
-                </Badge>
-
-                <div className="mt-2 flex items-center gap-2">
-                    <Switch
-                        id={`master-data-product-sku-${skuSegment}-enable`}
-                        size="sm"
-                        disabled={!canRevise}
-                        checked={sku.lifecycleStatus === "ENABLED"}
-                        onCheckedChange={(checked) => {
-                            if (
-                                !checked &&
-                                !window.confirm(
-                                    "停用该 SKU 后，新的业务单据将选不到它；历史单据不受影响。确定停用？",
-                                )
-                            ) {
-                                return
+            {fields.productKind === "PHYSICAL" ? (
+                <TableCell className={cellPad}>
+                    {sku.skuId ? (
+                        <Button
+                            id={`master-data-product-sku-${skuSegment}-inventory`}
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="h-auto px-0 text-xs"
+                            onClick={(event) =>
+                                onOpenInventory(sku.skuId, event.currentTarget)
                             }
-                            updateSku(index, {
-                                lifecycleStatus: checked
-                                    ? "ENABLED"
-                                    : "DISABLED",
-                            })
-                        }}
-                        aria-label={`${sku.specLabel} SKU 状态`}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                        {sku.lifecycleStatus === "ENABLED" ? "启用" : "停用"}
-                    </span>
+                        >
+                            查看库存
+                        </Button>
+                    ) : (
+                        <span className="block text-xs text-muted-foreground">
+                            保存后可查看
+                        </span>
+                    )}
+                </TableCell>
+            ) : null}
+            <TableCell className={cellPad}>
+                <div className="flex flex-col items-start gap-1.5">
+                    <div className="flex items-center gap-2">
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">
+                            上架状态
+                        </span>
+                        <Badge
+                            variant={
+                                sku.listingStatus === "LISTED"
+                                    ? "success"
+                                    : "secondary"
+                            }
+                        >
+                            {sku.listingStatus === "LISTED"
+                                ? "已上架"
+                                : "已下架"}
+                        </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Label
+                            htmlFor={`master-data-product-sku-${skuSegment}-enable`}
+                            className="whitespace-nowrap text-xs font-normal text-muted-foreground"
+                        >
+                            SKU 启用
+                        </Label>
+                        <Switch
+                            id={`master-data-product-sku-${skuSegment}-enable`}
+                            size="sm"
+                            disabled={!canRevise}
+                            checked={sku.lifecycleStatus === "ENABLED"}
+                            onCheckedChange={(checked) => {
+                                if (
+                                    !checked &&
+                                    !window.confirm(
+                                        "停用该 SKU 后，新的业务单据将选不到它；历史单据不受影响。确定停用？",
+                                    )
+                                ) {
+                                    return
+                                }
+                                updateSku(index, {
+                                    lifecycleStatus: checked
+                                        ? "ENABLED"
+                                        : "DISABLED",
+                                })
+                            }}
+                            aria-label={`${skuName} SKU 启用`}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                            {sku.lifecycleStatus === "ENABLED"
+                                ? "启用"
+                                : "停用"}
+                        </span>
+                    </div>
                 </div>
             </TableCell>
         </TableRow>
@@ -348,7 +382,7 @@ type ProductSkuTableProps = {
     canRevise: boolean
     name: string
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
-    rememberSkuFile: (index: number, file?: File) => void
+    rememberSkuFile: (previewUrl: string, file: File) => void
     onOpenInventory: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
@@ -379,16 +413,24 @@ function ProductSkuTable({
         <div className="w-full max-w-full overflow-hidden rounded-lg border">
             <Table
                 data-density="comfortable"
-                className="min-w-[48rem] [&_thead_th]:!static"
+                className={
+                    fields.productKind === "PHYSICAL"
+                        ? "min-w-[52rem] [&_thead_th]:!static"
+                        : "min-w-[44rem] [&_thead_th]:!static"
+                }
             >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="min-w-64">商品规格</TableHead>
+                        <TableHead className="min-w-64">SKU 信息</TableHead>
                         <TableHead className="w-32 min-w-28">销售价</TableHead>
                         <TableHead className="w-32 min-w-28">市场价</TableHead>
                         <TableHead className="w-36 min-w-28">供给</TableHead>
-                        <TableHead className="w-28 min-w-24">库存</TableHead>
-                        <TableHead className="w-32 min-w-28">状态</TableHead>
+                        {fields.productKind === "PHYSICAL" ? (
+                            <TableHead className="w-28 min-w-24">
+                                库存
+                            </TableHead>
+                        ) : null}
+                        <TableHead className="w-44 min-w-40">状态</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>

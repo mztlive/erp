@@ -46,18 +46,20 @@ export const listWorkspaceEmptyStateClassName =
 const styles = listWorkspaceStyles
 
 export function ListWorkspaceHeader({
+    className,
     eyebrow,
     title,
     description,
     children,
 }: {
+    className?: string
     eyebrow: string
     title: string
     description?: React.ReactNode
     children?: React.ReactNode
 }) {
     return (
-        <header className={styles.header}>
+        <header className={cn(styles.header, className)}>
             <div>
                 <p className={styles.eyebrow}>{eyebrow}</p>
                 <h1 className={styles.title}>{title}</h1>
@@ -135,6 +137,7 @@ export function ListWorkSurface({
     toolbar,
     table,
     tableClassName,
+    toolbarClassName,
     selectionBar,
 }: {
     ariaLabel: string
@@ -142,6 +145,7 @@ export function ListWorkSurface({
     toolbar?: React.ReactNode
     table: React.ReactNode
     tableClassName?: string
+    toolbarClassName?: string
     selectionBar?: React.ReactNode
 }) {
     return (
@@ -151,7 +155,10 @@ export function ListWorkSurface({
             aria-label={ariaLabel}
         >
             {views}
-            <div className={styles.toolbar} data-slot="list-workspace-toolbar">
+            <div
+                className={cn(styles.toolbar, toolbarClassName)}
+                data-slot="list-workspace-toolbar"
+            >
                 <div className={styles.filters}>{toolbar}</div>
                 <div
                     className={styles.columnSettings}

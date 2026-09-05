@@ -551,9 +551,7 @@ impl SupplierOrderActionLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{
-        SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId,
-    };
+    use crate::ids::{SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId};
     use std::str::FromStr;
 
     fn sample_data() -> SupplierOrderActionData {
@@ -670,9 +668,7 @@ mod tests {
             action_type: SupplierOrderActionType::Place,
             ..sample_data()
         };
-        assert!(
-            SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_ok()
-        );
+        assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_ok());
     }
 
     #[test]

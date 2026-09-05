@@ -1,6 +1,10 @@
 import * as React from "react"
 
-import { applySpecsFromDrafts } from "@/features/master-data/lib/product-editor-model"
+import {
+    applySpecsFromDrafts,
+    createSpecDraft,
+    validateSpecDrafts,
+} from "@/features/master-data/lib/product-editor-model"
 import type {
     ProductEditorFormValues,
     ProductSpecDraft,
@@ -70,9 +74,38 @@ export function createProductFormBindings(
         )
     const syncSpecDrafts = (next: readonly ProductSpecDraft[]) => {
         setSpecDrafts(next)
-        setFields((previous) =>
-            applySpecsFromDrafts(next, previous, values.name),
+    }
+    const resetSpecDrafts = () =>
+        setSpecDrafts(
+            fields.specs.map((spec) => createSpecDraft(spec.name, spec.values)),
         )
+    const applySpecDrafts = (): string | null => {
+        const error = validateSpecDrafts(values.specDrafts)
+        if (error) return error
+        const next = applySpecsFromDrafts(
+            values.specDrafts,
+            fields,
+            values.name,
+        )
+        const signatures = new Set(
+            next.skus.map((sku) => sku.specificationSignature),
+        )
+        const removed = fields.skus.filter(
+            (sku) => !signatures.has(sku.specificationSignature ?? ""),
+        )
+        if (removed.length) {
+            const labels = removed
+                .map((sku) => `${sku.skuNo} · ${sku.specLabel}`)
+                .join("\n")
+            if (
+                !window.confirm(
+                    `应用规格后将移除以下 ${removed.length} 个 SKU，并生成 ${next.skus.length} 个 SKU：\n${labels}\n\n被移除 SKU 的价格、主图、条码和供给关联不会转入新 SKU。此操作先更新当前编辑内容，保存商品后生效。确定应用？`,
+                )
+            )
+                return null
+        }
+        setFields(next)
+        return null
     }
     const updateSku = (index: number, patch: Partial<ProductSkuFields>) => {
         setFields((previous) => ({
@@ -132,6 +165,8 @@ export function createProductFormBindings(
         setChangeReason,
         setFields,
         syncSpecDrafts,
+        applySpecDrafts,
+        resetSpecDrafts,
         updateSku,
         handleSubmit,
         name,

@@ -3,11 +3,12 @@
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use database::{ApprovalIntegrationExt, BpmExt, NoTransaction, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, WorkItemExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentState};
 use entities::work_item::WorkItem;
+use mongodb::Database;
 
 use super::adapter::{
     document_approval_view_with_history, require_frozen_binding, stock_adjustment_subject_ref,
@@ -308,6 +309,31 @@ fn empty_history_page() -> DocumentApprovalHistoryPageView {
         next_cursor: None,
         has_more: false,
     }
+}
+
+/// 按执行器加载库存调整单的审批绑定。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `document_id` - 库存调整单与注册单据共用的主键
+/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
+///
+/// # 返回
+/// 返回已冻结审批绑定；单据尚未绑定时返回 `None`。
+///
+/// # 错误
+/// 单据未注册或仓储查询失败时返回错误。
+pub(super) async fn load_approval_binding(
+    db: &Database,
+    document_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalDefinitionBinding>> {
+    let document = db
+        .inventory()
+        .business_document(document_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
+    Ok(document.approval_binding)
 }
 
 #[cfg(test)]

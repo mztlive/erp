@@ -65,9 +65,6 @@ test("确认层回显上级勾选的批次和结果", () => {
             reverseReason=""
             onReverseReasonChange={() => undefined}
             onConfirmReverse={async () => undefined}
-            exitDiscardOpen={false}
-            onExitDiscardOpenChange={() => undefined}
-            onConfirmExit={() => undefined}
         />,
     )
 
@@ -129,9 +126,6 @@ test("冲正确认层只保留状态变化和理由", () => {
             reverseReason=""
             onReverseReasonChange={() => undefined}
             onConfirmReverse={async () => undefined}
-            exitDiscardOpen={false}
-            onExitDiscardOpenChange={() => undefined}
-            onConfirmExit={() => undefined}
         />,
     )
 
@@ -175,9 +169,6 @@ test("冲正确认层不把内部单号写进标题", () => {
             reverseReason=""
             onReverseReasonChange={() => undefined}
             onConfirmReverse={async () => undefined}
-            exitDiscardOpen={false}
-            onExitDiscardOpenChange={() => undefined}
-            onConfirmExit={() => undefined}
         />,
     )
 

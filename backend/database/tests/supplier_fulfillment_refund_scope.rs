@@ -70,9 +70,6 @@ fn fulfillment_item(
     item
 }
 
-
-
-
 /// 退款事实夹具（可选软删除；软删除事实不得计入退款累计）。
 fn refund_fact(
     id: &str,
@@ -100,7 +97,6 @@ fn refund_fact(
     }
     fact
 }
-
 
 /// FUL-R05 多明细成本、多退款事实正确累加；已删除明细与已删除退款事实
 /// 不计入；金额精度精确到分。

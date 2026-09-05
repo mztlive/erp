@@ -15,6 +15,7 @@ import {
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { cn } from "@/lib/utils"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
+import { formatDateTime } from "@/lib/datetime"
 import { freshnessText } from "@/lib/ui-text"
 
 type CustomerReceivablesHeaderProps = {
@@ -62,7 +63,9 @@ export function CustomerReceivablesHeader({
                     variant: "outline",
                     mobileVisibility: "hide",
                     disabled: !canExport || !data || data.total === 0,
-                    title: canExport ? undefined : permissionReason,
+                    title: canExport
+                        ? "导出与当前查询结果一致"
+                        : permissionReason,
                     onClick: onExport,
                 },
                 {
@@ -131,6 +134,7 @@ export function CustomerReceivablesHeader({
 
     return (
         <ListWorkspaceHeader
+            className="pb-6 md:pb-6"
             eyebrow="财务"
             title="客户往来"
             description={
@@ -139,7 +143,8 @@ export function CustomerReceivablesHeader({
                     <span className="ml-3 text-xs" role="status">
                         {data ? (
                             <time dateTime={data.queriedAt}>
-                                更新于 {data.queriedAt.slice(11, 16)}
+                                更新于{" "}
+                                {formatDateTime(data.queriedAt, "monthDayIntl")}
                             </time>
                         ) : (
                             "正在查询"

@@ -156,7 +156,7 @@ function MetricItem({
     detail,
     status,
     detailMode = "inline",
-    density = "default",
+    density = "compact",
     className,
     ...props
 }: MetricItemProps) {
@@ -176,10 +176,7 @@ function MetricItem({
             data-slot="metric-item"
             data-density={density}
             data-detail-mode={detailMode}
-            className={cn(
-                "group relative min-w-0 border-l border-border bg-card px-5 py-3 first:border-l-0",
-                className,
-            )}
+            className={cn("relative min-w-0", className)}
             {...props}
         >
             <div className="flex items-center justify-between gap-2">
@@ -194,20 +191,20 @@ function MetricItem({
             </div>
             <div
                 className={cn(
-                    "flex items-baseline gap-2",
+                    "flex min-w-0 flex-col items-start gap-1",
                     compact ? "mt-1" : "mt-1.5",
                 )}
             >
                 <div
                     className={cn(
-                        "num font-semibold tracking-tight text-foreground",
+                        "num max-w-full wrap-anywhere font-semibold tracking-tight text-foreground",
                         compact ? "text-xl" : "text-2xl",
                     )}
                 >
                     {value}
                 </div>
                 {showInlineDetail ? (
-                    <span className="truncate text-xs text-muted-foreground">
+                    <span className="text-xs leading-relaxed text-muted-foreground">
                         {detail}
                     </span>
                 ) : null}
@@ -217,90 +214,6 @@ function MetricItem({
 }
 
 export type MetricStripColumns = 1 | 2 | 3 | 4 | 5 | 6
-
-export type MetricFilterItemProps = Omit<
-    React.ComponentProps<"button">,
-    "children" | "value"
-> & {
-    label: React.ReactNode
-    value: React.ReactNode
-    detail?: React.ReactNode
-    /** 指标状态徽章（含严重度色值）；如「已超期」传 tone="destructive"。 */
-    status?: SemanticStatus
-    active?: boolean
-    detailMode?: MetricDetailMode
-    density?: MetricDensity
-    id?: string
-}
-
-/** 可作为列表/待办过滤器的指标项，提供按钮语义与明确选中态。 */
-function MetricFilterItem({
-    label,
-    value,
-    detail,
-    status,
-    active = false,
-    detailMode = "inline",
-    density = "default",
-    id,
-    className,
-    ...props
-}: MetricFilterItemProps) {
-    const compact = density === "compact"
-    const showInlineDetail = detail != null && detailMode === "inline"
-    return (
-        <div className="min-w-0">
-            <button
-                type="button"
-                id={id}
-                aria-pressed={active}
-                data-density={density}
-                className={cn(
-                    "h-full w-full border-b-2 border-transparent bg-card px-5 py-3 text-left transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2",
-                    active && "border-foreground bg-muted/30 text-foreground",
-                    className,
-                )}
-                {...props}
-            >
-                <div className="flex items-center justify-between gap-2">
-                    <span
-                        className={cn(
-                            "block font-medium text-muted-foreground/80 tracking-wide xl:shrink-0",
-                            "text-xs",
-                        )}
-                    >
-                        {label}
-                    </span>
-                    {status ? (
-                        <span className="shrink-0">
-                            <StatusBadge {...status} />
-                        </span>
-                    ) : null}
-                </div>
-                <div
-                    className={cn(
-                        "flex items-baseline gap-2",
-                        compact ? "mt-1" : "mt-1.5",
-                    )}
-                >
-                    <span
-                        className={cn(
-                            "num font-semibold tracking-tight text-foreground",
-                            compact ? "text-xl" : "text-2xl",
-                        )}
-                    >
-                        {value}
-                    </span>
-                    {showInlineDetail ? (
-                        <span className="truncate text-xs text-muted-foreground">
-                            {detail}
-                        </span>
-                    ) : null}
-                </div>
-            </button>
-        </div>
-    )
-}
 
 const metricColumnClasses: Record<MetricStripColumns, string> = {
     1: "grid-cols-1",
@@ -327,8 +240,7 @@ function MetricStrip({
             data-slot="metric-strip"
             data-density={density}
             className={cn(
-                // 指标在同一条带内排列，保持与业务表格一致的分隔线。
-                "grid gap-y-3 border-y border-border py-3",
+                "grid gap-x-6 gap-y-4",
                 metricColumnClasses[columns],
                 className,
             )}
@@ -516,7 +428,6 @@ const surfaceInsetClassName = "rounded-md bg-muted/40"
 export {
     DataFreshness,
     MetricItem,
-    MetricFilterItem,
     MetricStrip,
     PageActions,
     PageScaffold,

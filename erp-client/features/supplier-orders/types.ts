@@ -247,7 +247,7 @@ export type SupplierOrderMetric = {
     key: string
     label: string
     value: number
-    /** 指标一键筛选：写入 fulfillmentStatuses 或 view */
+    /** 指标对应的履约、售后或视图维度。 */
     fulfillmentStatuses?: SupplierFulfillmentStatus[]
     fulfillmentStatus?: SupplierFulfillmentStatus
     view?: ListView

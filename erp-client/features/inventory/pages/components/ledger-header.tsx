@@ -27,6 +27,7 @@ export function LedgerHeader({
 }: LedgerHeaderProps) {
     return (
         <ListWorkspaceHeader
+            className="pb-6 md:pb-6"
             eyebrow="库存"
             title="库存台账"
             description={

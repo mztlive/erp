@@ -45,7 +45,6 @@ export function BrandReviseDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
-    const [discardOpen, setDiscardOpen] = React.useState(false)
     const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
     const [logoAssetId, setLogoAssetId] = React.useState("")
     const [logoPreviewUrl, setLogoPreviewUrl] = React.useState("")
@@ -138,8 +137,6 @@ export function BrandReviseDialog({
             form={form as never}
             result={result}
             pending={mutation.isPending || !target}
-            discardOpen={discardOpen}
-            setDiscardOpen={setDiscardOpen}
             submitLabel={masterDataCopy.reviseSubmit}
             logoPreviewUrl={logoPreviewUrl}
             onLogoFiles={(files) => {
