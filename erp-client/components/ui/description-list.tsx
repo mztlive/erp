@@ -61,7 +61,10 @@ function DescriptionDetails({
     return (
         <dd
             data-slot="description-details"
-            className={cn("min-w-0 text-sm text-foreground", className)}
+            className={cn(
+                "min-w-0 break-words text-sm leading-6 text-foreground",
+                className,
+            )}
             {...props}
         />
     )

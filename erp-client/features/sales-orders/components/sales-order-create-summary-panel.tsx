@@ -30,12 +30,7 @@ export function SalesOrderCreateSummaryPanel({
                         ? "提交后进入销售领导 → 运营两级审批"
                         : "提交后进入审批"
                 return (
-                    <div
-                        className={cn(
-                            surfacePanelClassName,
-                            "sticky top-14 space-y-4 p-4",
-                        )}
-                    >
+                    <div className={cn(surfacePanelClassName, "space-y-4")}>
                         <div>
                             <h2 className="font-heading text-sm font-semibold">
                                 本单摘要
@@ -47,19 +42,19 @@ export function SalesOrderCreateSummaryPanel({
                         <dl className="space-y-2.5 text-xs">
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted-foreground">合同</dt>
-                                <dd className="max-w-[10rem] truncate text-right font-medium">
+                                <dd className="max-w-[10rem] break-words text-right font-medium">
                                     {values.contractRevisionLabel || "未选择"}
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted-foreground">客户</dt>
-                                <dd className="max-w-[10rem] truncate text-right font-medium">
+                                <dd className="max-w-[10rem] break-words text-right font-medium">
                                     {values.customerName || "—"}
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted-foreground">结算</dt>
-                                <dd className="max-w-[10rem] truncate text-right font-medium">
+                                <dd className="max-w-[10rem] break-words text-right font-medium">
                                     {values.settlementEntity || "—"}
                                 </dd>
                             </div>

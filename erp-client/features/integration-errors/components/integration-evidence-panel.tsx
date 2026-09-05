@@ -33,7 +33,7 @@ export function IntegrationEvidencePanel({
                             {item.attempts.map((attempt) => (
                                 <li
                                     key={`${attempt.attemptNumber}-${attempt.attemptedAt}`}
-                                    className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
+                                    className="border-l-2 border-border px-4 py-2 text-sm"
                                 >
                                     <div className="font-medium">
                                         第 {attempt.attemptNumber} 次 ·{" "}

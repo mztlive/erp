@@ -65,7 +65,7 @@ export function SalesOrderCreateTotalBar({
         <>
             {headerIssues.length > 0 ? (
                 <ValidationSummary
-                    className="border-t border-grid px-4 pt-4 md:px-5 lg:px-6"
+                    className="border-t border-grid pt-4 2xl:col-span-2"
                     issues={headerIssues}
                     title={`单据头共 ${headerIssues.length} 项待处理`}
                 />
@@ -79,7 +79,7 @@ export function SalesOrderCreateTotalBar({
                     )
                     return (
                         <StickyTotalBar
-                            className="rounded-none border-0 border-t border-grid px-4 py-4 shadow-none md:px-5 md:py-4"
+                            className="rounded-none border-0 border-t border-grid px-0 py-4 shadow-none 2xl:col-span-2"
                             items={[
                                 {
                                     id: "gross",

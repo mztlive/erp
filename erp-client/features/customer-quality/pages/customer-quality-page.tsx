@@ -4,7 +4,11 @@ import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
-import { BusinessFailureState, PageScaffold } from "@/components/business"
+import {
+    BusinessFailureState,
+    PageHeader,
+    PageScaffold,
+} from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Button } from "@/components/ui/button"
 
@@ -211,17 +215,10 @@ export function CustomerQualityPage() {
         refreshMutation.isPending ||
         (viewQuery.isFetching && !viewQuery.isPending)
 
-    // —— Loading shells ——
-    if (
-        period.periodPolicyQuery.isPending ||
-        (!period.periodWriteDone && !period.needsPeriodBlocker)
-    ) {
-        return <CustomerQualityPageSkeleton variant="policy-loading" />
-    }
-
     if (period.periodPolicyQuery.isError) {
         return (
             <PageScaffold>
+                <PageHeader title="客户经营质量" />
                 <BusinessFailureState
                     title="期间配置加载失败"
                     error={period.periodPolicyQuery.error}
@@ -241,10 +238,19 @@ export function CustomerQualityPage() {
         )
     }
 
+    // —— Loading shells ——
+    if (
+        period.periodPolicyQuery.isPending ||
+        (!period.periodWriteDone && !period.needsPeriodBlocker)
+    ) {
+        return <CustomerQualityPageSkeleton variant="policy-loading" />
+    }
+
     // —— Period blocker ——
     if (period.needsPeriodBlocker) {
         return (
             <PageScaffold>
+                <PageHeader title="客户经营质量" />
                 <PeriodBlockerCard
                     periodPolicy={period.periodPolicy}
                     explicitFrom={period.explicitFrom}

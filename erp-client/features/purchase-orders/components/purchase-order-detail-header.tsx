@@ -84,7 +84,7 @@ export function PurchaseOrderDetailHeader({
                         <span
                             ref={titleRef}
                             tabIndex={-1}
-                            className="text-xl font-semibold tracking-tight text-foreground outline-none"
+                            className="text-sm font-normal text-muted-foreground outline-none"
                         >
                             采购单
                         </span>

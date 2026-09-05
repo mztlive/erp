@@ -47,9 +47,9 @@ export function IntegrationQueuePanel({
                             role="button"
                             tabIndex={0}
                             className={cn(
-                                "w-full cursor-pointer rounded-xl text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                                "w-full cursor-pointer border-l-2 border-transparent text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary",
                                 item.identity.id === selectedId
-                                    ? "ring-2 ring-primary"
+                                    ? "border-l-foreground bg-muted/50"
                                     : "hover:bg-muted/40",
                             )}
                             onClick={() => onSelect(item)}

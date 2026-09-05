@@ -8,6 +8,7 @@ import {
     BusinessFailureState,
     PageScaffold,
     surfacePanelClassName,
+    objectSectionPanelClassName,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -282,7 +283,7 @@ export function SupplierOrderCenterPage({
                     </TabsList>
                 </Tabs>
 
-                <div className="space-y-4 p-3 md:p-4">
+                <div className={objectSectionPanelClassName}>
                     {activeSection === "overview" ? (
                         <OverviewSection order={o} />
                     ) : null}

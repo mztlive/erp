@@ -1,18 +1,22 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { ArrowLeftIcon } from "lucide-react"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
     DiscardConfirmDialog,
+    PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
+import { Button } from "@/components/ui/button"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
@@ -308,16 +312,11 @@ export function SalesOrderCreateForm({
                     void form.handleSubmit()
                 }}
             >
-                <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:gap-5">
-                    <div
-                        className={cn(
-                            surfacePanelClassName,
-                            "min-w-0 overflow-hidden",
-                        )}
-                    >
-                        <section className="border-b border-grid p-4 md:p-5 lg:p-6">
+                <div className="grid min-w-0 items-start gap-y-6 2xl:grid-cols-[minmax(0,1fr)_17.5rem] 2xl:gap-x-8">
+                    <div className={cn(surfacePanelClassName, "contents")}>
+                        <section className="min-w-0 border-b border-grid pb-6">
                             <div className="mb-4">
-                                <h2 className="font-heading text-sm font-semibold">
+                                <h2 className="font-heading text-base font-semibold">
                                     单据头
                                 </h2>
                             </div>
@@ -361,7 +360,7 @@ export function SalesOrderCreateForm({
                         />
                     </div>
 
-                    <aside className="hidden xl:block">
+                    <aside className="hidden border-l border-border pl-6 2xl:col-start-2 2xl:row-start-1 2xl:block">
                         <SalesOrderCreateSummaryPanel form={form} />
                     </aside>
                 </div>
@@ -424,5 +423,22 @@ export function SalesOrderCreateForm({
 
     if (chrome === "none") return editor
 
-    return <PageScaffold className="pb-8">{editor}</PageScaffold>
+    return (
+        <PageScaffold className="pb-8">
+            <PageHeader
+                title={purpose === "create" ? "新建销售单" : "编辑销售单"}
+                actions={
+                    <Button
+                        id="sales-orders-create-back-to-list"
+                        variant="outline"
+                        render={<Link href="/sales/orders" />}
+                    >
+                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+                        返回销售单
+                    </Button>
+                }
+            />
+            {editor}
+        </PageScaffold>
+    )
 }

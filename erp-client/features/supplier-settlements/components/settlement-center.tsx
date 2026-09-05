@@ -5,6 +5,7 @@ import {
     SequentialProcessBar,
     surfaceInsetClassName,
     surfacePanelClassName,
+    objectSectionPanelClassName,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -217,7 +218,7 @@ function SettlementCenter({
                         ))}
                     </TabsList>
                 </Tabs>
-                <div className="space-y-4 p-3 md:p-4">
+                <div className={objectSectionPanelClassName}>
                     <p className="text-xs text-muted-foreground">
                         快捷键 d 可直达差异处理
                     </p>

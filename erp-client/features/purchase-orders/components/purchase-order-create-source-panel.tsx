@@ -100,7 +100,7 @@ export function PurchaseOrderCreateSourcePanel({
                     "flex flex-col gap-4",
                     flat
                         ? cn(workspaceTaskSurfacePadClassName, "py-5")
-                        : "p-4 md:p-5",
+                        : "border-b border-border pb-6",
                 )}
             >
                 <div className="flex items-start justify-between gap-3">

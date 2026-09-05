@@ -31,7 +31,7 @@ export function ObjectCenterOverviewSection({
             title={masterDataCopy.centerOverview}
             description={masterDataCopy.centerOverviewDesc}
         >
-            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+            <dl className="grid gap-x-8 gap-y-6 text-sm sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:mt-1 [&_dd]:break-words [&_dd]:leading-6">
                 <div>
                     <dt className="text-xs text-muted-foreground">
                         {masterDataCopy.colStableNo}

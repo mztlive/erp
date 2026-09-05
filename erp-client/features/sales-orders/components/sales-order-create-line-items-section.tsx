@@ -62,11 +62,11 @@ export function SalesOrderCreateLineItemsSection({
     return (
         <section
             id="sales-line-items-section"
-            className="border-b border-grid p-4 md:p-5 lg:p-6"
+            className="min-w-0 border-b border-grid pb-6 2xl:col-span-2"
         >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                 <div className="flex min-w-0 items-center gap-2">
-                    <h2 className="font-heading text-sm font-semibold">
+                    <h2 className="font-heading text-base font-semibold">
                         销售明细
                     </h2>
                     <form.Subscribe selector={(state) => state.values.nature}>

@@ -48,10 +48,16 @@ export function IntegrationQueueToolbar({
         <div
             className={cn(
                 surfacePanelClassName,
-                "sticky top-0 z-10 space-y-2.5 px-3 py-2.5",
+                "sticky top-0 z-10 space-y-3 py-3",
             )}
         >
             <div className="flex flex-wrap items-center gap-2">
+                <Label
+                    htmlFor="integration-queue-toolbar-view"
+                    className="text-xs text-muted-foreground"
+                >
+                    队列视图
+                </Label>
                 <OptionCombobox
                     id="integration-queue-toolbar-view"
                     value={urlState.view}
@@ -69,6 +75,33 @@ export function IntegrationQueueToolbar({
                     size="sm"
                     aria-label="队列视图"
                     inputClassName="w-[9.5rem]"
+                />
+                <Label
+                    htmlFor="integration-queue-toolbar-owner"
+                    className="ml-3 text-xs text-muted-foreground"
+                >
+                    责任人
+                </Label>
+                <OptionCombobox
+                    id="integration-queue-toolbar-owner"
+                    value={urlState.owner}
+                    onValueChange={(v) =>
+                        patchUrl({
+                            owner: v ?? "me",
+                            taskId: null,
+                            differenceId: null,
+                        })
+                    }
+                    options={(
+                        Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
+                    ).map((o) => ({
+                        value: o,
+                        label: OWNER_LABEL[o],
+                    }))}
+                    inputClassName="w-[8rem]"
+                    size="sm"
+                    aria-label="责任人"
+                    allowClear={false}
                 />
             </div>
             <ListToolbar
@@ -175,31 +208,6 @@ export function IntegrationQueueToolbar({
                             allowClear={false}
                         />
                     </>
-                }
-                secondary={
-                    <OptionCombobox
-                        id="integration-queue-toolbar-owner"
-                        value={urlState.owner}
-                        onValueChange={(v) =>
-                            patchUrl({
-                                owner: v ?? "me",
-                                taskId: null,
-                                differenceId: null,
-                            })
-                        }
-                        options={(
-                            Object.keys(
-                                OWNER_LABEL,
-                            ) as (keyof typeof OWNER_LABEL)[]
-                        ).map((o) => ({
-                            value: o,
-                            label: OWNER_LABEL[o],
-                        }))}
-                        inputClassName="w-[8rem]"
-                        size="sm"
-                        aria-label="责任人"
-                        allowClear={false}
-                    />
                 }
                 actions={
                     <>

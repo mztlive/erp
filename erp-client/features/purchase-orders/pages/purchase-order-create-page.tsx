@@ -702,7 +702,7 @@ export function PurchaseOrderCreatePage({
                                 <div
                                     className={cn(
                                         "flex flex-col gap-3",
-                                        !embedded && "p-4 md:p-5",
+                                        !embedded && "py-5",
                                     )}
                                 >
                                     <div className="flex items-center justify-between gap-2">

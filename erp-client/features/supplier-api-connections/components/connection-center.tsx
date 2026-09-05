@@ -9,6 +9,7 @@ import {
     FormalActionResult,
     PageScaffold,
     surfacePanelClassName,
+    objectSectionPanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -222,7 +223,7 @@ export function ConnectionCenter({
                     </TabsList>
                 </Tabs>
 
-                <div className="space-y-4 p-3 md:p-4">
+                <div className={objectSectionPanelClassName}>
                     {section === "overview" ? (
                         <OverviewSection conn={conn} />
                     ) : null}

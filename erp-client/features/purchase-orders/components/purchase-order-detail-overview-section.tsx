@@ -36,7 +36,7 @@ export function PurchaseOrderDetailOverviewSection({
 }) {
     return (
         <DocumentSection title="概览">
-            <DescriptionList columns="three">
+            <DescriptionList columns="three" className="gap-x-8 gap-y-6">
                 <DescriptionItem>
                     <DescriptionTerm>供应商</DescriptionTerm>
                     <DescriptionDetails>
@@ -155,7 +155,7 @@ export function PurchaseOrderDetailOverviewSection({
                 </div>
             ) : null}
             <PurchaseOrderDetailTotals
-                className="mt-4 max-w-md"
+                className="mt-6 ml-auto max-w-md"
                 order={order}
                 costMasked={costMasked}
             />

@@ -1,6 +1,6 @@
 "use client"
 
-import { PageScaffold } from "@/components/business"
+import { PageHeader, PageScaffold } from "@/components/business"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const variantClasses = {
@@ -18,7 +18,7 @@ export function CustomerQualityPageSkeleton({
     const { summary, table } = variantClasses[variant]
     return (
         <PageScaffold>
-            <Skeleton className="h-10 w-64 rounded-lg" />
+            <PageHeader title="客户经营质量" />
             <Skeleton className={`${summary} w-full rounded-lg`} />
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, i) => (

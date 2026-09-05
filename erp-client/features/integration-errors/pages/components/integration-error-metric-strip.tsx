@@ -17,7 +17,7 @@ export function IntegrationErrorMetricStrip({
     onSelectView: (view: IntegrationView) => void
 }) {
     return (
-        <MetricStrip>
+        <MetricStrip columns={5}>
             <MetricFilterItem
                 id="integration-metrics-result-unknown"
                 label="结果未知"

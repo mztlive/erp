@@ -91,7 +91,11 @@ function ObjectSectionTabs({
     )
 }
 
-const objectSectionPanelClassName = "space-y-6 px-0 py-6"
+const objectSectionPanelClassName = cn(
+    "min-w-0 space-y-6 px-0 py-6",
+    "[&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-card [&_[data-slot=card]]:shadow-none",
+    "[&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-footer]]:px-0",
+)
 
 function ObjectSectionTabsPanel({
     className,

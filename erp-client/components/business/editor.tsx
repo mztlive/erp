@@ -132,7 +132,7 @@ function StickyTotalBar({
         <aside
             data-slot="sticky-total-bar"
             className={cn(
-                "sticky bottom-3 z-20 rounded-2xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85",
+                "sticky bottom-0 z-20 border-t border-border bg-card px-0 py-4",
                 className,
             )}
             {...props}
@@ -230,7 +230,7 @@ function EditableLineItemTable<TItem>({
             className={cn("space-y-4", className)}
             {...props}
         >
-            <div className="erp-raised-surface overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="erp-raised-surface overflow-hidden border-y border-border bg-card">
                 <Table data-density="comfortable">
                     <caption className="sr-only">{caption}</caption>
                     <TableHeader>

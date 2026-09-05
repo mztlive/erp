@@ -11,9 +11,15 @@ export function Row({
     mono?: boolean
 }) {
     return (
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-6 border-b border-border/60 py-3 last:border-b-0">
             <dt className="shrink-0 text-muted-foreground">{label}</dt>
-            <dd className={mono ? "font-mono text-right" : "text-right"}>
+            <dd
+                className={
+                    mono
+                        ? "min-w-0 break-all text-right font-mono"
+                        : "min-w-0 break-words text-right"
+                }
+            >
                 {value}
             </dd>
         </div>
