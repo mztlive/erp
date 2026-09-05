@@ -346,7 +346,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 ) : null}
                                 {isDirty && canRevise ? (
                                     <div
-                                        className="sticky bottom-0 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur"
+                                        className="sticky bottom-0 z-20 flex flex-wrap items-center gap-3 border-t border-border bg-card py-4"
                                         role="region"
                                         aria-label="未保存的修改"
                                     >

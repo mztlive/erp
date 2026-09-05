@@ -211,7 +211,10 @@ function SettlementList({
                     })
                 }
             >
-                <TabsList>
+                <TabsList
+                    variant="line"
+                    className="w-full overflow-x-auto border-b border-border"
+                >
                     {(
                         Object.keys(VIEW_LABEL) as Array<
                             keyof typeof VIEW_LABEL

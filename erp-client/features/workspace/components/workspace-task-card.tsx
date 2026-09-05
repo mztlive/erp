@@ -76,7 +76,7 @@ export function WorkspaceTaskCard({
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "relative flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                "relative flex w-full flex-col gap-2 px-4 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 selected
                     ? "bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
                     : "hover:bg-muted/40",

@@ -65,7 +65,7 @@ function PolicyBanner({
     return (
         <Collapsible
             data-slot="policy-banner"
-            className="overflow-hidden rounded-xl border border-border bg-card"
+            className="shrink-0 overflow-hidden rounded-lg border border-border bg-card"
         >
             <CollapsibleTrigger
                 id={`operations-${view}-policy-banner-trigger`}

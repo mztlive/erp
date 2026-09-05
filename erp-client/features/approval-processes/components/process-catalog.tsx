@@ -138,6 +138,7 @@ export function ProcessCatalog({
                                             <Button
                                                 id={`${id}-row-${rowSegment}-create-draft`}
                                                 type="button"
+                                                variant="outline"
                                                 size="sm"
                                                 onClick={() =>
                                                     onCreateDraft(item)

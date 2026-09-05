@@ -398,7 +398,10 @@ export function ProfitLossRowsPanel({
                             onDimensionChange(v)
                         }}
                     >
-                        <TabsList>
+                        <TabsList
+                            variant="line"
+                            className="w-full overflow-x-auto border-b border-border"
+                        >
                             {(
                                 Object.keys(
                                     DIMENSION_LABEL,

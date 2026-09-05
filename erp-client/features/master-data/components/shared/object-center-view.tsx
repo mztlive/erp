@@ -202,7 +202,7 @@ export function ObjectCenterView({
 
             <nav
                 aria-label="资料分区"
-                className="sticky top-0 z-10 inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+                className="sticky top-0 z-10 flex w-full flex-wrap items-center gap-6 border-b border-border bg-card"
             >
                 {SECTION_NAV.map((item) => {
                     const selected = item.id === activeSection
@@ -213,9 +213,9 @@ export function ObjectCenterView({
                             size="sm"
                             variant="ghost"
                             className={cn(
-                                "h-7 rounded-md px-2.5 text-sm",
+                                "h-12 rounded-none border-b-2 border-transparent px-0 text-sm",
                                 selected
-                                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10 hover:bg-card"
+                                    ? "border-b-foreground bg-transparent font-semibold text-foreground hover:bg-transparent"
                                     : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                             )}
                             render={
@@ -228,7 +228,7 @@ export function ObjectCenterView({
                 })}
             </nav>
 
-            <div className={cn(surfacePanelClassName, "space-y-6 p-4 md:p-5")}>
+            <div className={cn(surfacePanelClassName, "space-y-6 py-5")}>
                 <ObjectCenterOverviewSection
                     data={data}
                     canRevealSensitive={canRevealSensitive}

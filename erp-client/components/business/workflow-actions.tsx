@@ -537,7 +537,7 @@ function SequentialProcessBar({
             data-slot="sequential-process-bar"
             aria-label="连续处理操作"
             className={cn(
-                "erp-raised-surface flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between",
+                "erp-raised-surface flex flex-col gap-4 border-y border-border bg-card py-4 lg:flex-row lg:items-center lg:justify-between",
                 className,
             )}
             {...props}

@@ -120,7 +120,10 @@ export function BatchListView({
                         })
                     }}
                 >
-                    <TabsList>
+                    <TabsList
+                        variant="line"
+                        className="w-full overflow-x-auto border-b border-border"
+                    >
                         <TabsTrigger
                             id="operations-import-batches-filter-environment-validation-trigger"
                             value="VALIDATION"

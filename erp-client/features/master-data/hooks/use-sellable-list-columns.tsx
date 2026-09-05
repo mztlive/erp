@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
 import { MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
@@ -32,15 +31,13 @@ function SupplyRegions({ regions }: { regions: readonly string[] }) {
     const rest = regions.length - 2
     return (
         <div
-            className="flex min-w-0 flex-wrap gap-1"
+            className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
             title={regions.join("、")}
         >
             {shown.map((region) => (
-                <Badge key={region} variant="secondary">
-                    {region}
-                </Badge>
+                <span key={region}>{region}</span>
             ))}
-            {rest > 0 ? <Badge variant="neutral">+{rest}</Badge> : null}
+            {rest > 0 ? <span className="num">+{rest}</span> : null}
         </div>
     )
 }
@@ -58,18 +55,26 @@ export function useSellableListColumns() {
                 cell: ({ row }) => {
                     const sellable = row.original.sellableItem
                     return (
-                        <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
+                        <div className="min-w-0 space-y-1.5">
+                            <div
+                                className="truncate text-sm font-medium text-foreground"
+                                title={row.original.name}
+                            >
                                 {row.original.name}
-                                {sellable
-                                    ? ` · ${sellable.specificationLabel}`
-                                    : null}
                             </div>
-                            <div className="truncate text-xs text-muted-foreground">
-                                SKU 编号：
-                                <span className="num">
+                            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                                <span className="num shrink-0">
                                     {row.original.stableNo}
                                 </span>
+                                {sellable &&
+                                sellable.specificationLabel !== "无规格" ? (
+                                    <span
+                                        className="truncate border-l border-border pl-2"
+                                        title={sellable.specificationLabel}
+                                    >
+                                        {sellable.specificationLabel}
+                                    </span>
+                                ) : null}
                             </div>
                         </div>
                     )
@@ -102,6 +107,7 @@ export function useSellableListColumns() {
                 sortingFn: moneySortingFn,
                 cell: ({ row }) => (
                     <MoneyValue
+                        className="font-semibold"
                         value={
                             row.original.sellableItem?.salesVisiblePriceGross
                         }
@@ -160,18 +166,19 @@ export function useSellableListColumns() {
                     // 全表唯一有决策价值的列：只有一家供货时断供就没得替换
                     const atRisk = count <= 1
                     return (
-                        <Badge variant={atRisk ? "warning" : "success"}>
+                        <span
+                            className={
+                                atRisk
+                                    ? "inline-flex items-center gap-1.5 text-[13px] text-warning-soft-foreground"
+                                    : "inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"
+                            }
+                        >
                             {atRisk ? (
                                 <TriangleAlertIcon
-                                    data-icon="inline-start"
+                                    className="size-3.5 shrink-0"
                                     aria-hidden="true"
                                 />
-                            ) : (
-                                <CircleCheckIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                            )}
+                            ) : null}
                             {atRisk ? (
                                 "单一供应商"
                             ) : (
@@ -184,7 +191,7 @@ export function useSellableListColumns() {
                                     ，断供后无法替换
                                 </span>
                             ) : null}
-                        </Badge>
+                        </span>
                     )
                 },
             },

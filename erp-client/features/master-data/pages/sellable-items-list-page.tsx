@@ -1,12 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    CircleDollarSignIcon,
-    DownloadIcon,
-    EyeIcon,
-    ShieldCheckIcon,
-} from "lucide-react"
+import { CircleHelpIcon, DownloadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
 
@@ -15,19 +10,28 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    PageHeader,
-    PageHeaderMeta,
-    PageHeaderMetaItem,
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import styles from "./sellable-items-list-page.module.css"
 import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
 import { useSellableListState } from "@/features/master-data/hooks/use-sellable-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+
+const supplyViews = [
+    { value: "all", label: "全部商品" },
+    { value: "single-supplier", label: "单一供应商" },
+    { value: "nationwide", label: "全国可供" },
+] as const
 
 export function SellableItemsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -54,47 +58,59 @@ export function SellableItemsListPage() {
         filters.q.trim() !== "" ||
         filters.hasStructuredSellableFilters ||
         filters.supplyPreset != null
-    const listLoadFailed = state.listQuery.isError || !state.listQuery.data
+    const listLoadFailed = state.listQuery.isError
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
-                title="公司商品池"
-                description={masterDataCopy.sellableItemsHint}
-                metadata={
-                    <PageHeaderMeta>
-                        <PageHeaderMetaItem>
-                            <EyeIcon aria-hidden="true" />
-                            只读查询
-                        </PageHeaderMetaItem>
-                        <PageHeaderMetaItem>
-                            <CircleDollarSignIcon aria-hidden="true" />
-                            销售可见口径
-                        </PageHeaderMetaItem>
-                        <PageHeaderMetaItem>
-                            <ShieldCheckIcon aria-hidden="true" />
-                            采购成本受保护
-                        </PageHeaderMetaItem>
-                    </PageHeaderMeta>
-                }
-                actions={
-                    <div className="flex items-center gap-2">
-                        <Button
-                            id="master-data-sellable-items-list-export"
-                            type="button"
-                            variant="outline"
-                            disabled={exportPending || state.rows.length === 0}
-                            onClick={state.onExport}
+        <PageScaffold density="compact" className={styles.page}>
+            <header className={styles.header}>
+                <div>
+                    <p className={styles.eyebrow}>基础资料</p>
+                    <h1 className={styles.title}>公司商品池</h1>
+                    <p className={styles.description}>
+                        查看可售商品、销售价格与供货范围。
+                    </p>
+                </div>
+                <div className={styles.headerActions}>
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    id="master-data-sellable-items-help"
+                                    variant="ghost"
+                                    type="button"
+                                    className={styles.quietButton}
+                                />
+                            }
                         >
-                            <DownloadIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            {exportPending ? "导出中…" : "导出当前结果"}
-                        </Button>
-                    </div>
-                }
-            />
+                            <CircleHelpIcon aria-hidden="true" />
+                            查询说明
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="rounded-xl p-5">
+                            <p className="font-medium">商品池查询说明</p>
+                            <p className="text-sm leading-6 text-muted-foreground">
+                                {masterDataCopy.sellableItemsHint}
+                            </p>
+                            <p className="text-sm leading-6 text-muted-foreground">
+                                此页面用于查询。点击商品可查看资料，导出范围与当前筛选结果一致。
+                            </p>
+                        </PopoverContent>
+                    </Popover>
+                    <Button
+                        id="master-data-sellable-items-list-export"
+                        type="button"
+                        variant="outline"
+                        className={styles.exportButton}
+                        disabled={exportPending || state.rows.length === 0}
+                        onClick={state.onExport}
+                    >
+                        <DownloadIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {exportPending ? "导出中…" : "导出当前结果"}
+                    </Button>
+                </div>
+            </header>
 
             {state.exportMeta ? (
                 <BackgroundJobProgress
@@ -118,6 +134,7 @@ export function SellableItemsListPage() {
             ) : null}
 
             <h2
+                id="master-data-sellable-items-results"
                 ref={resultsHeadingRef}
                 tabIndex={-1}
                 className="sr-only outline-none"
@@ -125,155 +142,125 @@ export function SellableItemsListPage() {
                 {`公司商品池 · ${state.rows.length} 条结果`}
             </h2>
 
-            <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-2xs transition-all">
-                {/* 1. 快捷状态分段筛选条：高反差精密轨道，彻底告别低透明度发虚 */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-muted/35 px-4 py-2.5 sm:px-5">
-                    <div className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-surface-sunken p-1 text-xs shadow-2xs">
-                        <button
-                            type="button"
-                            id="master-data-sellable-preset-all"
-                            onClick={() => filters.applySupplyPreset("all")}
-                            className={cn(
-                                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
-                                (filters.supplyPreset ?? "all") === "all"
-                                    ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-card/50",
-                            )}
-                        >
-                            全部商品
-                            <span
-                                className={cn(
-                                    "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
-                                    (filters.supplyPreset ?? "all") === "all"
-                                        ? "bg-foreground text-background"
-                                        : "bg-muted-foreground/15 text-foreground/75",
-                                )}
-                            >
-                                {state.supplyPresetCounts.all}
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            id="master-data-sellable-preset-single-supplier"
-                            onClick={() =>
-                                filters.applySupplyPreset("single-supplier")
-                            }
-                            className={cn(
-                                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
-                                filters.supplyPreset === "single-supplier"
-                                    ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-card/50",
-                            )}
-                        >
-                            单一供应商
-                            <span
-                                className={cn(
-                                    "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
-                                    filters.supplyPreset === "single-supplier"
-                                        ? "bg-foreground text-background"
-                                        : "bg-muted-foreground/15 text-foreground/75",
-                                )}
-                            >
-                                {state.supplyPresetCounts["single-supplier"]}
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            id="master-data-sellable-preset-nationwide"
-                            onClick={() =>
-                                filters.applySupplyPreset("nationwide")
-                            }
-                            className={cn(
-                                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-all",
-                                filters.supplyPreset === "nationwide"
-                                    ? "bg-card text-foreground font-semibold shadow-xs border border-border/80 ring-1 ring-black/5 dark:ring-white/10"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-card/50",
-                            )}
-                        >
-                            全国可供
-                            <span
-                                className={cn(
-                                    "rounded-full px-1.5 py-0.2 text-[10px] tabular-nums font-semibold transition-colors",
-                                    filters.supplyPreset === "nationwide"
-                                        ? "bg-foreground text-background"
-                                        : "bg-muted-foreground/15 text-foreground/75",
-                                )}
-                            >
-                                {state.supplyPresetCounts.nationwide}
-                            </span>
-                        </button>
+            <section
+                className={styles.workSurface}
+                data-business-component="table-frame"
+                aria-label="可售商品列表"
+            >
+                <div className={styles.viewBar}>
+                    <div
+                        className={styles.views}
+                        role="group"
+                        aria-label="供应快捷筛选"
+                    >
+                        {supplyViews.map(({ value, label }) => {
+                            const active =
+                                (filters.supplyPreset ?? "all") === value
+                            return (
+                                <button
+                                    key={value}
+                                    id={`master-data-sellable-preset-${value}`}
+                                    type="button"
+                                    aria-pressed={active}
+                                    className={cn(
+                                        styles.view,
+                                        active && styles.activeView,
+                                    )}
+                                    onClick={() =>
+                                        filters.applySupplyPreset(value)
+                                    }
+                                >
+                                    {label}
+                                    <span className={styles.viewCount}>
+                                        {state.listQuery.data
+                                            ? state.supplyPresetCounts[value]
+                                            : "—"}
+                                    </span>
+                                </button>
+                            )
+                        })}
                     </div>
-                    <div className="text-xs text-muted-foreground font-medium">
-                        {state.appliedChips.length > 0
-                            ? `已生效筛选：${state.appliedChips.map((c) => c.label).join("、")}`
-                            : "销售可见口径 · 采购成本受保护 · 点击整行抽屉预览"}
-                    </div>
+                    <span className={styles.viewHint}>选择商品查看详情</span>
                 </div>
+                <div className={styles.toolbar}>
+                    <div className={styles.filters}>
+                        <SellableListToolbar
+                            idPrefix="master-data-sellable-items-list-toolbar"
+                            searchInputRef={searchInputRef}
+                            searchDraft={filters.searchDraft}
+                            setSearchDraft={filters.setSearchDraft}
+                            hasActiveFilters={hasActiveFilters}
+                            clearAllFilters={filters.clearAllFilters}
+                            appliedChips={state.appliedChips}
+                            removeFilter={filters.removeFilter}
+                            supplyPreset={filters.supplyPreset ?? "all"}
+                            supplyPresetCounts={state.supplyPresetCounts}
+                            applySupplyPreset={filters.applySupplyPreset}
+                            showSupplyPreset={false}
+                            sellableFilterPanelOpen={
+                                filters.sellableFilterPanelOpen
+                            }
+                            setSellableFilterPanelOpen={
+                                filters.setSellableFilterPanelOpen
+                            }
+                            hasStructuredSellableFilters={
+                                filters.hasStructuredSellableFilters
+                            }
+                            applySellableFilters={filters.applySellableFilters}
+                            resetMoreFilters={filters.resetMoreFilters}
+                            supplyRegionDraft={filters.supplyRegionDraft}
+                            setSupplyRegionDraft={filters.setSupplyRegionDraft}
+                            productKindDraft={filters.productKindDraft}
+                            setProductKindDraft={filters.setProductKindDraft}
+                            productCategoryIdDraft={
+                                filters.productCategoryIdDraft
+                            }
+                            setProductCategoryIdDraft={
+                                filters.setProductCategoryIdDraft
+                            }
+                            productBrandIdDraft={filters.productBrandIdDraft}
+                            setProductBrandIdDraft={
+                                filters.setProductBrandIdDraft
+                            }
+                            productSupplierIdDraft={
+                                filters.productSupplierIdDraft
+                            }
+                            setProductSupplierIdDraft={
+                                filters.setProductSupplierIdDraft
+                            }
+                            productSalesPriceMinDraft={
+                                filters.productSalesPriceMinDraft
+                            }
+                            setProductSalesPriceMinDraft={
+                                filters.setProductSalesPriceMinDraft
+                            }
+                            productSalesPriceMaxDraft={
+                                filters.productSalesPriceMaxDraft
+                            }
+                            setProductSalesPriceMaxDraft={
+                                filters.setProductSalesPriceMaxDraft
+                            }
+                            productSalesPriceError={
+                                filters.productSalesPriceError
+                            }
+                            setProductSalesPriceError={
+                                filters.setProductSalesPriceError
+                            }
+                            productFilterOptionsQuery={
+                                state.productFilterOptionsQuery
+                            }
+                        />
+                    </div>
 
-                {/* 2. 内嵌工具栏（搜索框已收敛比例，筛选成组紧邻） */}
-                <div className="px-4 py-3 sm:px-5">
-                    <SellableListToolbar
-                        idPrefix="master-data-sellable-items-list-toolbar"
-                        searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
-                        appliedChips={state.appliedChips}
-                        removeFilter={filters.removeFilter}
-                        supplyPreset={filters.supplyPreset ?? "all"}
-                        supplyPresetCounts={state.supplyPresetCounts}
-                        applySupplyPreset={filters.applySupplyPreset}
-                        showSupplyPreset={false}
-                        sellableFilterPanelOpen={
-                            filters.sellableFilterPanelOpen
-                        }
-                        setSellableFilterPanelOpen={
-                            filters.setSellableFilterPanelOpen
-                        }
-                        hasStructuredSellableFilters={
-                            filters.hasStructuredSellableFilters
-                        }
-                        applySellableFilters={filters.applySellableFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        supplyRegionDraft={filters.supplyRegionDraft}
-                        setSupplyRegionDraft={filters.setSupplyRegionDraft}
-                        productKindDraft={filters.productKindDraft}
-                        setProductKindDraft={filters.setProductKindDraft}
-                        productCategoryIdDraft={filters.productCategoryIdDraft}
-                        setProductCategoryIdDraft={
-                            filters.setProductCategoryIdDraft
-                        }
-                        productBrandIdDraft={filters.productBrandIdDraft}
-                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
-                        productSupplierIdDraft={filters.productSupplierIdDraft}
-                        setProductSupplierIdDraft={
-                            filters.setProductSupplierIdDraft
-                        }
-                        productSalesPriceMinDraft={
-                            filters.productSalesPriceMinDraft
-                        }
-                        setProductSalesPriceMinDraft={
-                            filters.setProductSalesPriceMinDraft
-                        }
-                        productSalesPriceMaxDraft={
-                            filters.productSalesPriceMaxDraft
-                        }
-                        setProductSalesPriceMaxDraft={
-                            filters.setProductSalesPriceMaxDraft
-                        }
-                        productSalesPriceError={filters.productSalesPriceError}
-                        setProductSalesPriceError={
-                            filters.setProductSalesPriceError
-                        }
-                        productFilterOptionsQuery={
-                            state.productFilterOptionsQuery
-                        }
+                    <div
+                        className={styles.columnSettings}
+                        data-slot="table-frame-view-options"
                     />
                 </div>
-
-                {/* 3. 核心数据表（无缝嵌入，去除了多余的二次标题卡片） */}
-                <div className="border-t border-border/70 [&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-pagination]]:border-border/70 [&_[data-slot=data-table-pagination]]:bg-muted/10 [&_[data-slot=data-table-pagination]]:px-4 [&_[data-slot=data-table-pagination]]:py-2.5 sm:[&_[data-slot=data-table-pagination]]:px-5">
+                <div
+                    className={styles.table}
+                    data-slot="business-table-frame-table"
+                >
                     <DataTable
                         id="master-data-sellable-items-list-table"
                         data={state.rows}
@@ -294,6 +281,8 @@ export function SellableItemsListPage() {
                         loading={state.listQuery.isFetching}
                         highlightedRowId={state.previewId ?? undefined}
                         layout="flush"
+                        caption="可售商品、销售价格与供应保障"
+                        defaultColumnVisibility={{ productNo: false }}
                         defaultColumnPinning={{
                             left: ["name"],
                             right: [],
@@ -324,7 +313,7 @@ export function SellableItemsListPage() {
                                     kind={
                                         hasActiveFilters ? "filter" : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className="rounded-none border-0 bg-transparent px-6 py-16 shadow-none ring-0"
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"
@@ -360,7 +349,7 @@ export function SellableItemsListPage() {
                         }}
                     />
                 </div>
-            </div>
+            </section>
 
             <SellablePreviewSheet
                 idPrefix="master-data-sellable-items-preview"

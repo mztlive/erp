@@ -168,7 +168,7 @@ export function ConnectionListToolbar({
                         <div
                             role="group"
                             aria-label="环境快捷筛选"
-                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
+                            className="flex h-control max-w-full items-stretch overflow-x-auto gap-1 border-b border-border bg-transparent [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
                         >
                             {ENVIRONMENT_FILTER_OPTIONS.map((option) => {
                                 const active = environment === option.value
@@ -180,8 +180,8 @@ export function ConnectionListToolbar({
                                         variant={active ? "secondary" : "ghost"}
                                         className={
                                             active
-                                                ? "bg-card shadow-xs"
-                                                : "shadow-none"
+                                                ? "rounded-none border-b-2 border-b-foreground bg-transparent shadow-none"
+                                                : "rounded-none bg-transparent shadow-none"
                                         }
                                         aria-pressed={active}
                                         onClick={() =>

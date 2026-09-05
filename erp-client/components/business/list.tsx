@@ -334,8 +334,8 @@ interface BusinessTableFrameProps extends Omit<
 }
 
 /**
- * 列表工作面：工具条贴画布；表格单独圆角描边。
- * showHeader 时分页贴在结果卡页脚；否则分页在表外。
+ * 列表工作面：工具条与结果区沿同一基线排列，以分隔线划分区域。
+ * showHeader 时展示结果标题与说明，分页保持表格既有位置。
  * 页头标题由 PageHeader 承担，这里的 title 仅作辅助标题。
  */
 function BusinessTableFrame({
@@ -381,7 +381,7 @@ function BusinessTableFrame({
                     {toolbar ? (
                         <div
                             data-slot="table-frame-toolbar"
-                            className="rounded-lg border border-border/75 bg-card p-toolbar-inset shadow-2xs"
+                            className="bg-card py-1"
                         >
                             {toolbar}
                         </div>
@@ -389,11 +389,11 @@ function BusinessTableFrame({
                     {selectionBar}
                     <div
                         data-slot="business-table-frame-result"
-                        className="overflow-hidden rounded-lg border border-border/75 bg-card shadow-2xs"
+                        className="overflow-hidden border-y border-border bg-card"
                     >
-                        <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-table-cell-inline py-toolbar-inset sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-0 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
-                                <Heading className="text-sm font-semibold text-foreground">
+                                <Heading className="text-base font-semibold text-foreground">
                                     {title}
                                 </Heading>
                                 {description ? (
@@ -441,6 +441,7 @@ interface QuickPreviewSheetProps extends Omit<
     readonly children: React.ReactNode
     readonly footer?: React.ReactNode
     readonly contentClassName?: string
+    readonly overlayClassName?: string
     /**
      * preview：窄栏 + 整区滚动，适合轻摘要。
      * detail：半屏 + 正文区由子树自管滚动，适合双栏读主记录。
@@ -461,6 +462,7 @@ function QuickPreviewSheet({
     children,
     footer,
     contentClassName,
+    overlayClassName,
     size = "preview",
     id,
     idPrefix,
@@ -476,6 +478,7 @@ function QuickPreviewSheet({
                 side="right"
                 size={size}
                 className={contentClassName}
+                overlayClassName={overlayClassName}
                 closeButtonId={closeButtonId}
             >
                 <SheetHeader

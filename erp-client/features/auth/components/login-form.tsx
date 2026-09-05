@@ -40,10 +40,12 @@ export function LoginForm() {
     })
 
     return (
-        <Card className="w-full max-w-md border border-border shadow-md">
+        <Card className="w-full max-w-md border-0 bg-transparent shadow-none">
             <CardHeader className="gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <CardTitle className="text-xl">登录</CardTitle>
+                    <CardTitle className="text-[28px] leading-10">
+                        登录
+                    </CardTitle>
                     <CardDescription>使用后台账号进入工作台</CardDescription>
                 </div>
             </CardHeader>

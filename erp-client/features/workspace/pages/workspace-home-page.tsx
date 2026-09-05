@@ -306,11 +306,6 @@ export function WorkspaceHomePage() {
                 }
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        <WorkspaceQueueScopeNav
-                            metrics={metrics}
-                            activeMetric={activeMetric}
-                            onMetricClick={onMetricClick}
-                        />
                         <PageActions
                             actions={[
                                 {
@@ -330,6 +325,13 @@ export function WorkspaceHomePage() {
                 }
             />
 
+            <div className="border-b border-border pb-3">
+                <WorkspaceQueueScopeNav
+                    metrics={metrics}
+                    activeMetric={activeMetric}
+                    onMetricClick={onMetricClick}
+                />
+            </div>
             <div
                 className={cn(
                     surfacePanelClassName,
@@ -344,7 +346,7 @@ export function WorkspaceHomePage() {
                     )}
                     aria-label={filterLabel}
                 >
-                    <header className="flex flex-col gap-2 border-b border-grid px-3 pt-3 pb-3">
+                    <header className="flex flex-col gap-3 border-b border-grid px-3 pt-1 pb-4">
                         <p className="sr-only" aria-live="polite">
                             {filterLabel} {view.total} 项
                         </p>

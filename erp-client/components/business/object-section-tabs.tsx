@@ -63,8 +63,8 @@ function ObjectSectionTabs({
                 variant="line"
                 aria-label={listLabel}
                 className={cn(
-                    "sticky top-0 z-10 h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-4 py-1.5 md:px-5",
-                    "backdrop-blur supports-backdrop-filter:bg-card/80",
+                    "sticky top-0 z-10 h-auto w-full justify-start gap-5 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0",
+
                     "group-data-horizontal/tabs:h-auto",
                     listClassName,
                 )}
@@ -79,7 +79,7 @@ function ObjectSectionTabs({
                         }
                         value={item.id}
                         title={item.title}
-                        className="h-10 flex-none gap-1.5 rounded-none px-3 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 data-active:font-semibold"
+                        className="h-12 flex-none gap-2 rounded-none px-0 text-[13px] after:inset-x-0 after:bottom-0 after:h-0.5 data-active:font-semibold"
                     >
                         {item.label}
                         {item.badge != null ? item.badge : null}
@@ -91,7 +91,7 @@ function ObjectSectionTabs({
     )
 }
 
-const objectSectionPanelClassName = "space-y-6 p-5 md:p-6"
+const objectSectionPanelClassName = "space-y-6 px-0 py-6"
 
 function ObjectSectionTabsPanel({
     className,

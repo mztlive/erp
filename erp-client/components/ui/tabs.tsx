@@ -31,10 +31,10 @@ const tabsListVariants = cva(
         variants: {
             variant: {
                 default: "bg-muted",
-                // 列表工作视图：白底描边外框 + 选中项主色实心胶囊。
-                solid: "border border-border bg-card shadow-xs",
+                // 列表工作视图：平面分区，使用浅底和字重标识当前项。
+                solid: "gap-1 rounded-lg border border-border bg-card",
                 // 对象分区 / 底边导航：不锁死 h-8，由 Trigger 内边距撑开。
-                line: "gap-1 bg-transparent p-0",
+                line: "justify-start gap-6 bg-transparent p-0",
             },
         },
         defaultVariants: {
@@ -82,9 +82,9 @@ function TabsTrigger({
             data-slot="tabs-trigger"
             className={cn(
                 "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-transparent! px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start group-data-vertical/tabs:px-3 group-data-vertical/tabs:py-0.5 hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-                "group-data-[variant=line]/tabs-list:h-auto group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:px-3 group-data-[variant=line]/tabs-list:py-2.5 group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
+                "group-data-[variant=line]/tabs-list:flex-none group-data-[variant=line]/tabs-list:h-auto group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:px-0 group-data-[variant=line]/tabs-list:py-3.5 group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
                 "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
-                "group-data-[variant=solid]/tabs-list:data-active:bg-primary group-data-[variant=solid]/tabs-list:data-active:text-primary-foreground group-data-[variant=solid]/tabs-list:data-active:hover:text-primary-foreground dark:group-data-[variant=solid]/tabs-list:data-active:border-transparent dark:group-data-[variant=solid]/tabs-list:data-active:bg-primary dark:group-data-[variant=solid]/tabs-list:data-active:text-primary-foreground",
+                "group-data-[variant=solid]/tabs-list:rounded-md group-data-[variant=solid]/tabs-list:data-active:bg-muted group-data-[variant=solid]/tabs-list:data-active:font-semibold group-data-[variant=solid]/tabs-list:data-active:text-foreground",
                 "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:after:bottom-0 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
                 className,
             )}

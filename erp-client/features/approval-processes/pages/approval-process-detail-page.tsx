@@ -343,7 +343,7 @@ export function ApprovalProcessDetailPage({
                 >
                     <TabsList
                         variant="line"
-                        className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
+                        className="h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-card px-0 py-0"
                     >
                         <TabsTrigger
                             id="governance-approval-processes-detail-tab-current"

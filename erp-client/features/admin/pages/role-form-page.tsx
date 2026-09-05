@@ -266,7 +266,7 @@ function RoleForm({
                     void form.handleSubmit()
                 }}
             >
-                <div className="flex flex-col gap-4 p-4 md:p-5">
+                <div className="flex flex-col gap-6 py-5">
                     <FieldGroup className="gap-4">
                         <div className="flex flex-wrap items-end gap-3">
                             <form.AppField
@@ -567,7 +567,7 @@ function StickyFormBar({
     ).length
 
     return (
-        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-grid bg-card/95 px-4 py-3 backdrop-blur md:px-5">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-0 py-4">
             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span>
                     已选 <span className="num">{selected.length}</span> 项 ·{" "}

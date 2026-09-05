@@ -109,14 +109,16 @@ export function DataTableBody<TData>({
                         colSpan={Math.max(visibleColumnCount, 1)}
                         className="h-auto p-4 sm:p-6"
                     >
-                        {errorState ?? (
-                            <BusinessFailureState
-                                kind="system"
-                                title={errorTitle ?? "数据加载失败"}
-                                description={errorSummary}
-                                onRetry={onRetry}
-                            />
-                        )}
+                        <div className="sticky left-0 w-[calc(100cqw-3rem)] max-w-full whitespace-normal">
+                            {errorState ?? (
+                                <BusinessFailureState
+                                    kind="system"
+                                    title={errorTitle ?? "数据加载失败"}
+                                    description={errorSummary}
+                                    onRetry={onRetry}
+                                />
+                            )}
+                        </div>
                     </TableCell>
                 </TableRow>
             ) : loading && dataLength === 0 ? (
@@ -240,23 +242,25 @@ export function DataTableBody<TData>({
                         colSpan={Math.max(visibleColumnCount, 1)}
                         className="h-auto p-6"
                     >
-                        {emptyState ?? (
-                            <div className="flex flex-col items-center gap-2 py-2 text-center">
-                                <p className="text-sm text-muted-foreground">
-                                    {emptyTitle ?? "当前筛选没有结果"}
-                                </p>
-                                {emptyDescription != null ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        {emptyDescription}
+                        <div className="sticky left-0 w-[calc(100cqw-3rem)] max-w-full whitespace-normal">
+                            {emptyState ?? (
+                                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                                    <p className="text-sm text-muted-foreground">
+                                        {emptyTitle ?? "当前筛选没有结果"}
                                     </p>
-                                ) : null}
-                                {emptyAction != null ? (
-                                    <div className="flex flex-wrap justify-center gap-2 pt-1">
-                                        {emptyAction}
-                                    </div>
-                                ) : null}
-                            </div>
-                        )}
+                                    {emptyDescription != null ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            {emptyDescription}
+                                        </p>
+                                    ) : null}
+                                    {emptyAction != null ? (
+                                        <div className="flex flex-wrap justify-center gap-2 pt-1">
+                                            {emptyAction}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            )}
+                        </div>
                     </TableCell>
                 </TableRow>
             ) : null}

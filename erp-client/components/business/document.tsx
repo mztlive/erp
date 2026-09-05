@@ -116,7 +116,7 @@ function DocumentHeader({
                 <h1
                     className={cn(
                         "font-heading font-semibold tracking-tight",
-                        compact ? "text-xl" : "text-2xl",
+                        "text-[26px] leading-9",
                     )}
                 >
                     {title}
@@ -142,7 +142,7 @@ function DocumentHeader({
                 {version != null ? (
                     <span
                         className={cn(
-                            "num rounded-md bg-muted text-foreground",
+                            "num text-muted-foreground",
                             compact
                                 ? "px-1.5 py-0.5 text-tiny"
                                 : "px-2 py-1 text-xs",
@@ -203,9 +203,9 @@ function DocumentHeader({
             data-slot="document-header"
             data-density={density}
             className={cn(
-                // 浮动画布：身份区轻浮起，避免重描边
-                "rounded-lg border border-border bg-card shadow-sm",
-                compact ? "p-3 md:p-4" : "p-4 md:p-5",
+                // 对象身份区以底部分隔线连接业务分区
+                "border-b border-border bg-card",
+                compact ? "pb-6" : "pb-7",
                 className,
             )}
             {...props}
@@ -263,10 +263,7 @@ function DocumentSummary({
     return (
         <section
             data-slot="document-summary"
-            className={cn(
-                "rounded-lg border border-border bg-card p-5 shadow-sm",
-                className,
-            )}
+            className={cn("border-b border-border bg-card py-5", className)}
             {...props}
         >
             <DescriptionList columns={columns}>

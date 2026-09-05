@@ -94,7 +94,7 @@ export function WorkspaceQueueScopeNav({
         <div
             role="group"
             aria-label="待办筛选"
-            className="flex flex-wrap items-center gap-1"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1"
         >
             {visibleMetrics.map((metric) => (
                 <WorkspaceTextNavButton

@@ -322,7 +322,10 @@ export function BatchDetailView({
                         patchUrl({ section: v as BatchSection })
                     }}
                 >
-                    <TabsList className="flex h-auto flex-wrap">
+                    <TabsList
+                        variant="line"
+                        className="flex h-auto w-full flex-wrap border-b border-border"
+                    >
                         {SECTION_TABS.map((tab) => (
                             <TabsTrigger
                                 key={tab.id}

@@ -165,10 +165,7 @@ function MetricItem({
     const showTooltipDetail = detail != null && detailMode === "tooltip"
     const labelNode = (
         <span
-            className={cn(
-                "block font-medium text-muted-foreground/80 tracking-wide",
-                compact ? "text-[11px]" : "text-xs tracking-wider",
-            )}
+            className={cn("block font-medium text-muted-foreground", "text-xs")}
         >
             {label}
         </span>
@@ -180,7 +177,7 @@ function MetricItem({
             data-density={density}
             data-detail-mode={detailMode}
             className={cn(
-                "group relative min-w-0 rounded-lg border border-border/75 bg-card px-3.5 py-2.5 shadow-2xs transition-all duration-150 hover:border-border hover:shadow-xs",
+                "group relative min-w-0 border-l border-border bg-card px-5 py-3 first:border-l-0",
                 className,
             )}
             {...props}
@@ -195,7 +192,12 @@ function MetricItem({
                 )}
                 {status ? <StatusBadge {...status} /> : null}
             </div>
-            <div className={cn("flex items-baseline gap-2", compact ? "mt-1" : "mt-1.5")}>
+            <div
+                className={cn(
+                    "flex items-baseline gap-2",
+                    compact ? "mt-1" : "mt-1.5",
+                )}
+            >
                 <div
                     className={cn(
                         "num font-semibold tracking-tight text-foreground",
@@ -254,9 +256,8 @@ function MetricFilterItem({
                 aria-pressed={active}
                 data-density={density}
                 className={cn(
-                    "h-full w-full rounded-lg border border-border/75 bg-card px-3.5 py-2.5 text-left shadow-2xs transition-all duration-150 hover:border-foreground/30 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active &&
-                        "border-foreground/80 bg-muted/60 text-foreground shadow-xs ring-1 ring-foreground/20",
+                    "h-full w-full border-b-2 border-transparent bg-card px-5 py-3 text-left transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2",
+                    active && "border-foreground bg-muted/30 text-foreground",
                     className,
                 )}
                 {...props}
@@ -265,7 +266,7 @@ function MetricFilterItem({
                     <span
                         className={cn(
                             "block font-medium text-muted-foreground/80 tracking-wide xl:shrink-0",
-                            compact ? "text-[11px]" : "text-xs tracking-wider",
+                            "text-xs",
                         )}
                     >
                         {label}
@@ -276,7 +277,12 @@ function MetricFilterItem({
                         </span>
                     ) : null}
                 </div>
-                <div className={cn("flex items-baseline gap-2", compact ? "mt-1" : "mt-1.5")}>
+                <div
+                    className={cn(
+                        "flex items-baseline gap-2",
+                        compact ? "mt-1" : "mt-1.5",
+                    )}
+                >
                     <span
                         className={cn(
                             "num font-semibold tracking-tight text-foreground",
@@ -321,8 +327,8 @@ function MetricStrip({
             data-slot="metric-strip"
             data-density={density}
             className={cn(
-                // 浮动画布：各指标独立轻卡，与主表/主任务卡同圆角体系
-                "grid gap-2",
+                // 指标在同一条带内排列，保持与业务表格一致的分隔线。
+                "grid gap-y-3 border-y border-border py-3",
                 metricColumnClasses[columns],
                 className,
             )}
@@ -417,19 +423,14 @@ function PageScaffold({
             data-slot="page-scaffold"
             data-density={density}
             className={cn(
-                // flex-1：内容短时撑满壳层，避免稀疏列表下面露出大块空画布。
-                // 不设 min-h-0，长页仍按内容增高，由壳层 overflow-auto 滚动。
-                "mx-auto flex w-full max-w-shell flex-1 flex-col",
+                "mx-auto flex w-full max-w-none flex-1 flex-col bg-card",
                 density === "compact"
-                    ? "gap-3 p-4 md:px-6 md:py-5"
-                    : "gap-4 p-page-block px-page-inline md:px-page-inline-lg md:py-page-block-lg",
-                // 页头吸顶时铺满脚手架内边距，避免滚动时两侧露底。
-                density === "compact"
-                    ? "[&>[data-slot=page-header]]:-mx-4 [&>[data-slot=page-header]]:-mt-4 [&>[data-slot=page-header]]:px-4 [&>[data-slot=page-header]]:pt-4 [&>[data-slot=page-header]]:pb-3 md:[&>[data-slot=page-header]]:-mx-6 md:[&>[data-slot=page-header]]:-mt-5 md:[&>[data-slot=page-header]]:px-6 md:[&>[data-slot=page-header]]:pt-5 md:[&>[data-slot=page-header]]:pb-3.5"
-                    : "[&>[data-slot=page-header]]:-mx-page-inline [&>[data-slot=page-header]]:-mt-page-block [&>[data-slot=page-header]]:px-page-inline [&>[data-slot=page-header]]:pt-page-block [&>[data-slot=page-header]]:pb-3 md:[&>[data-slot=page-header]]:-mx-page-inline-lg md:[&>[data-slot=page-header]]:-mt-page-block-lg md:[&>[data-slot=page-header]]:px-page-inline-lg md:[&>[data-slot=page-header]]:pt-page-block-lg md:[&>[data-slot=page-header]]:pb-4",
-                // 页头到工作面的距离必须明显大于内容块之间的距离，
-                // 否则页头说明会和工具栏黏成一团，读不出层级。
-                "[&>[data-slot=page-header]]:mb-3 md:[&>[data-slot=page-header]]:mb-4",
+                    ? "gap-4 p-5 md:px-8 md:py-6"
+                    : "gap-6 p-5 md:px-8 md:py-6",
+                "[&>[data-slot=page-header]]:pb-2",
+                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-sm",
+                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:font-normal",
+                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-muted-foreground",
                 className,
             )}
             {...props}
@@ -437,9 +438,8 @@ function PageScaffold({
     )
 }
 
-/** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
-const surfacePanelClassName =
-    "erp-raised-surface rounded-xl border border-border/80 bg-card shadow-xs transition-shadow duration-200"
+/** 主工作面：白底平面，分区组件负责绘制边界。 */
+const surfacePanelClassName = "erp-raised-surface min-w-0 bg-card"
 
 /** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
 const surfaceFlatClassName =
@@ -454,7 +454,7 @@ const workspaceTaskSurfacePadClassName = "px-5"
 
 /** 工作台内嵌页面脚手架：贴齐作业面，不再套一层页边距和卡片间隙。 */
 const workspaceEmbeddedScaffoldClassName = cn(
-    "h-full min-h-0 max-w-none gap-0 p-0",
+    "h-full min-h-0 max-w-none gap-0 p-0 md:p-0",
     "[&>[data-slot=page-header]]:static",
     "[&>[data-slot=page-header]]:mx-0",
     "[&>[data-slot=page-header]]:mt-0",

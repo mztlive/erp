@@ -32,7 +32,11 @@ export function SupplierAccountsViewTabs({
                 onViewChange(parsed)
             }}
         >
-            <TabsList variant="solid" aria-label="供应商往来工作视图">
+            <TabsList
+                variant="line"
+                className="w-full overflow-x-auto border-b border-border"
+                aria-label="供应商往来工作视图"
+            >
                 {SUPPLIER_ACCOUNT_VIEWS.map((item) => (
                     <TabsTrigger
                         key={item}

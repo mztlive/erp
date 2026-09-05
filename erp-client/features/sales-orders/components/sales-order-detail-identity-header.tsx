@@ -79,7 +79,7 @@ function AmountCell({
     return (
         <div className={className}>
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <dd className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                 {value}
                 {status != null ? (
                     <StatusBadge tone={status.tone} label={status.label} />
@@ -106,7 +106,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
                 value={
                     <MoneyValue
                         value={order.amountGross}
-                        className="font-semibold"
+                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
                     />
                 }
             />
@@ -116,7 +116,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
                 value={
                     <MoneyValue
                         value={order.receivedAmount}
-                        className="font-semibold"
+                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
                     />
                 }
                 status={order.collection}
@@ -127,7 +127,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
                 value={
                     <MoneyValue
                         value={receivableLeft}
-                        className="font-semibold"
+                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
                     />
                 }
             />
@@ -137,7 +137,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
                 value={
                     <MoneyValue
                         value={order.invoicedAmount}
-                        className="font-semibold"
+                        className="font-semibold [&>span:first-child]:text-2xl [&>span:first-child]:leading-9"
                     />
                 }
                 status={order.invoicing}

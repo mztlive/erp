@@ -27,7 +27,7 @@ export function SupplierOrdersListMetricStrip({
     updateUrl,
 }: SupplierOrdersListMetricStripProps) {
     return (
-        <MetricStrip>
+        <MetricStrip columns={5}>
             {metrics.map((m) => (
                 <MetricFilterItem
                     key={m.key}

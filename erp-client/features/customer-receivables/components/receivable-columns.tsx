@@ -20,12 +20,12 @@ export function createReceivableColumns({
             header: "往来主体 / 客户",
             meta: { label: "往来主体", width: "reference" },
             cell: ({ row }) => (
-                <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-sm font-medium">
+                <div className="flex min-w-0 max-w-64 flex-col items-start gap-1 whitespace-normal">
+                    <span className="break-words text-sm font-medium">
                         {row.original.counterpartyPartyName}
                     </span>
-                    <span className="shrink-0 text-muted-foreground">·</span>
-                    <span className="truncate text-xs text-muted-foreground">
+                    <span className="sr-only">·</span>
+                    <span className="break-words text-xs text-muted-foreground">
                         {row.original.customerName}
                     </span>
                 </div>
@@ -36,7 +36,7 @@ export function createReceivableColumns({
             header: "销售单 / 子账",
             meta: { label: "销售单", width: "reference" },
             cell: ({ row }) => (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-start gap-1">
                     <span className="num text-sm">
                         {row.original.salesOrderNo}
                     </span>

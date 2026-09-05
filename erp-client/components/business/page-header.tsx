@@ -74,7 +74,7 @@ function PageHeader({
             data-density={objectChrome ? "compact" : density}
             data-variant={variant}
             className={cn(
-                "sticky top-0 z-20 flex shrink-0 flex-col border-b border-border/75 bg-card/95 backdrop-blur-sm shadow-2xs",
+                "sticky top-0 z-20 flex shrink-0 flex-col bg-card",
                 objectChrome ? "gap-1.5" : compact ? "gap-1.5" : "gap-2.5",
                 className,
             )}
@@ -110,10 +110,10 @@ function PageHeader({
                             {title != null ? (
                                 <h1
                                     className={cn(
-                                        "font-bold tracking-tight text-foreground",
+                                        "font-semibold tracking-tight text-foreground",
                                         compact
-                                            ? "text-xl leading-7"
-                                            : "text-2xl leading-8",
+                                            ? "text-[26px] leading-9"
+                                            : "text-[26px] leading-9",
                                     )}
                                 >
                                     {title}
@@ -129,7 +129,7 @@ function PageHeader({
                         {description ? (
                             <p
                                 className={cn(
-                                    "max-w-2xl text-sm leading-relaxed text-muted-foreground",
+                                    "max-w-3xl text-[13px] leading-6 text-muted-foreground",
                                     compact ? "mt-1" : "mt-1.5",
                                 )}
                             >
@@ -181,7 +181,7 @@ function PageHeaderMetaItem({
         <span
             data-slot="page-header-meta-item"
             className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground [&_svg]:size-3.5",
+                "inline-flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5",
                 className,
             )}
             {...props}

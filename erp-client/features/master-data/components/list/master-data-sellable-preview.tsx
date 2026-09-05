@@ -1,9 +1,8 @@
 "use client"
 
-import { MapPinIcon, PackageIcon, UsersIcon } from "lucide-react"
+import { UsersIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -13,15 +12,14 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
     if (!item) return null
 
     return (
-        <div className="space-y-5 text-sm">
-            <section className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="space-y-6 text-sm">
+            <section className="border-b border-border pb-6">
                 <div className="text-xs font-medium text-muted-foreground">
-                    销售价
+                    销售价（含税）
                 </div>
                 <MoneyValue
                     value={item.salesVisiblePriceGross}
-                    taxBasis="gross"
-                    className="mt-2 [&>span:first-child]:text-2xl"
+                    className="mt-2 [&>span:first-child]:text-[32px] [&>span:first-child]:font-semibold [&>span:first-child]:tracking-tight"
                 />
                 {item.marketPrice ? (
                     <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -32,22 +30,18 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                         />
                     </div>
                 ) : null}
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                    销售选品默认使用的公司 SKU 价格，不包含任何供应商采购成本。
-                </p>
             </section>
 
-            <section className="space-y-3 rounded-xl border bg-card p-4">
+            <section className="space-y-3 border-b border-border pb-6">
                 <div className="flex items-center gap-2 font-medium">
-                    <MapPinIcon className="size-4 text-primary" aria-hidden />
                     <h3>可供区域</h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {item.supplyRegions.length > 0 ? (
                         item.supplyRegions.map((region) => (
-                            <Badge key={region} variant="outline">
+                            <span key={region} className="text-sm">
                                 {region}
-                            </Badge>
+                            </span>
                         ))
                     ) : (
                         <span className="text-muted-foreground">
@@ -55,7 +49,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <UsersIcon className="size-3.5" aria-hidden />
                     <span>
                         当前由{" "}
@@ -69,10 +63,9 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
 
             <section className="space-y-3">
                 <div className="flex items-center gap-2 font-medium">
-                    <PackageIcon className="size-4 text-primary" aria-hidden />
                     <h3>商品资料</h3>
                 </div>
-                <dl className="grid grid-cols-2 gap-2">
+                <dl className="space-y-3">
                     {[
                         ["SKU 编号", row.stableNo],
                         ["商品编号", item.productNo],
@@ -83,13 +76,13 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                     ].map(([label, value]) => (
                         <div
                             key={label}
-                            className="min-w-0 rounded-lg bg-muted/50 p-3"
+                            className="flex min-w-0 items-baseline justify-between gap-5"
                         >
                             <dt className="text-xs text-muted-foreground">
                                 {label}
                             </dt>
                             <dd
-                                className="num mt-1 truncate font-medium"
+                                className="num min-w-0 break-all text-right text-[13px]"
                                 title={value}
                             >
                                 {value}
@@ -99,7 +92,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                 </dl>
             </section>
 
-            <section className="rounded-xl border bg-muted/30 p-4">
+            <section className="border-t border-border pt-6">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     当前可售期间
                 </h3>

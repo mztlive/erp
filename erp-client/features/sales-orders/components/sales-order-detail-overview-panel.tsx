@@ -27,7 +27,12 @@ function OverviewField({
     return (
         <div className="min-w-0">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className={cn("mt-0.5 truncate text-sm", numeric && "num")}>
+            <dd
+                className={cn(
+                    "mt-1.5 break-words text-sm leading-6",
+                    numeric && "num",
+                )}
+            >
                 {value}
             </dd>
         </div>
@@ -37,7 +42,7 @@ function OverviewField({
 export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
     return (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden border-y border-border">
             <Table
                 data-density="compact"
                 className={isCard ? "min-w-[62rem]" : "min-w-[54rem]"}
@@ -116,8 +121,8 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
 
     return (
-        <div className="space-y-4">
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-6">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
                 <OverviewField
                     label="关联合同"
                     value={order.contractRevisionLabel || "—"}
@@ -187,7 +192,7 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
 
             <div>
                 <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <h2 className="text-sm font-medium">
+                    <h2 className="text-base font-semibold">
                         {isCard ? "卡券明细" : "销售明细"}
                     </h2>
                     <p className="text-xs text-muted-foreground">

@@ -175,7 +175,7 @@ export function PermissionOptionsPanel({
             <div className="grid min-h-0 gap-3 md:grid-cols-[11rem_minmax(0,1fr)]">
                 <nav
                     aria-label="权限分组目录"
-                    className="hidden max-h-[32rem] flex-col overflow-y-auto rounded-lg border border-border p-1 md:flex"
+                    className="hidden max-h-[32rem] flex-col overflow-y-auto border-r border-border pr-3 md:flex"
                 >
                     {visibleGroups.map((group) => {
                         const progress = progressLookup.get(group.name)
@@ -215,7 +215,7 @@ export function PermissionOptionsPanel({
                 <div
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex max-h-[32rem] min-w-0 flex-col gap-4 overflow-y-auto rounded-lg border border-border p-3"
+                    className="flex max-h-[32rem] min-w-0 flex-col gap-4 overflow-y-auto px-3"
                 >
                     {visibleGroups.length === 0 ? (
                         <p className="py-6 text-center text-xs text-muted-foreground">
@@ -268,9 +268,9 @@ function PermissionMatrixSection({
         <section
             ref={ref}
             aria-label={group.name}
-            className="shrink-0 overflow-hidden rounded-lg border border-border"
+            className="shrink-0 overflow-hidden border-b border-border pb-4"
         >
-            <div className="flex items-center justify-between gap-2 border-b border-grid bg-muted/40 px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-b border-grid bg-card px-0 py-3">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">

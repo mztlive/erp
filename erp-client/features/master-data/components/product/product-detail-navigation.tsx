@@ -60,7 +60,7 @@ function ProductSectionTabs({
             <TabsList
                 variant="line"
                 aria-label="商品编辑分区"
-                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
+                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0"
             >
                 {PRODUCT_EDITOR_SECTIONS.filter(
                     (section) =>
@@ -71,7 +71,7 @@ function ProductSectionTabs({
                         key={section.id}
                         id={`master-data-product-editor-tab-${toAutomationIdSegment(section.id)}`}
                         value={section.id}
-                        className="h-11 flex-none rounded-none px-4 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
+                        className="h-11 flex-none rounded-none px-0 text-sm after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
                     >
                         {section.label}
                     </TabsTrigger>

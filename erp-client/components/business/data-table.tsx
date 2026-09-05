@@ -426,7 +426,7 @@ function DataTable<TData>({
             <div
                 ref={tableSurfaceRef}
                 data-slot="data-table-surface"
-                className="overflow-hidden rounded-lg border bg-card"
+                className="overflow-hidden border-y border-border bg-card [container-type:inline-size]"
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (
                     <div

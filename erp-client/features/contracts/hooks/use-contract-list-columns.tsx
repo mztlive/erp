@@ -19,7 +19,7 @@ export function useContractListColumns() {
                 header: "合同编号",
                 meta: { label: "合同编号", width: "reference" },
                 cell: ({ row }) => (
-                    <div className="min-w-0">
+                    <div className="min-w-0 max-w-72">
                         <Button
                             id={`card-contracts-list-row-${toAutomationIdSegment(row.original.contractId)}-open`}
                             type="button"
@@ -51,7 +51,7 @@ export function useContractListColumns() {
                 header: "结算主体",
                 meta: { label: "结算主体", width: "default" },
                 cell: ({ row }) => (
-                    <span className="text-sm">
+                    <span className="block max-w-48 whitespace-normal break-words text-sm leading-6">
                         {row.original.settlementParty.displayName}
                     </span>
                 ),

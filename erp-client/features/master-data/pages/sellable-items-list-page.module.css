@@ -1,0 +1,276 @@
+.page {
+    --spacing-table-column-reference-min: 15rem;
+    --spacing-table-column-amount: 8.25rem;
+    --spacing-table-column-amount-min: 7.5rem;
+    --spacing-table-column-default: 7rem;
+    --spacing-table-column-default-min: 6rem;
+    --spacing-table-column-status: 8rem;
+    --spacing-table-column-status-min: 7.5rem;
+    --spacing-table-column-preview: 2rem;
+    max-width: none;
+    gap: 0;
+    padding: 28px 32px 24px;
+    background: var(--card);
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 30px;
+}
+
+.eyebrow {
+    margin-bottom: 10px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+
+.title {
+    font-size: 26px;
+    line-height: 36px;
+    font-weight: 600;
+    letter-spacing: -0.6px;
+}
+
+.description {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 22px;
+    color: var(--muted-foreground);
+}
+
+.headerActions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.quietButton,
+.exportButton {
+    font-size: 13px;
+    box-shadow: none;
+}
+
+.quietButton {
+    color: var(--muted-foreground);
+}
+
+.workSurface {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+
+.viewBar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.views {
+    display: flex;
+    min-width: 0;
+    gap: 26px;
+    overflow-x: auto;
+}
+
+.view {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 9px;
+    min-height: 46px;
+    border-bottom: 2px solid transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: color 120ms;
+}
+
+.view:hover,
+.activeView {
+    color: var(--foreground);
+}
+
+.activeView {
+    border-bottom-color: var(--foreground);
+    font-weight: 600;
+}
+
+.view:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--foreground);
+    outline-offset: -3px;
+}
+
+.viewCount {
+    min-width: 22px;
+    border-radius: 5px;
+    padding: 0 5px;
+    background: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewHint {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+}
+
+.toolbar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 0;
+}
+
+.filters {
+    min-width: 0;
+    flex: 1;
+}
+
+.toolbar [data-slot="input-group"],
+.toolbar [data-slot="button"] {
+    box-shadow: none;
+    font-size: 13px;
+}
+
+.toolbar [data-slot="input-group"] {
+    background: var(--background);
+}
+
+.toolbar [data-slot="input-group"]:focus-within {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+}
+
+.columnSettings {
+    flex-shrink: 0;
+}
+
+.table {
+    flex: 1;
+    min-height: 0;
+}
+
+.table [data-slot="data-table"] {
+    height: 100%;
+    gap: 0;
+}
+
+.table [data-slot="data-table-surface"] {
+    flex: 1;
+    border: 0;
+    border-radius: 0;
+}
+
+.table [data-slot="table-head"] {
+    height: 40px;
+    padding-top: 0;
+    padding-bottom: 0;
+    letter-spacing: normal;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.table [data-slot="table-cell"] {
+    height: 64px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.table [data-column-id="name"] {
+    min-width: var(--spacing-table-column-reference-min);
+    padding-left: 14px;
+}
+
+.table [data-column-id="price"],
+.table [data-column-id="marketPrice"] {
+    width: var(--spacing-table-column-amount);
+    min-width: var(--spacing-table-column-amount-min);
+}
+
+.table [data-column-id="productNo"],
+.table [data-column-id="supplyRegions"] {
+    width: var(--spacing-table-column-default);
+    min-width: var(--spacing-table-column-default-min);
+}
+
+.table [data-column-id="supplierCount"] {
+    width: var(--spacing-table-column-status);
+    min-width: var(--spacing-table-column-status-min);
+}
+
+.table [data-column-id="__preview"] {
+    width: var(--spacing-table-column-preview);
+    min-width: var(--spacing-table-column-preview);
+    max-width: var(--spacing-table-column-preview);
+    padding-right: 8px;
+    padding-left: 8px;
+}
+
+.table [data-slot="table-row"]:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: -2px;
+}
+
+.table [data-slot="data-table-pagination"] {
+    flex-shrink: 0;
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding: 16px 0 0;
+    font-size: 12px;
+}
+
+@media (max-width: 1199px) {
+    .page {
+        --spacing-table-column-reference-min: 14.5rem;
+        padding-right: 24px;
+        padding-left: 24px;
+    }
+
+    .viewHint {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .page {
+        padding: 20px 16px;
+    }
+
+    .header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 16px;
+        padding-bottom: 20px;
+    }
+
+    .headerActions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .views {
+        gap: 20px;
+    }
+
+    .toolbar {
+        gap: 0;
+    }
+}

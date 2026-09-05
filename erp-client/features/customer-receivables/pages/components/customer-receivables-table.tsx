@@ -77,7 +77,10 @@ export function CustomerReceivablesTable({
                     patchUrl(patch, { replace: true })
                 }}
             >
-                <TabsList>
+                <TabsList
+                    variant="line"
+                    className="w-full overflow-x-auto border-b border-border"
+                >
                     {(
                         [
                             "receivable",
