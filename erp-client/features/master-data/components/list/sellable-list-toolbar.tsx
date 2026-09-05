@@ -79,6 +79,7 @@ export function SellableListToolbar({
     setProductSalesPriceError,
     productFilterOptionsQuery,
     showSupplyPresetCounts = true,
+    showSupplyPreset = true,
     hiddenProductKinds,
     applyHint = "将同时应用上方关键词和以下筛选条件；结果也用于导出。",
 }: {
@@ -116,6 +117,7 @@ export function SellableListToolbar({
     setProductSalesPriceError: SetState<string | null>
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
     showSupplyPresetCounts?: boolean
+    showSupplyPreset?: boolean
     hiddenProductKinds?: readonly ProductKind[]
     applyHint?: string
 }) {
@@ -145,43 +147,47 @@ export function SellableListToolbar({
                 }
                 filters={
                     <>
-                        <div
-                            role="group"
-                            aria-label="供应快捷筛选"
-                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                        >
-                            {SUPPLY_PRESET_OPTIONS.map((option) => {
-                                const active = supplyPreset === option.value
-                                return (
-                                    <Button
-                                        id={`master-data-sellable-preset-${toAutomationIdSegment(option.value)}`}
-                                        key={option.value}
-                                        type="button"
-                                        variant={active ? "secondary" : "ghost"}
-                                        className={
-                                            active
-                                                ? "bg-card shadow-xs"
-                                                : "shadow-none"
-                                        }
-                                        aria-pressed={active}
-                                        onClick={() =>
-                                            applySupplyPreset(option.value)
-                                        }
-                                    >
-                                        {option.label}
-                                        {showSupplyPresetCounts ? (
-                                            <span className="num text-xs text-muted-foreground">
-                                                {
-                                                    supplyPresetCounts[
-                                                        option.value
-                                                    ]
-                                                }
-                                            </span>
-                                        ) : null}
-                                    </Button>
-                                )
-                            })}
-                        </div>
+                        {showSupplyPreset ? (
+                            <div
+                                role="group"
+                                aria-label="供应快捷筛选"
+                                className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
+                            >
+                                {SUPPLY_PRESET_OPTIONS.map((option) => {
+                                    const active = supplyPreset === option.value
+                                    return (
+                                        <Button
+                                            id={`master-data-sellable-preset-${toAutomationIdSegment(option.value)}`}
+                                            key={option.value}
+                                            type="button"
+                                            variant={
+                                                active ? "secondary" : "ghost"
+                                            }
+                                            className={
+                                                active
+                                                    ? "bg-card shadow-xs"
+                                                    : "shadow-none"
+                                            }
+                                            aria-pressed={active}
+                                            onClick={() =>
+                                                applySupplyPreset(option.value)
+                                            }
+                                        >
+                                            {option.label}
+                                            {showSupplyPresetCounts ? (
+                                                <span className="num text-xs text-muted-foreground">
+                                                    {
+                                                        supplyPresetCounts[
+                                                            option.value
+                                                        ]
+                                                    }
+                                                </span>
+                                            ) : null}
+                                        </Button>
+                                    )
+                                })}
+                            </div>
+                        ) : null}
                         <Button
                             id={`${prefix}-filter-trigger`}
                             type="button"
