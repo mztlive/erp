@@ -4,7 +4,10 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
-import { BusinessTableFrame, PageScaffold } from "@/components/business"
+import { PageScaffold } from "@/components/business"
+import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
+import { salesOrdersListStyles as salesStyles } from "./sales-orders-list-styles"
+import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
 import { downloadSalesOrderContractPdf } from "@/features/sales-orders/api/sales-orders"
@@ -17,10 +20,7 @@ import { useSalesOrdersListExport } from "@/features/sales-orders/hooks/use-sale
 import { useSalesOrdersListFilters } from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
 import { useSalesOrdersListQuery } from "@/features/sales-orders/hooks/use-sales-orders-list-query"
 import { useSalesOrdersListUrlState } from "@/features/sales-orders/hooks/use-sales-orders-list-url-state"
-import {
-    salesOrdersListFilterDescription,
-    salesOrdersListFiltersActive,
-} from "@/features/sales-orders/lib/sales-orders-list-filters"
+import { salesOrdersListFiltersActive } from "@/features/sales-orders/lib/sales-orders-list-filters"
 import { SORT_COLUMN_TO_FIELD } from "@/features/sales-orders/lib/sales-orders-list-query"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
@@ -131,7 +131,7 @@ export function SalesOrdersListPage() {
     )
 
     return (
-        <PageScaffold density="compact">
+        <PageScaffold density="compact" className={styles.page}>
             <SalesOrdersListHeader
                 isError={ordersQuery.isError}
                 isFetching={ordersQuery.isFetching}
@@ -144,56 +144,49 @@ export function SalesOrdersListPage() {
                 exportJob={exportJob}
             />
 
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        销售单
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {total} 条
-                        </span>
-                    </span>
-                }
-                description={salesOrdersListFilterDescription(url)}
-                toolbar={
-                    <SalesOrdersListFilterBar
-                        panelId={panelId}
-                        searchDraft={searchDraft}
-                        onSearchDraftChange={setSearchDraft}
-                        onSubmit={applyFilters}
-                        filterPanelOpen={filterPanelOpen}
-                        onToggleFilterPanel={() => {
-                            setFilterPanelOpen((open) => !open)
-                        }}
-                        hasStructuredFilters={hasStructuredFilters}
-                        hasChips={filtersActive && chips.length > 0}
-                        chips={chips}
-                        onClearFilters={clearFilters}
-                        summary={url.summary}
-                        onSummaryChange={(summary) => {
-                            // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
-                            pushUrl({
-                                summary,
-                                createdBy: undefined,
-                                commercialStatus: "all",
-                                reviewStatus: "all",
-                                page: 1,
-                            })
-                        }}
-                        filterPanel={
-                            <SalesOrdersListFilterPanel
-                                panelId={panelId}
-                                draft={filterDraft}
-                                onDraftChange={setFilterDraft}
-                                onResetMoreFilters={resetMoreFilters}
-                            />
-                        }
-                    />
-                }
-                table={
+            <section
+                className={styles.workSurface}
+                data-business-component="table-frame"
+                aria-label="销售单列表"
+            >
+                <SalesOrdersListFilterBar
+                    total={total}
+                    panelId={panelId}
+                    searchDraft={searchDraft}
+                    onSearchDraftChange={setSearchDraft}
+                    onSubmit={applyFilters}
+                    filterPanelOpen={filterPanelOpen}
+                    onToggleFilterPanel={() => {
+                        setFilterPanelOpen((open) => !open)
+                    }}
+                    hasStructuredFilters={hasStructuredFilters}
+                    hasChips={filtersActive && chips.length > 0}
+                    chips={chips}
+                    onClearFilters={clearFilters}
+                    summary={url.summary}
+                    onSummaryChange={(summary) => {
+                        // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
+                        pushUrl({
+                            summary,
+                            createdBy: undefined,
+                            commercialStatus: "all",
+                            reviewStatus: "all",
+                            page: 1,
+                        })
+                    }}
+                    filterPanel={
+                        <SalesOrdersListFilterPanel
+                            panelId={panelId}
+                            draft={filterDraft}
+                            onDraftChange={setFilterDraft}
+                            onResetMoreFilters={resetMoreFilters}
+                        />
+                    }
+                />
+                <div
+                    className={cn(styles.table, salesStyles.table)}
+                    data-slot="business-table-frame-table"
+                >
                     <SalesOrdersListTable
                         items={items}
                         total={total}
@@ -214,8 +207,8 @@ export function SalesOrdersListPage() {
                         downloadingContractId={downloadingContractId}
                         downloadContract={downloadContract}
                     />
-                }
-            />
+                </div>
+            </section>
         </PageScaffold>
     )
 }

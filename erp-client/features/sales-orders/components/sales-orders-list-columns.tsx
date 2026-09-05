@@ -9,7 +9,6 @@ import {
     MoneyValue,
     StatusTrackSummary,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     isPendingReviewStage,
@@ -44,7 +43,7 @@ export function buildSalesOrdersListColumns(
                                 id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
                                 variant="link"
                                 size="xs"
-                                className="num px-0"
+                                className="num h-auto min-h-0 px-0 text-[13px] leading-5 font-semibold text-foreground"
                                 aria-label={`查看销售单 ${row.original.documentNumber}`}
                                 render={
                                     <Link
@@ -60,7 +59,7 @@ export function buildSalesOrdersListColumns(
                                 tone={row.original.primaryStatus.tone}
                             />
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
                             {row.original.customerName}
                         </div>
                     </div>
@@ -73,9 +72,9 @@ export function buildSalesOrdersListColumns(
             meta: { label: "业务性质", width: "status" },
             enableSorting: false,
             cell: ({ row }) => (
-                <Badge variant="secondary">
+                <span className="text-xs text-muted-foreground">
                     {NATURE_LABEL[row.original.nature]}
-                </Badge>
+                </span>
             ),
         },
         {
@@ -101,7 +100,7 @@ export function buildSalesOrdersListColumns(
                                 type="button"
                                 variant="link"
                                 size="xs"
-                                className="num px-0"
+                                className="num h-auto min-h-0 px-0 text-[13px] leading-5 font-semibold text-foreground"
                                 disabled={downloading}
                                 aria-label={`下载合同 ${contractNo || order.contractId}`}
                                 onClick={() => {
@@ -126,7 +125,7 @@ export function buildSalesOrdersListColumns(
                                 {contractNo || "—"}
                             </span>
                         )}
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
                             {companyName || "—"}
                         </div>
                     </div>
@@ -173,7 +172,11 @@ export function buildSalesOrdersListColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue value={row.original.amountGross} taxBasis="gross" />
+                <MoneyValue
+                    value={row.original.amountGross}
+                    taxBasis="gross"
+                    className="font-semibold text-foreground"
+                />
             ),
         },
         {

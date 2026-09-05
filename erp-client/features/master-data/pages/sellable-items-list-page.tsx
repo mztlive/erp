@@ -19,7 +19,8 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import styles from "./sellable-items-list-page.module.css"
+import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
+import { sellableItemsListStyles as productStyles } from "./sellable-items-list-styles"
 import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -185,6 +186,14 @@ export function SellableItemsListPage() {
                 <div className={styles.toolbar}>
                     <div className={styles.filters}>
                         <SellableListToolbar
+                            variant="quiet"
+                            applyHint="筛选结果同时用于导出"
+                            actions={
+                                <div
+                                    className={styles.columnSettings}
+                                    data-slot="table-frame-view-options"
+                                />
+                            }
                             idPrefix="master-data-sellable-items-list-toolbar"
                             searchInputRef={searchInputRef}
                             searchDraft={filters.searchDraft}
@@ -251,14 +260,9 @@ export function SellableItemsListPage() {
                             }
                         />
                     </div>
-
-                    <div
-                        className={styles.columnSettings}
-                        data-slot="table-frame-view-options"
-                    />
                 </div>
                 <div
-                    className={styles.table}
+                    className={cn(styles.table, productStyles.table)}
                     data-slot="business-table-frame-table"
                 >
                     <DataTable

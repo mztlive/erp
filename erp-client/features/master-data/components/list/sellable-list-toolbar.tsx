@@ -23,6 +23,7 @@ import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import { PRODUCT_KIND_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -82,6 +83,8 @@ export function SellableListToolbar({
     showSupplyPreset = true,
     hiddenProductKinds,
     applyHint = "将同时应用上方关键词和以下筛选条件；结果也用于导出。",
+    variant = "default",
+    actions,
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -120,6 +123,8 @@ export function SellableListToolbar({
     showSupplyPreset?: boolean
     hiddenProductKinds?: readonly ProductKind[]
     applyHint?: string
+    variant?: "default" | "quiet"
+    actions?: React.ReactNode
 }) {
     const prefix = idPrefix ?? "master-data-list-sellable-list-toolbar"
     const panelId = React.useId()
@@ -134,6 +139,12 @@ export function SellableListToolbar({
             }}
         >
             <ListToolbar
+                actions={actions}
+                className={
+                    variant === "quiet"
+                        ? "gap-0 [&_[data-slot=list-toolbar-primary]_[data-slot=separator]]:hidden"
+                        : undefined
+                }
                 search={
                     <ListSearchField
                         id={`${prefix}-search-input`}
@@ -220,9 +231,19 @@ export function SellableListToolbar({
                 }
                 secondary={
                     hasChips || sellableFilterPanelOpen ? (
-                        <div className="w-full space-y-3">
+                        <div
+                            className={cn(
+                                "w-full space-y-3",
+                                variant === "quiet" && "pt-5",
+                            )}
+                        >
                             {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                <div
+                                    className={cn(
+                                        "flex flex-wrap items-center gap-2 border-t pt-3",
+                                        variant === "quiet" && "border-0 pt-0",
+                                    )}
+                                >
                                     <span className="text-xs text-muted-foreground">
                                         已筛选
                                     </span>
@@ -251,10 +272,19 @@ export function SellableListToolbar({
                             {sellableFilterPanelOpen ? (
                                 <div
                                     id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    className={cn(
+                                        "flex w-full flex-col gap-3 border-t pt-3",
+                                        variant === "quiet" &&
+                                            "gap-5 border-0 pt-0",
+                                    )}
                                     aria-label="公司商品池更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        variant={
+                                            variant === "quiet"
+                                                ? "quiet"
+                                                : "outline"
+                                        }
                                         label="商品类型"
                                         value={productKindDraft}
                                         onValueChange={setProductKindDraft}
@@ -266,7 +296,13 @@ export function SellableListToolbar({
                                                 ),
                                         )}
                                     />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div
+                                        className={cn(
+                                            "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4",
+                                            variant === "quiet" &&
+                                                "gap-x-5 gap-y-4 lg:grid-cols-3",
+                                        )}
+                                    >
                                         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                                             <span className="text-muted-foreground">
                                                 分类
@@ -431,7 +467,13 @@ export function SellableListToolbar({
                                             ) : null}
                                         </div>
                                     </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div
+                                        className={cn(
+                                            "flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between",
+                                            variant === "quiet" &&
+                                                "border-0 pt-1",
+                                        )}
+                                    >
                                         <p className="text-xs text-muted-foreground">
                                             {applyHint}
                                         </p>

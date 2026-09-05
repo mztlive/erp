@@ -4,12 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { DownloadIcon, LoaderCircleIcon, PlusIcon } from "lucide-react"
 
-import {
-    DataFreshness,
-    FormalActionResult,
-    PageActions,
-    PageHeader,
-} from "@/components/business"
+import { FormalActionResult, PageActions } from "@/components/business"
+import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
 import type { SalesOrdersListExportJob } from "@/features/sales-orders/lib/sales-orders-list-csv"
 
 export function SalesOrdersListHeader(props: {
@@ -33,30 +29,28 @@ export function SalesOrdersListHeader(props: {
 
     return (
         <>
-            <PageHeader
-                title="销售单"
-                metadata={
-                    <DataFreshness
-                        updatedAt={
-                            isError
-                                ? "查询失败"
-                                : queriedAt
-                                  ? queriedAt.slice(11, 16)
-                                  : "正在查询"
-                        }
-                        dateTime={queriedAt}
-                        state={
-                            isError
-                                ? "failed"
-                                : isFetching
-                                  ? "syncing"
-                                  : queriedAt
-                                    ? "fresh"
-                                    : "unknown"
-                        }
-                    />
-                }
-                actions={
+            <header className={styles.header}>
+                <div>
+                    <p className={styles.eyebrow}>销售</p>
+                    <h1 className={styles.title}>销售单</h1>
+                    <p className={styles.description}>
+                        查看销售单、履约进度与成交金额。
+                        <span className="ml-3 text-xs" role="status">
+                            {isError ? (
+                                "查询失败"
+                            ) : isFetching ? (
+                                "正在更新…"
+                            ) : queriedAt ? (
+                                <time dateTime={queriedAt}>
+                                    更新于 {queriedAt.slice(11, 16)}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </p>
+                </div>
+                <div className={styles.headerActions}>
                     <PageActions
                         actions={[
                             {
@@ -82,8 +76,8 @@ export function SalesOrdersListHeader(props: {
                             },
                         ]}
                     />
-                }
-            />
+                </div>
+            </header>
 
             {exportJob ? (
                 <FormalActionResult

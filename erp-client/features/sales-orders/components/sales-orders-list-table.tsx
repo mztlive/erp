@@ -68,19 +68,16 @@ export function SalesOrdersListTable(props: {
         [downloadingContractId, downloadContract],
     )
 
-    if (isError) {
-        return (
-            <BusinessFailureState
-                id="sales-orders-list-retry"
-                title="销售单列表加载失败"
-                error={error}
-                onRetry={onRetry}
-            />
-        )
-    }
-
-    if (!loading && items.length === 0) {
-        return (
+    const errorState = isError ? (
+        <BusinessFailureState
+            id="sales-orders-list-retry"
+            title="销售单列表加载失败"
+            error={error}
+            onRetry={onRetry}
+        />
+    ) : undefined
+    const emptyState =
+        !loading && items.length === 0 ? (
             <BusinessEmptyState
                 kind={filtersActive ? "filter" : "no-data"}
                 title={filtersActive ? undefined : "还没有销售单"}
@@ -116,8 +113,7 @@ export function SalesOrdersListTable(props: {
                     )
                 }
             />
-        )
-    }
+        ) : undefined
 
     return (
         <DataTable
@@ -131,6 +127,8 @@ export function SalesOrdersListTable(props: {
             pagination={pagination}
             onPaginationChange={onPaginationChange}
             loading={loading}
+            errorState={errorState}
+            emptyState={emptyState}
             layout="flush"
             defaultColumnPinning={{ left: ["document"] }}
             onRowOpen={(row) => onRowNavigate(row.id)}

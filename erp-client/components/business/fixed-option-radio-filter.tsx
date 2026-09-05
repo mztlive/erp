@@ -23,6 +23,7 @@ export type FixedOptionRadioFilterProps<Value extends string = string> = {
     className?: string
     id?: string
     idPrefix?: string
+    variant?: "outline" | "quiet"
 }
 
 /**
@@ -41,6 +42,7 @@ export function FixedOptionRadioFilter<Value extends string>({
     className,
     id,
     idPrefix,
+    variant = "outline",
 }: FixedOptionRadioFilterProps<Value>) {
     const labelId = React.useId()
     const baseId = idPrefix ?? id
@@ -73,6 +75,8 @@ export function FixedOptionRadioFilter<Value extends string>({
                             "has-data-checked:border-solid has-data-checked:border-primary has-data-checked:font-medium has-data-checked:text-foreground",
                             "has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/30",
                             "has-data-disabled:cursor-not-allowed has-data-disabled:opacity-50",
+                            variant === "quiet" &&
+                                "border-0 hover:bg-muted/60 has-data-checked:bg-muted has-data-checked:font-semibold",
                         )}
                     >
                         <RadioGroupItem
