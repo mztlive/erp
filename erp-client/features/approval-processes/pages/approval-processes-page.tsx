@@ -6,21 +6,23 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    ListToolbar,
     MetricItem,
     MetricStrip,
     OptionCombobox,
     PageScaffold,
 } from "@/components/business"
 import {
+    ListSearchField,
     ListWorkSurface,
+    ListWorkspaceFilterBar,
     ListWorkspaceHeader,
+    ListWorkspaceInlineFilter,
     ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
+    listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 
 import { CreateDraftDialog } from "../components/create-draft-dialog"
@@ -71,14 +73,93 @@ export function ApprovalProcessesPage() {
         [searchParams],
     )
     const [searchDraft, setSearchDraft] = React.useState(urlState.q)
+    const [policyDraft, setPolicyDraft] = React.useState(urlState.policy)
+    const [statusDraft, setStatusDraft] = React.useState(urlState.status)
     React.useEffect(() => {
         setSearchDraft(urlState.q)
     }, [urlState.q])
+    React.useEffect(() => {
+        setPolicyDraft(urlState.policy)
+    }, [urlState.policy])
+    React.useEffect(() => {
+        setStatusDraft(urlState.status)
+    }, [urlState.status])
 
     const replaceState = (next: CatalogUrlState) => {
         const query = buildCatalogSearchParams(next)
         router.replace(`/system/approval-processes${query}`)
     }
+
+    const applyFilters = () => {
+        replaceState({
+            policy: policyDraft,
+            status: statusDraft,
+            q: searchDraft.trim(),
+            page: 1,
+        })
+    }
+
+    const clearAllFilters = () => {
+        setSearchDraft("")
+        setPolicyDraft("ALL")
+        setStatusDraft("ALL")
+        replaceState({
+            policy: "ALL",
+            status: "ALL",
+            q: "",
+            page: 1,
+        })
+    }
+
+    const removeFilter = (key: string) => {
+        if (key === "q") {
+            setSearchDraft("")
+            replaceState({ ...urlState, q: "", page: 1 })
+        }
+        if (key === "policy") {
+            setPolicyDraft("ALL")
+            replaceState({ ...urlState, policy: "ALL", page: 1 })
+        }
+        if (key === "status") {
+            setStatusDraft("ALL")
+            replaceState({ ...urlState, status: "ALL", page: 1 })
+        }
+    }
+
+    const hasPendingChanges =
+        searchDraft.trim() !== urlState.q.trim() ||
+        policyDraft !== urlState.policy ||
+        statusDraft !== urlState.status
+
+    const appliedChips = [
+        ...(urlState.q.trim()
+            ? [{ key: "q", label: `搜索：${urlState.q.trim()}` }]
+            : []),
+        ...(urlState.policy !== "ALL"
+            ? [
+                  {
+                      key: "policy",
+                      label: `政策：${
+                          POLICY_OPTIONS.find(
+                              (option) => option.value === urlState.policy,
+                          )?.label ?? urlState.policy
+                      }`,
+                  },
+              ]
+            : []),
+        ...(urlState.status !== "ALL"
+            ? [
+                  {
+                      key: "status",
+                      label: `状态：${
+                          STATUS_OPTIONS.find(
+                              (option) => option.value === urlState.status,
+                          )?.label ?? urlState.status
+                      }`,
+                  },
+              ]
+            : []),
+    ]
 
     const permissions = profileQuery.data?.permissions
     const items = catalogQuery.data ?? []
@@ -187,93 +268,81 @@ export function ApprovalProcessesPage() {
                     />
                 }
                 toolbar={
-                    <ListToolbar
+                    <ListWorkspaceFilterBar
+                        idPrefix="governance-approval-processes-catalog"
+                        formAriaLabel="审批流程查询"
+                        onSubmit={applyFilters}
                         search={
-                            <Input
+                            <ListSearchField
                                 id="governance-approval-processes-catalog-search"
-                                aria-label="搜索单据类型"
                                 value={searchDraft}
+                                onChange={setSearchDraft}
                                 placeholder="搜索单据类型"
-                                onChange={(event) =>
-                                    setSearchDraft(event.target.value)
-                                }
+                                aria-label="搜索单据类型"
                             />
                         }
-                        filters={
+                        commonFilters={
                             <>
-                                <OptionCombobox
-                                    id="governance-approval-processes-catalog-policy"
-                                    aria-label="审批政策"
-                                    options={[...POLICY_OPTIONS]}
-                                    value={urlState.policy}
-                                    allowClear={false}
-                                    onValueChange={(value) =>
-                                        replaceState({
-                                            ...urlState,
-                                            policy:
+                                <ListWorkspaceInlineFilter
+                                    htmlFor="governance-approval-processes-catalog-policy"
+                                    label="审批政策"
+                                >
+                                    <OptionCombobox
+                                        id="governance-approval-processes-catalog-policy"
+                                        className="w-full sm:w-44"
+                                        aria-label="审批政策"
+                                        options={[...POLICY_OPTIONS]}
+                                        value={policyDraft}
+                                        allowClear={false}
+                                        onValueChange={(value) =>
+                                            setPolicyDraft(
                                                 value === "PROCESS_REQUIRED" ||
-                                                value === "NO_APPROVAL"
+                                                    value === "NO_APPROVAL"
                                                     ? value
                                                     : "ALL",
-                                            page: 1,
-                                        })
-                                    }
-                                />
-                                <OptionCombobox
-                                    id="governance-approval-processes-catalog-status"
-                                    aria-label="配置状态"
-                                    options={[...STATUS_OPTIONS]}
-                                    value={urlState.status}
-                                    allowClear={false}
-                                    onValueChange={(value) =>
-                                        replaceState({
-                                            ...urlState,
-                                            status:
+                                            )
+                                        }
+                                    />
+                                </ListWorkspaceInlineFilter>
+                                <ListWorkspaceInlineFilter
+                                    htmlFor="governance-approval-processes-catalog-status"
+                                    label="配置状态"
+                                >
+                                    <OptionCombobox
+                                        id="governance-approval-processes-catalog-status"
+                                        className="w-full sm:w-48"
+                                        aria-label="配置状态"
+                                        options={[...STATUS_OPTIONS]}
+                                        value={statusDraft}
+                                        allowClear={false}
+                                        onValueChange={(value) =>
+                                            setStatusDraft(
                                                 value === "PUBLISHED" ||
-                                                value ===
-                                                    "MISSING_CONFIGURATION" ||
-                                                value === "HAS_DRAFT" ||
-                                                value === "NOT_APPLICABLE"
+                                                    value ===
+                                                        "MISSING_CONFIGURATION" ||
+                                                    value === "HAS_DRAFT" ||
+                                                    value === "NOT_APPLICABLE"
                                                     ? value
                                                     : "ALL",
-                                            page: 1,
-                                        })
-                                    }
-                                />
+                                            )
+                                        }
+                                    />
+                                </ListWorkspaceInlineFilter>
                             </>
                         }
-                        actions={
-                            <>
-                                <Button
-                                    id="governance-approval-processes-catalog-clear"
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() =>
-                                        replaceState({
-                                            policy: "ALL",
-                                            status: "ALL",
-                                            q: "",
-                                            page: 1,
-                                        })
-                                    }
-                                >
-                                    清除筛选
-                                </Button>
-                                <Button
-                                    id="governance-approval-processes-catalog-search-submit"
-                                    type="button"
-                                    onClick={() =>
-                                        replaceState({
-                                            ...urlState,
-                                            q: searchDraft.trim(),
-                                            page: 1,
-                                        })
-                                    }
-                                >
-                                    搜索
-                                </Button>
-                            </>
-                        }
+                        resultStatus={listWorkspaceFilterStatusText({
+                            loading: catalogQuery.isPending,
+                            failed: catalogQuery.isError,
+                            resultCount: catalogQuery.data
+                                ? filtered.length
+                                : undefined,
+                            noun: "个单据类型",
+                            loadingLabel: "正在加载目录…",
+                        })}
+                        chips={appliedChips}
+                        onClearChip={removeFilter}
+                        onClearAll={clearAllFilters}
+                        hasPendingChanges={hasPendingChanges}
                     />
                 }
                 table={

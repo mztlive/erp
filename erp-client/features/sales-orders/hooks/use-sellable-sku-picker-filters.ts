@@ -93,7 +93,10 @@ export function useSellableSkuPickerFilters() {
         const maximum = productSalesPriceMaxDraft.trim()
         const error = productSalesPriceRangeError(minimum, maximum)
         setProductSalesPriceError(error)
-        if (error) return
+        if (error) {
+            setSellableFilterPanelOpen(true)
+            return
+        }
         const nextKind =
             productKindDraft === "all"
                 ? undefined
@@ -171,32 +174,48 @@ export function useSellableSkuPickerFilters() {
         [resetPagination],
     )
 
+    /** 仅重置更多条件草稿；保留关键词、类型、分类及当前查询结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setProductKindDraft("all")
-        setProductCategoryIdDraft(null)
         setProductBrandIdDraft(null)
         setProductSupplierIdDraft(null)
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setSupplyRegionDraft("")
         setProductSalesPriceError(null)
-        setProductKind(undefined)
-        setProductCategoryId(undefined)
-        setProductBrandId(undefined)
-        setProductSupplierId(undefined)
-        setProductSalesPriceMin(undefined)
-        setProductSalesPriceMax(undefined)
-        setSupplyRegion(undefined)
-        resetPagination()
-    }, [resetPagination])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        productKindDraft !== (productKind ?? "all") ||
+        productCategoryIdDraft !== (productCategoryId ?? null) ||
+        productBrandIdDraft !== (productBrandId ?? null) ||
+        productSupplierIdDraft !== (productSupplierId ?? null) ||
+        supplyRegionDraft.trim() !== (supplyRegion ?? "") ||
+        productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
+        productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "")
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setQ("")
         setSupplyPreset("all")
+        setProductKindDraft("all")
+        setProductKind(undefined)
+        setProductCategoryIdDraft(null)
+        setProductCategoryId(undefined)
+        setProductBrandIdDraft(null)
+        setProductBrandId(undefined)
+        setProductSupplierIdDraft(null)
+        setProductSupplierId(undefined)
+        setSupplyRegionDraft("")
+        setSupplyRegion(undefined)
+        setProductSalesPriceMinDraft("")
+        setProductSalesPriceMaxDraft("")
+        setProductSalesPriceMin(undefined)
+        setProductSalesPriceMax(undefined)
+        setProductSalesPriceError(null)
         setSellableFilterPanelOpen(false)
-        resetMoreFilters()
-    }, [resetMoreFilters])
+        resetPagination()
+    }, [resetPagination])
 
     const changePagination = React.useCallback((next: PaginationState) => {
         setPagination(next)
@@ -217,6 +236,7 @@ export function useSellableSkuPickerFilters() {
         productSalesPriceMin,
         productSalesPriceMax,
         hasStructuredSellableFilters,
+        hasPendingChanges,
         searchDraft,
         setSearchDraft,
         sellableFilterPanelOpen,

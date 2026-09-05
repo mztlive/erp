@@ -217,7 +217,6 @@ export const SupplierOfferingsPage = () => {
                             onSearchDraftChange={state.setSearchDraft}
                             filterPanelOpen={state.filterPanelOpen}
                             onFilterPanelOpenChange={state.setFilterPanelOpen}
-                            hasStructuredFilters={state.hasStructuredFilters}
                             appliedChips={appliedChips}
                             removeFilter={state.removeFilter}
                             onApplyFilters={state.applyFilters}
@@ -242,6 +241,10 @@ export const SupplierOfferingsPage = () => {
                             onProductNoDraftChange={state.setProductNoDraft}
                             supplierIdDraft={state.supplierIdDraft}
                             onSupplierIdDraftChange={state.setSupplierIdDraft}
+                            hasPendingChanges={state.hasPendingChanges}
+                            resultCount={query.data?.total}
+                            loading={query.isFetching}
+                            failed={query.isError}
                         />
                     }
                     tableClassName="flex flex-col"

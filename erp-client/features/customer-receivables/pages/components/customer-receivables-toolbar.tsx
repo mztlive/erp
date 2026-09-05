@@ -1,20 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
+import { FixedOptionRadioFilter } from "@/components/business"
 import {
-    FilterChip,
-    FixedOptionRadioFilter,
-    ListToolbar,
-} from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/components/receivable-counterparty-search-combobox"
 import {
     DUE_LABEL,
@@ -24,7 +18,6 @@ import {
     type ReceivableReviewStatusFilter,
     type ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -32,6 +25,9 @@ export type ReceivableAppliedChip = Readonly<{
     key: CustomerReceivablesFilterKey
     label: string
 }>
+
+const prefix = "customer-receivables-toolbar"
+const panelId = `${prefix}-more-panel`
 
 const DUE_RADIO_OPTIONS: ReadonlyArray<{
     value: DueFilter
@@ -80,13 +76,15 @@ type CustomerReceivablesToolbarProps = {
     setReviewStatusDraft: SetState<ReceivableReviewStatusFilter>
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
-    hasStructuredFilters: boolean
-    hasActiveFilters: boolean
     appliedChips: readonly ReceivableAppliedChip[]
     removeFilter: (key: CustomerReceivablesFilterKey) => void
     applyFilters: () => void
     resetMoreFilters: () => void
     clearFilters: () => void
+    hasPendingChanges: boolean
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }
 
 export function CustomerReceivablesToolbar({
@@ -104,190 +102,112 @@ export function CustomerReceivablesToolbar({
     setReviewStatusDraft,
     panelOpen,
     setPanelOpen,
-    hasStructuredFilters,
-    hasActiveFilters,
     appliedChips,
     removeFilter,
     applyFilters,
     resetMoreFilters,
     clearFilters,
+    hasPendingChanges,
+    resultCount,
+    loading,
+    failed,
 }: CustomerReceivablesToolbarProps) {
-    const panelId = React.useId()
     const receivableView = view === "receivable"
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const moreCount = appliedChips.filter(({ key }) =>
+        ["counterpartyId", "status", "reviewStatus"].includes(key),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="customer-receivables-toolbar-search"
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="往来主体、销售单、回款单、发票号"
-                            aria-label="搜索客户往来"
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="customer-receivables-toolbar-more-filters"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="客户往来查询"
+            onSubmit={applyFilters}
+            queryButtonId={`${prefix}-apply`}
+            moreButtonId={`${prefix}-more-filters`}
+            clearButtonId={`${prefix}-clear-all`}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search`}
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="往来主体、销售单、回款单、发票号"
+                    aria-label="搜索客户往来"
+                />
+            }
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={() => setPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="客户往来更多筛选条件"
+            onResetMore={resetMoreFilters}
+            commonFilters={
+                receivableView ? (
+                    <FixedOptionRadioFilter
+                        idPrefix={`${prefix}-due-filter`}
+                        label="到期"
+                        variant="quiet"
+                        value={dueDraft}
+                        onValueChange={setDueDraft}
+                        options={DUE_RADIO_OPTIONS}
+                    />
+                ) : null
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5">
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-counterparty`}
+                        label="往来主体"
                     >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
+                        <ReceivableCounterpartySearchCombobox
+                            id={`${prefix}-counterparty`}
+                            className="w-full sm:w-60"
+                            value={counterpartyPartyIdDraft ?? undefined}
+                            onValueChange={(id) =>
+                                setCounterpartyPartyIdDraft(id ?? null)
                             }
+                            purpose="filter"
+                            aria-label="筛选往来主体"
+                            placeholder="全部主体"
                         />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`customer-receivables-applied-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="customer-receivables-toolbar-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="客户往来更多筛选条件"
-                                >
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                往来主体
-                                            </span>
-                                            <ReceivableCounterpartySearchCombobox
-                                                id="customer-receivables-toolbar-counterparty"
-                                                className="w-full"
-                                                value={
-                                                    counterpartyPartyIdDraft ??
-                                                    undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    setCounterpartyPartyIdDraft(
-                                                        id ?? null,
-                                                    )
-                                                }
-                                                purpose="filter"
-                                                aria-label="筛选往来主体"
-                                                placeholder="全部主体"
-                                            />
-                                        </div>
-                                    </div>
-                                    {receivableView ? (
-                                        <>
-                                            <FixedOptionRadioFilter
-                                                id="customer-receivables-toolbar-due-filter"
-                                                label="到期"
-                                                value={dueDraft}
-                                                onValueChange={setDueDraft}
-                                                options={DUE_RADIO_OPTIONS}
-                                            />
-                                            <FixedOptionRadioFilter
-                                                id="customer-receivables-toolbar-status-filter"
-                                                label="状态"
-                                                value={statusDraft}
-                                                onValueChange={setStatusDraft}
-                                                options={STATUS_RADIO_OPTIONS}
-                                            />
-                                            <FixedOptionRadioFilter
-                                                id="customer-receivables-toolbar-review-status-filter"
-                                                label="复核状态"
-                                                value={reviewStatusDraft}
-                                                onValueChange={
-                                                    setReviewStatusDraft
-                                                }
-                                                options={
-                                                    REVIEW_STATUS_RADIO_OPTIONS
-                                                }
-                                            />
-                                        </>
-                                    ) : null}
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="customer-receivables-toolbar-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="customer-receivables-toolbar-apply"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                    </ListWorkspaceFilterField>
+                    {receivableView ? (
+                        <>
+                            <FixedOptionRadioFilter
+                                idPrefix={`${prefix}-status-filter`}
+                                label="状态"
+                                value={statusDraft}
+                                onValueChange={setStatusDraft}
+                                options={STATUS_RADIO_OPTIONS}
+                            />
+                            <div id={`${prefix}-review-status-filter`}>
+                                <FixedOptionRadioFilter
+                                    idPrefix={`${prefix}-review-status-filter`}
+                                    label="复核状态"
+                                    value={reviewStatusDraft}
+                                    onValueChange={setReviewStatusDraft}
+                                    options={REVIEW_STATUS_RADIO_OPTIONS}
+                                />
+                            </div>
+                        </>
+                    ) : null}
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "条往来",
+                loadingLabel: "正在加载往来…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) =>
+                removeFilter(key as CustomerReceivablesFilterKey)
+            }
+            onClearAll={clearFilters}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

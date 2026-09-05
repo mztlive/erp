@@ -20,6 +20,8 @@ export function useCardFundsReviewUrlState(): {
     autoNext: boolean
     searchInput: string
     setSearchInput: React.Dispatch<React.SetStateAction<string>>
+    applyFilters: () => void
+    hasPendingChanges: boolean
     setAutoNext: (on: boolean) => void
     replaceUrl: (patch: Record<string, string | null | undefined>) => void
     pathname: string
@@ -58,6 +60,7 @@ export function useCardFundsReviewUrlState(): {
               : sessionAutoNext
 
     const [searchInput, setSearchInput] = React.useState(q ?? "")
+    const appliedQuery = q ?? ""
 
     // 搜索输入（q）与 URL 对齐
     React.useEffect(() => {
@@ -83,18 +86,16 @@ export function useCardFundsReviewUrlState(): {
         [pathname, queueContextId, router, searchParams],
     )
 
-    // 300ms 防抖写 URL；q/replaceUrl 入依赖保证闭包不陈旧，
-    // 避免防抖期间切换 scope/type 等参数后被旧 URL 快照覆盖（D18 竞态）
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput.trim() === (q ?? "")) return
-            replaceUrl({
-                q: searchInput.trim() || null,
-                currentWorkItemId: null,
-            })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-    }, [q, replaceUrl, searchInput])
+    const applyFilters = React.useCallback(() => {
+        const next = searchInput.trim()
+        if (next === appliedQuery) return
+        replaceUrl({
+            q: next || null,
+            currentWorkItemId: null,
+        })
+    }, [appliedQuery, replaceUrl, searchInput])
+
+    const hasPendingChanges = searchInput.trim() !== appliedQuery
 
     const setAutoNext = React.useCallback(
         (on: boolean) => {
@@ -115,6 +116,8 @@ export function useCardFundsReviewUrlState(): {
         autoNext,
         searchInput,
         setSearchInput,
+        applyFilters,
+        hasPendingChanges,
         setAutoNext,
         replaceUrl,
         pathname,

@@ -184,7 +184,6 @@ export function CustomerQualityPage() {
             searchInputRef={filters.searchInputRef}
             panelOpen={filters.panelOpen}
             setPanelOpen={filters.setPanelOpen}
-            hasStructuredFilters={filters.hasStructuredFilters}
             appliedChips={appliedChips}
             onRemoveFilter={filters.removeFilter}
             onApplyFilters={filters.applyFilters}
@@ -194,6 +193,10 @@ export function CustomerQualityPage() {
             setFundsReviewDraft={filters.setFundsReviewDraft}
             businessTypeDraft={filters.businessTypeDraft}
             setBusinessTypeDraft={filters.setBusinessTypeDraft}
+            hasPendingChanges={filters.hasPendingChanges}
+            resultCount={data?.customers.filteredTotal}
+            loading={viewQuery.isPending && !data}
+            failed={viewQuery.isError && !data}
         />
     )
 

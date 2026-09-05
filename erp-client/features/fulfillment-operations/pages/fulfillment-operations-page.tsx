@@ -221,6 +221,9 @@ export function FulfillmentOperationsPage({
                     onPatch={controller.handlePatch}
                     onClearAllFilters={controller.clearAllFilters}
                     onAutoNextChange={controller.setAutoNext}
+                    loading={controller.queueQuery.isPending}
+                    failed={controller.queueQuery.isError}
+                    resultCount={context?.total}
                 />
 
                 {state}
@@ -292,6 +295,12 @@ export function FulfillmentOperationsPage({
                 onPatch={controller.handlePatch}
                 onClearAllFilters={controller.clearAllFilters}
                 onAutoNextChange={controller.setAutoNext}
+                loading={
+                    controller.queueQuery.isFetching &&
+                    !controller.queueQuery.isPending
+                }
+                failed={controller.queueQuery.isError}
+                resultCount={context?.total}
             />
 
             {workspace}

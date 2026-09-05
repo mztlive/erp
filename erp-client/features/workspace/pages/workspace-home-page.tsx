@@ -218,6 +218,9 @@ export function WorkspaceHomePage() {
                 onSearch={applySearch}
                 showSort={false}
                 searchAriaLabel="搜索我发起的审批"
+                resultCount={view.total}
+                loading={refreshing}
+                resultNoun="条审批"
             />
         </div>
     ) : (
@@ -233,6 +236,8 @@ export function WorkspaceHomePage() {
                 onSearchDraftChange={setSearchDraft}
                 onSortChange={onSortChange}
                 onSearch={applySearch}
+                resultCount={view.total}
+                loading={refreshing}
             />
         </>
     )

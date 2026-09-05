@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 import type {
     ColumnDef,
     PaginationState,
@@ -12,25 +11,26 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    FilterChip,
-    ListToolbar,
+    FixedOptionRadioFilter,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
 import {
+    ListSearchField,
     ListWorkSurface,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
+    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import type { ComboboxOption } from "@/components/business/option-combobox"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+    COST_TYPE_CHIP_PREFIX,
+    FULFILLMENT_MODE_CHIP_PREFIX,
+} from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import type { ProfitLossAppliedChip } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 import {
@@ -67,11 +67,11 @@ export type ProfitLossRowsPanelProps = {
     onCoverageChange: (value: string) => void
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
-    hasStructuredFilters: boolean
     appliedChips: readonly ProfitLossAppliedChip[]
     onRemoveFilter: (key: string) => void
     onResetMoreFilters: () => void
     onClearAllFilters: () => void
+    hasPendingChanges: boolean
     onDimensionChange: (value: string) => void
     benefitScenarioDraft: string
     onBenefitScenarioDraftChange: SetState<string>
@@ -95,8 +95,7 @@ export type ProfitLossRowsPanelProps = {
 }
 
 /**
- * 盈亏明细区：筛选 form（ListToolbar + 更多筛选面板 + 已筛选 chip 行）+ 维度切换
- * + 失败/空态/数据表。结构契约见 docs/ui-filter-design.md §1.2 / §3 / §8.2。
+ * 盈亏明细区：ListWorkspaceFilterBar + 维度切换 + 失败/空态/数据表。
  */
 export function ProfitLossRowsPanel({
     data,
@@ -110,11 +109,11 @@ export function ProfitLossRowsPanel({
     onCoverageChange,
     panelOpen,
     setPanelOpen,
-    hasStructuredFilters,
     appliedChips,
     onRemoveFilter,
     onResetMoreFilters,
     onClearAllFilters,
+    hasPendingChanges,
     onDimensionChange,
     benefitScenarioDraft,
     onBenefitScenarioDraftChange,
@@ -136,8 +135,12 @@ export function ProfitLossRowsPanel({
     error,
     onRetry,
 }: ProfitLossRowsPanelProps) {
-    const panelId = React.useId()
-    const hasChips = appliedChips.length > 0
+    const moreCount = appliedChips.filter(
+        ({ key }) =>
+            key === "benefitScenario" ||
+            key.startsWith(FULFILLMENT_MODE_CHIP_PREFIX) ||
+            key.startsWith(COST_TYPE_CHIP_PREFIX),
+    ).length
     const listLoadFailed = isError && !data
 
     return (
@@ -168,242 +171,107 @@ export function ProfitLossRowsPanel({
                 />
             }
             toolbar={
-                <div className="space-y-2">
-                    <form
-                        onSubmit={(event) => {
-                            event.preventDefault()
-                            onApplyFilters()
-                        }}
-                    >
-                        <ListToolbar
-                            aria-label="盈亏明细筛选"
-                            search={
-                                <InputGroup>
-                                    <InputGroupAddon>
-                                        <SearchIcon aria-hidden="true" />
-                                    </InputGroupAddon>
-                                    <InputGroupInput
-                                        id="actual-profit-loss-filter-search"
-                                        ref={searchInputRef}
-                                        value={searchInput}
-                                        onChange={(event) =>
-                                            onSearchInputChange(
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="搜索销售单号、客户（/）"
-                                        aria-label="搜索销售单或客户"
-                                    />
-                                </InputGroup>
-                            }
-                            filters={
-                                <>
-                                    <div
-                                        role="group"
-                                        aria-label="成本覆盖快捷筛选"
-                                        className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                                    >
-                                        {COVERAGE_OPTIONS.map((option) => {
-                                            const active =
-                                                coverage === option.value
-                                            return (
-                                                <Button
-                                                    key={option.value}
-                                                    id={`actual-profit-loss-coverage-${toAutomationIdSegment(option.value)}`}
-                                                    type="button"
-                                                    variant={
-                                                        active
-                                                            ? "secondary"
-                                                            : "ghost"
-                                                    }
-                                                    className={
-                                                        active
-                                                            ? "bg-card shadow-xs"
-                                                            : "shadow-none"
-                                                    }
-                                                    aria-pressed={active}
-                                                    onClick={() =>
-                                                        onCoverageChange(
-                                                            option.value,
-                                                        )
-                                                    }
-                                                >
-                                                    {option.label}
-                                                </Button>
-                                            )
-                                        })}
-                                    </div>
-                                    <Button
-                                        id="actual-profit-loss-filter-more-trigger"
-                                        type="button"
-                                        variant="outline"
-                                        aria-expanded={panelOpen}
-                                        aria-controls={panelId}
-                                        onClick={() =>
-                                            setPanelOpen((open) => !open)
-                                        }
-                                    >
-                                        <FilterIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                        />
-                                        更多筛选
-                                        {hasStructuredFilters ? (
-                                            <Badge variant="info">已启用</Badge>
-                                        ) : null}
-                                        <ChevronDownIcon
-                                            data-icon="inline-end"
-                                            aria-hidden="true"
-                                            className={
-                                                panelOpen
-                                                    ? "rotate-180 transition-transform"
-                                                    : "transition-transform"
-                                            }
-                                        />
-                                    </Button>
-                                </>
-                            }
-                            secondary={
-                                hasChips || panelOpen ? (
-                                    <div className="w-full space-y-3">
-                                        {hasChips ? (
-                                            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                                <span className="text-xs text-muted-foreground">
-                                                    已筛选
-                                                </span>
-                                                {appliedChips.map((chip) => (
-                                                    <FilterChip
-                                                        key={chip.key}
-                                                        id={`actual-profit-loss-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                                        label={chip.label}
-                                                        clearLabel={`移除${chip.label}`}
-                                                        onClear={() =>
-                                                            onRemoveFilter(
-                                                                chip.key,
-                                                            )
-                                                        }
-                                                    />
-                                                ))}
-                                                <Button
-                                                    id="actual-profit-loss-filter-clear-all"
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="xs"
-                                                    onClick={onClearAllFilters}
-                                                >
-                                                    清空全部
-                                                </Button>
-                                            </div>
-                                        ) : null}
-                                        {panelOpen ? (
-                                            <div
-                                                id={panelId}
-                                                className="flex w-full flex-col gap-3 border-t pt-3"
-                                                aria-label="盈亏明细更多筛选条件"
-                                            >
-                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                        <span className="text-muted-foreground">
-                                                            福利场景
-                                                        </span>
-                                                        <OptionCombobox
-                                                            id="actual-profit-loss-filter-benefit-scenario"
-                                                            className="w-full"
-                                                            value={
-                                                                benefitScenarioDraft ||
-                                                                undefined
-                                                            }
-                                                            aria-label="福利场景"
-                                                            onValueChange={(
-                                                                value,
-                                                            ) =>
-                                                                onBenefitScenarioDraftChange(
-                                                                    value ?? "",
-                                                                )
-                                                            }
-                                                            options={
-                                                                benefitScenarioOptions
-                                                            }
-                                                            placeholder="全部福利场景"
-                                                            searchPlaceholder="搜索福利场景"
-                                                        />
-                                                    </div>
-                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                        <span className="text-muted-foreground">
-                                                            履约方式
-                                                        </span>
-                                                        <MultiOptionCombobox
-                                                            id="actual-profit-loss-filter-fulfillment-modes"
-                                                            className="w-full"
-                                                            value={
-                                                                fulfillmentModesDraft
-                                                            }
-                                                            aria-label="履约方式"
-                                                            onValueChange={
-                                                                onFulfillmentModesDraftChange
-                                                            }
-                                                            options={
-                                                                fulfillmentModeOptions
-                                                            }
-                                                            placeholder="全部履约方式"
-                                                        />
-                                                    </div>
-                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                        <span className="text-muted-foreground">
-                                                            成本类型
-                                                        </span>
-                                                        <MultiOptionCombobox
-                                                            id="actual-profit-loss-filter-cost-types"
-                                                            className="w-full"
-                                                            value={
-                                                                costTypesDraft
-                                                            }
-                                                            aria-label="成本类型"
-                                                            onValueChange={
-                                                                onCostTypesDraftChange
-                                                            }
-                                                            options={
-                                                                costTypeOptions
-                                                            }
-                                                            placeholder="全部成本类型"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                                    <p className="text-xs text-muted-foreground">
-                                                        将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                                        <Button
-                                                            id="actual-profit-loss-filter-reset"
-                                                            type="button"
-                                                            variant="ghost"
-                                                            onClick={
-                                                                onResetMoreFilters
-                                                            }
-                                                        >
-                                                            重置更多条件
-                                                        </Button>
-                                                        <Button
-                                                            id="actual-profit-loss-filter-apply"
-                                                            type="submit"
-                                                        >
-                                                            <SearchIcon
-                                                                data-icon="inline-start"
-                                                                aria-hidden="true"
-                                                            />
-                                                            应用全部筛选
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                ) : undefined
-                            }
+                <ListWorkspaceFilterBar
+                    idPrefix="actual-profit-loss-filter"
+                    formAriaLabel="盈亏明细查询"
+                    onSubmit={onApplyFilters}
+                    queryButtonId="actual-profit-loss-filter-apply"
+                    moreButtonId="actual-profit-loss-filter-more-trigger"
+                    resetMoreButtonId="actual-profit-loss-filter-reset"
+                    clearButtonId="actual-profit-loss-filter-clear-all"
+                    search={
+                        <ListSearchField
+                            id="actual-profit-loss-filter-search"
+                            searchInputRef={searchInputRef}
+                            value={searchInput}
+                            onChange={onSearchInputChange}
+                            placeholder="搜索销售单号、客户（/）"
+                            aria-label="搜索销售单或客户"
                         />
-                    </form>
-                </div>
+                    }
+                    moreCount={moreCount}
+                    moreOpen={panelOpen}
+                    onToggleMore={() => setPanelOpen((open) => !open)}
+                    morePanelId="actual-profit-loss-filter-more-panel"
+                    morePanelAriaLabel="盈亏明细更多筛选条件"
+                    onResetMore={onResetMoreFilters}
+                    commonFilters={
+                        <FixedOptionRadioFilter
+                            idPrefix="actual-profit-loss-coverage"
+                            label="成本覆盖"
+                            variant="quiet"
+                            value={coverage}
+                            onValueChange={onCoverageChange}
+                            options={COVERAGE_OPTIONS}
+                        />
+                    }
+                    morePanel={
+                        <div className="grid min-w-0 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            <ListWorkspaceFilterField
+                                htmlFor="actual-profit-loss-filter-benefit-scenario"
+                                label="福利场景"
+                            >
+                                <OptionCombobox
+                                    id="actual-profit-loss-filter-benefit-scenario"
+                                    className="w-full"
+                                    value={benefitScenarioDraft || undefined}
+                                    aria-label="福利场景"
+                                    onValueChange={(value) =>
+                                        onBenefitScenarioDraftChange(
+                                            value ?? "",
+                                        )
+                                    }
+                                    options={benefitScenarioOptions}
+                                    placeholder="全部福利场景"
+                                    searchPlaceholder="搜索福利场景"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="actual-profit-loss-filter-fulfillment-modes"
+                                label="履约方式"
+                            >
+                                <MultiOptionCombobox
+                                    id="actual-profit-loss-filter-fulfillment-modes"
+                                    className="w-full"
+                                    value={fulfillmentModesDraft}
+                                    aria-label="履约方式"
+                                    onValueChange={
+                                        onFulfillmentModesDraftChange
+                                    }
+                                    options={fulfillmentModeOptions}
+                                    placeholder="全部履约方式"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="actual-profit-loss-filter-cost-types"
+                                label="成本类型"
+                            >
+                                <MultiOptionCombobox
+                                    id="actual-profit-loss-filter-cost-types"
+                                    className="w-full"
+                                    value={costTypesDraft}
+                                    aria-label="成本类型"
+                                    onValueChange={onCostTypesDraftChange}
+                                    options={costTypeOptions}
+                                    placeholder="全部成本类型"
+                                />
+                            </ListWorkspaceFilterField>
+                        </div>
+                    }
+                    resultStatus={listWorkspaceFilterStatusText({
+                        loading: loading || (!data && !isError),
+                        failed: isError,
+                        resultCount: data?.rows.total,
+                        noun: "条明细",
+                        loadingLabel: "正在加载盈亏明细…",
+                    })}
+                    chips={appliedChips}
+                    onClearChip={onRemoveFilter}
+                    onClearAll={onClearAllFilters}
+                    hasPendingChanges={hasPendingChanges}
+                    pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                    idleHint="导出与当前查询结果一致"
+                />
             }
             table={
                 listLoadFailed ? (

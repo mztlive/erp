@@ -104,29 +104,16 @@ export function VoucherCategoriesListPage() {
                     <DictionaryListToolbar
                         idPrefix="master-data-voucher-categories-list-toolbar"
                         searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
+                        filters={filters}
                         searchPlaceholder={masterDataSearchPlaceholder(
                             "voucher-categories",
                         )}
                         countLabel="卡券类目"
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
-                        appliedChips={filters.appliedChips}
-                        removeFilter={filters.removeFilter}
-                        filterPanelOpen={filters.filterPanelOpen}
-                        setFilterPanelOpen={filters.setFilterPanelOpen}
-                        hasStructuredListFilters={
-                            filters.hasStructuredListFilters
+                        resultCount={
+                            state.listQuery.data ? state.rows.length : undefined
                         }
-                        applyListFilters={filters.applyListFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        lifecycleStatusDraft={filters.lifecycleStatusDraft}
-                        setLifecycleStatusDraft={
-                            filters.setLifecycleStatusDraft
-                        }
-                        revisionTimingDraft={filters.revisionTimingDraft}
-                        setRevisionTimingDraft={filters.setRevisionTimingDraft}
+                        loading={state.listQuery.isFetching}
+                        failed={state.listQuery.isError}
                     />
                 }
                 tableClassName={dictionaryListStyles.table}

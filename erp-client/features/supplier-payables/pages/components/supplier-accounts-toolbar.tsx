@@ -1,21 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
+import { FixedOptionRadioFilter } from "@/components/business"
 import {
-    FilterChip,
-    FixedOptionRadioFilter,
-    ListToolbar,
-} from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
     AllocationTrack,
@@ -38,6 +31,9 @@ export type SupplierAppliedChip = Readonly<{
     key: SupplierFilterKey
     label: string
 }>
+
+const prefix = "supplier-payables-toolbar"
+const panelId = `${prefix}-more-panel`
 
 const SOURCE_TYPE_OPTIONS: ReadonlyArray<{
     value: PayableSourceType | "all"
@@ -91,8 +87,6 @@ export interface SupplierAccountsToolbarProps {
     searchInput: string
     onSearchInputChange: (value: string) => void
     searchInputRef: React.Ref<HTMLInputElement>
-    hasActiveFilters: boolean
-    hasStructuredFilters: boolean
     panelOpen: boolean
     setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
     appliedChips: readonly SupplierAppliedChip[]
@@ -112,6 +106,10 @@ export interface SupplierAccountsToolbarProps {
     setPaymentGateDraft: (value: "satisfied" | "unsatisfied" | "all") => void
     trackDraft: AllocationTrack | "all"
     setTrackDraft: (value: AllocationTrack | "all") => void
+    hasPendingChanges: boolean
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }
 
 export function SupplierAccountsToolbar({
@@ -119,8 +117,6 @@ export function SupplierAccountsToolbar({
     searchInput,
     onSearchInputChange,
     searchInputRef,
-    hasActiveFilters,
-    hasStructuredFilters,
     panelOpen,
     setPanelOpen,
     appliedChips,
@@ -140,191 +136,119 @@ export function SupplierAccountsToolbar({
     setPaymentGateDraft,
     trackDraft,
     setTrackDraft,
+    hasPendingChanges,
+    resultCount,
+    loading,
+    failed,
 }: SupplierAccountsToolbarProps) {
-    const panelId = React.useId()
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const moreCount = appliedChips.filter(({ key }) =>
+        ["supplierId", "sourceType", "paymentGate"].includes(key),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="supplier-payables-toolbar-search"
-                            ref={searchInputRef}
-                            placeholder="供应商、采购单、结算单、付款单、发票号"
-                            value={searchInput}
-                            onChange={(e) =>
-                                onSearchInputChange(e.target.value)
-                            }
-                            aria-label="搜索供应商往来"
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="供应商往来查询"
+            onSubmit={applyFilters}
+            queryButtonId={`${prefix}-apply`}
+            moreButtonId={`${prefix}-filter-toggle`}
+            clearButtonId={`${prefix}-clear-all`}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search`}
+                    searchInputRef={searchInputRef}
+                    value={searchInput}
+                    onChange={onSearchInputChange}
+                    placeholder="供应商、采购单、结算单、付款单、发票号"
+                    aria-label="搜索供应商往来"
+                />
+            }
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={() => setPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="供应商往来更多筛选条件"
+            onResetMore={resetMoreFilters}
+            commonFilters={
+                view === "payable" ? (
+                    <>
+                        <FixedOptionRadioFilter
+                            idPrefix={`${prefix}-filter-status`}
+                            label="状态"
+                            variant="quiet"
+                            value={statusDraft}
+                            onValueChange={setStatusDraft}
+                            options={STATUS_OPTIONS}
                         />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="supplier-payables-toolbar-filter-toggle"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
+                        <FixedOptionRadioFilter
+                            idPrefix={`${prefix}-filter-due`}
+                            label="到期"
+                            variant="quiet"
+                            value={dueDraft}
+                            onValueChange={setDueDraft}
+                            options={DUE_OPTIONS}
+                        />
+                    </>
+                ) : view === "unallocated" ? (
+                    <FixedOptionRadioFilter
+                        idPrefix={`${prefix}-filter-track`}
+                        label="轨道"
+                        variant="quiet"
+                        value={trackDraft}
+                        onValueChange={setTrackDraft}
+                        options={TRACK_OPTIONS}
+                    />
+                ) : null
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5">
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-supplier-filter`}
+                        label="供应商"
                     >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
+                        <SupplierSearchCombobox
+                            id={`${prefix}-supplier-filter`}
+                            className="w-full sm:w-60"
+                            value={supplierDraft ?? undefined}
+                            onValueChange={(id) => setSupplierDraft(id ?? null)}
+                            purpose="filter"
+                            aria-label="供应商"
+                            placeholder="全部供应商"
                         />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
-                        />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`supplier-payables-toolbar-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="supplier-payables-toolbar-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="供应商往来更多筛选条件"
-                                >
-                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                        <span className="text-muted-foreground">
-                                            供应商
-                                        </span>
-                                        <SupplierSearchCombobox
-                                            id="supplier-payables-toolbar-supplier-filter"
-                                            className="w-full"
-                                            value={supplierDraft ?? undefined}
-                                            onValueChange={(id) =>
-                                                setSupplierDraft(id ?? null)
-                                            }
-                                            purpose="filter"
-                                            aria-label="供应商"
-                                            placeholder="全部供应商"
-                                        />
-                                    </div>
-                                    {view === "payable" ? (
-                                        <>
-                                            <FixedOptionRadioFilter
-                                                idPrefix="supplier-payables-toolbar-filter-source-type"
-                                                label="来源类型"
-                                                value={sourceTypeDraft}
-                                                onValueChange={
-                                                    setSourceTypeDraft
-                                                }
-                                                options={SOURCE_TYPE_OPTIONS}
-                                            />
-                                            <FixedOptionRadioFilter
-                                                idPrefix="supplier-payables-toolbar-filter-status"
-                                                label="状态"
-                                                value={statusDraft}
-                                                onValueChange={setStatusDraft}
-                                                options={STATUS_OPTIONS}
-                                            />
-                                            <FixedOptionRadioFilter
-                                                idPrefix="supplier-payables-toolbar-filter-due"
-                                                label="到期"
-                                                value={dueDraft}
-                                                onValueChange={setDueDraft}
-                                                options={DUE_OPTIONS}
-                                            />
-                                            <FixedOptionRadioFilter
-                                                idPrefix="supplier-payables-toolbar-filter-payment-gate"
-                                                label="先款条件"
-                                                value={paymentGateDraft}
-                                                onValueChange={
-                                                    setPaymentGateDraft
-                                                }
-                                                options={PAYMENT_GATE_OPTIONS}
-                                            />
-                                        </>
-                                    ) : null}
-                                    {view === "unallocated" ? (
-                                        <FixedOptionRadioFilter
-                                            idPrefix="supplier-payables-toolbar-filter-track"
-                                            label="轨道"
-                                            value={trackDraft}
-                                            onValueChange={setTrackDraft}
-                                            options={TRACK_OPTIONS}
-                                        />
-                                    ) : null}
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="supplier-payables-toolbar-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="supplier-payables-toolbar-apply"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                    </ListWorkspaceFilterField>
+                    {view === "payable" ? (
+                        <>
+                            <FixedOptionRadioFilter
+                                idPrefix={`${prefix}-filter-source-type`}
+                                label="来源类型"
+                                value={sourceTypeDraft}
+                                onValueChange={setSourceTypeDraft}
+                                options={SOURCE_TYPE_OPTIONS}
+                            />
+                            <FixedOptionRadioFilter
+                                idPrefix={`${prefix}-filter-payment-gate`}
+                                label="先款条件"
+                                value={paymentGateDraft}
+                                onValueChange={setPaymentGateDraft}
+                                options={PAYMENT_GATE_OPTIONS}
+                            />
+                        </>
+                    ) : null}
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "条往来",
+                loadingLabel: "正在加载往来…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as SupplierFilterKey)}
+            onClearAll={clearAllFilters}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

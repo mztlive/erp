@@ -103,6 +103,7 @@ export function useMasterDataCategoryTree(
 
     /** 搜索/启停筛选是否生效：空态与「系统从未建分类」区分。 */
     const filterActive = q.trim() !== "" || lifecycleStatus !== "all"
+    const hasPendingChanges = searchDraft.trim() !== q.trim()
 
     /** 所有已生效条件均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<
@@ -197,6 +198,7 @@ export function useMasterDataCategoryTree(
         setSearchDraft,
         lifecycleStatus,
         setLifecycleStatus,
+        hasPendingChanges,
         appliedChips,
         removeFilter,
         applyTreeFilters,

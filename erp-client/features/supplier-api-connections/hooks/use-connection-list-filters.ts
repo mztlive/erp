@@ -105,7 +105,7 @@ export function parseConnectionAppliedFilters(
 /**
  * 连接列表筛选状态：Applied 由 URL 派生，Draft 本地受控，面板展开属于 UI 态
  * （docs/ui-filter-design.md §5）。environment 属视图类参数（W20 §6），
- * 由主行快捷筛选直接写 URL，不被「清空全部」清除。
+ * 由主行快捷筛选直接写 URL，不被「清除全部」清除。
  */
 export function useConnectionListFilters(
     urlState: ConnectionsUrlState,
@@ -119,6 +119,12 @@ export function useConnectionListFilters(
     )
     const hasStructuredFilters = Boolean(
         applied.status ||
+        applied.health.length > 0 ||
+        applied.capability ||
+        applied.catalogFreshness.length > 0 ||
+        applied.supplierId,
+    )
+    const hasMoreFilters = Boolean(
         applied.health.length > 0 ||
         applied.capability ||
         applied.catalogFreshness.length > 0 ||
@@ -142,8 +148,7 @@ export function useConnectionListFilters(
         applied.supplierId ?? null,
     )
     /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] =
-        React.useState(hasStructuredFilters)
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(hasMoreFilters)
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
@@ -212,22 +217,13 @@ export function useConnectionListFilters(
         [patchUrl],
     )
 
-    /** 仅清除「更多筛选」；保留关键词与环境，面板保持展开（§5.6）。 */
+    /** 仅重置更多条件草稿；保留关键词、状态、环境与已生效结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setStatusDraft("all")
         setHealthDraft([])
         setCapabilityDraft("")
         setCatalogFreshnessDraft([])
         setSupplierIdDraft(null)
-        patchUrl({
-            status: undefined,
-            health: undefined,
-            capability: undefined,
-            catalogFreshness: undefined,
-            supplierId: undefined,
-            page: 1,
-        })
-    }, [patchUrl])
+    }, [])
 
     /**
      * 清空关键词与全部筛选参数并收起面板；environment 属视图类参数保留
@@ -311,6 +307,16 @@ export function useConnectionListFilters(
         applied.supplierId ? "已选择供应商" : null,
     ].filter((label): label is string => label !== null)
 
+    const hasPendingChanges =
+        searchDraft.trim() !== (applied.q ?? "") ||
+        statusDraft !== (applied.status ?? "all") ||
+        [...healthDraft].sort().join(",") !==
+            [...applied.health].sort().join(",") ||
+        capabilityDraft !== (applied.capability ?? "") ||
+        [...catalogFreshnessDraft].sort().join(",") !==
+            [...applied.catalogFreshness].sort().join(",") ||
+        supplierIdDraft !== (applied.supplierId ?? null)
+
     return {
         searchInputRef,
         applied,
@@ -336,6 +342,7 @@ export function useConnectionListFilters(
         resetMoreFilters,
         clearFilters,
         appliedFilterLabels,
+        hasPendingChanges,
     }
 }
 

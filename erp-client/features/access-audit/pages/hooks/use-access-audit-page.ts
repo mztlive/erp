@@ -98,6 +98,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         clearAllFilters,
         removeFilter,
         filterError,
+        hasPendingChanges,
     } = filters
 
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
@@ -388,6 +389,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         resetMoreFilters,
         removeFilter,
         filterError,
+        hasPendingChanges,
         appliedChips,
         actionOptions,
         // 查询

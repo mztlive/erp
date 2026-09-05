@@ -147,7 +147,10 @@ export function useProductListFilters(
         const maximum = productSalesPriceMaxDraft.trim()
         const error = productSalesPriceRangeError(minimum, maximum)
         setProductSalesPriceError(error)
-        if (error) return
+        if (error) {
+            setProductFilterPanelOpen(true)
+            return
+        }
         patchUrl({
             q: searchDraft.trim() || null,
             productKind: productKindDraft === "all" ? null : productKindDraft,
@@ -227,32 +230,31 @@ export function useProductListFilters(
         [patchUrl, resetPagination, setSearchDraft],
     )
 
-    /** 仅清除「更多筛选」；保留关键词和快捷筛选（启停指标），并保持面板展开。 */
+    /** 仅重置更多条件草稿；保留关键词、类型、分类及当前查询结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setProductKindDraft("all")
+        setLifecycleStatusDraft("all")
         setRevisionTimingDraft("all")
         setProductListingStatusDraft("all")
         setProductSupplyCoverageDraft("all")
-        setProductCategoryIdDraft(null)
         setProductBrandIdDraft(null)
         setProductSupplierIdDraft(null)
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setProductSalesPriceError(null)
-        patchUrl({
-            productKind: null,
-            revisionTiming: null,
-            productListingStatus: null,
-            productSupplyCoverage: null,
-            productCategoryId: null,
-            productBrandId: null,
-            productSupplierId: null,
-            productSalesPriceMin: null,
-            productSalesPriceMax: null,
-            page: null,
-        })
-        resetPagination()
-    }, [patchUrl, resetPagination])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        productKindDraft !== (productKind ?? "all") ||
+        lifecycleStatusDraft !== lifecycleStatus ||
+        revisionTimingDraft !== revisionTiming ||
+        productListingStatusDraft !== (productListingStatus ?? "all") ||
+        productSupplyCoverageDraft !== (productSupplyCoverage ?? "all") ||
+        productCategoryIdDraft !== (productCategoryId ?? null) ||
+        productBrandIdDraft !== (productBrandId ?? null) ||
+        productSupplierIdDraft !== (productSupplierId ?? null) ||
+        productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
+        productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "")
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -351,6 +353,7 @@ export function useProductListFilters(
         setProductSalesPriceMaxDraft,
         productSalesPriceError,
         setProductSalesPriceError,
+        hasPendingChanges,
         pagination,
         setPagination,
         changePagination,

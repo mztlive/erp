@@ -81,6 +81,7 @@ export function InventoryLedgerPage() {
         })
     const filters = useLedgerFilters({
         view,
+        q: qParam,
         warehouseId,
         availability,
         movementType,

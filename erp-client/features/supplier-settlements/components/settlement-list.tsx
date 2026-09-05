@@ -247,7 +247,6 @@ function SettlementList({
                         setSearchDraft={filters.setSearchDraft}
                         panelOpen={filters.panelOpen}
                         setPanelOpen={filters.setPanelOpen}
-                        hasActiveFilters={filters.hasActiveFilters}
                         applyFilters={filters.applyFilters}
                         removeFilter={filters.removeFilter}
                         resetMoreFilters={filters.resetMoreFilters}
@@ -264,6 +263,10 @@ function SettlementList({
                         setPeriodToDraft={filters.setPeriodToDraft}
                         periodError={filters.periodError}
                         setPeriodError={filters.setPeriodError}
+                        hasPendingChanges={filters.hasPendingChanges}
+                        resultCount={data?.total}
+                        loading={listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                 }
                 table={

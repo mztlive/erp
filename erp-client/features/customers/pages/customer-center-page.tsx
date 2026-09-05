@@ -228,17 +228,14 @@ export function CustomerCenterPage() {
                         setSearchDraft={directoryState.setSearchDraft}
                         statusDraft={directoryState.statusDraft}
                         setStatusDraft={directoryState.setStatusDraft}
-                        hasActiveFilters={directoryState.hasActiveFilters}
                         appliedChips={directoryState.appliedChips}
                         removeFilter={directoryState.removeFilter}
-                        panelOpen={directoryState.panelOpen}
-                        setPanelOpen={directoryState.setPanelOpen}
-                        hasStructuredFilters={
-                            directoryState.hasStructuredFilters
-                        }
                         applyFilters={directoryState.applyFilters}
-                        resetMoreFilters={directoryState.resetMoreFilters}
                         clearAllFilters={directoryState.clearAllFilters}
+                        hasPendingChanges={directoryState.hasPendingChanges}
+                        resultCount={data?.totalInScope}
+                        loading={directoryQuery.isPending && !data}
+                        failed={directoryQuery.isError}
                     />
                 }
                 table={tableSlot}

@@ -1,25 +1,20 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
-    FilterChip,
     FixedOptionRadioFilter,
     type FixedOptionRadioFilterOption,
-    ListToolbar,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     DUE_FILTER_OPTIONS,
     GATE_FILTER_OPTIONS,
@@ -31,7 +26,7 @@ import {
     SLUG_TO_TYPE,
 } from "@/features/fulfillment-operations/types"
 
-export type QueueFilterPatch = Record<string, string | null>
+export type QueueFilterPatch = Record<string, string | null | undefined>
 
 /** 可被单独移除的已生效条件。 */
 export type FulfillmentFilterKey =
@@ -67,15 +62,17 @@ const DUE_CHIP_LABELS: Record<DueFilter, string> = {
     overdue: "已超期",
 }
 
+const MORE_CHIP_KEYS: readonly FulfillmentFilterKey[] = [
+    "warehouseId",
+    "due",
+    "gate",
+    "salesOrderId",
+    "purchaseOrderId",
+]
+
 /**
- * W09 队列筛选工具栏（第 1 / 2 层）。
- *
- * 第 0 层（类型）由页面 sticky 处理面渲染；本组件只负责：
- * - 第 1 层：搜索 +「更多筛选」开关
- * - 第 2 层：已生效 FilterChip 行 + 可折叠「更多筛选」面板
- * - actions：队列「自动下一项」
- * 整个筛选区域共用一个 <form>：收起态按 Enter 或点搜索框尾部箭头，
- * 展开态点面板底部「应用全部筛选」，都走同一个 applyFilters。
+ * 履约队列筛选：搜索 + 查询 + 更多筛选（仓库 / 到期 / 货款 / 来源锁定）。
+ * 类型是第 0 层视图，不进本工具栏。自动下一项放在 actions。
  */
 export function FulfillmentQueueToolbar({
     q,
@@ -86,7 +83,6 @@ export function FulfillmentQueueToolbar({
     purchaseOrderId,
     salesOrderNo,
     purchaseNo,
-    /** 内部 ID 只进 URL：chip 与摘要展示仓库名称 */
     warehouseLabel,
     autoNext,
     showAutoNext,
@@ -94,6 +90,9 @@ export function FulfillmentQueueToolbar({
     onPatch,
     onClearAllFilters,
     onAutoNextChange,
+    resultCount,
+    loading,
+    failed,
 }: {
     q: string | undefined
     warehouseId: string | undefined
@@ -101,24 +100,22 @@ export function FulfillmentQueueToolbar({
     gate: GateFilter | undefined
     salesOrderId: string | undefined
     purchaseOrderId: string | undefined
-    /** 内部 ID 只进 URL：chip 与摘要展示业务单号 */
     salesOrderNo: string | undefined
     purchaseNo: string | undefined
     warehouseLabel: string | undefined
     autoNext: boolean
-    /** 只读角色不会连续处理，不显示自动下一项 */
     showAutoNext: boolean
-    /** 单据类型筛选（slug，多值逗号分隔）；"all" 视为未激活 */
     type?: string | null
     onPatch: (patch: QueueFilterPatch) => void
     onClearAllFilters: () => void
     onAutoNextChange: (next: boolean) => void
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }) {
-    const panelId = React.useId()
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const panelId = "fulfillment-operations-queue-more-panel"
 
-    // 三层状态：Applied 来自 URL（props），Draft 在本地，面板展开是 UI 态。
-    // 关键词草稿在输入聚焦时不被 URL 回填覆盖（与列表页 useSearchDraft 同款保护）。
     const [searchDraft, setSearchDraft] = React.useState(q ?? "")
     const [warehouseIdDraft, setWarehouseIdDraft] = React.useState<
         string | null
@@ -130,7 +127,6 @@ export function FulfillmentQueueToolbar({
         gate ?? "all",
     )
     const hasStructuredFilters = Boolean(warehouseId || due || gate)
-    // 初始深链带结构化条件时展开面板；后续 URL 回填不得再改展开态
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
 
     React.useEffect(() => {
@@ -145,7 +141,6 @@ export function FulfillmentQueueToolbar({
         setGateDraft(gate ?? "all")
     }, [due, gate, warehouseId])
 
-    // `/` 聚焦搜索；输入框 / 文本域 / 弹层打开时不抢焦点
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (
@@ -169,7 +164,6 @@ export function FulfillmentQueueToolbar({
         return () => window.removeEventListener("keydown", onKey)
     }, [])
 
-    /** 唯一提交路径：收起态 Enter / 搜索框尾部箭头 / 面板「应用全部筛选」。 */
     const applyFilters = React.useCallback(() => {
         const next: QueueFilterPatch = {
             q: searchDraft.trim() || null,
@@ -200,26 +194,17 @@ export function FulfillmentQueueToolbar({
         warehouseIdDraft,
     ])
 
-    /** 只清除「更多筛选」；保留关键词和第 0 层类型，保持面板展开。 */
     const resetMoreFilters = React.useCallback(() => {
         setWarehouseIdDraft(null)
         setDueDraft("all")
         setGateDraft("all")
-        onPatch({
-            warehouseId: null,
-            due: null,
-            gate: null,
-            currentOperationId: null,
-        })
-    }, [onPatch])
+    }, [])
 
-    /** 清空全部：URL、草稿、面板一次清干净；草稿随 URL 回填同步。 */
     const clearAllFilters = React.useCallback(() => {
         setPanelOpen(false)
         onClearAllFilters()
     }, [onClearAllFilters])
 
-    /** 移除单个已生效条件；只动自己的参数。 */
     const removeFilter = React.useCallback(
         (key: FulfillmentFilterKey) => {
             onPatch({ [key]: null, currentOperationId: null })
@@ -241,17 +226,6 @@ export function FulfillmentQueueToolbar({
             .join("、")
     }, [type])
 
-    const hasActiveFilters = Boolean(
-        q ||
-        (type && type !== "all") ||
-        warehouseId ||
-        due ||
-        gate ||
-        salesOrderId ||
-        purchaseOrderId,
-    )
-
-    /** 全部已生效条件都以 chip 显性展示，来源锁定参数也不例外。 */
     const appliedChips = React.useMemo<
         readonly FulfillmentAppliedChip[]
     >(() => {
@@ -298,183 +272,102 @@ export function FulfillmentQueueToolbar({
         warehouseLabel,
     ])
 
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const moreCount = appliedChips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key),
+    ).length
+    const hasPendingChanges =
+        searchDraft.trim() !== (q ?? "") ||
+        (warehouseIdDraft ?? null) !== (warehouseId ?? null) ||
+        dueDraft !== (due ?? "all") ||
+        gateDraft !== (gate ?? "all")
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                aria-label="履约单据筛选"
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="fulfillment-operations-queue-search"
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="销售单号、采购单号、客户、供应商"
-                            aria-label="搜索履约单据"
-                        />
-                        {/* 面板展开时隐藏尾部提交箭头，只留面板底部唯一主按钮 */}
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="fulfillment-operations-queue-filters-trigger"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
+        <ListWorkspaceFilterBar
+            idPrefix="fulfillment-operations-queue-filter"
+            formAriaLabel="履约单据查询"
+            onSubmit={applyFilters}
+            search={
+                <ListSearchField
+                    id="fulfillment-operations-queue-search"
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="销售单号、采购单号、客户、供应商"
+                    aria-label="搜索履约单据"
+                />
+            }
+            queryButtonId="fulfillment-operations-queue-apply-filters"
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={() => setPanelOpen((open) => !open)}
+            moreButtonId="fulfillment-operations-queue-filters-trigger"
+            morePanelId={panelId}
+            morePanelAriaLabel="履约单据更多筛选条件"
+            onResetMore={resetMoreFilters}
+            resetMoreButtonId="fulfillment-operations-queue-reset-more"
+            morePanel={
+                <div className="grid min-w-0 gap-5">
+                    <FixedOptionRadioFilter
+                        id="fulfillment-operations-queue-due-filter"
+                        label="到期"
+                        value={dueDraft}
+                        onValueChange={setDueDraft}
+                        options={DUE_RADIO_FILTER_OPTIONS}
+                    />
+                    <FixedOptionRadioFilter
+                        id="fulfillment-operations-queue-gate-filter"
+                        label="货款情况"
+                        value={gateDraft}
+                        onValueChange={setGateDraft}
+                        options={GATE_RADIO_FILTER_OPTIONS}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor="fulfillment-operations-queue-warehouse-filter"
+                        label="仓库"
                     >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
+                        <WarehouseSearchCombobox
+                            id="fulfillment-operations-queue-warehouse-filter"
+                            className="w-full sm:w-60"
+                            value={warehouseIdDraft ?? undefined}
+                            onValueChange={(id) =>
+                                setWarehouseIdDraft(id ?? null)
                             }
+                            placeholder="全部仓库"
+                            aria-label="按仓库筛选（只对入库和发货有效）"
                         />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`fulfillment-operations-queue-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="fulfillment-operations-queue-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="履约单据更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        id="fulfillment-operations-queue-due-filter"
-                                        label="到期"
-                                        value={dueDraft}
-                                        onValueChange={setDueDraft}
-                                        options={DUE_RADIO_FILTER_OPTIONS}
-                                    />
-                                    <FixedOptionRadioFilter
-                                        id="fulfillment-operations-queue-gate-filter"
-                                        label="货款情况"
-                                        value={gateDraft}
-                                        onValueChange={setGateDraft}
-                                        options={GATE_RADIO_FILTER_OPTIONS}
-                                    />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                仓库
-                                            </span>
-                                            <WarehouseSearchCombobox
-                                                id="fulfillment-operations-queue-warehouse-filter"
-                                                className="w-full"
-                                                value={
-                                                    warehouseIdDraft ??
-                                                    undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    setWarehouseIdDraft(
-                                                        id ?? null,
-                                                    )
-                                                }
-                                                placeholder="全部仓库"
-                                                aria-label="按仓库筛选（只对入库和发货有效）"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="fulfillment-operations-queue-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="fulfillment-operations-queue-apply-filters"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-                actions={
-                    showAutoNext ? (
-                        <div className="flex items-center gap-2">
-                            <Label
-                                htmlFor="fulfillment-operations-queue-auto-next"
-                                className="text-muted-foreground"
-                            >
-                                自动下一项
-                            </Label>
-                            <Switch
-                                id="fulfillment-operations-queue-auto-next"
-                                checked={autoNext}
-                                onCheckedChange={onAutoNextChange}
-                            />
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                    </ListWorkspaceFilterField>
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "项作业",
+                loadingLabel: "正在加载履约作业…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as FulfillmentFilterKey)}
+            onClearAll={clearAllFilters}
+            clearButtonId="fulfillment-operations-queue-clear-all"
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询"
+            actions={
+                showAutoNext ? (
+                    <div className="flex items-center gap-2">
+                        <Label
+                            htmlFor="fulfillment-operations-queue-auto-next"
+                            className="text-muted-foreground"
+                        >
+                            自动下一项
+                        </Label>
+                        <Switch
+                            id="fulfillment-operations-queue-auto-next"
+                            checked={autoNext}
+                            onCheckedChange={onAutoNextChange}
+                        />
+                    </div>
+                ) : undefined
+            }
+        />
     )
 }

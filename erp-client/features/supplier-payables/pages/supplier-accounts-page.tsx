@@ -44,10 +44,10 @@ export function SupplierAccountsPage() {
         searchInputRef,
         panelOpen,
         setPanelOpen,
-        hasStructuredFilters,
         appliedChips,
         applyFilters,
         resetMoreFilters,
+        hasPendingChanges,
         removeFilter,
         supplierDraft,
         setSupplierDraft,
@@ -91,7 +91,6 @@ export function SupplierAccountsPage() {
         setRedInvoiceNo,
         lastResult,
         setLastResult,
-        hasActiveFilters,
         clearFilters,
         switchView,
         listQuery,
@@ -106,8 +105,6 @@ export function SupplierAccountsPage() {
             searchInput={searchInput}
             onSearchInputChange={setSearchInput}
             searchInputRef={searchInputRef}
-            hasActiveFilters={hasActiveFilters}
-            hasStructuredFilters={hasStructuredFilters}
             panelOpen={panelOpen}
             setPanelOpen={setPanelOpen}
             appliedChips={appliedChips}
@@ -127,6 +124,24 @@ export function SupplierAccountsPage() {
             setPaymentGateDraft={setPaymentGateDraft}
             trackDraft={trackDraft}
             setTrackDraft={setTrackDraft}
+            hasPendingChanges={hasPendingChanges}
+            resultCount={
+                data
+                    ? view === "payable"
+                        ? sortedPayables.length
+                        : view === "payment"
+                          ? data.payments.length
+                          : view === "purchase_invoice"
+                            ? data.invoices.length
+                            : trackFilter !== "all"
+                              ? data.unallocated.filter(
+                                    (item) => item.track === trackFilter,
+                                ).length
+                              : data.unallocated.length
+                    : undefined
+            }
+            loading={listQuery.isFetching}
+            failed={listQuery.isError}
         />
     )
 

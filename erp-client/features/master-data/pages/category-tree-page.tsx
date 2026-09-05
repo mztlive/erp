@@ -40,6 +40,7 @@ export function CategoryTreePage() {
         applyTreeFilters,
         lifecycleStatus,
         setLifecycleStatus,
+        hasPendingChanges,
         appliedChips,
         removeFilter,
         selectedId,
@@ -158,6 +159,10 @@ export function CategoryTreePage() {
                         appliedChips={appliedChips}
                         removeFilter={removeFilter}
                         clearFilters={clearFilters}
+                        hasPendingChanges={hasPendingChanges}
+                        resultCount={listQuery.data ? rows.length : undefined}
+                        loading={listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                     {listQuery.isPending ? (
                         <div

@@ -119,6 +119,16 @@ export function ListWorkspaceViews({
     )
 }
 
+export { ListSearchField } from "./list-search-field"
+export {
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
+    listWorkspaceFilterBarClassName,
+    listWorkspaceFilterStatusText,
+    type ListWorkspaceFilterChip,
+} from "./list-workspace-filter-bar"
+
 export function ListWorkSurface({
     ariaLabel,
     views,

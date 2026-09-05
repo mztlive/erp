@@ -1,29 +1,14 @@
 import * as React from "react"
 
-export function useIntegrationSearch({
-    q,
-    onCommitSearch,
-}: {
-    q: string | undefined
-    onCommitSearch: (q: string | null) => void
-}) {
+export function useIntegrationSearch({ q }: { q: string | undefined }) {
     const [searchDraft, setSearchDraft] = React.useState(q ?? "")
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
-    // URL 搜索变化时回写输入框（浏览器前进/后退同步）
     React.useEffect(() => {
-        setSearchDraft(q ?? "")
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(q ?? "")
+        }
     }, [q])
-
-    // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchDraft.trim() === (q ?? "")) return
-            onCommitSearch(searchDraft.trim() || null)
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 以当前渲染快照为准
-    }, [searchDraft])
 
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {

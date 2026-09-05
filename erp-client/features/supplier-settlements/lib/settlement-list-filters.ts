@@ -63,17 +63,20 @@ export function joinSettlementStatusParam(
     return joined || undefined
 }
 
-/** 结构化条件（面板内字段）是否存在已生效值。 */
-export function hasStructuredSettlementFilters(
+/** 「更多筛选」面板内字段是否存在已生效值。 */
+export function hasMoreSettlementFilters(
     state: SettlementFilterState,
 ): boolean {
     return Boolean(
-        state.supplierId ||
-        state.status ||
-        state.differenceType ||
-        state.periodFrom ||
-        state.periodTo,
+        state.supplierId || state.status || state.periodFrom || state.periodTo,
     )
+}
+
+/** 结构化条件是否存在已生效值（含常驻差异类型）。 */
+export function hasStructuredSettlementFilters(
+    state: SettlementFilterState,
+): boolean {
+    return hasMoreSettlementFilters(state) || Boolean(state.differenceType)
 }
 
 /** 全部筛选参数（含关键词）是否存在已生效值；视图属于 Saved View，不算筛选。 */

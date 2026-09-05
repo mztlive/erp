@@ -28,6 +28,7 @@ export type LedgerAppliedChip = Readonly<{
 export interface UseLedgerFiltersInput {
     view: InventoryView
     /** Applied：URL 是唯一事实源；非法枚举已在解析时降级为默认。 */
+    q: string
     warehouseId: string | undefined
     availability: InventoryAvailability
     movementType: string[]
@@ -41,12 +42,12 @@ export interface UseLedgerFiltersInput {
 }
 
 /**
- * 库存台账结构化筛选状态（docs/ui-filter-design.md §5 / §8.2）：
- * Applied（URL）/ Draft（本地受控，提交前不请求）/ UI（面板展开与校验）。
- * 收起态 Enter、搜索框尾部提交箭头与展开态「应用全部筛选」共用 applyFilters。
+ * 库存台账结构化筛选状态：Applied（URL）/ Draft（本地受控，提交前不请求）/ UI。
+ * 查询按钮、Enter 与展开面板共用 applyFilters；重置更多条件只清草稿。
  */
 export function useLedgerFilters({
     view,
+    q,
     warehouseId,
     availability,
     movementType,
@@ -79,17 +80,25 @@ export function useLedgerFilters({
         (view === "movement" && movementType.length > 0) ||
         (view === "movement" && Boolean(occurredFrom || occurredTo)),
     )
-    // 有结构化条件的初始深链展开面板；URL 回填不得再次强制展开（§5.4 / §5.5）
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+    const hasMoreFilters = Boolean(
+        (view === "balance" && warehouseId) ||
+        (view === "movement" &&
+            (movementType.length > 0 || Boolean(occurredFrom || occurredTo))),
+    )
+    // 有更多条件的初始深链展开面板；URL 回填不得再次强制展开
+    const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
-    /** 唯一提交路径：收起态 Enter / 尾部箭头 / 展开态「应用全部筛选」共用。 */
+    /** 唯一提交路径：查询按钮与 Enter 共用。 */
     const applyFilters = React.useCallback(() => {
         const from = occurredFromDraft.trim()
         const to = occurredToDraft.trim()
         const error = ledgerDateRangeError(from, to)
         setFilterError(error)
-        if (error) return
+        if (error) {
+            setPanelOpen(true)
+            return
+        }
         patchUrl(
             {
                 q: searchDraft.trim() || null,
@@ -143,28 +152,18 @@ export function useLedgerFilters({
         [patchUrl, resetPagination, setSearchDraft],
     )
 
-    /** 只清除「更多筛选」结构化条件；保留关键词与来源锁定，面板保持展开。 */
+    /** 只清除「更多筛选」草稿；保留关键词、常用条件与已生效结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setWarehouseIdDraft(null)
-        setAvailabilityDraft("all")
-        setMovementTypeDraft([])
-        setOccurredFromDraft("")
-        setOccurredToDraft("")
+        if (view === "balance") setWarehouseIdDraft(null)
+        if (view === "movement") {
+            setMovementTypeDraft([])
+            setOccurredFromDraft("")
+            setOccurredToDraft("")
+        }
         setFilterError(null)
-        patchUrl(
-            {
-                warehouseId: null,
-                availability: null,
-                movementType: null,
-                occurredFrom: null,
-                occurredTo: null,
-            },
-            { replace: true, scroll: false },
-        )
-        resetPagination()
-    }, [patchUrl, resetPagination])
+    }, [view])
 
-    /** 清空全部：草稿、错误、面板、全部筛选参数（含来源锁定）与分页同时重置；保留视图与排序。 */
+    /** 清除全部：草稿、错误、面板、全部筛选参数（含来源锁定）与分页同时重置；保留视图与排序。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setWarehouseIdDraft(null)
@@ -213,6 +212,15 @@ export function useLedgerFilters({
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 以稳定签名驱动回填
     }, [appliedSignature])
 
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        (warehouseIdDraft ?? null) !== (warehouseId ?? null) ||
+        availabilityDraft !== availability ||
+        [...movementTypeDraft].sort().join(",") !==
+            [...movementType].sort().join(",") ||
+        occurredFromDraft !== (occurredFrom ?? "") ||
+        occurredToDraft !== (occurredTo ?? "")
+
     return {
         searchDraft,
         setSearchDraft,
@@ -235,5 +243,6 @@ export function useLedgerFilters({
         removeFilter,
         resetMoreFilters,
         clearAllFilters,
+        hasPendingChanges,
     }
 }

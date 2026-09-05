@@ -94,6 +94,22 @@ function hasStructuredFilters(
     )
 }
 
+/** 更多筛选面板内的已生效条件（结果在常用区，不计入）。 */
+function hasMoreFilters(
+    applied: AccessAppliedFilters,
+    view: AccessView,
+): boolean {
+    if (view !== "audit") return false
+    return Boolean(
+        applied.from ||
+        applied.to ||
+        applied.action ||
+        applied.actorId ||
+        applied.traceId ||
+        applied.objectId,
+    )
+}
+
 /**
  * W19 筛选状态：Applied（URL）/ Draft（本地受控）/ UI（面板与校验）。
  * Draft 变化不写 URL、不触发请求；提交、清除与 chip 移除都走 patchFilterUrl。
@@ -130,7 +146,7 @@ export function useAccessListFilters({
         toDraft(applied),
     )
     const [panelOpen, setPanelOpen] = React.useState(() =>
-        hasStructuredFilters(applied, view),
+        hasMoreFilters(applied, view),
     )
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
@@ -149,7 +165,7 @@ export function useAccessListFilters({
         setDraft((current) => ({ ...current, q: value }))
     }, [])
 
-    /** 收起态 Enter / 搜索框尾部提交箭头 / 展开态「应用全部筛选」共用同一提交。 */
+    /** 查询按钮与 Enter 共用同一提交。 */
     const applyFilters = React.useCallback(() => {
         const from = draft.from.trim()
         const to = draft.to.trim()
@@ -174,32 +190,21 @@ export function useAccessListFilters({
         setPanelOpen(false)
     }, [draft, patchFilterUrl])
 
-    /** 只清除「更多筛选」结构化条件；保留关键词，面板保持展开。 */
+    /** 只清除更多条件草稿；保留关键词、结果与已生效查询。 */
     const resetMoreFilters = React.useCallback(() => {
         setDraft((current) => ({
             ...current,
             from: "",
             to: "",
             action: "all",
-            result: "all",
             actorId: "",
             traceId: "",
             objectId: "",
         }))
         setFilterError(null)
-        patchFilterUrl({
-            from: null,
-            to: null,
-            action: null,
-            result: null,
-            actorId: null,
-            traceId: null,
-            objectId: null,
-            page: null,
-        })
-    }, [patchFilterUrl])
+    }, [])
 
-    /** 清空全部：草稿、错误、面板与全部筛选参数同时重置；保留视图与详情/导航上下文。 */
+    /** 清除全部：草稿、错误、面板与全部筛选参数同时重置；保留视图与详情/导航上下文。 */
     const clearAllFilters = React.useCallback(() => {
         setDraft(DEFAULT_ACCESS_FILTER_DRAFT)
         setFilterError(null)
@@ -280,6 +285,16 @@ export function useAccessListFilters({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [appliedSignature])
 
+    const hasPendingChanges =
+        draft.q.trim() !== applied.q.trim() ||
+        draft.from !== (applied.from ?? "") ||
+        draft.to !== (applied.to ?? "") ||
+        draft.action !== (applied.action ?? "all") ||
+        draft.result !== (applied.result ?? "all") ||
+        draft.actorId !== (applied.actorId ?? "") ||
+        draft.traceId !== (applied.traceId ?? "") ||
+        draft.objectId !== (applied.objectId ?? "")
+
     return {
         applied,
         draft,
@@ -294,5 +309,6 @@ export function useAccessListFilters({
         clearAllFilters,
         removeFilter,
         filterError,
+        hasPendingChanges,
     }
 }

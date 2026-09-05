@@ -6,7 +6,6 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
     MoreHorizontalIcon,
     PlusIcon,
-    SearchIcon,
     ShieldCheckIcon,
     Trash2Icon,
 } from "lucide-react"
@@ -15,14 +14,16 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    ListToolbar,
     PageScaffold,
 } from "@/components/business"
 import {
+    ListSearchField,
     ListWorkSurface,
+    ListWorkspaceFilterBar,
     ListWorkspaceHeader,
     ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
+    listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
@@ -32,11 +33,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
 import type { AccountDraft } from "@/features/admin/components/accounts/account-form-dialog"
 import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
@@ -71,6 +67,7 @@ export function AccountsPage() {
     const [keyword, setKeyword] = React.useState(
         () => searchParams.get("q") ?? "",
     )
+    const [searchDraft, setSearchDraft] = React.useState(keyword)
     const [accountForm, setAccountForm] =
         React.useState<AccountFormState | null>(null)
     const [deletingAccount, setDeletingAccount] = React.useState<{
@@ -220,6 +217,21 @@ export function AccountsPage() {
     )
 
     const hasSearch = keyword.trim().length > 0
+    const hasPendingChanges = searchDraft.trim() !== keyword.trim()
+    const appliedChips = hasSearch
+        ? [{ key: "q", label: `搜索：${keyword.trim()}` }]
+        : []
+
+    const applyFilters = React.useCallback(() => {
+        const next = searchDraft.trim()
+        setSearchDraft(next)
+        setKeyword(next)
+    }, [searchDraft])
+
+    const clearAllFilters = React.useCallback(() => {
+        setSearchDraft("")
+        setKeyword("")
+    }, [])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -277,23 +289,32 @@ export function AccountsPage() {
                     />
                 }
                 toolbar={
-                    <ListToolbar
+                    <ListWorkspaceFilterBar
+                        idPrefix="governance-admin-accounts"
+                        formAriaLabel="账号查询"
+                        onSubmit={applyFilters}
                         search={
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    id="governance-admin-accounts-search"
-                                    value={keyword}
-                                    onChange={(event) =>
-                                        setKeyword(event.target.value)
-                                    }
-                                    placeholder="账号、姓名或角色"
-                                    aria-label="搜索账号"
-                                />
-                            </InputGroup>
+                            <ListSearchField
+                                id="governance-admin-accounts-search"
+                                value={searchDraft}
+                                onChange={setSearchDraft}
+                                placeholder="账号、姓名或角色"
+                                aria-label="搜索账号"
+                            />
                         }
+                        resultStatus={listWorkspaceFilterStatusText({
+                            loading: adminsQuery.isPending,
+                            failed: adminsQuery.isError,
+                            resultCount: adminsQuery.data
+                                ? rows.length
+                                : undefined,
+                            noun: "个账号",
+                            loadingLabel: "正在加载账号…",
+                        })}
+                        chips={appliedChips}
+                        onClearChip={clearAllFilters}
+                        onClearAll={clearAllFilters}
+                        hasPendingChanges={hasPendingChanges}
                     />
                 }
                 table={

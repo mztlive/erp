@@ -1,6 +1,5 @@
 "use client"
 
-import { surfacePanelClassName } from "@/components/business"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { FulfillmentQueueToolbar } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-toolbar"
 import type {
@@ -17,7 +16,6 @@ import {
     TYPE_SLUG,
 } from "@/features/fulfillment-operations/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 export type FulfillmentFilterBarProps = {
     activeTypeSlug: string
@@ -35,9 +33,12 @@ export type FulfillmentFilterBarProps = {
     onPatch: (patch: Record<string, string | null | undefined>) => void
     onClearAllFilters: () => void
     onAutoNextChange: (next: boolean) => void
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }
 
-/** M3 sticky 处理面：第 0 层范围/类型 + 第 1/2 层 ListToolbar（ui-filter-design §2.3）。 */
+/** 履约处理队列：第 0 层类型切换常驻在筛选条上方，筛选条本身不再使用浮起卡片。 */
 export function FulfillmentFilterBar({
     activeTypeSlug,
     visibleTypes,
@@ -54,51 +55,47 @@ export function FulfillmentFilterBar({
     onPatch,
     onClearAllFilters,
     onAutoNextChange,
+    resultCount,
+    loading,
+    failed,
 }: FulfillmentFilterBarProps) {
     const warehouseLabel = operations.find(
         (t) => t.source.warehouseId === warehouseId,
     )?.source.warehouseLabel
     return (
-        <div
-            className={cn(
-                surfacePanelClassName,
-                "sticky top-0 z-10 space-y-2.5 px-3 py-2.5",
-            )}
-        >
-            <div className="flex flex-wrap items-center gap-2">
-                <ToggleGroup
-                    value={[activeTypeSlug === "all" ? "all" : activeTypeSlug]}
-                    onValueChange={(values) => {
-                        const next = values[0]
-                        if (!next) return
-                        if (next === "all") onTypeChange("all")
-                        else {
-                            const t = SLUG_TO_TYPE[next]
-                            if (t) onTypeChange(t)
-                        }
-                    }}
-                    variant="outline"
-                    spacing={0}
-                    className="w-fit flex-wrap"
-                    aria-label="作业类型"
+        <div className="sticky top-0 z-10 space-y-2.5 bg-card py-2">
+            <ToggleGroup
+                value={[activeTypeSlug === "all" ? "all" : activeTypeSlug]}
+                onValueChange={(values) => {
+                    const next = values[0]
+                    if (!next) return
+                    if (next === "all") onTypeChange("all")
+                    else {
+                        const t = SLUG_TO_TYPE[next]
+                        if (t) onTypeChange(t)
+                    }
+                }}
+                variant="outline"
+                spacing={0}
+                className="w-fit flex-wrap"
+                aria-label="作业类型"
+            >
+                <ToggleGroupItem
+                    id="fulfillment-operations-filter-type-all"
+                    value="all"
                 >
+                    全部
+                </ToggleGroupItem>
+                {visibleTypes.map((t) => (
                     <ToggleGroupItem
-                        id="fulfillment-operations-filter-type-all"
-                        value="all"
+                        key={t}
+                        id={`fulfillment-operations-filter-type-${toAutomationIdSegment(TYPE_SLUG[t])}`}
+                        value={TYPE_SLUG[t]}
                     >
-                        全部
+                        {OPERATION_TYPE_SHORT[t]}
                     </ToggleGroupItem>
-                    {visibleTypes.map((t) => (
-                        <ToggleGroupItem
-                            key={t}
-                            id={`fulfillment-operations-filter-type-${toAutomationIdSegment(TYPE_SLUG[t])}`}
-                            value={TYPE_SLUG[t]}
-                        >
-                            {OPERATION_TYPE_SHORT[t]}
-                        </ToggleGroupItem>
-                    ))}
-                </ToggleGroup>
-            </div>
+                ))}
+            </ToggleGroup>
 
             <FulfillmentQueueToolbar
                 q={q}
@@ -124,6 +121,9 @@ export function FulfillmentFilterBar({
                 onPatch={onPatch}
                 onClearAllFilters={onClearAllFilters}
                 onAutoNextChange={onAutoNextChange}
+                resultCount={resultCount}
+                loading={loading}
+                failed={failed}
             />
         </div>
     )

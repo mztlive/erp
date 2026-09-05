@@ -153,11 +153,11 @@ export function ActualProfitLossPage() {
                             onCoverageChange={page.handleCoverageChange}
                             panelOpen={page.filterPanelOpen}
                             setPanelOpen={page.setFilterPanelOpen}
-                            hasStructuredFilters={page.hasStructuredFilters}
                             appliedChips={page.appliedChips}
                             onRemoveFilter={page.removeFilter}
                             onResetMoreFilters={page.resetMoreFilters}
                             onClearAllFilters={page.clearAllFilters}
+                            hasPendingChanges={page.hasPendingChanges}
                             onDimensionChange={page.handleDimensionChange}
                             benefitScenarioDraft={page.benefitScenarioDraft}
                             onBenefitScenarioDraftChange={

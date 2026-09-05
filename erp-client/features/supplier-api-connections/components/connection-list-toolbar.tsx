@@ -1,22 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
-    FilterChip,
     FixedOptionRadioFilter,
-    ListToolbar,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
     ConnectionAppliedChip,
@@ -83,7 +80,13 @@ const CATALOG_FRESHNESS_FILTER_OPTIONS: ReadonlyArray<{
     label: CATALOG_LABEL[value],
 }))
 
-/** 连接列表筛选区：单一 form，收起态靠搜索框尾部提交箭头与 Enter，展开态只保留面板底部主提交（docs/ui-filter-design.md §3.5）。 */
+const MORE_CHIP_KEYS: readonly ConnectionFilterKey[] = [
+    "health",
+    "capability",
+    "catalogFreshness",
+    "supplierId",
+]
+
 export type ConnectionListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
@@ -92,7 +95,6 @@ export type ConnectionListToolbarProps = {
     onEnvironmentChange: (value: ConnectionEnvironment | "ALL") => void
     filterPanelOpen: boolean
     onFilterPanelOpenChange: SetState<boolean>
-    hasStructuredFilters: boolean
     appliedChips: readonly ConnectionAppliedChip[]
     removeFilter: (key: ConnectionFilterKey) => void
     onApplyFilters: () => void
@@ -108,6 +110,10 @@ export type ConnectionListToolbarProps = {
     onCatalogFreshnessDraftChange: SetState<string[]>
     supplierIdDraft: string | null
     onSupplierIdDraftChange: SetState<string | null>
+    hasPendingChanges?: boolean
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }
 
 export function ConnectionListToolbar({
@@ -118,7 +124,6 @@ export function ConnectionListToolbar({
     onEnvironmentChange,
     filterPanelOpen,
     onFilterPanelOpenChange,
-    hasStructuredFilters,
     appliedChips,
     removeFilter,
     onApplyFilters,
@@ -134,246 +139,151 @@ export function ConnectionListToolbar({
     onCatalogFreshnessDraftChange,
     supplierIdDraft,
     onSupplierIdDraftChange,
+    hasPendingChanges = false,
+    resultCount,
+    loading,
+    failed,
 }: ConnectionListToolbarProps) {
-    const panelId = React.useId()
-    const hasChips = appliedChips.length > 0
+    const moreCount = appliedChips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                onApplyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="supplier-api-connections-toolbar-search"
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                onSearchDraftChange(event.target.value)
-                            }
-                            placeholder="连接代码、供应商名称"
-                            aria-label="搜索连接"
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    <>
-                        <div
-                            role="group"
-                            aria-label="环境快捷筛选"
-                            className="flex h-control max-w-full items-stretch overflow-x-auto gap-1 border-b border-border bg-transparent [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                        >
-                            {ENVIRONMENT_FILTER_OPTIONS.map((option) => {
-                                const active = environment === option.value
-                                return (
-                                    <Button
-                                        key={option.value}
-                                        id={`supplier-api-connections-toolbar-environment-${toAutomationIdSegment(option.value)}`}
-                                        type="button"
-                                        variant={active ? "secondary" : "ghost"}
-                                        className={
-                                            active
-                                                ? "rounded-none border-b-2 border-b-foreground bg-transparent shadow-none"
-                                                : "rounded-none bg-transparent shadow-none"
-                                        }
-                                        aria-pressed={active}
-                                        onClick={() =>
-                                            onEnvironmentChange(option.value)
-                                        }
-                                    >
-                                        {option.label}
-                                    </Button>
-                                )
-                            })}
-                        </div>
-                        <Button
-                            id="supplier-api-connections-toolbar-more-filters"
-                            type="button"
-                            variant="outline"
-                            aria-expanded={filterPanelOpen}
-                            aria-controls={panelId}
-                            onClick={() =>
-                                onFilterPanelOpenChange(!filterPanelOpen)
-                            }
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            更多筛选
-                            {hasStructuredFilters ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    filterPanelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
+        <ListWorkspaceFilterBar
+            idPrefix="supplier-api-connections-toolbar-filter"
+            formAriaLabel="API 供应商连接查询"
+            onSubmit={onApplyFilters}
+            search={
+                <ListSearchField
+                    id="supplier-api-connections-toolbar-search"
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={onSearchDraftChange}
+                    placeholder="连接代码、供应商名称"
+                    aria-label="搜索连接"
+                />
+            }
+            queryButtonId="supplier-api-connections-toolbar-apply"
+            extraPrimary={
+                <div
+                    role="group"
+                    aria-label="环境快捷筛选"
+                    className="flex flex-wrap items-center gap-1"
+                >
+                    {ENVIRONMENT_FILTER_OPTIONS.map((option) => {
+                        const active = environment === option.value
+                        return (
+                            <Button
+                                key={option.value}
+                                id={`supplier-api-connections-toolbar-environment-${toAutomationIdSegment(option.value)}`}
+                                type="button"
+                                variant={active ? "secondary" : "ghost"}
+                                size="sm"
+                                aria-pressed={active}
+                                onClick={() =>
+                                    onEnvironmentChange(option.value)
                                 }
-                            />
-                        </Button>
-                    </>
-                }
-                secondary={
-                    hasChips || filterPanelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`supplier-api-connections-toolbar-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="supplier-api-connections-toolbar-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={onClearFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {filterPanelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="连接列表更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        label="状态"
-                                        value={statusDraft}
-                                        onValueChange={onStatusDraftChange}
-                                        options={STATUS_FILTER_OPTIONS}
-                                    />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                供应商
-                                            </span>
-                                            <SupplierSearchCombobox
-                                                id="supplier-api-connections-toolbar-supplier"
-                                                value={
-                                                    supplierIdDraft ?? undefined
-                                                }
-                                                onValueChange={(value) =>
-                                                    onSupplierIdDraftChange(
-                                                        value ?? null,
-                                                    )
-                                                }
-                                                purpose="filter"
-                                                placeholder="全部供应商"
-                                                className="w-full"
-                                                aria-label="供应商"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                能力
-                                            </span>
-                                            <OptionCombobox
-                                                id="supplier-api-connections-toolbar-capability"
-                                                className="w-full"
-                                                value={
-                                                    capabilityDraft || undefined
-                                                }
-                                                onValueChange={(value) =>
-                                                    onCapabilityDraftChange(
-                                                        value ?? "",
-                                                    )
-                                                }
-                                                options={
-                                                    CAPABILITY_FILTER_OPTIONS
-                                                }
-                                                placeholder="全部能力"
-                                                searchPlaceholder="搜索能力名称"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                健康结果
-                                            </span>
-                                            <MultiOptionCombobox
-                                                id="supplier-api-connections-toolbar-health"
-                                                className="w-full"
-                                                value={healthDraft}
-                                                onValueChange={
-                                                    onHealthDraftChange
-                                                }
-                                                options={HEALTH_FILTER_OPTIONS}
-                                                placeholder="全部健康结果"
-                                                aria-label="健康结果"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                目录更新时间
-                                            </span>
-                                            <MultiOptionCombobox
-                                                id="supplier-api-connections-toolbar-catalog"
-                                                className="w-full"
-                                                value={catalogFreshnessDraft}
-                                                onValueChange={
-                                                    onCatalogFreshnessDraftChange
-                                                }
-                                                options={
-                                                    CATALOG_FRESHNESS_FILTER_OPTIONS
-                                                }
-                                                placeholder="全部目录状态"
-                                                aria-label="目录更新时间"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="supplier-api-connections-toolbar-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={onResetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="supplier-api-connections-toolbar-apply"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                            >
+                                {option.label}
+                            </Button>
+                        )
+                    })}
+                </div>
+            }
+            moreCount={moreCount}
+            moreOpen={filterPanelOpen}
+            onToggleMore={() => onFilterPanelOpenChange(!filterPanelOpen)}
+            moreButtonId="supplier-api-connections-toolbar-more-filters"
+            morePanelId="supplier-api-connections-toolbar-more-panel"
+            morePanelAriaLabel="连接列表更多筛选条件"
+            onResetMore={onResetMoreFilters}
+            resetMoreButtonId="supplier-api-connections-toolbar-reset-more"
+            commonFilters={
+                <FixedOptionRadioFilter
+                    label="状态"
+                    variant="quiet"
+                    value={statusDraft}
+                    onValueChange={onStatusDraftChange}
+                    options={STATUS_FILTER_OPTIONS}
+                />
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <ListWorkspaceFilterField
+                        htmlFor="supplier-api-connections-toolbar-supplier"
+                        label="供应商"
+                    >
+                        <SupplierSearchCombobox
+                            id="supplier-api-connections-toolbar-supplier"
+                            value={supplierIdDraft ?? undefined}
+                            onValueChange={(value) =>
+                                onSupplierIdDraftChange(value ?? null)
+                            }
+                            purpose="filter"
+                            placeholder="全部供应商"
+                            className="w-full"
+                            aria-label="供应商"
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        htmlFor="supplier-api-connections-toolbar-capability"
+                        label="能力"
+                    >
+                        <OptionCombobox
+                            id="supplier-api-connections-toolbar-capability"
+                            className="w-full"
+                            value={capabilityDraft || undefined}
+                            onValueChange={(value) =>
+                                onCapabilityDraftChange(value ?? "")
+                            }
+                            options={CAPABILITY_FILTER_OPTIONS}
+                            placeholder="全部能力"
+                            searchPlaceholder="搜索能力名称"
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        htmlFor="supplier-api-connections-toolbar-health"
+                        label="健康结果"
+                    >
+                        <MultiOptionCombobox
+                            id="supplier-api-connections-toolbar-health"
+                            className="w-full"
+                            value={healthDraft}
+                            onValueChange={onHealthDraftChange}
+                            options={HEALTH_FILTER_OPTIONS}
+                            placeholder="全部健康结果"
+                            aria-label="健康结果"
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        htmlFor="supplier-api-connections-toolbar-catalog"
+                        label="目录更新时间"
+                    >
+                        <MultiOptionCombobox
+                            id="supplier-api-connections-toolbar-catalog"
+                            className="w-full"
+                            value={catalogFreshnessDraft}
+                            onValueChange={onCatalogFreshnessDraftChange}
+                            options={CATALOG_FRESHNESS_FILTER_OPTIONS}
+                            placeholder="全部目录状态"
+                            aria-label="目录更新时间"
+                        />
+                    </ListWorkspaceFilterField>
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "个连接",
+                loadingLabel: "正在加载连接…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as ConnectionFilterKey)}
+            onClearAll={onClearFilters}
+            clearButtonId="supplier-api-connections-toolbar-clear-all"
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询"
+        />
     )
 }

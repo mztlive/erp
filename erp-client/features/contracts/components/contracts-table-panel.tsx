@@ -1,35 +1,28 @@
 "use client"
 
-import * as React from "react"
-import {
-    ChevronDownIcon,
-    FileUpIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { FileUpIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    FilterChip,
-    ListToolbar,
     OptionCombobox,
 } from "@/components/business"
 import {
+    ListSearchField,
     ListWorkSurface,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
+    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
+    useContractsList,
+    type ContractFilterKey,
+} from "@/features/contracts/hooks/use-contracts-list"
 import type { ContractListRow } from "@/features/contracts/types"
 
 type ContractsTablePanelProps = {
@@ -62,13 +55,13 @@ export function ContractsTablePanel({
         searchInputRef,
         panelOpen,
         setPanelOpen,
-        hasStructuredFilters,
         settlementPartyIdDraft,
         setSettlementPartyIdDraft,
         ownerDraft,
         setOwnerDraft,
         applyFilters,
         resetMoreFilters,
+        hasPendingChanges,
         removeFilter,
         clearAllFilters,
         appliedChips,
@@ -83,8 +76,9 @@ export function ContractsTablePanel({
         handlePaginationChange,
     } = list
 
-    const panelId = React.useId()
-    const hasChips = appliedChips.length > 0
+    const moreCount = appliedChips.filter(({ key }) =>
+        ["settlementPartyId", "owner"].includes(key),
+    ).length
 
     return (
         <ListWorkSurface
@@ -105,168 +99,79 @@ export function ContractsTablePanel({
                 />
             }
             toolbar={
-                <form
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        applyFilters()
-                    }}
-                >
-                    <ListToolbar
-                        search={
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    id="card-contracts-list-search"
-                                    ref={searchInputRef}
-                                    value={searchDraft}
-                                    onChange={(event) => {
-                                        setSearchDraft(event.target.value)
-                                    }}
-                                    placeholder="合同号、客户、结算主体、负责人"
-                                    aria-label="搜索合同"
-                                />
-                            </InputGroup>
-                        }
-                        filters={
-                            <Button
-                                id="card-contracts-list-more-filters-trigger"
-                                type="button"
-                                variant="outline"
-                                aria-expanded={panelOpen}
-                                aria-controls={panelId}
-                                onClick={() => setPanelOpen((open) => !open)}
+                <ListWorkspaceFilterBar
+                    idPrefix="card-contracts-list"
+                    formAriaLabel="合同查询"
+                    onSubmit={applyFilters}
+                    queryButtonId="card-contracts-list-apply-filters"
+                    moreButtonId="card-contracts-list-more-filters-trigger"
+                    clearButtonId="card-contracts-list-clear-all"
+                    search={
+                        <ListSearchField
+                            id="card-contracts-list-search"
+                            searchInputRef={searchInputRef}
+                            value={searchDraft}
+                            onChange={setSearchDraft}
+                            placeholder="合同号、客户、结算主体、负责人"
+                            aria-label="搜索合同"
+                        />
+                    }
+                    moreCount={moreCount}
+                    moreOpen={panelOpen}
+                    onToggleMore={() => setPanelOpen((open) => !open)}
+                    morePanelId="card-contracts-list-more-panel"
+                    morePanelAriaLabel="合同更多筛选条件"
+                    onResetMore={resetMoreFilters}
+                    morePanel={
+                        <div className="grid min-w-0 gap-5 sm:grid-cols-2">
+                            <ListWorkspaceFilterField
+                                htmlFor="card-contracts-list-filter-settlement-party"
+                                label="结算主体"
                             >
-                                <FilterIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
+                                <OptionCombobox
+                                    id="card-contracts-list-filter-settlement-party"
+                                    className="w-full"
+                                    value={settlementPartyIdDraft}
+                                    aria-label="结算主体"
+                                    onValueChange={setSettlementPartyIdDraft}
+                                    options={settlementPartyOptions}
+                                    placeholder="全部结算主体"
+                                    searchPlaceholder="搜索结算主体名称"
                                 />
-                                更多筛选
-                                {hasStructuredFilters ? (
-                                    <Badge variant="info">已启用</Badge>
-                                ) : null}
-                                <ChevronDownIcon
-                                    data-icon="inline-end"
-                                    aria-hidden="true"
-                                    className={
-                                        panelOpen
-                                            ? "rotate-180 transition-transform"
-                                            : "transition-transform"
-                                    }
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="card-contracts-list-filter-owner"
+                                label="负责人"
+                            >
+                                <OptionCombobox
+                                    id="card-contracts-list-filter-owner"
+                                    className="w-full"
+                                    value={ownerDraft}
+                                    aria-label="负责人"
+                                    onValueChange={setOwnerDraft}
+                                    options={ownerOptions}
+                                    placeholder="全部负责人"
+                                    searchPlaceholder="搜索负责人姓名"
                                 />
-                            </Button>
-                        }
-                        secondary={
-                            hasChips || panelOpen ? (
-                                <div className="w-full space-y-3">
-                                    {hasChips ? (
-                                        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                            <span className="text-xs text-muted-foreground">
-                                                已筛选
-                                            </span>
-                                            {appliedChips.map((chip) => (
-                                                <FilterChip
-                                                    key={chip.key}
-                                                    id={`card-contracts-list-filter-chip-${chip.key}`}
-                                                    label={chip.label}
-                                                    clearLabel={`移除${chip.label}`}
-                                                    onClear={() =>
-                                                        removeFilter(chip.key)
-                                                    }
-                                                />
-                                            ))}
-                                            <Button
-                                                id="card-contracts-list-clear-all"
-                                                type="button"
-                                                variant="ghost"
-                                                size="xs"
-                                                onClick={clearAllFilters}
-                                            >
-                                                清空全部
-                                            </Button>
-                                        </div>
-                                    ) : null}
-                                    {panelOpen ? (
-                                        <div
-                                            id={panelId}
-                                            className="flex w-full flex-col gap-3 border-t pt-3"
-                                            aria-label="合同更多筛选条件"
-                                        >
-                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        结算主体
-                                                    </span>
-                                                    <OptionCombobox
-                                                        id="card-contracts-list-filter-settlement-party"
-                                                        className="w-full"
-                                                        value={
-                                                            settlementPartyIdDraft
-                                                        }
-                                                        aria-label="结算主体"
-                                                        onValueChange={
-                                                            setSettlementPartyIdDraft
-                                                        }
-                                                        options={
-                                                            settlementPartyOptions
-                                                        }
-                                                        placeholder="全部结算主体"
-                                                        searchPlaceholder="搜索结算主体名称"
-                                                    />
-                                                </div>
-                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        负责人
-                                                    </span>
-                                                    <OptionCombobox
-                                                        id="card-contracts-list-filter-owner"
-                                                        className="w-full"
-                                                        value={ownerDraft}
-                                                        aria-label="负责人"
-                                                        onValueChange={
-                                                            setOwnerDraft
-                                                        }
-                                                        options={ownerOptions}
-                                                        placeholder="全部负责人"
-                                                        searchPlaceholder="搜索负责人姓名"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <p className="text-xs text-muted-foreground">
-                                                    将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                                </p>
-                                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                                    <Button
-                                                        id="card-contracts-list-reset-more"
-                                                        type="button"
-                                                        variant="ghost"
-                                                        onClick={
-                                                            resetMoreFilters
-                                                        }
-                                                    >
-                                                        重置更多条件
-                                                    </Button>
-                                                    <Button
-                                                        id="card-contracts-list-apply-filters"
-                                                        type="submit"
-                                                    >
-                                                        <SearchIcon
-                                                            data-icon="inline-start"
-                                                            aria-hidden="true"
-                                                        />
-                                                        应用全部筛选
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                </div>
-                            ) : undefined
-                        }
-                    />
-                </form>
+                            </ListWorkspaceFilterField>
+                        </div>
+                    }
+                    resultStatus={listWorkspaceFilterStatusText({
+                        loading: isPending,
+                        failed: isError,
+                        resultCount: isPending ? undefined : sorted.length,
+                        noun: "份合同",
+                        loadingLabel: "正在加载合同…",
+                    })}
+                    chips={appliedChips}
+                    onClearChip={(key) =>
+                        removeFilter(key as ContractFilterKey)
+                    }
+                    onClearAll={clearAllFilters}
+                    hasPendingChanges={hasPendingChanges}
+                    pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                    idleHint="导出与当前查询结果一致"
+                />
             }
             table={
                 <DataTable<ContractListRow>

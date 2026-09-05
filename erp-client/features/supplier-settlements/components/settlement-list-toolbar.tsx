@@ -1,29 +1,23 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
-    FilterChip,
     FixedOptionRadioFilter,
-    ListToolbar,
     MultiOptionCombobox,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
+import { DatePicker } from "@/components/ui/date-picker"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     buildSettlementFilterChips,
     DIFF_TYPE_RADIO_OPTIONS,
-    hasStructuredSettlementFilters,
     SETTLEMENT_STATUS_VALUES,
     type SettlementFilterKey,
 } from "@/features/supplier-settlements/lib/settlement-list-filters"
@@ -33,6 +27,9 @@ import {
 } from "@/features/supplier-settlements/types"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+const prefix = "supplier-settlements-list"
+const panelId = `${prefix}-more-panel`
 
 const STATUS_FILTER_OPTIONS = SETTLEMENT_STATUS_VALUES.map((value) => ({
     value,
@@ -47,7 +44,6 @@ export function SettlementListToolbar({
     setSearchDraft,
     panelOpen,
     setPanelOpen,
-    hasActiveFilters,
     applyFilters,
     removeFilter,
     resetMoreFilters,
@@ -64,6 +60,10 @@ export function SettlementListToolbar({
     setPeriodToDraft,
     periodError,
     setPeriodError,
+    hasPendingChanges,
+    resultCount,
+    loading,
+    failed,
 }: {
     urlState: SettlementsUrlState
     suppliers: readonly { supplierId: string; supplierName: string }[]
@@ -72,7 +72,6 @@ export function SettlementListToolbar({
     setSearchDraft: SetState<string>
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
-    hasActiveFilters: boolean
     applyFilters: () => void
     removeFilter: (key: SettlementFilterKey) => void
     resetMoreFilters: () => void
@@ -89,244 +88,146 @@ export function SettlementListToolbar({
     setPeriodToDraft: SetState<string>
     periodError: string | null
     setPeriodError: SetState<string | null>
+    hasPendingChanges: boolean
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }) {
-    const panelId = React.useId()
-    const periodErrorId = React.useId()
+    const periodErrorId = `${prefix}-period-error`
     const appliedChips = React.useMemo(
         () => buildSettlementFilterChips(urlState, suppliers),
         [suppliers, urlState],
     )
-    const hasChips = hasActiveFilters && appliedChips.length > 0
-    const hasStructuredFilters = hasStructuredSettlementFilters(urlState)
+    const moreCount = appliedChips.filter(({ key }) =>
+        ["supplierId", "status", "period"].includes(key),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="supplier-settlements-list-search-input"
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="结算单号、外部账单号、供应商"
-                            aria-label="搜索结算单"
-                            data-slot="settlement-list-search"
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="supplier-settlements-list-filter-toggle"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="结算单查询"
+            onSubmit={applyFilters}
+            queryButtonId={`${prefix}-filter-apply`}
+            moreButtonId={`${prefix}-filter-toggle`}
+            resetMoreButtonId={`${prefix}-filter-reset-more`}
+            clearButtonId={`${prefix}-filter-clear-all`}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search-input`}
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="结算单号、外部账单号、供应商"
+                    aria-label="搜索结算单"
+                    data-slot="settlement-list-search"
+                />
+            }
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={() => setPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="结算单列表更多筛选条件"
+            onResetMore={resetMoreFilters}
+            commonFilters={
+                <FixedOptionRadioFilter
+                    idPrefix={`${prefix}-filter-difference-type`}
+                    label="差异类型"
+                    variant="quiet"
+                    value={differenceTypeDraft}
+                    onValueChange={setDifferenceTypeDraft}
+                    options={DIFF_TYPE_RADIO_OPTIONS}
+                />
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-filter-supplier`}
+                        label="供应商"
                     >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
+                        <SupplierSearchCombobox
+                            id={`${prefix}-filter-supplier`}
+                            purpose="filter"
+                            className="w-full"
+                            value={supplierIdDraft ?? undefined}
+                            onValueChange={(id) =>
+                                setSupplierIdDraft(id ?? null)
                             }
+                            aria-label="供应商"
+                            placeholder="全部供应商"
                         />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`supplier-settlements-list-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="supplier-settlements-list-filter-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="结算单列表更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        id="supplier-settlements-list-filter-difference-type"
-                                        label="差异类型"
-                                        value={differenceTypeDraft}
-                                        onValueChange={setDifferenceTypeDraft}
-                                        options={DIFF_TYPE_RADIO_OPTIONS}
-                                    />
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                供应商
-                                            </span>
-                                            <SupplierSearchCombobox
-                                                id="supplier-settlements-list-filter-supplier"
-                                                purpose="filter"
-                                                className="w-full"
-                                                value={
-                                                    supplierIdDraft ?? undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    setSupplierIdDraft(
-                                                        id ?? null,
-                                                    )
-                                                }
-                                                aria-label="供应商"
-                                                placeholder="全部供应商"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                状态
-                                            </span>
-                                            <MultiOptionCombobox
-                                                id="supplier-settlements-list-filter-status"
-                                                className="w-full"
-                                                value={statusDraft}
-                                                onValueChange={setStatusDraft}
-                                                options={STATUS_FILTER_OPTIONS}
-                                                placeholder="全部状态"
-                                                aria-label="状态"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
-                                            <span className="text-muted-foreground">
-                                                结算期间
-                                            </span>
-                                            <div
-                                                className="flex items-center gap-1.5"
-                                                role="group"
-                                                aria-label="结算期间"
-                                                aria-describedby={
-                                                    periodError
-                                                        ? periodErrorId
-                                                        : undefined
-                                                }
-                                            >
-                                                <DatePicker
-                                                    id="supplier-settlements-list-filter-period-from"
-                                                    className="w-0 min-w-0 flex-1"
-                                                    value={
-                                                        periodFromDraft ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(next) => {
-                                                        setPeriodFromDraft(
-                                                            next ?? "",
-                                                        )
-                                                        setPeriodError(null)
-                                                    }}
-                                                    aria-invalid={Boolean(
-                                                        periodError,
-                                                    )}
-                                                    placeholder="期间自"
-                                                />
-                                                <span className="text-muted-foreground">
-                                                    至
-                                                </span>
-                                                <DatePicker
-                                                    id="supplier-settlements-list-filter-period-to"
-                                                    className="w-0 min-w-0 flex-1"
-                                                    value={
-                                                        periodToDraft ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(next) => {
-                                                        setPeriodToDraft(
-                                                            next ?? "",
-                                                        )
-                                                        setPeriodError(null)
-                                                    }}
-                                                    aria-invalid={Boolean(
-                                                        periodError,
-                                                    )}
-                                                    placeholder="期间至"
-                                                />
-                                            </div>
-                                            {periodError ? (
-                                                <span
-                                                    id={periodErrorId}
-                                                    className="text-xs text-destructive"
-                                                    role="alert"
-                                                >
-                                                    {periodError}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="supplier-settlements-list-filter-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="supplier-settlements-list-filter-apply"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-filter-status`}
+                        label="状态"
+                    >
+                        <MultiOptionCombobox
+                            id={`${prefix}-filter-status`}
+                            className="w-full"
+                            value={statusDraft}
+                            onValueChange={setStatusDraft}
+                            options={STATUS_FILTER_OPTIONS}
+                            placeholder="全部状态"
+                            aria-label="状态"
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField label="结算期间">
+                        <div
+                            className="flex items-center gap-1.5"
+                            role="group"
+                            aria-label="结算期间"
+                            aria-describedby={
+                                periodError ? periodErrorId : undefined
+                            }
+                        >
+                            <DatePicker
+                                id={`${prefix}-filter-period-from`}
+                                className="w-0 min-w-0 flex-1"
+                                value={periodFromDraft || undefined}
+                                onValueChange={(next) => {
+                                    setPeriodFromDraft(next ?? "")
+                                    setPeriodError(null)
+                                }}
+                                aria-invalid={Boolean(periodError)}
+                                placeholder="期间自"
+                            />
+                            <span className="text-muted-foreground">至</span>
+                            <DatePicker
+                                id={`${prefix}-filter-period-to`}
+                                className="w-0 min-w-0 flex-1"
+                                value={periodToDraft || undefined}
+                                onValueChange={(next) => {
+                                    setPeriodToDraft(next ?? "")
+                                    setPeriodError(null)
+                                }}
+                                aria-invalid={Boolean(periodError)}
+                                placeholder="期间至"
+                            />
                         </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                        {periodError ? (
+                            <span
+                                id={periodErrorId}
+                                className="text-xs text-destructive"
+                                role="alert"
+                            >
+                                {periodError}
+                            </span>
+                        ) : null}
+                    </ListWorkspaceFilterField>
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "张结算单",
+                loadingLabel: "正在加载结算单…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as SettlementFilterKey)}
+            onClearAll={clearAllFilters}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

@@ -15,10 +15,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    AccessListToolbar,
-    AuditAdvancedFilterPanel,
-} from "@/features/access-audit/components/access-list-toolbar"
+import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
@@ -153,35 +150,30 @@ export function AuditPage() {
                     />
                 }
                 toolbar={
-                    <>
-                        <AccessListToolbar
-                            isAudit
-                            searchInputRef={page.searchInputRef}
-                            searchDraft={page.searchDraft}
-                            setSearchDraft={page.setSearchDraft}
-                            panelOpen={page.panelOpen}
-                            setPanelOpen={page.setPanelOpen}
-                            hasStructuredFilters={page.hasStructuredFilters}
-                            appliedChips={page.appliedChips}
-                            hasChips={
-                                page.hasActiveFilters &&
-                                page.appliedChips.length > 0
-                            }
-                            removeFilter={page.removeFilter}
-                            clearAllFilters={page.clearFilters}
-                            applyFilters={page.applyFilters}
-                        />
-                        {page.panelOpen ? (
-                            <AuditAdvancedFilterPanel
-                                draft={page.draft}
-                                updateDraft={page.updateDraft}
-                                actionOptions={page.actionOptions}
-                                filterError={page.filterError}
-                                resetMoreFilters={page.resetMoreFilters}
-                                applyFilters={page.applyFilters}
-                            />
-                        ) : null}
-                    </>
+                    <AccessListToolbar
+                        isAudit
+                        searchInputRef={page.searchInputRef}
+                        searchDraft={page.searchDraft}
+                        setSearchDraft={page.setSearchDraft}
+                        panelOpen={page.panelOpen}
+                        setPanelOpen={page.setPanelOpen}
+                        appliedChips={page.appliedChips}
+                        removeFilter={page.removeFilter}
+                        clearAllFilters={page.clearFilters}
+                        applyFilters={page.applyFilters}
+                        draft={page.draft}
+                        updateDraft={page.updateDraft}
+                        actionOptions={page.actionOptions}
+                        filterError={page.filterError}
+                        resetMoreFilters={page.resetMoreFilters}
+                        hasPendingChanges={page.hasPendingChanges}
+                        resultCount={rows.length}
+                        loading={
+                            page.pageQuery.isFetching &&
+                            !page.pageQuery.isPending
+                        }
+                        failed={page.pageQuery.isError && !data}
+                    />
                 }
                 table={
                     <AccessViewTable

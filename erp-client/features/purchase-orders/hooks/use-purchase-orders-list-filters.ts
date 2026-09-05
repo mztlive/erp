@@ -21,8 +21,8 @@ export type PurchaseOrderAppliedChip = Readonly<{
 /**
  * 采购单列表筛选状态模型（docs/ui-filter-design.md §5）：
  * Applied 在 URL（唯一事实源，查询 / 导出 / 计数只读它），
- * Draft 本地受控不触发请求，面板展开等 UI 态本地 state。
- * 收起态 Enter 与展开态「应用全部筛选」共用 applyFilters 一条提交路径。
+ * Draft 本地受控不触发请求。
+ * 收起态 Enter 与主行「查询」共用 applyFilters 一条提交路径。
  */
 export function usePurchaseOrdersListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -50,8 +50,6 @@ export function usePurchaseOrdersListFilters(
         statusFilter !== "all" ||
         effectiveMetric !== "all"
 
-    // 有结构化条件的初始深链展开面板；后续 URL 回填不重置展开态
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
     const [searchDraft, setSearchDraft] = React.useState(search)
     const [statusDraft, setStatusDraft] =
         React.useState<PurchaseOrderStatusFilter>(statusFilter)
@@ -76,7 +74,6 @@ export function usePurchaseOrdersListFilters(
             metric: "all",
             page: 1,
         })
-        setPanelOpen(false)
     }, [pushUrl, searchDraft, statusDraft])
 
     /** 移除单个已生效条件；chip 关闭按钮只移除该条件。 */
@@ -95,17 +92,16 @@ export function usePurchaseOrdersListFilters(
         [pushUrl],
     )
 
-    /** 仅清除结构化条件（主状态）；保留关键词与指标快捷筛选，保持面板展开。 */
-    const resetMoreFilters = React.useCallback(() => {
-        setStatusDraft("all")
-        pushUrl({ status: "all", page: 1 })
-    }, [pushUrl])
+    /** 无更多面板，重置为空操作。 */
+    const resetMoreFilters = React.useCallback(() => {}, [])
 
-    /** 清空全部：Draft、面板、URL 筛选参数与分页一并重置；排序与导航上下文保留。 */
+    const hasPendingChanges =
+        searchDraft.trim() !== search.trim() || statusDraft !== statusFilter
+
+    /** 清除全部：Draft 与 URL 筛选参数一并重置；排序与导航上下文保留。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setStatusDraft("all")
-        setPanelOpen(false)
         pushUrl({ q: undefined, status: "all", metric: "all", page: 1 })
     }, [pushUrl])
 
@@ -151,10 +147,9 @@ export function usePurchaseOrdersListFilters(
         setSearchDraft,
         statusDraft,
         setStatusDraft,
-        panelOpen,
-        setPanelOpen,
         hasActiveFilters,
         hasStructuredFilters,
+        hasPendingChanges,
         appliedChips,
         // 动作
         removeFilter,

@@ -6,7 +6,7 @@ import type { PaginationState } from "@tanstack/react-table"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     hasAppliedSettlementFilters,
-    hasStructuredSettlementFilters,
+    hasMoreSettlementFilters,
     joinSettlementStatusParam,
     parseSettlementStatusParam,
     validateSettlementPeriodRange,
@@ -55,11 +55,11 @@ export function useSettlementListState(
     // ---- UI 态 ----
     // 深链带结构化条件时展开面板；展开态本身不写 URL。
     const [panelOpen, setPanelOpen] = React.useState(() =>
-        hasStructuredSettlementFilters(urlState),
+        hasMoreSettlementFilters(urlState),
     )
     const [periodError, setPeriodError] = React.useState<string | null>(null)
 
-    /** 唯一提交路径：收起态 Enter / 尾部箭头与展开态「应用全部筛选」共用。 */
+    /** 唯一提交路径：收起态 Enter 与主行「查询」共用。 */
     const applyFilters = React.useCallback(() => {
         const error = validateSettlementPeriodRange(
             periodFromDraft,
@@ -119,26 +119,28 @@ export function useSettlementListState(
         [patchUrl],
     )
 
-    /** 只清「更多筛选」结构化条件；保留关键词与视图，面板保持展开。 */
+    /** 只清「更多筛选」草稿；保留关键词、差异类型与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setSupplierIdDraft(null)
         setStatusDraft([])
-        setDifferenceTypeDraft("all")
         setPeriodFromDraft("")
         setPeriodToDraft("")
         setPeriodError(null)
-        patchUrl({
-            supplierId: undefined,
-            status: undefined,
-            differenceType: undefined,
-            periodFrom: undefined,
-            periodTo: undefined,
-            page: 1,
-        })
-    }, [patchUrl])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== (urlState.q ?? "").trim() ||
+        supplierIdDraft !== (urlState.supplierId ?? null) ||
+        (joinSettlementStatusParam([...statusDraft].sort()) ?? "") !==
+            (joinSettlementStatusParam(
+                [...parseSettlementStatusParam(urlState.status)].sort(),
+            ) ?? "") ||
+        differenceTypeDraft !== (urlState.differenceType ?? "all") ||
+        periodFromDraft !== (urlState.periodFrom ?? "") ||
+        periodToDraft !== (urlState.periodTo ?? "")
 
     /**
-     * 清空全部：重置 Draft、错误、面板、筛选参数与分页；
+     * 清除全部：重置 Draft、错误、面板、筛选参数与分页；
      * 保留排序、视图、期间与导航上下文（docs/ui-filter-design.md §5.6 / §14.3）。
      */
     const clearAllFilters = React.useCallback(() => {
@@ -201,6 +203,7 @@ export function useSettlementListState(
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        hasPendingChanges,
         clearAllFilters,
     }
 }

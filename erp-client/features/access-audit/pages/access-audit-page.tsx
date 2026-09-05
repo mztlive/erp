@@ -201,15 +201,17 @@ export function AccessAuditPage() {
                         setSearchDraft={page.setSearchDraft}
                         panelOpen={page.panelOpen}
                         setPanelOpen={page.setPanelOpen}
-                        hasStructuredFilters={page.hasStructuredFilters}
                         appliedChips={page.appliedChips}
-                        hasChips={
-                            page.hasActiveFilters &&
-                            page.appliedChips.length > 0
-                        }
                         removeFilter={page.removeFilter}
                         clearAllFilters={page.clearFilters}
                         applyFilters={page.applyFilters}
+                        hasPendingChanges={page.hasPendingChanges}
+                        resultCount={rows.length}
+                        loading={
+                            page.pageQuery.isFetching &&
+                            !page.pageQuery.isPending
+                        }
+                        failed={page.pageQuery.isError && !data}
                     />
                 }
                 table={

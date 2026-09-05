@@ -6,7 +6,7 @@ import * as React from "react"
  * 搜索关键词草稿：URL 回填 + `/` 聚焦快捷键。
  *
  * 只维护 Draft 与输入框引用，不写 URL —— 提交统一走显式 apply
- * （收起态 Enter / 搜索框尾部提交箭头 / 展开态「应用全部筛选」）。
+ * （Enter / 「查询」）。
  */
 export function useCustomerQualitySearch({ qParam }: { qParam: string }) {
     const [searchDraft, setSearchDraft] = React.useState(qParam)

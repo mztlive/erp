@@ -171,22 +171,21 @@ export function useSupplierListFilters(
         [patchUrl, resetPagination, setSearchDraft],
     )
 
-    /** 仅清除「更多筛选」；保留关键词，并保持面板展开。 */
+    /** 仅重置更多条件草稿；保留关键词、启停、资质状态及当前查询结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setLifecycleStatusDraft("all")
         setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
-        setSupplierQualificationHealthDraft("all")
-        patchUrl({
-            lifecycleStatus: null,
-            metricKey: null,
-            supplierCapabilityCodes: null,
-            supplierQualificationTypes: null,
-            supplierQualificationHealth: null,
-            page: null,
-        })
-        resetPagination()
-    }, [patchUrl, resetPagination])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        lifecycleStatusDraft !== lifecycleStatus ||
+        supplierQualificationHealthDraft !==
+            (supplierQualificationHealth ?? "all") ||
+        [...supplierCapabilityCodesDraft].sort().join(",") !==
+            [...supplierCapabilityCodes].sort().join(",") ||
+        [...supplierQualificationTypesDraft].sort().join(",") !==
+            [...supplierQualificationTypes].sort().join(",")
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -241,6 +240,7 @@ export function useSupplierListFilters(
         setSupplierQualificationTypesDraft,
         supplierQualificationHealthDraft,
         setSupplierQualificationHealthDraft,
+        hasPendingChanges,
         pagination,
         setPagination,
         changePagination,

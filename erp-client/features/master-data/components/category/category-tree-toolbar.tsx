@@ -1,32 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon } from "lucide-react"
 
-import { FilterChip, ListToolbar } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { FixedOptionRadioFilter } from "@/components/business"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import { LIFECYCLE_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type {
     CategoryTreeAppliedChip,
     CategoryTreeFilterKey,
 } from "@/features/master-data/hooks/use-master-data-category-tree"
 
-const LIFECYCLE_OPTIONS: ReadonlyArray<{
-    value: "all" | "enabled" | "disabled"
-    label: string
-}> = [
-    { value: "all", label: "全部" },
-    { value: "enabled", label: masterDataCopy.lifecycleEnabled },
-    { value: "disabled", label: masterDataCopy.lifecycleDisabled },
-]
-
-/** 分类树筛选条：搜索、启停快捷筛选与已生效 chip（docs/ui-filter-design.md §2.2/§3.1）。 */
+/** 分类树筛选条：搜索、启停常用筛选与已生效 chip。 */
 export function CategoryTreeToolbar({
     idPrefix,
     searchInputRef,
@@ -38,6 +27,10 @@ export function CategoryTreeToolbar({
     appliedChips,
     removeFilter,
     clearFilters,
+    hasPendingChanges,
+    resultCount,
+    loading,
+    failed,
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -49,93 +42,57 @@ export function CategoryTreeToolbar({
     appliedChips: readonly CategoryTreeAppliedChip[]
     removeFilter: (key: CategoryTreeFilterKey) => void
     clearFilters: () => void
+    hasPendingChanges: boolean
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }) {
     const prefix = idPrefix ?? "master-data-category-tree-toolbar"
-    const hasChips = appliedChips.length > 0
 
     return (
-        <form
-            className="border-b border-grid px-3 py-2.5"
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyTreeFilters()
-            }}
-        >
-            <ListToolbar
-                aria-label="分类树筛选"
+        <div className="border-b border-grid px-3 py-2.5">
+            <ListWorkspaceFilterBar
+                idPrefix={prefix}
+                formAriaLabel="分类树查询"
+                onSubmit={applyTreeFilters}
                 search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id={`${prefix}-search`}
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(e) => setSearchDraft(e.target.value)}
-                            placeholder={masterDataCopy.categoryTreeSearch}
-                            aria-label={masterDataCopy.categoryTreeSearch}
-                        />
-                    </InputGroup>
+                    <ListSearchField
+                        id={`${prefix}-search`}
+                        searchInputRef={searchInputRef}
+                        value={searchDraft}
+                        onChange={setSearchDraft}
+                        placeholder={masterDataCopy.categoryTreeSearch}
+                        aria-label={masterDataCopy.categoryTreeSearch}
+                    />
                 }
-                filters={
-                    <div
-                        role="group"
+                clearButtonId={`${prefix}-clear-all`}
+                commonFilters={
+                    <FixedOptionRadioFilter
+                        id={`${prefix}-lifecycle`}
+                        label="启停"
+                        variant="quiet"
+                        value={lifecycleStatus}
+                        onValueChange={onLifecycleStatusChange}
+                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
                         aria-label="生命周期筛选"
-                        className="flex h-control max-w-full items-stretch overflow-x-auto gap-1 border-b border-border bg-transparent [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                    >
-                        {LIFECYCLE_OPTIONS.map((option) => {
-                            const active = lifecycleStatus === option.value
-                            return (
-                                <Button
-                                    id={`${prefix}-lifecycle-${toAutomationIdSegment(option.value)}`}
-                                    key={option.value}
-                                    type="button"
-                                    variant={active ? "secondary" : "ghost"}
-                                    className={
-                                        active
-                                            ? "rounded-none border-b-2 border-b-foreground bg-transparent shadow-none"
-                                            : "rounded-none bg-transparent shadow-none"
-                                    }
-                                    aria-pressed={active}
-                                    onClick={() =>
-                                        onLifecycleStatusChange(option.value)
-                                    }
-                                >
-                                    {option.label}
-                                </Button>
-                            )
-                        })}
-                    </div>
+                    />
                 }
-                secondary={
-                    hasChips ? (
-                        <div className="flex w-full flex-wrap items-center gap-2 border-t pt-3">
-                            <span className="text-xs text-muted-foreground">
-                                已筛选
-                            </span>
-                            {appliedChips.map((chip) => (
-                                <FilterChip
-                                    key={chip.key}
-                                    id={`${prefix}-filter-${toAutomationIdSegment(chip.key)}`}
-                                    label={chip.label}
-                                    clearLabel={`移除${chip.label}`}
-                                    onClear={() => removeFilter(chip.key)}
-                                />
-                            ))}
-                            <Button
-                                id={`${prefix}-clear-all`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                onClick={clearFilters}
-                            >
-                                清空全部
-                            </Button>
-                        </div>
-                    ) : undefined
+                resultStatus={listWorkspaceFilterStatusText({
+                    loading,
+                    failed,
+                    resultCount,
+                    noun: "项",
+                    loadingLabel: "正在加载分类…",
+                })}
+                chips={appliedChips}
+                onClearChip={(key) =>
+                    removeFilter(key as CategoryTreeFilterKey)
                 }
+                onClearAll={clearFilters}
+                hasPendingChanges={hasPendingChanges}
+                pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                idleHint="导出与当前查询结果一致"
             />
-        </form>
+        </div>
     )
 }

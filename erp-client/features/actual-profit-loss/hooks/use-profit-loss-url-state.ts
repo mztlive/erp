@@ -246,13 +246,14 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         setBenefitScenarioDraft("")
         setFulfillmentModesDraft([])
         setCostTypesDraft([])
-        patchUrl({
-            benefitScenario: null,
-            fulfillmentMode: null,
-            costType: null,
-            page: null,
-        })
-    }, [patchUrl])
+    }, [])
+
+    const hasPendingChanges =
+        searchInput.trim() !== qParam.trim() ||
+        benefitScenarioDraft.trim() !== (benefitScenario ?? "") ||
+        serializeCsvValues(fulfillmentModesDraft) !==
+            serializeCsvValues(fulfillmentModes) ||
+        serializeCsvValues(costTypesDraft) !== serializeCsvValues(costTypes)
     const removeFilter = React.useCallback(
         (key: string) => {
             if (key === "q") {
@@ -353,6 +354,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         applyFilters,
         clearAllFilters,
         resetMoreFilters,
+        hasPendingChanges,
         removeFilter,
         pagination,
         setPagination: handlePaginationChange,

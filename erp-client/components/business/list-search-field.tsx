@@ -8,20 +8,23 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function ListSearchField({
+    id,
     searchInputRef,
     value,
     onChange,
     placeholder,
-    id = "master-data-list-search-input",
+    "aria-label": ariaLabel = "搜索",
+    "data-slot": dataSlot,
 }: {
-    searchInputRef: React.RefObject<HTMLInputElement | null>
+    id: string
+    searchInputRef?: React.Ref<HTMLInputElement>
     value: string
     onChange: (value: string) => void
     placeholder: string
-    id?: string
+    "aria-label"?: string
+    "data-slot"?: string
 }) {
     return (
         <InputGroup>
@@ -31,10 +34,11 @@ export function ListSearchField({
             <InputGroupInput
                 id={id}
                 ref={searchInputRef}
+                data-slot={dataSlot}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 placeholder={placeholder}
-                aria-label={masterDataCopy.searchAria}
+                aria-label={ariaLabel}
             />
         </InputGroup>
     )

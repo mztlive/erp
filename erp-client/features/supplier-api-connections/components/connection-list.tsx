@@ -258,7 +258,6 @@ export function ConnectionList({
                         onEnvironmentChange={filters.applyEnvironment}
                         filterPanelOpen={filters.filterPanelOpen}
                         onFilterPanelOpenChange={filters.setFilterPanelOpen}
-                        hasStructuredFilters={filters.hasStructuredFilters}
                         appliedChips={appliedChips}
                         removeFilter={filters.removeFilter}
                         onApplyFilters={filters.applyFilters}
@@ -276,6 +275,10 @@ export function ConnectionList({
                         }
                         supplierIdDraft={filters.supplierIdDraft}
                         onSupplierIdDraftChange={filters.setSupplierIdDraft}
+                        hasPendingChanges={filters.hasPendingChanges}
+                        resultCount={data?.total}
+                        loading={listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                 }
                 table={

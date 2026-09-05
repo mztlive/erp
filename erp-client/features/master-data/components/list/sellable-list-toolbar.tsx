@@ -1,30 +1,33 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     CategoryCombobox,
-    FilterChip,
     FixedOptionRadioFilter,
-    ListFilterGrid,
-    ListToolbar,
     OptionCombobox,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ListSearchField } from "@/features/master-data/components/list/list-search-field"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type {
     SellableFilterKey,
     SellableSupplyPresetSelection,
 } from "@/features/master-data/hooks/use-sellable-list-filters"
-import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 import { PRODUCT_KIND_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -46,12 +49,18 @@ const SUPPLY_PRESET_OPTIONS: ReadonlyArray<{
     { value: "nationwide", label: "全国可供" },
 ]
 
+const MORE_CHIP_KEYS = [
+    "productBrandId",
+    "productSupplierId",
+    "supplyRegion",
+    "salesPrice",
+] as const
+
 export function SellableListToolbar({
     idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
-    hasActiveFilters,
     clearAllFilters,
     appliedChips,
     removeFilter,
@@ -60,7 +69,6 @@ export function SellableListToolbar({
     applySupplyPreset,
     sellableFilterPanelOpen,
     setSellableFilterPanelOpen,
-    hasStructuredSellableFilters,
     applySellableFilters,
     resetMoreFilters,
     supplyRegionDraft,
@@ -83,15 +91,19 @@ export function SellableListToolbar({
     showSupplyPresetCounts = true,
     showSupplyPreset = true,
     hiddenProductKinds,
-    applyHint = "将同时应用上方关键词和以下筛选条件；结果也用于导出。",
+    applyHint,
     variant = "default",
     actions,
+    hasPendingChanges = false,
+    resultCount,
+    loading = false,
+    failed = false,
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
-    hasActiveFilters: boolean
+    hasActiveFilters?: boolean
     clearAllFilters: () => void
     appliedChips: readonly SellableAppliedChip[]
     removeFilter: (key: SellableFilterKey) => void
@@ -100,7 +112,7 @@ export function SellableListToolbar({
     applySupplyPreset: (next: SellableSupplyPresetSelection) => void
     sellableFilterPanelOpen: boolean
     setSellableFilterPanelOpen: SetState<boolean>
-    hasStructuredSellableFilters: boolean
+    hasStructuredSellableFilters?: boolean
     applySellableFilters: () => void
     resetMoreFilters: () => void
     supplyRegionDraft: string
@@ -126,379 +138,280 @@ export function SellableListToolbar({
     applyHint?: string
     variant?: "default" | "quiet"
     actions?: React.ReactNode
+    hasPendingChanges?: boolean
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }) {
     const prefix = idPrefix ?? "master-data-list-sellable-list-toolbar"
-    const panelId = React.useId()
-    const priceErrorId = React.useId()
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const panelId = `${prefix}-more-panel`
+    const priceErrorId = `${prefix}-price-error`
+    const priceInputRef = React.useRef<HTMLInputElement>(null)
+    const moreCount = appliedChips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
+    ).length
+
+    React.useEffect(() => {
+        if (productSalesPriceError && sellableFilterPanelOpen) {
+            priceInputRef.current?.focus()
+        }
+    }, [productSalesPriceError, sellableFilterPanelOpen])
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applySellableFilters()
-            }}
-        >
-            <ListToolbar
-                actions={actions}
-                className={
-                    variant === "quiet"
-                        ? "gap-0 [&_[data-slot=list-toolbar-primary]_[data-slot=separator]]:hidden"
-                        : undefined
-                }
-                search={
-                    <ListSearchField
-                        id={`${prefix}-search-input`}
-                        searchInputRef={searchInputRef}
-                        value={searchDraft}
-                        onChange={setSearchDraft}
-                        placeholder={masterDataSearchPlaceholder(
-                            "sellable-items",
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="公司商品池查询"
+            onSubmit={applySellableFilters}
+            className={
+                variant === "quiet"
+                    ? "gap-0 [&_[data-slot=list-toolbar-primary]_[data-slot=separator]]:hidden"
+                    : undefined
+            }
+            search={
+                <ListSearchField
+                    id={`${prefix}-search-input`}
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder={masterDataSearchPlaceholder("sellable-items")}
+                    aria-label={masterDataCopy.searchAria}
+                />
+            }
+            queryButtonId="master-data-list-sellable-list-toolbar-button-5"
+            moreButtonId={`${prefix}-filter-trigger`}
+            resetMoreButtonId="master-data-list-sellable-list-toolbar-button-4"
+            clearButtonId="master-data-list-sellable-list-toolbar-button-3"
+            moreCount={moreCount}
+            moreOpen={sellableFilterPanelOpen}
+            onToggleMore={() => setSellableFilterPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="公司商品池更多筛选条件"
+            moreHint={applyHint ?? "可组合多个条件，点击「查询」后统一生效。"}
+            onResetMore={resetMoreFilters}
+            extraPrimary={
+                showSupplyPreset ? (
+                    <div
+                        role="group"
+                        aria-label="供应快捷筛选"
+                        className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
+                    >
+                        {SUPPLY_PRESET_OPTIONS.map((option) => {
+                            const active = supplyPreset === option.value
+                            return (
+                                <Button
+                                    id={`master-data-sellable-preset-${toAutomationIdSegment(option.value)}`}
+                                    key={option.value}
+                                    type="button"
+                                    variant={active ? "secondary" : "ghost"}
+                                    className={
+                                        active
+                                            ? "bg-card shadow-xs"
+                                            : "shadow-none"
+                                    }
+                                    aria-pressed={active}
+                                    onClick={() =>
+                                        applySupplyPreset(option.value)
+                                    }
+                                >
+                                    {option.label}
+                                    {showSupplyPresetCounts ? (
+                                        <span className="num text-xs text-muted-foreground">
+                                            {supplyPresetCounts[option.value]}
+                                        </span>
+                                    ) : null}
+                                </Button>
+                            )
+                        })}
+                    </div>
+                ) : undefined
+            }
+            actions={actions}
+            commonFilters={
+                <>
+                    <FixedOptionRadioFilter
+                        variant="quiet"
+                        label="商品类型"
+                        value={productKindDraft}
+                        onValueChange={setProductKindDraft}
+                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS.filter(
+                            (option) =>
+                                option.value === "all" ||
+                                !hiddenProductKinds?.includes(
+                                    option.value as ProductKind,
+                                ),
                         )}
                     />
-                }
-                filters={
-                    <>
-                        {showSupplyPreset ? (
-                            <div
-                                role="group"
-                                aria-label="供应快捷筛选"
-                                className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                            >
-                                {SUPPLY_PRESET_OPTIONS.map((option) => {
-                                    const active = supplyPreset === option.value
-                                    return (
-                                        <Button
-                                            id={`master-data-sellable-preset-${toAutomationIdSegment(option.value)}`}
-                                            key={option.value}
-                                            type="button"
-                                            variant={
-                                                active ? "secondary" : "ghost"
-                                            }
-                                            className={
-                                                active
-                                                    ? "bg-card shadow-xs"
-                                                    : "shadow-none"
-                                            }
-                                            aria-pressed={active}
-                                            onClick={() =>
-                                                applySupplyPreset(option.value)
-                                            }
-                                        >
-                                            {option.label}
-                                            {showSupplyPresetCounts ? (
-                                                <span className="num text-xs text-muted-foreground">
-                                                    {
-                                                        supplyPresetCounts[
-                                                            option.value
-                                                        ]
-                                                    }
-                                                </span>
-                                            ) : null}
-                                        </Button>
-                                    )
-                                })}
-                            </div>
-                        ) : null}
-                        <Button
-                            id={`${prefix}-filter-trigger`}
-                            type="button"
-                            variant="outline"
-                            aria-expanded={sellableFilterPanelOpen}
-                            aria-controls={panelId}
-                            onClick={() =>
-                                setSellableFilterPanelOpen((open) => !open)
+                    <ListWorkspaceInlineFilter
+                        htmlFor="master-data-list-sellable-list-toolbar-categorycombobox-1"
+                        label="分类"
+                    >
+                        <CategoryCombobox
+                            id="master-data-list-sellable-list-toolbar-categorycombobox-1"
+                            className="w-full sm:w-60"
+                            aria-label="商品分类"
+                            categories={
+                                productFilterOptionsQuery.data?.categories ?? []
                             }
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            更多筛选
-                            {hasStructuredSellableFilters ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    sellableFilterPanelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
-                                }
-                            />
-                        </Button>
-                    </>
-                }
-                secondary={
-                    hasChips || sellableFilterPanelOpen ? (
-                        <div
-                            className={cn(
-                                "w-full space-y-3",
-                                variant === "quiet" && "pt-5",
-                            )}
-                        >
-                            {hasChips ? (
-                                <div
-                                    className={cn(
-                                        "flex flex-wrap items-center gap-2 border-t pt-3",
-                                        variant === "quiet" && "border-0 pt-0",
-                                    )}
-                                >
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`master-data-sellable-toolbar-filter-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="master-data-list-sellable-list-toolbar-button-3"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {sellableFilterPanelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className={cn(
-                                        "flex w-full flex-col gap-3 border-t pt-3",
-                                        variant === "quiet" &&
-                                            "gap-5 border-0 pt-0",
-                                    )}
-                                    aria-label="公司商品池更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        variant={
-                                            variant === "quiet"
-                                                ? "quiet"
-                                                : "outline"
-                                        }
-                                        label="商品类型"
-                                        value={productKindDraft}
-                                        onValueChange={setProductKindDraft}
-                                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS.filter(
-                                            (option) =>
-                                                option.value === "all" ||
-                                                !hiddenProductKinds?.includes(
-                                                    option.value as ProductKind,
-                                                ),
-                                        )}
-                                    />
-                                    <ListFilterGrid>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                分类
-                                            </span>
-                                            <CategoryCombobox
-                                                id="master-data-list-sellable-list-toolbar-categorycombobox-1"
-                                                className="w-full"
-                                                categories={
-                                                    productFilterOptionsQuery
-                                                        .data?.categories ?? []
-                                                }
-                                                value={
-                                                    productCategoryIdDraft ??
-                                                    undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    setProductCategoryIdDraft(
-                                                        id ?? null,
-                                                    )
-                                                }
-                                                loading={
-                                                    productFilterOptionsQuery.isPending
-                                                }
-                                                placeholder="全部分类"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                品牌
-                                            </span>
-                                            <OptionCombobox
-                                                id="master-data-list-sellable-list-toolbar-optioncombobox-1"
-                                                className="w-full"
-                                                value={productBrandIdDraft}
-                                                aria-label="商品品牌"
-                                                onValueChange={
-                                                    setProductBrandIdDraft
-                                                }
-                                                options={
-                                                    productFilterOptionsQuery
-                                                        .data?.brands ?? []
-                                                }
-                                                loading={
-                                                    productFilterOptionsQuery.isPending
-                                                }
-                                                placeholder="全部品牌"
-                                                searchPlaceholder="搜索品牌名称或代码"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                供应商
-                                            </span>
-                                            <OptionCombobox
-                                                id="master-data-list-sellable-list-toolbar-optioncombobox-2"
-                                                className="w-full"
-                                                value={productSupplierIdDraft}
-                                                aria-label="供应商"
-                                                onValueChange={
-                                                    setProductSupplierIdDraft
-                                                }
-                                                options={
-                                                    productFilterOptionsQuery
-                                                        .data?.suppliers ?? []
-                                                }
-                                                loading={
-                                                    productFilterOptionsQuery.isPending
-                                                }
-                                                placeholder="全部供应商"
-                                                searchPlaceholder="搜索供应商名称或代码"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                可供区域
-                                            </span>
-                                            <Input
-                                                id="master-data-list-sellable-list-toolbar-input-1"
-                                                className="w-full"
-                                                value={supplyRegionDraft}
-                                                onChange={(event) =>
-                                                    setSupplyRegionDraft(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                autoComplete="off"
-                                                placeholder="如：全国"
-                                                aria-label="可供区域"
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
-                                            <span className="text-muted-foreground">
-                                                销售价
-                                            </span>
-                                            <div className="flex items-center gap-1.5">
-                                                <Input
-                                                    id="master-data-list-sellable-list-toolbar-input-2"
-                                                    className="w-0 min-w-0 flex-1"
-                                                    value={
-                                                        productSalesPriceMinDraft
-                                                    }
-                                                    onChange={(event) => {
-                                                        setProductSalesPriceMinDraft(
-                                                            event.target.value,
-                                                        )
-                                                        setProductSalesPriceError(
-                                                            null,
-                                                        )
-                                                    }}
-                                                    inputMode="decimal"
-                                                    autoComplete="off"
-                                                    placeholder="最低价"
-                                                    aria-label="最低销售价"
-                                                    aria-invalid={Boolean(
-                                                        productSalesPriceError,
-                                                    )}
-                                                    aria-describedby={
-                                                        productSalesPriceError
-                                                            ? priceErrorId
-                                                            : undefined
-                                                    }
-                                                />
-                                                <span className="text-muted-foreground">
-                                                    至
-                                                </span>
-                                                <Input
-                                                    id="master-data-list-sellable-list-toolbar-input-3"
-                                                    className="w-0 min-w-0 flex-1"
-                                                    value={
-                                                        productSalesPriceMaxDraft
-                                                    }
-                                                    onChange={(event) => {
-                                                        setProductSalesPriceMaxDraft(
-                                                            event.target.value,
-                                                        )
-                                                        setProductSalesPriceError(
-                                                            null,
-                                                        )
-                                                    }}
-                                                    inputMode="decimal"
-                                                    autoComplete="off"
-                                                    placeholder="最高价"
-                                                    aria-label="最高销售价"
-                                                    aria-invalid={Boolean(
-                                                        productSalesPriceError,
-                                                    )}
-                                                    aria-describedby={
-                                                        productSalesPriceError
-                                                            ? priceErrorId
-                                                            : undefined
-                                                    }
-                                                />
-                                            </div>
-                                            {productSalesPriceError ? (
-                                                <span
-                                                    id={priceErrorId}
-                                                    className="text-xs text-destructive"
-                                                    role="alert"
-                                                >
-                                                    {productSalesPriceError}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                    </ListFilterGrid>
-                                    <div
-                                        className={cn(
-                                            "flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between",
-                                            variant === "quiet" &&
-                                                "border-0 pt-1",
-                                        )}
-                                    >
-                                        <p className="text-xs text-muted-foreground">
-                                            {applyHint}
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="master-data-list-sellable-list-toolbar-button-4"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="master-data-list-sellable-list-toolbar-button-5"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
+                            value={productCategoryIdDraft ?? undefined}
+                            onValueChange={(id) =>
+                                setProductCategoryIdDraft(id ?? null)
+                            }
+                            loading={productFilterOptionsQuery.isPending}
+                            placeholder="全部分类"
+                        />
+                    </ListWorkspaceInlineFilter>
+                </>
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            品牌与供货
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+                            <ListWorkspaceFilterField
+                                htmlFor="master-data-list-sellable-list-toolbar-optioncombobox-1"
+                                label="品牌"
+                            >
+                                <OptionCombobox
+                                    id="master-data-list-sellable-list-toolbar-optioncombobox-1"
+                                    className="w-full"
+                                    value={productBrandIdDraft}
+                                    aria-label="商品品牌"
+                                    onValueChange={setProductBrandIdDraft}
+                                    options={
+                                        productFilterOptionsQuery.data
+                                            ?.brands ?? []
+                                    }
+                                    loading={
+                                        productFilterOptionsQuery.isPending
+                                    }
+                                    placeholder="全部品牌"
+                                    searchPlaceholder="搜索品牌名称或代码"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="master-data-list-sellable-list-toolbar-optioncombobox-2"
+                                label="供应商"
+                            >
+                                <OptionCombobox
+                                    id="master-data-list-sellable-list-toolbar-optioncombobox-2"
+                                    className="w-full"
+                                    value={productSupplierIdDraft}
+                                    aria-label="供应商"
+                                    onValueChange={setProductSupplierIdDraft}
+                                    options={
+                                        productFilterOptionsQuery.data
+                                            ?.suppliers ?? []
+                                    }
+                                    loading={
+                                        productFilterOptionsQuery.isPending
+                                    }
+                                    placeholder="全部供应商"
+                                    searchPlaceholder="搜索供应商名称或代码"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="master-data-list-sellable-list-toolbar-input-1"
+                                label="可供区域"
+                            >
+                                <Input
+                                    id="master-data-list-sellable-list-toolbar-input-1"
+                                    className="w-full"
+                                    value={supplyRegionDraft}
+                                    onChange={(event) =>
+                                        setSupplyRegionDraft(event.target.value)
+                                    }
+                                    autoComplete="off"
+                                    placeholder="如：全国"
+                                    aria-label="可供区域"
+                                />
+                            </ListWorkspaceFilterField>
                         </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                    </fieldset>
+                    <fieldset className="min-w-0 lg:border-l lg:pl-5">
+                        <legend className="mb-3 text-xs font-medium">
+                            销售价格
+                        </legend>
+                        <ListWorkspaceFilterField label="含税售价 · 元">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <Input
+                                    id="master-data-list-sellable-list-toolbar-input-2"
+                                    ref={priceInputRef}
+                                    className="w-0 min-w-0 flex-1"
+                                    value={productSalesPriceMinDraft}
+                                    onChange={(event) => {
+                                        setProductSalesPriceMinDraft(
+                                            event.target.value,
+                                        )
+                                        setProductSalesPriceError(null)
+                                    }}
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    placeholder="最低价"
+                                    aria-label="最低销售价"
+                                    aria-invalid={Boolean(
+                                        productSalesPriceError,
+                                    )}
+                                    aria-describedby={
+                                        productSalesPriceError
+                                            ? priceErrorId
+                                            : undefined
+                                    }
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                    至
+                                </span>
+                                <Input
+                                    id="master-data-list-sellable-list-toolbar-input-3"
+                                    className="w-0 min-w-0 flex-1"
+                                    value={productSalesPriceMaxDraft}
+                                    onChange={(event) => {
+                                        setProductSalesPriceMaxDraft(
+                                            event.target.value,
+                                        )
+                                        setProductSalesPriceError(null)
+                                    }}
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    placeholder="最高价"
+                                    aria-label="最高销售价"
+                                    aria-invalid={Boolean(
+                                        productSalesPriceError,
+                                    )}
+                                    aria-describedby={
+                                        productSalesPriceError
+                                            ? priceErrorId
+                                            : undefined
+                                    }
+                                />
+                            </div>
+                            {productSalesPriceError ? (
+                                <p
+                                    id={priceErrorId}
+                                    className="text-xs text-destructive"
+                                    role="alert"
+                                >
+                                    {productSalesPriceError}
+                                </p>
+                            ) : null}
+                        </ListWorkspaceFilterField>
+                    </fieldset>
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "件商品",
+                loadingLabel: "正在加载商品…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as SellableFilterKey)}
+            onClearAll={clearAllFilters}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询"
+            idleHint="结果与当前查询条件一致"
+        />
     )
 }

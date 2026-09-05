@@ -35,7 +35,7 @@ export type CustomerAppliedChip = Readonly<{
 
 /**
  * 客户中心目录的 URL 派生状态（docs/ui-filter-design.md §5）：
- * Applied 以 URL 为唯一事实源；Draft（关键词/状态）与 UI 态（面板展开）只存本地，
+ * Applied 以 URL 为唯一事实源；Draft（关键词/状态）只存本地，
  * Draft 变化不触发请求。所有变更通过 router.replace(scroll: false) 写回 URL。
  */
 export function useCustomerCenterDirectoryState() {
@@ -63,11 +63,7 @@ export function useCustomerCenterDirectoryState() {
     const [statusDraft, setStatusDraft] =
         React.useState<DirectoryStatus>(status)
 
-    // ---- UI 态 ----
-    // 有结构化条件（状态非默认「启用」）的初始深链展开面板
-    const [panelOpen, setPanelOpen] = React.useState(status !== "active")
-
-    // URL 回填只同步 Draft；不抢夺用户当前面板展开态
+    // URL 回填只同步 Draft
     React.useEffect(() => {
         if (document.activeElement !== searchInputRef.current) {
             setSearchDraft(q)
@@ -92,13 +88,12 @@ export function useCustomerCenterDirectoryState() {
         [dir, page, pathname, q, router, scope, sort, status],
     )
 
-    /** 单一提交路径：收起态 Enter / 搜索框尾部箭头 / 展开态「应用全部筛选」都走这里。 */
+    /** 单一提交路径：查询按钮与搜索框 Enter 共用。 */
     const applyFilters = React.useCallback(() => {
         pushState({ q: searchDraft.trim(), status: statusDraft, page: 1 })
-        setPanelOpen(false)
     }, [pushState, searchDraft, statusDraft])
 
-    /** 快捷筛选（客户范围）直接写 Applied；不改动关键词或「更多筛选」草稿。 */
+    /** 快捷筛选（客户范围）直接写 Applied；不改动关键词或状态草稿。 */
     const applyScope = React.useCallback(
         (next: CustomerScope) => {
             pushState({ scope: next, page: 1 })
@@ -121,17 +116,15 @@ export function useCustomerCenterDirectoryState() {
         [pushState],
     )
 
-    /** 仅清除「更多筛选」；保留关键词和范围快捷筛选，面板保持展开。 */
+    /** 仅重置更多条件草稿；本页无更多面板。 */
     const resetMoreFilters = React.useCallback(() => {
-        setStatusDraft("active")
-        pushState({ status: "active", page: 1 })
-    }, [pushState])
+        return
+    }, [])
 
-    /** 同时重置 Draft、错误、面板、URL 筛选参数与分页；保留 scope/sort/dir。 */
+    /** 同时重置 Draft、URL 筛选参数与分页；保留 scope/sort/dir。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setStatusDraft("active")
-        setPanelOpen(false)
         pushState({ q: "", status: "active", page: 1 })
     }, [pushState])
 
@@ -153,6 +146,8 @@ export function useCustomerCenterDirectoryState() {
 
     const hasStructuredFilters = status !== "active"
     const hasActiveFilters = hasStructuredFilters || q.trim().length > 0
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() || statusDraft !== status
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -191,10 +186,9 @@ export function useCustomerCenterDirectoryState() {
         statusDraft,
         setStatusDraft,
         searchInputRef,
-        panelOpen,
-        setPanelOpen,
         hasStructuredFilters,
         hasActiveFilters,
+        hasPendingChanges,
         appliedChips,
         pushState,
         applyFilters,

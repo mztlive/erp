@@ -157,7 +157,6 @@ export function BatchListView({
                         searchInputRef={filters.searchInputRef}
                         searchDraft={filters.qDraft}
                         setSearchDraft={filters.setQDraft}
-                        hasActiveFilters={filters.hasAppliedBatchFilters}
                         clearAllFilters={filters.clearAllBatchFilters}
                         appliedChips={filters.appliedChips}
                         removeFilter={filters.removeBatchFilter}
@@ -165,15 +164,16 @@ export function BatchListView({
                         setBatchFilterPanelOpen={
                             filters.setBatchFilterPanelOpen
                         }
-                        hasStructuredBatchFilters={
-                            filters.hasStructuredBatchFilters
-                        }
                         applyBatchFilters={filters.applyBatchFilters}
                         resetMoreFilters={filters.resetMoreBatchFilters}
                         objectTypeDraft={filters.objectTypeDraft}
                         setObjectTypeDraft={filters.setObjectTypeDraft}
                         statusDraft={filters.statusDraft}
                         setStatusDraft={filters.setStatusDraft}
+                        hasPendingChanges={filters.hasPendingChanges}
+                        resultCount={data?.totalCount}
+                        loading={listQuery.isPending || listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                 }
                 table={

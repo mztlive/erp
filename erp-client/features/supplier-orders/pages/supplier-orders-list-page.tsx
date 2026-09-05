@@ -296,34 +296,10 @@ export function SupplierOrdersListPage() {
                 toolbar={
                     <SupplierOrdersListToolbar
                         searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        onSearchDraftChange={filters.setSearchDraft}
-                        panelOpen={filters.panelOpen}
-                        setPanelOpen={filters.setPanelOpen}
-                        hasStructuredFilters={filters.hasStructuredFilters}
-                        appliedChips={filters.appliedChips}
-                        onRemoveFilter={filters.removeFilter}
-                        onApplyFilters={filters.applyFilters}
-                        onClearAllFilters={filters.clearAllFilters}
-                        onResetMoreFilters={filters.resetMoreFilters}
-                        filterError={filters.filterError}
-                        setFilterError={filters.setFilterError}
-                        supplierIdDraft={filters.supplierIdDraft}
-                        setSupplierIdDraft={filters.setSupplierIdDraft}
-                        fulfillmentStatusesDraft={
-                            filters.fulfillmentStatusesDraft
-                        }
-                        setFulfillmentStatusesDraft={
-                            filters.setFulfillmentStatusesDraft
-                        }
-                        cancelStatusesDraft={filters.cancelStatusesDraft}
-                        setCancelStatusesDraft={filters.setCancelStatusesDraft}
-                        refundStatusesDraft={filters.refundStatusesDraft}
-                        setRefundStatusesDraft={filters.setRefundStatusesDraft}
-                        paidFromDraft={filters.paidFromDraft}
-                        setPaidFromDraft={filters.setPaidFromDraft}
-                        paidToDraft={filters.paidToDraft}
-                        setPaidToDraft={filters.setPaidToDraft}
+                        filters={filters}
+                        resultCount={listQuery.data ? total : undefined}
+                        loading={listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                 }
                 table={

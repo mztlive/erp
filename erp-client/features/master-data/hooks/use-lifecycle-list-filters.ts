@@ -137,12 +137,15 @@ export function useLifecycleListFilters(
         [patchUrl, resetPagination, setSearchDraft],
     )
 
-    /** 仅清除「更多筛选」；保留关键词和快捷筛选（启停指标），并保持面板展开。 */
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        lifecycleStatusDraft !== lifecycleStatus ||
+        revisionTimingDraft !== revisionTiming
+
+    /** 字典页无更多面板；保留草稿重置以免外部仍调用。 */
     const resetMoreFilters = React.useCallback(() => {
         setRevisionTimingDraft("all")
-        patchUrl({ revisionTiming: null, page: null })
-        resetPagination()
-    }, [patchUrl, resetPagination])
+    }, [])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -178,6 +181,7 @@ export function useLifecycleListFilters(
         setLifecycleStatusDraft,
         revisionTimingDraft,
         setRevisionTimingDraft,
+        hasPendingChanges,
         appliedChips,
         pagination,
         setPagination,

@@ -173,7 +173,20 @@ export function PurchaseOrdersListPage() {
                 toolbar={
                     <PurchaseOrdersListToolbar
                         searchInputRef={ctrl.searchInputRef}
-                        {...filters}
+                        searchDraft={filters.searchDraft}
+                        setSearchDraft={filters.setSearchDraft}
+                        statusDraft={filters.statusDraft}
+                        setStatusDraft={filters.setStatusDraft}
+                        appliedChips={filters.appliedChips}
+                        removeFilter={filters.removeFilter}
+                        applyFilters={filters.applyFilters}
+                        clearAllFilters={filters.clearAllFilters}
+                        hasPendingChanges={filters.hasPendingChanges}
+                        resultCount={
+                            ctrl.listQuery.data ? ctrl.total : undefined
+                        }
+                        loading={ctrl.listQuery.isFetching}
+                        failed={listLoadFailed}
                     />
                 }
                 table={

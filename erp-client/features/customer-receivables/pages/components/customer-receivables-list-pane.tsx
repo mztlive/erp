@@ -106,13 +106,15 @@ export function CustomerReceivablesListPane({
                         setReviewStatusDraft={urlState.setReviewStatusDraft}
                         panelOpen={urlState.panelOpen}
                         setPanelOpen={urlState.setPanelOpen}
-                        hasStructuredFilters={urlState.hasStructuredFilters}
-                        hasActiveFilters={urlState.hasActiveFilters}
                         appliedChips={appliedChips}
                         removeFilter={urlState.removeFilter}
                         applyFilters={urlState.applyFilters}
                         resetMoreFilters={urlState.resetMoreFilters}
                         clearFilters={urlState.clearFilters}
+                        hasPendingChanges={urlState.hasPendingChanges}
+                        resultCount={data?.total}
+                        loading={isPending}
+                        failed={isError}
                     />
                 }
                 patchUrl={urlState.patchUrl}

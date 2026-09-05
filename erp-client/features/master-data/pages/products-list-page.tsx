@@ -130,70 +130,16 @@ export function ProductsListPage() {
                     <ProductListToolbar
                         idPrefix="master-data-products-list-toolbar"
                         searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
+                        filters={filters}
                         appliedChips={state.appliedChips}
-                        removeFilter={filters.removeFilter}
-                        productFilterPanelOpen={filters.productFilterPanelOpen}
-                        setProductFilterPanelOpen={
-                            filters.setProductFilterPanelOpen
-                        }
-                        hasStructuredProductFilters={
-                            filters.hasStructuredProductFilters
-                        }
-                        applyProductFilters={filters.applyProductFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        productKindDraft={filters.productKindDraft}
-                        setProductKindDraft={filters.setProductKindDraft}
-                        lifecycleStatusDraft={filters.lifecycleStatusDraft}
-                        setLifecycleStatusDraft={
-                            filters.setLifecycleStatusDraft
-                        }
-                        revisionTimingDraft={filters.revisionTimingDraft}
-                        setRevisionTimingDraft={filters.setRevisionTimingDraft}
-                        productListingStatusDraft={
-                            filters.productListingStatusDraft
-                        }
-                        setProductListingStatusDraft={
-                            filters.setProductListingStatusDraft
-                        }
-                        productSupplyCoverageDraft={
-                            filters.productSupplyCoverageDraft
-                        }
-                        setProductSupplyCoverageDraft={
-                            filters.setProductSupplyCoverageDraft
-                        }
-                        productCategoryIdDraft={filters.productCategoryIdDraft}
-                        setProductCategoryIdDraft={
-                            filters.setProductCategoryIdDraft
-                        }
-                        productBrandIdDraft={filters.productBrandIdDraft}
-                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
-                        productSupplierIdDraft={filters.productSupplierIdDraft}
-                        setProductSupplierIdDraft={
-                            filters.setProductSupplierIdDraft
-                        }
-                        productSalesPriceMinDraft={
-                            filters.productSalesPriceMinDraft
-                        }
-                        setProductSalesPriceMinDraft={
-                            filters.setProductSalesPriceMinDraft
-                        }
-                        productSalesPriceMaxDraft={
-                            filters.productSalesPriceMaxDraft
-                        }
-                        setProductSalesPriceMaxDraft={
-                            filters.setProductSalesPriceMaxDraft
-                        }
-                        productSalesPriceError={filters.productSalesPriceError}
-                        setProductSalesPriceError={
-                            filters.setProductSalesPriceError
-                        }
                         productFilterOptionsQuery={
                             state.productFilterOptionsQuery
                         }
+                        resultCount={
+                            state.listQuery.data ? state.rows.length : undefined
+                        }
+                        loading={state.listQuery.isFetching}
+                        failed={state.listQuery.isError}
                     />
                 }
                 tableClassName={productsListStyles.table}

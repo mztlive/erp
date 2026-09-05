@@ -110,6 +110,9 @@ export function LedgerTableFrame({
                             hasActiveFilters={hasActiveFilters}
                             appliedChips={appliedChips}
                             searchInputRef={searchInputRef}
+                            resultCount={data?.total}
+                            loading={loading}
+                            failed={isError}
                             {...filters}
                         />
                     </div>

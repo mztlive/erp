@@ -322,7 +322,11 @@ export function SellableSkuSelectDialog({
                                 ? [excludeProductKind]
                                 : undefined
                         }
-                        applyHint="将同时应用上方关键词和以下筛选条件。"
+                        applyHint="可组合多个条件，点击「查询」后统一生效。"
+                        hasPendingChanges={filters.hasPendingChanges}
+                        resultCount={listQuery.data?.total}
+                        loading={listQuery.isFetching}
+                        failed={listQuery.isError}
                     />
                 </div>
 

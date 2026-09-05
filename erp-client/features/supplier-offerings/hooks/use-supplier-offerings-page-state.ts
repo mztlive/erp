@@ -127,6 +127,14 @@ export function useSupplierOfferingsPageState() {
         urlState.sourceType ||
         urlState.availabilityStatus,
     )
+    const hasMoreFilters = Boolean(
+        (!skuLocked && urlState.skuId) ||
+        urlState.skuNo ||
+        urlState.productNo ||
+        urlState.supplierId ||
+        urlState.sourceType ||
+        urlState.availabilityStatus,
+    )
     /** 已生效筛选包含来源锁定条件：查询消费的全部参数都计入（§12.6）。 */
     const hasFilters = Boolean(
         urlState.q ||
@@ -159,8 +167,7 @@ export function useSupplierOfferingsPageState() {
             urlState.availabilityStatus ?? "all",
         )
     /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] =
-        React.useState(hasStructuredFilters)
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(hasMoreFilters)
 
     /** 合并 URL 补丁并保留未变的导航上下文。 */
     const patchUrl = React.useCallback(
@@ -253,28 +260,17 @@ export function useSupplierOfferingsPageState() {
     )
 
     /**
-     * 仅清除「更多筛选」面板内的结构化条件；保留关键词，
-     * 商品页带入的 skuId 属于导航上下文一并保留；面板保持展开（§5.6）。
+     * 仅重置更多条件草稿；保留关键词、关系状态与已生效结果。
+     * 商品页带入的 skuId 属于导航上下文，不在此清除。
      */
     const resetMoreFilters = React.useCallback(() => {
         setSkuNoDraft("")
         setProductNoDraft("")
         setSupplierIdDraft(null)
-        setStatusDraft("all")
         setSourceTypeDraft("all")
         setAvailabilityStatusDraft("all")
         if (!skuLocked) setSkuIdDraft(null)
-        patchUrl({
-            ...(skuLocked ? {} : { skuId: undefined }),
-            skuNo: undefined,
-            productNo: undefined,
-            supplierId: undefined,
-            status: undefined,
-            sourceType: undefined,
-            availabilityStatus: undefined,
-            page: 1,
-        })
-    }, [patchUrl, skuLocked])
+    }, [skuLocked])
 
     /**
      * 清空关键词与全部筛选参数并收起面板；商品页带入的 skuId 与 returnTo
@@ -361,6 +357,16 @@ export function useSupplierOfferingsPageState() {
             : null,
     ].filter(Boolean)
 
+    const hasPendingChanges =
+        searchDraft.trim() !== (urlState.q ?? "") ||
+        skuIdDraft !== (urlState.skuId ?? null) ||
+        skuNoDraft.trim() !== (urlState.skuNo ?? "") ||
+        productNoDraft.trim() !== (urlState.productNo ?? "") ||
+        supplierIdDraft !== (urlState.supplierId ?? null) ||
+        statusDraft !== (urlState.status ?? "all") ||
+        sourceTypeDraft !== (urlState.sourceType ?? "all") ||
+        availabilityStatusDraft !== (urlState.availabilityStatus ?? "all")
+
     return {
         urlState,
         skuLocked,
@@ -393,5 +399,6 @@ export function useSupplierOfferingsPageState() {
         removeFilter,
         resetMoreFilters,
         appliedFilterLabels,
+        hasPendingChanges,
     }
 }

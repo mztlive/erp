@@ -1,23 +1,20 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { OptionCombobox } from "@/components/business"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceInlineFilter,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import type {
     PurchaseOrderAppliedChip,
     PurchaseOrderFilterKey,
 } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
 import type { PurchaseOrderStatusFilter } from "@/features/purchase-orders/types"
 import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 状态枚举 ≥5：面板内用 Combobox，禁止长 Toggle 横排。 */
 const PO_STATUS_FILTER_OPTIONS = (
@@ -28,6 +25,8 @@ const PO_STATUS_FILTER_OPTIONS = (
     .filter(([value]) => value !== "all")
     .map(([value, label]) => ({ value, label }))
 
+const prefix = "procurement-orders-list"
+
 export type PurchaseOrdersListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
@@ -36,15 +35,14 @@ export type PurchaseOrdersListToolbarProps = {
     setStatusDraft: React.Dispatch<
         React.SetStateAction<PurchaseOrderStatusFilter>
     >
-    panelOpen: boolean
-    setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
-    hasActiveFilters: boolean
-    hasStructuredFilters: boolean
     appliedChips: readonly PurchaseOrderAppliedChip[]
     removeFilter: (key: PurchaseOrderFilterKey) => void
     applyFilters: () => void
-    resetMoreFilters: () => void
     clearAllFilters: () => void
+    hasPendingChanges: boolean
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }
 
 export function PurchaseOrdersListToolbar({
@@ -53,167 +51,67 @@ export function PurchaseOrdersListToolbar({
     setSearchDraft,
     statusDraft,
     setStatusDraft,
-    panelOpen,
-    setPanelOpen,
-    hasActiveFilters,
-    hasStructuredFilters,
     appliedChips,
     removeFilter,
     applyFilters,
-    resetMoreFilters,
     clearAllFilters,
+    hasPendingChanges,
+    resultCount,
+    loading,
+    failed,
 }: PurchaseOrdersListToolbarProps) {
-    const panelId = "procurement-orders-list-filters-panel"
-    const hasChips = hasActiveFilters && appliedChips.length > 0
-
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="procurement-orders-list-search"
-                            ref={searchInputRef}
-                            data-slot="po-list-search"
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="采购单号、供应商、来源销售单"
-                            aria-label="搜索采购单"
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="procurement-orders-list-filters-trigger"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
-                    >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
-                        />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`procurement-orders-list-filter-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id="procurement-orders-list-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="采购单更多筛选条件"
-                                >
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                主状态
-                                            </span>
-                                            <OptionCombobox
-                                                id="procurement-orders-list-status-filter"
-                                                className="w-full"
-                                                value={
-                                                    statusDraft === "all"
-                                                        ? null
-                                                        : statusDraft
-                                                }
-                                                onValueChange={(value) =>
-                                                    setStatusDraft(
-                                                        (value as PurchaseOrderStatusFilter | null) ??
-                                                            "all",
-                                                    )
-                                                }
-                                                options={
-                                                    PO_STATUS_FILTER_OPTIONS
-                                                }
-                                                aria-label="主状态"
-                                                placeholder="状态：全部"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="procurement-orders-list-reset-filters"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="procurement-orders-list-apply-filters"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+        <ListWorkspaceFilterBar
+            idPrefix={`${prefix}-filter`}
+            formAriaLabel="采购单查询"
+            onSubmit={applyFilters}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search`}
+                    searchInputRef={searchInputRef}
+                    data-slot="po-list-search"
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="采购单号、供应商、来源销售单"
+                    aria-label="搜索采购单"
+                />
+            }
+            queryButtonId={`${prefix}-apply-filters`}
+            clearButtonId={`${prefix}-clear-all`}
+            commonFilters={
+                <ListWorkspaceInlineFilter
+                    htmlFor={`${prefix}-status-filter`}
+                    label="主状态"
+                >
+                    <OptionCombobox
+                        id={`${prefix}-status-filter`}
+                        className="w-full sm:w-60"
+                        value={statusDraft === "all" ? null : statusDraft}
+                        onValueChange={(value) =>
+                            setStatusDraft(
+                                (value as PurchaseOrderStatusFilter | null) ??
+                                    "all",
+                            )
+                        }
+                        options={PO_STATUS_FILTER_OPTIONS}
+                        aria-label="主状态"
+                        placeholder="状态：全部"
+                    />
+                </ListWorkspaceInlineFilter>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "张采购单",
+                loadingLabel: "正在加载采购单…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as PurchaseOrderFilterKey)}
+            onClearAll={clearAllFilters}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

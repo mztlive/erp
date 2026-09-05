@@ -35,14 +35,11 @@ export type SalesOrdersListFilterDraft = {
     createdTo: string
 }
 
-export function hasStructuredSalesOrdersFilters(
-    url: SalesOrdersUrlState,
-): boolean {
+export function hasMoreSalesOrdersFilters(url: SalesOrdersUrlState): boolean {
     return Boolean(
         url.customerId ||
         url.contractId ||
         url.createdBy ||
-        url.nature !== "all" ||
         url.origin !== "all" ||
         url.commercialStatus !== "all" ||
         url.reviewStatus !== "all" ||
@@ -52,6 +49,33 @@ export function hasStructuredSalesOrdersFilters(
         url.closeStatus !== "all" ||
         url.createdFrom ||
         url.createdTo,
+    )
+}
+
+export function hasStructuredSalesOrdersFilters(
+    url: SalesOrdersUrlState,
+): boolean {
+    return url.nature !== "all" || hasMoreSalesOrdersFilters(url)
+}
+
+export function salesOrdersListFilterDraftsEqual(
+    left: SalesOrdersListFilterDraft,
+    right: SalesOrdersListFilterDraft,
+): boolean {
+    return (
+        left.customerId === right.customerId &&
+        left.contractId === right.contractId &&
+        left.createdBy === right.createdBy &&
+        left.nature === right.nature &&
+        left.origin === right.origin &&
+        left.commercialStatus === right.commercialStatus &&
+        left.reviewStatus === right.reviewStatus &&
+        left.fulfillment === right.fulfillment &&
+        left.collection === right.collection &&
+        left.invoice === right.invoice &&
+        left.closeStatus === right.closeStatus &&
+        left.createdFrom === right.createdFrom &&
+        left.createdTo === right.createdTo
     )
 }
 
@@ -152,7 +176,7 @@ export function resolveSalesOrdersListFilterPatch(input: {
         contractId: filterDraft.contractId || undefined,
         createdBy: filterDraft.createdBy || undefined,
         nature: filterDraft.nature,
-        summary: summaryConflictsWithDraft ? "all" : summary,
+        ...(summaryConflictsWithDraft ? { summary: "all" as const } : {}),
         origin: filterDraft.origin,
         commercialStatus: filterDraft.commercialStatus,
         reviewStatus: filterDraft.reviewStatus,

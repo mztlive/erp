@@ -1,29 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
+import { FixedOptionRadioFilter, OptionCombobox } from "@/components/business"
 import {
-    FilterChip,
-    FixedOptionRadioFilter,
-    ListToolbar,
-    OptionCombobox,
-} from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { DateRangePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { RESULT_FILTER_RADIO_OPTIONS } from "@/features/access-audit/lib/filter-options"
 import type {
     AccessFilterDraft,
     AccessFilterKey,
 } from "@/features/access-audit/pages/hooks/use-access-list-filters"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type AccessAppliedChip = Readonly<{
     key: AccessFilterKey
@@ -32,20 +24,37 @@ export type AccessAppliedChip = Readonly<{
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
+const MORE_CHIP_KEYS: readonly AccessFilterKey[] = [
+    "time",
+    "action",
+    "actorId",
+    "traceId",
+    "objectId",
+]
+
 type AccessListToolbarProps = {
-    /** 审计侧提供结构化筛选面板入口；角色 / 用户授权侧只有关键词。 */
     isAudit: boolean
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: (value: string) => void
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
-    hasStructuredFilters: boolean
     appliedChips: readonly AccessAppliedChip[]
-    hasChips: boolean
     removeFilter: (key: AccessFilterKey) => void
     clearAllFilters: () => void
     applyFilters: () => void
+    draft?: AccessFilterDraft
+    updateDraft?: <Key extends keyof AccessFilterDraft>(
+        key: Key,
+        value: AccessFilterDraft[Key],
+    ) => void
+    actionOptions?: readonly { value: string; label: string }[]
+    filterError?: string | null
+    resetMoreFilters?: () => void
+    hasPendingChanges?: boolean
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }
 
 function AccessListToolbar({
@@ -55,274 +64,210 @@ function AccessListToolbar({
     setSearchDraft,
     panelOpen,
     setPanelOpen,
-    hasStructuredFilters,
     appliedChips,
-    hasChips,
     removeFilter,
     clearAllFilters,
     applyFilters,
-}: AccessListToolbarProps) {
-    return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id={
-                                isAudit
-                                    ? "operations-audit-toolbar-search"
-                                    : "operations-access-toolbar-search"
-                            }
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder={
-                                isAudit
-                                    ? "操作者、动作、对象、追踪号"
-                                    : "角色名称"
-                            }
-                            aria-label={isAudit ? "搜索审计事件" : "搜索角色"}
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    isAudit ? (
-                        <Button
-                            id="operations-audit-toolbar-filter-trigger"
-                            type="button"
-                            variant="outline"
-                            aria-expanded={panelOpen}
-                            onClick={() => setPanelOpen((open) => !open)}
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            更多筛选
-                            {hasStructuredFilters ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    panelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
-                                }
-                            />
-                        </Button>
-                    ) : undefined
-                }
-                secondary={
-                    hasChips ? (
-                        <div className="flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5">
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                                已筛选
-                            </span>
-                            {appliedChips.map((chip) => (
-                                <FilterChip
-                                    key={chip.key}
-                                    id={`${isAudit ? "operations-audit-toolbar" : "operations-access-toolbar"}-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                    label={chip.label}
-                                    clearLabel={`移除${chip.label}`}
-                                    onClear={() => removeFilter(chip.key)}
-                                />
-                            ))}
-                            <Button
-                                id={
-                                    isAudit
-                                        ? "operations-audit-toolbar-clear-all"
-                                        : "operations-access-toolbar-clear-all"
-                                }
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                className="shrink-0"
-                                onClick={clearAllFilters}
-                            >
-                                清空全部
-                            </Button>
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
-    )
-}
-
-type AuditAdvancedFilterPanelProps = {
-    draft: AccessFilterDraft
-    updateDraft: <Key extends keyof AccessFilterDraft>(
-        key: Key,
-        value: AccessFilterDraft[Key],
-    ) => void
-    /** 动作选项：由当前查询结果归纳，保证每个选项都能筛出记录。 */
-    actionOptions: readonly { value: string; label: string }[]
-    filterError: string | null
-    resetMoreFilters: () => void
-    applyFilters: () => void
-}
-
-/**
- * 审计高级筛选面板。
- *
- * 渲染在工具条卡片内的附属板块（上方以分隔线与搜索区划分），不进入表格卡片。
- * 所有控件 id 保持不变，自动化与现有用例不受影响。
- */
-function AuditAdvancedFilterPanel({
     draft,
     updateDraft,
-    actionOptions,
+    actionOptions = [],
     filterError,
     resetMoreFilters,
-    applyFilters,
-}: AuditAdvancedFilterPanelProps) {
-    const panelId = React.useId()
-    const dateErrorId = React.useId()
+    hasPendingChanges = false,
+    resultCount,
+    loading,
+    failed,
+}: AccessListToolbarProps) {
+    const dateErrorId = "operations-audit-toolbar-date-error"
+    const idPrefix = isAudit
+        ? "operations-audit-toolbar-filter"
+        : "operations-access-toolbar-filter"
+    const moreCount = appliedChips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key),
+    ).length
+    const showMore = isAudit && draft != null && updateDraft != null
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <div
-                id={panelId}
-                aria-label="审计查询更多筛选条件"
-                className="mt-3 flex w-full flex-col gap-3 border-t border-border pt-3"
-            >
-                <FixedOptionRadioFilter
-                    id="operations-audit-toolbar-filter-result"
-                    label="结果"
-                    value={draft.result}
-                    onValueChange={(value) => updateDraft("result", value)}
-                    options={RESULT_FILTER_RADIO_OPTIONS}
+        <ListWorkspaceFilterBar
+            idPrefix={idPrefix}
+            formAriaLabel={isAudit ? "审计事件查询" : "角色查询"}
+            onSubmit={applyFilters}
+            search={
+                <ListSearchField
+                    id={
+                        isAudit
+                            ? "operations-audit-toolbar-search"
+                            : "operations-access-toolbar-search"
+                    }
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder={
+                        isAudit ? "操作者、动作、对象、追踪号" : "角色名称"
+                    }
+                    aria-label={isAudit ? "搜索审计事件" : "搜索角色"}
                 />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
-                        <span className="text-muted-foreground">时间范围</span>
-                        <DateRangePicker
-                            id="operations-audit-toolbar-date-range"
-                            className="w-full"
-                            value={{
-                                from: draft.from,
-                                to: draft.to,
-                            }}
-                            onValueChange={(next) => {
-                                updateDraft("from", next?.from ?? "")
-                                updateDraft("to", next?.to ?? "")
-                            }}
-                            placeholder="选择审计时间范围"
-                        />
+            }
+            queryButtonId={
+                isAudit
+                    ? "operations-audit-toolbar-apply-filters"
+                    : "operations-access-toolbar-query"
+            }
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={
+                showMore ? () => setPanelOpen((open) => !open) : undefined
+            }
+            moreButtonId="operations-audit-toolbar-filter-trigger"
+            morePanelId="operations-audit-toolbar-more-panel"
+            morePanelAriaLabel="审计查询更多筛选条件"
+            onResetMore={showMore ? resetMoreFilters : undefined}
+            resetMoreButtonId="operations-audit-toolbar-reset-filters"
+            commonFilters={
+                showMore ? (
+                    <FixedOptionRadioFilter
+                        id="operations-audit-toolbar-filter-result"
+                        label="结果"
+                        variant="quiet"
+                        value={draft.result}
+                        onValueChange={(value) => updateDraft("result", value)}
+                        options={RESULT_FILTER_RADIO_OPTIONS}
+                    />
+                ) : undefined
+            }
+            morePanel={
+                showMore ? (
+                    <div className="grid min-w-0 gap-5">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <ListWorkspaceFilterField
+                                htmlFor="operations-audit-toolbar-date-range"
+                                label="时间范围"
+                                className="sm:col-span-2"
+                            >
+                                <DateRangePicker
+                                    id="operations-audit-toolbar-date-range"
+                                    className="w-full"
+                                    value={{
+                                        from: draft.from,
+                                        to: draft.to,
+                                    }}
+                                    onValueChange={(next) => {
+                                        updateDraft("from", next?.from ?? "")
+                                        updateDraft("to", next?.to ?? "")
+                                    }}
+                                    placeholder="选择审计时间范围"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="operations-audit-toolbar-action"
+                                label="动作"
+                            >
+                                <OptionCombobox
+                                    id="operations-audit-toolbar-action"
+                                    className="w-full"
+                                    value={
+                                        draft.action === "all"
+                                            ? null
+                                            : draft.action
+                                    }
+                                    onValueChange={(value) =>
+                                        updateDraft("action", value ?? "all")
+                                    }
+                                    options={[...actionOptions]}
+                                    placeholder="全部动作"
+                                    aria-label="动作"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="operations-audit-toolbar-actor"
+                                label="操作者"
+                            >
+                                <Input
+                                    id="operations-audit-toolbar-actor"
+                                    className="w-full"
+                                    value={draft.actorId}
+                                    onChange={(event) =>
+                                        updateDraft(
+                                            "actorId",
+                                            event.target.value,
+                                        )
+                                    }
+                                    autoComplete="off"
+                                    placeholder="操作者姓名或账号"
+                                    aria-label="操作者"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="operations-audit-toolbar-trace"
+                                label="请求追踪号"
+                            >
+                                <Input
+                                    id="operations-audit-toolbar-trace"
+                                    className="w-full"
+                                    value={draft.traceId}
+                                    onChange={(event) =>
+                                        updateDraft(
+                                            "traceId",
+                                            event.target.value,
+                                        )
+                                    }
+                                    autoComplete="off"
+                                    placeholder="精确匹配"
+                                    aria-label="请求追踪号"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="operations-audit-toolbar-object"
+                                label="对象编号"
+                            >
+                                <Input
+                                    id="operations-audit-toolbar-object"
+                                    className="w-full"
+                                    value={draft.objectId}
+                                    onChange={(event) =>
+                                        updateDraft(
+                                            "objectId",
+                                            event.target.value,
+                                        )
+                                    }
+                                    autoComplete="off"
+                                    placeholder="对象名称或编号"
+                                    aria-label="对象编号"
+                                />
+                            </ListWorkspaceFilterField>
+                        </div>
+                        {filterError ? (
+                            <p
+                                id={dateErrorId}
+                                className="text-xs text-destructive"
+                                role="alert"
+                            >
+                                {filterError}
+                            </p>
+                        ) : null}
                     </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                        <span className="text-muted-foreground">动作</span>
-                        <OptionCombobox
-                            id="operations-audit-toolbar-action"
-                            className="w-full"
-                            value={draft.action === "all" ? null : draft.action}
-                            onValueChange={(value) =>
-                                updateDraft("action", value ?? "all")
-                            }
-                            options={[...actionOptions]}
-                            placeholder="全部动作"
-                            aria-label="动作"
-                        />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                        <span className="text-muted-foreground">操作者</span>
-                        <Input
-                            id="operations-audit-toolbar-actor"
-                            className="w-full"
-                            value={draft.actorId}
-                            onChange={(event) =>
-                                updateDraft("actorId", event.target.value)
-                            }
-                            autoComplete="off"
-                            placeholder="操作者姓名或账号"
-                            aria-label="操作者"
-                        />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                        <span className="text-muted-foreground">
-                            请求追踪号
-                        </span>
-                        <Input
-                            id="operations-audit-toolbar-trace"
-                            className="w-full"
-                            value={draft.traceId}
-                            onChange={(event) =>
-                                updateDraft("traceId", event.target.value)
-                            }
-                            autoComplete="off"
-                            placeholder="精确匹配"
-                            aria-label="请求追踪号"
-                        />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                        <span className="text-muted-foreground">对象编号</span>
-                        <Input
-                            id="operations-audit-toolbar-object"
-                            className="w-full"
-                            value={draft.objectId}
-                            onChange={(event) =>
-                                updateDraft("objectId", event.target.value)
-                            }
-                            autoComplete="off"
-                            placeholder="对象名称或编号"
-                            aria-label="对象编号"
-                        />
-                    </div>
-                </div>
-                {filterError ? (
-                    <span
-                        id={dateErrorId}
-                        className="text-xs text-destructive"
-                        role="alert"
-                    >
-                        {filterError}
-                    </span>
-                ) : null}
-                <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-muted-foreground">
-                        将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                        <Button
-                            id="operations-audit-toolbar-reset-filters"
-                            type="button"
-                            variant="ghost"
-                            onClick={resetMoreFilters}
-                        >
-                            重置更多条件
-                        </Button>
-                        <Button
-                            id="operations-audit-toolbar-apply-filters"
-                            type="submit"
-                        >
-                            <SearchIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            应用全部筛选
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        </form>
+                ) : undefined
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: isAudit ? "条事件" : "个角色",
+                loadingLabel: isAudit ? "正在加载审计事件…" : "正在加载角色…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as AccessFilterKey)}
+            onClearAll={clearAllFilters}
+            clearButtonId={
+                isAudit
+                    ? "operations-audit-toolbar-clear-all"
+                    : "operations-access-toolbar-clear-all"
+            }
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }
 
-export { AccessListToolbar, AuditAdvancedFilterPanel }
+export { AccessListToolbar }

@@ -38,6 +38,17 @@ function paidDateRangeError(from: string, to: string): string | null {
     return null
 }
 
+function sameCodeList(
+    left: readonly string[],
+    right: readonly string[] | undefined,
+): boolean {
+    const other = right ?? []
+    return (
+        left.length === other.length &&
+        left.every((value, index) => value === other[index])
+    )
+}
+
 /**
  * 供应商订单列表筛选状态（docs/ui-filter-design.md §5）：
  * - Applied：URL 是唯一事实源；query key / 计数 / 摘要 / 空态只读它；
@@ -61,10 +72,17 @@ export function useSupplierOrdersFilters(
         url.paidFrom ||
         url.paidTo,
     )
-    /** 「已启用」与初始展开只认结构化条件，不含 q 与快捷筛选。 */
+    /** 结构化条件：不含 q 与快捷筛选。 */
     const hasStructuredFilters = Boolean(
         url.supplierId ||
         url.fulfillmentStatuses?.length ||
+        url.cancelStatuses?.length ||
+        url.refundStatuses?.length ||
+        url.paidFrom ||
+        url.paidTo,
+    )
+    /** 更多面板初始展开只认非常用条件。 */
+    const hasMoreFilters = Boolean(
         url.cancelStatuses?.length ||
         url.refundStatuses?.length ||
         url.paidFrom ||
@@ -91,7 +109,7 @@ export function useSupplierOrdersFilters(
     const [paidFromDraft, setPaidFromDraft] = React.useState(url.paidFrom ?? "")
     const [paidToDraft, setPaidToDraft] = React.useState(url.paidTo ?? "")
 
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+    const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
     // 供应商名称解析（chip 文案用业务名称，不展示内部 ID）；无 supplierId 时不请求。
@@ -102,13 +120,16 @@ export function useSupplierOrdersFilters(
     const selectedSupplierName =
         supplierSelectorQuery.selected.data?.supplierName
 
-    /** 收起态 Enter / 搜索框尾部提交 / 面板「应用全部筛选」共用同一提交。 */
+    /** 收起态 Enter / 搜索框尾部提交 / 主行「查询」共用同一提交。 */
     const applyFilters = React.useCallback(() => {
         const from = paidFromDraft.trim()
         const to = paidToDraft.trim()
         const nextError = paidDateRangeError(from, to)
         setFilterError(nextError)
-        if (nextError) return
+        if (nextError) {
+            setPanelOpen(true)
+            return
+        }
         updateUrl({
             q: searchDraft.trim() || undefined,
             supplierId: supplierIdDraft ?? undefined,
@@ -171,27 +192,25 @@ export function useSupplierOrdersFilters(
         [setSearchDraft, updateUrl],
     )
 
-    /** 仅清除结构化条件；保留关键词与快捷筛选，面板保持展开。 */
+    /** 仅清除更多筛选草稿；保留关键词、供应商、履约状态与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setSupplierIdDraft(null)
-        setFulfillmentStatusesDraft([])
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
         setPaidFromDraft("")
         setPaidToDraft("")
         setFilterError(null)
-        updateUrl({
-            supplierId: undefined,
-            fulfillmentStatuses: undefined,
-            cancelStatuses: undefined,
-            refundStatuses: undefined,
-            paidFrom: undefined,
-            paidTo: undefined,
-            page: 1,
-        })
-    }, [updateUrl])
+    }, [])
 
-    /** 清空全部：同时重置草稿、错误、面板与 URL 筛选参数；保留视图/排序/分页大小/导航上下文。 */
+    const hasPendingChanges =
+        searchDraft.trim() !== (url.q ?? "").trim() ||
+        supplierIdDraft !== (url.supplierId ?? null) ||
+        !sameCodeList(fulfillmentStatusesDraft, url.fulfillmentStatuses) ||
+        !sameCodeList(cancelStatusesDraft, url.cancelStatuses) ||
+        !sameCodeList(refundStatusesDraft, url.refundStatuses) ||
+        paidFromDraft.trim() !== (url.paidFrom ?? "") ||
+        paidToDraft.trim() !== (url.paidTo ?? "")
+
+    /** 清除全部：同时重置草稿、错误、面板与 URL 筛选参数；保留视图/排序/分页大小/导航上下文。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setSupplierIdDraft(null)
@@ -300,6 +319,7 @@ export function useSupplierOrdersFilters(
         updateUrl,
         hasActiveFilters,
         hasStructuredFilters,
+        hasPendingChanges,
         searchDraft,
         setSearchDraft,
         supplierIdDraft,

@@ -1,17 +1,16 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
-    FilterChip,
     FixedOptionCheckboxFilter,
     FixedOptionRadioFilter,
-    ListToolbar,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { ListSearchField } from "@/features/master-data/components/list/list-search-field"
+import {
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import {
     masterDataCopy,
     masterDataSearchPlaceholder,
@@ -23,220 +22,127 @@ import {
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
 import type { SupplierAppliedChip } from "@/features/master-data/hooks/use-supplier-list-state"
-import type { SupplierFilterKey } from "@/features/master-data/hooks/use-supplier-list-filters"
-import type { SupplierQualificationHealth } from "@/features/master-data/types"
+import type {
+    SupplierFilterKey,
+    useSupplierListFilters,
+} from "@/features/master-data/hooks/use-supplier-list-filters"
 
-type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+const MORE_CHIP_KEYS = [
+    "supplierCapabilityCodes",
+    "supplierQualificationTypes",
+] as const
 
 export function SupplierListToolbar({
     idPrefix,
     searchInputRef,
-    searchDraft,
-    setSearchDraft,
-    hasActiveFilters,
-    clearAllFilters,
+    filters: f,
     appliedChips,
-    removeFilter,
-    supplierFilterPanelOpen,
-    setSupplierFilterPanelOpen,
-    hasStructuredSupplierFilters,
-    applySupplierFilters,
-    resetMoreFilters,
-    lifecycleStatusDraft,
-    setLifecycleStatusDraft,
-    supplierQualificationHealthDraft,
-    setSupplierQualificationHealthDraft,
-    supplierCapabilityCodesDraft,
-    setSupplierCapabilityCodesDraft,
-    supplierQualificationTypesDraft,
-    setSupplierQualificationTypesDraft,
+    resultCount,
+    loading,
+    failed,
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    setSearchDraft: SetState<string>
-    hasActiveFilters: boolean
-    clearAllFilters: () => void
+    filters: ReturnType<typeof useSupplierListFilters>
     appliedChips: readonly SupplierAppliedChip[]
-    removeFilter: (key: SupplierFilterKey) => void
-    supplierFilterPanelOpen: boolean
-    setSupplierFilterPanelOpen: SetState<boolean>
-    hasStructuredSupplierFilters: boolean
-    applySupplierFilters: () => void
-    resetMoreFilters: () => void
-    lifecycleStatusDraft: "enabled" | "disabled" | "all"
-    setLifecycleStatusDraft: SetState<"enabled" | "disabled" | "all">
-    supplierQualificationHealthDraft: SupplierQualificationHealth | "all"
-    setSupplierQualificationHealthDraft: SetState<
-        SupplierQualificationHealth | "all"
-    >
-    supplierCapabilityCodesDraft: string[]
-    setSupplierCapabilityCodesDraft: SetState<string[]>
-    supplierQualificationTypesDraft: string[]
-    setSupplierQualificationTypesDraft: SetState<string[]>
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }) {
     const prefix = idPrefix ?? "master-data-list-supplier-list-toolbar"
-    const panelId = React.useId()
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const panelId = `${prefix}-more-panel`
+    const moreCount = appliedChips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applySupplierFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <ListSearchField
-                        id={`${prefix}-search-input`}
-                        searchInputRef={searchInputRef}
-                        value={searchDraft}
-                        onChange={setSearchDraft}
-                        placeholder={masterDataSearchPlaceholder("suppliers")}
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="供应商与资质查询"
+            onSubmit={f.applySupplierFilters}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search-input`}
+                    searchInputRef={searchInputRef}
+                    value={f.searchDraft}
+                    onChange={f.setSearchDraft}
+                    placeholder={masterDataSearchPlaceholder("suppliers")}
+                    aria-label="搜索基础资料"
+                />
+            }
+            moreCount={moreCount}
+            moreOpen={f.supplierFilterPanelOpen}
+            onToggleMore={() => f.setSupplierFilterPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="供应商与资质更多筛选条件"
+            moreButtonId={`${prefix}-filter-trigger`}
+            resetMoreButtonId={`${prefix}-reset`}
+            clearButtonId={`${prefix}-clear-filters`}
+            onResetMore={f.resetMoreFilters}
+            commonFilters={
+                <>
+                    <FixedOptionRadioFilter
+                        id={`${prefix}-filter-lifecycle`}
+                        label="启停"
+                        variant="quiet"
+                        value={f.lifecycleStatusDraft}
+                        onValueChange={f.setLifecycleStatusDraft}
+                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
+                        aria-label={masterDataCopy.filterLifecycleAria}
                     />
-                }
-                filters={
-                    <Button
-                        id={`${prefix}-filter-trigger`}
-                        type="button"
-                        variant="outline"
-                        aria-expanded={supplierFilterPanelOpen}
-                        aria-controls={panelId}
-                        onClick={() =>
-                            setSupplierFilterPanelOpen((open) => !open)
-                        }
-                    >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
+                    <FixedOptionRadioFilter
+                        id={`${prefix}-filter-qualification-health`}
+                        label="资质状态"
+                        variant="quiet"
+                        value={f.supplierQualificationHealthDraft}
+                        onValueChange={f.setSupplierQualificationHealthDraft}
+                        options={SUPPLIER_QUALIFICATION_HEALTH_OPTIONS}
+                        aria-label="资质状态"
+                    />
+                </>
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5">
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            供应能力
+                        </legend>
+                        <FixedOptionCheckboxFilter
+                            id={`${prefix}-filter-capability`}
+                            label="供应能力"
+                            value={f.supplierCapabilityCodesDraft}
+                            onValueChange={f.setSupplierCapabilityCodesDraft}
+                            options={SUPPLIER_CAPABILITY_OPTIONS}
+                            aria-label="供应能力，可多选"
                         />
-                        更多筛选
-                        {hasStructuredSupplierFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                supplierFilterPanelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
+                    </fieldset>
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            资质类型
+                        </legend>
+                        <FixedOptionCheckboxFilter
+                            id={`${prefix}-filter-qualification-type`}
+                            label="资质类型"
+                            value={f.supplierQualificationTypesDraft}
+                            onValueChange={f.setSupplierQualificationTypesDraft}
+                            options={SUPPLIER_QUALIFICATION_TYPE_OPTIONS}
+                            aria-label="资质类型，可多选"
                         />
-                    </Button>
-                }
-                secondary={
-                    hasChips || supplierFilterPanelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`${prefix}-chip-${chip.key}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id={`${prefix}-clear-filters`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {supplierFilterPanelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="供应商与资质更多筛选条件"
-                                >
-                                    <FixedOptionRadioFilter
-                                        id={`${prefix}-filter-lifecycle`}
-                                        label="启停"
-                                        value={lifecycleStatusDraft}
-                                        onValueChange={setLifecycleStatusDraft}
-                                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                                        aria-label={
-                                            masterDataCopy.filterLifecycleAria
-                                        }
-                                    />
-                                    <FixedOptionRadioFilter
-                                        id={`${prefix}-filter-qualification-health`}
-                                        label="资质状态"
-                                        value={supplierQualificationHealthDraft}
-                                        onValueChange={
-                                            setSupplierQualificationHealthDraft
-                                        }
-                                        options={
-                                            SUPPLIER_QUALIFICATION_HEALTH_OPTIONS
-                                        }
-                                        aria-label="资质状态"
-                                    />
-                                    <FixedOptionCheckboxFilter
-                                        id={`${prefix}-filter-capability`}
-                                        label="供应能力"
-                                        value={supplierCapabilityCodesDraft}
-                                        onValueChange={
-                                            setSupplierCapabilityCodesDraft
-                                        }
-                                        options={SUPPLIER_CAPABILITY_OPTIONS}
-                                        aria-label="供应能力，可多选"
-                                    />
-                                    <FixedOptionCheckboxFilter
-                                        id={`${prefix}-filter-qualification-type`}
-                                        label="资质类型"
-                                        value={supplierQualificationTypesDraft}
-                                        onValueChange={
-                                            setSupplierQualificationTypesDraft
-                                        }
-                                        options={
-                                            SUPPLIER_QUALIFICATION_TYPE_OPTIONS
-                                        }
-                                        aria-label="资质类型，可多选"
-                                    />
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id={`${prefix}-reset`}
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id={`${prefix}-apply`}
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                    </fieldset>
+                </div>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "条",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => f.removeFilter(key as SupplierFilterKey)}
+            onClearAll={f.clearAllFilters}
+            hasPendingChanges={f.hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

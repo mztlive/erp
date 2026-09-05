@@ -19,7 +19,7 @@ const SORT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
 /**
  * 分析维度与视图控件条（docs/ui-filter-design.md §2.3）：
  * 统计期间与排序会改变整张分析报表的含义，属于分析维度/视图参数，
- * 位于明细表面之外；不属于筛选表单，也不被「清空全部」清除。
+ * 位于明细表面之外；不属于筛选表单，也不被「清除全部」清除。
  */
 export function CustomerQualityPeriodBar({
     resolvedFrom,

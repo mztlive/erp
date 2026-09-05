@@ -66,6 +66,7 @@ export interface CustomerReceivablesUrlState {
     setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
     hasActiveFilters: boolean
     hasStructuredFilters: boolean
+    hasPendingChanges: boolean
     patchUrl: CustomerReceivablesPatchUrl
     applyFilters: () => void
     removeFilter: (key: CustomerReceivablesFilterKey) => void
@@ -161,7 +162,7 @@ export function useCustomerReceivablesUrlState(
         React.useState<ReceivableReviewStatusFilter>(reviewStatusDraftFromUrl)
 
     const hasStructuredFilters = Boolean(
-        counterpartyPartyId || (due && due !== "all") || status || reviewStatus,
+        counterpartyPartyId || status || reviewStatus,
     )
     // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
@@ -250,7 +251,7 @@ export function useCustomerReceivablesUrlState(
         receivableAccountId,
     )
 
-    /** 单一提交路径：收起态 Enter 与展开态「应用全部筛选」都走这里。 */
+    /** 单一提交路径：收起态 Enter 与主行「查询」共用。 */
     const applyFilters = React.useCallback(() => {
         patchUrl(
             {
@@ -289,24 +290,19 @@ export function useCustomerReceivablesUrlState(
         [patchUrl],
     )
 
-    /** 只清结构化条件；保留关键词和来源锁定，面板保持展开。 */
+    /** 只清「更多筛选」草稿；保留关键词、到期常用条件、来源锁定和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setCounterpartyPartyIdDraft(null)
-        setDueDraft("all")
         setStatusDraft("all")
         setReviewStatusDraft("all")
-        patchUrl(
-            {
-                counterpartyId: null,
-                due: null,
-                status: null,
-                reviewStatus: null,
-                page: null,
-            },
-            { replace: true },
-        )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [patchUrl])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== qParam.trim() ||
+        counterpartyPartyIdDraft !== (counterpartyPartyId ?? null) ||
+        dueDraft !== (due ?? "all") ||
+        statusDraft !== statusDraftFromUrl ||
+        reviewStatusDraft !== reviewStatusDraftFromUrl
 
     /** 清全部筛选参数 + 分页回 1；保留 view 与导航上下文。 */
     const clearFilters = React.useCallback(() => {
@@ -437,6 +433,7 @@ export function useCustomerReceivablesUrlState(
         setPanelOpen,
         hasActiveFilters,
         hasStructuredFilters,
+        hasPendingChanges,
         patchUrl,
         applyFilters,
         removeFilter,

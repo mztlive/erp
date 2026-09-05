@@ -45,7 +45,7 @@ function sanitizeBatchObjectType(
 /**
  * 批次列表筛选三层状态：
  * Applied 在 URL（唯一事实源）、Draft 本地受控（不触发请求）、UI 态本地。
- * 收起态 Enter / 提交箭头与展开态「应用全部筛选」共用 applyBatchFilters。
+ * 查询按钮与 Enter 共用 applyBatchFilters；重置更多条件只清草稿。
  */
 export function useBatchListFilters({
     urlState,
@@ -64,9 +64,9 @@ export function useBatchListFilters({
     const [statusDraft, setStatusDraft] = React.useState<BatchStatusDraft>(
         appliedStatus ?? "all",
     )
-    /** 有结构化条件的初始深链展开面板；提交成功后的 URL 回填不重新展开（§5.5）。 */
+    /** 有更多条件的初始深链展开面板；提交成功后的 URL 回填不重新展开。 */
     const [batchFilterPanelOpen, setBatchFilterPanelOpen] = React.useState(
-        Boolean(appliedStatus || appliedObjectType),
+        Boolean(appliedStatus),
     )
 
     const hasStructuredBatchFilters = Boolean(
@@ -106,12 +106,10 @@ export function useBatchListFilters({
         [patchUrl, setQDraft],
     )
 
-    /** 仅清结构化条件；保留关键词与快捷筛选，保持面板展开（§5.6）。 */
+    /** 仅重置更多条件草稿（批次状态）；保留对象集合、关键词与已生效结果。 */
     const resetMoreBatchFilters = React.useCallback(() => {
-        setObjectTypeDraft("all")
         setStatusDraft("all")
-        patchUrl({ objectType: undefined, status: undefined, page: 1 })
-    }, [patchUrl])
+    }, [])
 
     /** 全部清除：草稿、面板、URL 筛选参数与分页一起重置（§5.6）。 */
     const clearAllBatchFilters = React.useCallback(() => {
@@ -154,6 +152,11 @@ export function useBatchListFilters({
         return chips
     }, [appliedObjectType, appliedStatus, q])
 
+    const hasPendingChanges =
+        qDraft.trim() !== q.trim() ||
+        objectTypeDraft !== (appliedObjectType ?? "all") ||
+        statusDraft !== (appliedStatus ?? "all")
+
     return {
         q,
         appliedObjectType,
@@ -174,5 +177,6 @@ export function useBatchListFilters({
         removeBatchFilter,
         resetMoreBatchFilters,
         clearAllBatchFilters,
+        hasPendingChanges,
     }
 }

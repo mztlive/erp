@@ -55,7 +55,6 @@ export function IntegrationErrorsPage({
         query,
         replaceUrl,
         autoNext,
-        hasQueueFilters,
     } = useIntegrationPageUrl({ forcedTaskId, forcedDifferenceId })
 
     const queueQuery = useIntegrationQueueQuery(query)
@@ -148,11 +147,6 @@ export function IntegrationErrorsPage({
     const { searchDraft, setSearchDraft, searchInputRef } =
         useIntegrationSearch({
             q: urlState.q,
-            onCommitSearch: React.useCallback(
-                (q: string | null) =>
-                    replaceUrl({ q, taskId: null, differenceId: null }),
-                [replaceUrl],
-            ),
         })
 
     const clearQueueFilters = React.useCallback(() => {
@@ -161,7 +155,6 @@ export function IntegrationErrorsPage({
             mode: "all",
             environment: "production",
             errorClass: null,
-            owner: "me",
             q: null,
             taskId: null,
             differenceId: null,
@@ -263,9 +256,11 @@ export function IntegrationErrorsPage({
                     onSearchDraftChange={setSearchDraft}
                     searchInputRef={searchInputRef}
                     autoNext={autoNext}
-                    hasQueueFilters={hasQueueFilters}
                     patchUrl={replaceUrl}
                     onClearFilters={clearQueueFilters}
+                    resultCount={queueItems.length}
+                    loading={queueQuery.isFetching && !queueQuery.isPending}
+                    failed={queueQuery.isError}
                 />
             ) : !embedded ? (
                 <IntegrationDetailNav

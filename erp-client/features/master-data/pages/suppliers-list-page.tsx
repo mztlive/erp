@@ -109,45 +109,13 @@ export function SuppliersListPage() {
                     <SupplierListToolbar
                         idPrefix="master-data-suppliers-list-toolbar"
                         searchInputRef={searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
+                        filters={filters}
                         appliedChips={state.appliedChips}
-                        removeFilter={filters.removeFilter}
-                        supplierFilterPanelOpen={
-                            filters.supplierFilterPanelOpen
+                        resultCount={
+                            state.listQuery.data ? state.rows.length : undefined
                         }
-                        setSupplierFilterPanelOpen={
-                            filters.setSupplierFilterPanelOpen
-                        }
-                        hasStructuredSupplierFilters={
-                            filters.hasStructuredSupplierFilters
-                        }
-                        applySupplierFilters={filters.applySupplierFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        lifecycleStatusDraft={filters.lifecycleStatusDraft}
-                        setLifecycleStatusDraft={
-                            filters.setLifecycleStatusDraft
-                        }
-                        supplierQualificationHealthDraft={
-                            filters.supplierQualificationHealthDraft
-                        }
-                        setSupplierQualificationHealthDraft={
-                            filters.setSupplierQualificationHealthDraft
-                        }
-                        supplierCapabilityCodesDraft={
-                            filters.supplierCapabilityCodesDraft
-                        }
-                        setSupplierCapabilityCodesDraft={
-                            filters.setSupplierCapabilityCodesDraft
-                        }
-                        supplierQualificationTypesDraft={
-                            filters.supplierQualificationTypesDraft
-                        }
-                        setSupplierQualificationTypesDraft={
-                            filters.setSupplierQualificationTypesDraft
-                        }
+                        loading={state.listQuery.isFetching}
+                        failed={state.listQuery.isError}
                     />
                 }
                 tableClassName={suppliersListStyles.table}

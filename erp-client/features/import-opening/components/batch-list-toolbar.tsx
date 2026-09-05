@@ -1,16 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { OptionCombobox } from "@/components/business"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import type {
     BatchFilterKey,
     BatchObjectTypeDraft,
@@ -22,7 +21,6 @@ import {
     type ImportBatchStatus,
     type ImportObjectCode,
 } from "@/features/import-opening/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -55,214 +53,128 @@ const STATUS_FILTER_OPTIONS: ReadonlyArray<{
     ),
 ]
 
-/**
- * 批次列表显式提交筛选区（docs/ui-filter-design.md §8.2 模板）：
- * 单一 form，收起态靠搜索框尾部提交箭头与 Enter，展开态只保留面板底部
- * 「应用全部筛选」，两条路径调用同一个 applyBatchFilters（§3.5）。
- */
+const toolbarIdPrefix = "operations-import-batches-toolbar"
+
 export function BatchListToolbar({
     searchInputRef,
     searchDraft,
     setSearchDraft,
-    hasActiveFilters,
-    clearAllFilters,
     appliedChips,
     removeFilter,
     batchFilterPanelOpen,
     setBatchFilterPanelOpen,
-    hasStructuredBatchFilters,
     applyBatchFilters,
     resetMoreFilters,
     objectTypeDraft,
     setObjectTypeDraft,
     statusDraft,
     setStatusDraft,
+    clearAllFilters,
+    hasPendingChanges = false,
+    resultCount,
+    loading,
+    failed,
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
-    hasActiveFilters: boolean
-    clearAllFilters: () => void
     appliedChips: readonly BatchAppliedChip[]
     removeFilter: (key: BatchFilterKey) => void
     batchFilterPanelOpen: boolean
     setBatchFilterPanelOpen: SetState<boolean>
-    hasStructuredBatchFilters: boolean
     applyBatchFilters: () => void
     resetMoreFilters: () => void
     objectTypeDraft: BatchObjectTypeDraft
     setObjectTypeDraft: SetState<BatchObjectTypeDraft>
     statusDraft: BatchStatusDraft
     setStatusDraft: SetState<BatchStatusDraft>
+    clearAllFilters: () => void
+    hasPendingChanges?: boolean
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }) {
-    const panelId = React.useId()
-    const hasChips = hasActiveFilters && appliedChips.length > 0
-    const toolbarIdPrefix = "operations-import-batches-toolbar"
+    const moreCount = appliedChips.filter(({ key }) => key === "status").length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyBatchFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id={`${toolbarIdPrefix}-search`}
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="批次号（精确/前缀匹配）"
-                            aria-label="搜索批次"
-                        />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id={`${toolbarIdPrefix}-filter-trigger`}
-                        type="button"
-                        variant="outline"
-                        aria-expanded={batchFilterPanelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setBatchFilterPanelOpen((open) => !open)}
-                    >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredBatchFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                batchFilterPanelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
-                        />
-                    </Button>
-                }
-                secondary={
-                    hasChips || batchFilterPanelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`${toolbarIdPrefix}-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
-                                            }
-                                        />
-                                    ))}
-                                    <Button
-                                        id={`${toolbarIdPrefix}-clear-all`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {batchFilterPanelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="导入批次更多筛选条件"
-                                >
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                对象集合
-                                            </span>
-                                            <OptionCombobox
-                                                id={`${toolbarIdPrefix}-object-type`}
-                                                className="w-full"
-                                                value={objectTypeDraft}
-                                                onValueChange={(value) =>
-                                                    setObjectTypeDraft(
-                                                        (value ??
-                                                            "all") as BatchObjectTypeDraft,
-                                                    )
-                                                }
-                                                options={OBJECT_FILTER_OPTIONS}
-                                                aria-label="对象集合"
-                                                placeholder="全部对象"
-                                                searchPlaceholder="搜索对象名称"
-                                                allowClear={false}
-                                            />
-                                        </div>
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                批次状态
-                                            </span>
-                                            <OptionCombobox
-                                                id={`${toolbarIdPrefix}-status`}
-                                                className="w-full"
-                                                value={statusDraft}
-                                                onValueChange={(value) =>
-                                                    setStatusDraft(
-                                                        (value ??
-                                                            "all") as BatchStatusDraft,
-                                                    )
-                                                }
-                                                options={STATUS_FILTER_OPTIONS}
-                                                aria-label="批次状态"
-                                                placeholder="全部状态"
-                                                searchPlaceholder="搜索状态名称"
-                                                allowClear={false}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id={`${toolbarIdPrefix}-reset-filters`}
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id={`${toolbarIdPrefix}-apply-filters`}
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+        <ListWorkspaceFilterBar
+            idPrefix={`${toolbarIdPrefix}-filter`}
+            formAriaLabel="导入批次查询"
+            onSubmit={applyBatchFilters}
+            search={
+                <ListSearchField
+                    id={`${toolbarIdPrefix}-search`}
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="批次号（精确/前缀匹配）"
+                    aria-label="搜索批次"
+                />
+            }
+            queryButtonId={`${toolbarIdPrefix}-apply-filters`}
+            moreCount={moreCount}
+            moreOpen={batchFilterPanelOpen}
+            onToggleMore={() => setBatchFilterPanelOpen((open) => !open)}
+            moreButtonId={`${toolbarIdPrefix}-filter-trigger`}
+            morePanelId={`${toolbarIdPrefix}-more-panel`}
+            morePanelAriaLabel="导入批次更多筛选条件"
+            onResetMore={resetMoreFilters}
+            resetMoreButtonId={`${toolbarIdPrefix}-reset-filters`}
+            commonFilters={
+                <ListWorkspaceInlineFilter
+                    htmlFor={`${toolbarIdPrefix}-object-type`}
+                    label="对象集合"
+                >
+                    <OptionCombobox
+                        id={`${toolbarIdPrefix}-object-type`}
+                        className="w-full sm:w-60"
+                        value={objectTypeDraft}
+                        onValueChange={(value) =>
+                            setObjectTypeDraft(
+                                (value ?? "all") as BatchObjectTypeDraft,
+                            )
+                        }
+                        options={OBJECT_FILTER_OPTIONS}
+                        aria-label="对象集合"
+                        placeholder="全部对象"
+                        searchPlaceholder="搜索对象名称"
+                        allowClear={false}
+                    />
+                </ListWorkspaceInlineFilter>
+            }
+            morePanel={
+                <ListWorkspaceFilterField
+                    htmlFor={`${toolbarIdPrefix}-status`}
+                    label="批次状态"
+                >
+                    <OptionCombobox
+                        id={`${toolbarIdPrefix}-status`}
+                        className="w-full sm:w-60"
+                        value={statusDraft}
+                        onValueChange={(value) =>
+                            setStatusDraft((value ?? "all") as BatchStatusDraft)
+                        }
+                        options={STATUS_FILTER_OPTIONS}
+                        aria-label="批次状态"
+                        placeholder="全部状态"
+                        searchPlaceholder="搜索状态名称"
+                        allowClear={false}
+                    />
+                </ListWorkspaceFilterField>
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "个批次",
+                loadingLabel: "正在加载批次…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as BatchFilterKey)}
+            onClearAll={clearAllFilters}
+            clearButtonId={`${toolbarIdPrefix}-clear-all`}
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询"
+        />
     )
 }

@@ -5,16 +5,20 @@ import { useRouter } from "next/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import { PageScaffold } from "@/components/business"
-import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { salesOrdersListStyles as salesStyles } from "./sales-orders-list-styles"
-import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { downloadSalesOrderContractPdf } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrdersListFilterBar } from "@/features/sales-orders/components/sales-orders-list-filter-bar"
-import { SalesOrdersListFilterPanel } from "@/features/sales-orders/components/sales-orders-list-filter-panel"
 import { SalesOrdersListHeader } from "@/features/sales-orders/components/sales-orders-list-header"
 import { SalesOrdersListTable } from "@/features/sales-orders/components/sales-orders-list-table"
+import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
 import { useSalesOrdersListChips } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
 import { useSalesOrdersListExport } from "@/features/sales-orders/hooks/use-sales-orders-list-export"
 import { useSalesOrdersListFilters } from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
@@ -24,6 +28,16 @@ import { salesOrdersListFiltersActive } from "@/features/sales-orders/lib/sales-
 import { SORT_COLUMN_TO_FIELD } from "@/features/sales-orders/lib/sales-orders-list-query"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
+const SUMMARY_FILTER_OPTIONS: ReadonlyArray<{
+    value: SalesOrderSummaryFilter
+    label: string
+}> = [
+    { value: "all", label: "全部" },
+    { value: "mine", label: "待我处理" },
+    { value: "createdByMe", label: "我创建的" },
+    { value: "exception", label: "异常" },
+]
+
 /**
  * 销售单列表。实物/卡券销售单走各自审批入口。
  * SalesReturnCase 为 NO_APPROVAL，列表不展示销售退货审批区或审批动作。
@@ -32,21 +46,8 @@ export function SalesOrdersListPage() {
     const router = useRouter()
     const { url, pushUrl } = useSalesOrdersListUrlState()
     const { ordersQuery, query } = useSalesOrdersListQuery(url)
-    const {
-        searchDraft,
-        setSearchDraft,
-        filterDraft,
-        setFilterDraft,
-        filterPanelOpen,
-        setFilterPanelOpen,
-        hasStructuredFilters,
-        applyFilters,
-        removeFilter,
-        resetMoreFilters,
-        clearFilters,
-    } = useSalesOrdersListFilters(url, pushUrl)
-
-    const panelId = "sales-orders-list-filter-panel"
+    const filters = useSalesOrdersListFilters(url, pushUrl)
+    const { removeFilter, clearFilters } = filters
 
     const items = React.useMemo(
         () => ordersQuery.data?.items ?? [],
@@ -144,49 +145,44 @@ export function SalesOrdersListPage() {
                 exportJob={exportJob}
             />
 
-            <section
-                className={styles.workSurface}
-                data-business-component="table-frame"
-                aria-label="销售单列表"
-            >
-                <SalesOrdersListFilterBar
-                    total={total}
-                    panelId={panelId}
-                    searchDraft={searchDraft}
-                    onSearchDraftChange={setSearchDraft}
-                    onSubmit={applyFilters}
-                    filterPanelOpen={filterPanelOpen}
-                    onToggleFilterPanel={() => {
-                        setFilterPanelOpen((open) => !open)
-                    }}
-                    hasStructuredFilters={hasStructuredFilters}
-                    hasChips={filtersActive && chips.length > 0}
-                    chips={chips}
-                    onClearFilters={clearFilters}
-                    summary={url.summary}
-                    onSummaryChange={(summary) => {
-                        // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
-                        pushUrl({
-                            summary,
-                            createdBy: undefined,
-                            commercialStatus: "all",
-                            reviewStatus: "all",
-                            page: 1,
-                        })
-                    }}
-                    filterPanel={
-                        <SalesOrdersListFilterPanel
-                            panelId={panelId}
-                            draft={filterDraft}
-                            onDraftChange={setFilterDraft}
-                            onResetMoreFilters={resetMoreFilters}
-                        />
-                    }
-                />
-                <div
-                    className={cn(styles.table, salesStyles.table)}
-                    data-slot="business-table-frame-table"
-                >
+            <ListWorkSurface
+                ariaLabel="销售单列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="销售单工作视图"
+                        hint="选择销售单查看详情"
+                        items={SUMMARY_FILTER_OPTIONS.map((option) => {
+                            const active = url.summary === option.value
+                            return {
+                                id: `sales-orders-list-filter-summary-${toAutomationIdSegment(option.value)}`,
+                                label: option.label,
+                                count: active ? total : undefined,
+                                active,
+                                onClick: () => {
+                                    // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
+                                    pushUrl({
+                                        summary: option.value,
+                                        createdBy: undefined,
+                                        commercialStatus: "all",
+                                        reviewStatus: "all",
+                                        page: 1,
+                                    })
+                                },
+                            }
+                        })}
+                    />
+                }
+                toolbar={
+                    <SalesOrdersListFilterBar
+                        filters={filters}
+                        chips={chips}
+                        resultCount={ordersQuery.data ? total : undefined}
+                        loading={ordersQuery.isFetching}
+                        failed={ordersQuery.isError}
+                    />
+                }
+                tableClassName={salesStyles.table}
+                table={
                     <SalesOrdersListTable
                         items={items}
                         total={total}
@@ -207,8 +203,8 @@ export function SalesOrdersListPage() {
                         downloadingContractId={downloadingContractId}
                         downloadContract={downloadContract}
                     />
-                </div>
-            </section>
+                }
+            />
         </PageScaffold>
     )
 }

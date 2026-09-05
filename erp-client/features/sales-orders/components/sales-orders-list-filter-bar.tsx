@@ -1,194 +1,122 @@
 "use client"
 
-import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
-
-import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
-import { cn } from "@/lib/utils"
-import { FilterChip, ListToolbar } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { FixedOptionRadioFilter } from "@/components/business"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
+import { SalesOrdersListFilterPanel } from "@/features/sales-orders/components/sales-orders-list-filter-panel"
 import type { SalesOrdersAppliedChip } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
-import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
-import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
+import type {
+    SalesOrdersListFilterKey,
+    useSalesOrdersListFilters,
+} from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
 
-const SUMMARY_FILTER_OPTIONS: ReadonlyArray<{
-    value: SalesOrderSummaryFilter
-    label: string
-}> = [
-    { value: "all", label: "全部" },
-    { value: "mine", label: "待我处理" },
-    { value: "createdByMe", label: "我创建的" },
-    { value: "exception", label: "异常" },
+const prefix = "sales-orders-list-filter"
+const panelId = `${prefix}-panel`
+const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
+    "origin",
+    "commercialStatus",
+    "reviewStatus",
+    "fulfillment",
+    "collection",
+    "invoice",
+    "closeStatus",
+    "customerId",
+    "contractId",
+    "createdBy",
+    "createdDate",
 ]
 
-export function SalesOrdersListFilterBar(props: {
-    total: number
-    panelId: string
-    searchDraft: string
-    onSearchDraftChange: (value: string) => void
-    onSubmit: () => void
-    filterPanelOpen: boolean
-    onToggleFilterPanel: () => void
-    hasStructuredFilters: boolean
-    hasChips: boolean
+export function SalesOrdersListFilterBar({
+    filters: f,
+    chips,
+    resultCount,
+    loading,
+    failed,
+}: {
+    filters: ReturnType<typeof useSalesOrdersListFilters>
     chips: readonly SalesOrdersAppliedChip[]
-    onClearFilters: () => void
-    summary: SalesOrdersUrlState["summary"]
-    onSummaryChange: (summary: SalesOrderSummaryFilter) => void
-    filterPanel: React.ReactNode
+    resultCount?: number
+    loading: boolean
+    failed: boolean
 }) {
-    const {
-        total,
-        panelId,
-        searchDraft,
-        onSearchDraftChange,
-        onSubmit,
-        filterPanelOpen,
-        onToggleFilterPanel,
-        hasStructuredFilters,
-        hasChips,
-        chips,
-        onClearFilters,
-        summary,
-        onSummaryChange,
-        filterPanel,
-    } = props
+    const moreCount = chips.filter(({ key }) =>
+        MORE_CHIP_KEYS.includes(key),
+    ).length
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                onSubmit()
-            }}
-        >
-            <div className={styles.viewBar}>
-                <div
-                    role="group"
-                    aria-label="销售单工作视图"
-                    className={styles.views}
-                >
-                    {SUMMARY_FILTER_OPTIONS.map((option) => {
-                        const active = summary === option.value
-                        return (
-                            <button
-                                key={option.value}
-                                id={`sales-orders-list-filter-summary-${toAutomationIdSegment(option.value)}`}
-                                type="button"
-                                className={cn(
-                                    styles.view,
-                                    active && styles.activeView,
-                                )}
-                                aria-pressed={active}
-                                onClick={() => onSummaryChange(option.value)}
-                            >
-                                {option.label}
-                                {active ? (
-                                    <span className={styles.viewCount}>
-                                        {total}
-                                    </span>
-                                ) : null}
-                            </button>
-                        )
-                    })}
-                </div>
-                <span className={styles.viewHint}>选择销售单查看详情</span>
-            </div>
-            <div className={styles.toolbar}>
-                <div className={styles.filters}>
-                    <ListToolbar
-                        search={
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    id="sales-orders-list-filter-search"
-                                    data-slot="so-list-search"
-                                    value={searchDraft}
-                                    onChange={(event) => {
-                                        onSearchDraftChange(event.target.value)
-                                    }}
-                                    placeholder="销售单号、客户、合同号"
-                                    aria-label="搜索销售单"
-                                />
-                            </InputGroup>
-                        }
-                        filters={
-                            <>
-                                <Button
-                                    id="sales-orders-list-filter-more-toggle"
-                                    type="button"
-                                    variant="outline"
-                                    aria-expanded={filterPanelOpen}
-                                    aria-controls={panelId}
-                                    onClick={onToggleFilterPanel}
-                                >
-                                    <FilterIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    更多筛选
-                                    {hasStructuredFilters ? (
-                                        <Badge variant="info">已启用</Badge>
-                                    ) : null}
-                                    <ChevronDownIcon
-                                        data-icon="inline-end"
-                                        aria-hidden="true"
-                                        className={
-                                            filterPanelOpen
-                                                ? "rotate-180 transition-transform"
-                                                : "transition-transform"
-                                        }
-                                    />
-                                </Button>
-                            </>
-                        }
-                        secondary={
-                            hasChips || filterPanelOpen ? (
-                                <div className="w-full space-y-3">
-                                    {hasChips ? (
-                                        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                            <span className="text-xs text-muted-foreground">
-                                                已筛选
-                                            </span>
-                                            {chips.map((chip) => (
-                                                <FilterChip
-                                                    key={chip.key}
-                                                    id={`sales-orders-list-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                                    label={chip.label}
-                                                    clearLabel={chip.clearLabel}
-                                                    onClear={chip.onClear}
-                                                />
-                                            ))}
-                                            <Button
-                                                id="sales-orders-list-filter-clear-all"
-                                                type="button"
-                                                variant="ghost"
-                                                size="xs"
-                                                onClick={onClearFilters}
-                                            >
-                                                清空全部
-                                            </Button>
-                                        </div>
-                                    ) : null}
-                                    {filterPanelOpen ? filterPanel : null}
-                                </div>
-                            ) : undefined
-                        }
-                    />
-                </div>
-                <div
-                    className={styles.columnSettings}
-                    data-slot="table-frame-view-options"
+        <ListWorkspaceFilterBar
+            idPrefix={prefix}
+            formAriaLabel="销售单查询"
+            onSubmit={f.applyFilters}
+            search={
+                <ListSearchField
+                    id={`${prefix}-search`}
+                    data-slot="so-list-search"
+                    value={f.searchDraft}
+                    onChange={f.setSearchDraft}
+                    placeholder="销售单号、客户、合同号"
+                    aria-label="搜索销售单"
                 />
-            </div>
-        </form>
+            }
+            moreCount={moreCount}
+            moreOpen={f.filterPanelOpen}
+            onToggleMore={() => f.setFilterPanelOpen((open) => !open)}
+            morePanelId={panelId}
+            morePanelAriaLabel="销售单更多筛选条件"
+            moreButtonId={`${prefix}-more-toggle`}
+            queryButtonId={`${prefix}-apply`}
+            resetMoreButtonId={`${prefix}-reset`}
+            clearButtonId={`${prefix}-clear-all`}
+            onResetMore={f.resetMoreFilters}
+            commonFilters={
+                <FixedOptionRadioFilter
+                    id={`${prefix}-nature`}
+                    label="业务性质"
+                    variant="quiet"
+                    value={f.filterDraft.nature}
+                    onValueChange={(nature) => {
+                        f.setFilterDraft((draft) => ({
+                            ...draft,
+                            nature,
+                        }))
+                    }}
+                    options={[
+                        { value: "all", label: "全部" },
+                        {
+                            value: "physical_service",
+                            label: "实物与服务",
+                        },
+                        {
+                            value: "card_voucher",
+                            label: "卡券",
+                        },
+                    ]}
+                />
+            }
+            morePanel={
+                <SalesOrdersListFilterPanel
+                    draft={f.filterDraft}
+                    onDraftChange={f.setFilterDraft}
+                />
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "张销售单",
+                loadingLabel: "正在加载销售单…",
+            })}
+            chips={chips}
+            onClearChip={(key) =>
+                f.removeFilter(key as SalesOrdersListFilterKey)
+            }
+            onClearAll={f.clearFilters}
+            hasPendingChanges={f.hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }

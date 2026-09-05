@@ -56,6 +56,8 @@ export function CardFundsReviewPage({
         autoNext: urlAutoNext,
         searchInput,
         setSearchInput,
+        applyFilters,
+        hasPendingChanges,
         setAutoNext,
         replaceUrl,
         pathname,
@@ -235,11 +237,18 @@ export function CardFundsReviewPage({
                     type={type}
                     due={due}
                     status={status}
+                    q={q}
                     searchInput={searchInput}
                     onSearchInputChange={setSearchInput}
+                    onApplyFilters={applyFilters}
                     autoNext={autoNext}
                     setAutoNext={setAutoNext}
                     replaceUrl={replaceUrl}
+                    onClearAll={clearFilters}
+                    hasPendingChanges={hasPendingChanges}
+                    resultCount={tasks.length}
+                    loading={queueQuery.isFetching}
+                    failed={queueQuery.isError}
                 />
             ) : null}
 

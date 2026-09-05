@@ -33,7 +33,7 @@ export type ContractAppliedChip = Readonly<{
 /**
  * 合同列表 URL-first 状态（docs/ui-filter-design.md §5）：
  * Applied 在 URL（唯一事实源），Draft 本地受控不触发请求，UI 态（面板展开）本地保存。
- * 关键词与「更多筛选」草稿经显式提交（Enter / 应用全部筛选）一次性写 URL 并回第 1 页。
+ * 关键词与「更多筛选」草稿经显式提交（查询）一次性写 URL 并回第 1 页。
  */
 export function useContractsList(rows: readonly ContractListRow[] | undefined) {
     const router = useRouter()
@@ -86,7 +86,7 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         [pathname, router, url],
     )
 
-    /** 唯一提交路径：收起态 Enter / 提交箭头与展开态「应用全部筛选」共用。 */
+    /** 唯一提交路径：收起态 Enter 与主行「查询」共用。 */
     const applyFilters = React.useCallback(() => {
         pushUrl({
             q: searchDraft.trim() || undefined,
@@ -97,16 +97,16 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         setPanelOpen(false)
     }, [ownerDraft, pushUrl, searchDraft, settlementPartyIdDraft])
 
-    /** 只清「更多筛选」结构化条件；保留关键词、快捷筛选与客户锁定，保持面板展开。 */
+    /** 只清「更多筛选」草稿；保留关键词、快捷筛选、客户锁定和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setSettlementPartyIdDraft(null)
         setOwnerDraft(null)
-        pushUrl({
-            settlementPartyId: undefined,
-            owner: undefined,
-            page: 1,
-        })
-    }, [pushUrl])
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== (q ?? "").trim() ||
+        settlementPartyIdDraft !== (settlementPartyId ?? null) ||
+        ownerDraft !== (owner ?? null)
 
     /** 移除单个已生效条件；每个条件都有可移除 chip。 */
     const removeFilter = React.useCallback(
@@ -135,7 +135,7 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         [pushUrl],
     )
 
-    /** 清空全部筛选（含来源锁定与分页）；保留排序等视图/导航参数。 */
+    /** 清除全部筛选（含来源锁定与分页）；保留排序等视图/导航参数。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setSettlementPartyIdDraft(null)
@@ -416,6 +416,7 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         isFiltered,
         applyFilters,
         resetMoreFilters,
+        hasPendingChanges,
         removeFilter,
         handleMetricChange,
         handleSortingChange,

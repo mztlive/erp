@@ -82,7 +82,7 @@ export function useSupplierAccountsFilters() {
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const hasStructuredFilters = Boolean(
-        supplierId || sourceType || status || due || paymentGate || track,
+        supplierId || sourceType || paymentGate,
     )
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
     const [supplierDraft, setSupplierDraft] = React.useState<string | null>(
@@ -222,23 +222,17 @@ export function useSupplierAccountsFilters() {
     const resetMoreFilters = React.useCallback(() => {
         setSupplierDraft(null)
         setSourceTypeDraft("all")
-        setStatusDraft("all")
-        setDueDraft("all")
         setPaymentGateDraft("all")
-        setTrackDraft("all")
-        patchUrl(
-            {
-                supplierId: null,
-                sourceType: null,
-                status: null,
-                due: null,
-                paymentGate: null,
-                track: null,
-                page: null,
-            },
-            { replace: true, scroll: false },
-        )
-    }, [patchUrl])
+    }, [])
+
+    const hasPendingChanges =
+        searchInput.trim() !== qParam.trim() ||
+        supplierDraft !== (supplierId ?? null) ||
+        sourceTypeDraft !== (sourceType ?? "all") ||
+        statusDraft !== (status ?? "all") ||
+        dueDraft !== (due ?? "all") ||
+        paymentGateDraft !== (paymentGate ?? "all") ||
+        trackDraft !== (track ?? "all")
     const removeFilter = React.useCallback(
         (key: SupplierFilterKey) => {
             if (key === "q") setSearchInput("")
@@ -419,6 +413,7 @@ export function useSupplierAccountsFilters() {
         appliedChips,
         applyFilters,
         resetMoreFilters,
+        hasPendingChanges,
         removeFilter,
         supplierDraft,
         setSupplierDraft,

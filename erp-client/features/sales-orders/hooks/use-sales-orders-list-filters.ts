@@ -3,8 +3,10 @@ import * as React from "react"
 import {
     EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
     filterDraftFromUrl,
+    hasMoreSalesOrdersFilters,
     hasStructuredSalesOrdersFilters,
     resolveSalesOrdersListFilterPatch,
+    salesOrdersListFilterDraftsEqual,
 } from "@/features/sales-orders/lib/sales-orders-list-filters"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
@@ -32,7 +34,7 @@ export function useSalesOrdersListFilters(
 ) {
     const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(
-        hasStructuredSalesOrdersFilters(url),
+        hasMoreSalesOrdersFilters(url),
     )
     const [filterDraft, setFilterDraft] = React.useState(() =>
         filterDraftFromUrl(url),
@@ -164,25 +166,17 @@ export function useSalesOrdersListFilters(
         [pushUrl],
     )
 
-    /** 仅清除「更多筛选」；保留关键词与工作视图，保持面板展开。 */
+    /** 仅清除「更多筛选」草稿；保留关键词、业务性质、工作视图与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        pushUrl({
-            customerId: undefined,
-            contractId: undefined,
-            createdBy: undefined,
-            nature: "all",
-            origin: "all",
-            commercialStatus: "all",
-            reviewStatus: "all",
-            fulfillment: "all",
-            collection: "all",
-            invoice: "all",
-            closeStatus: "all",
-            createdFrom: undefined,
-            createdTo: undefined,
-            page: 1,
-        })
-    }, [pushUrl])
+        setFilterDraft((draft) => ({
+            ...EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
+            nature: draft.nature,
+        }))
+    }, [])
+
+    const hasPendingChanges =
+        searchDraft.trim() !== (search ?? "").trim() ||
+        !salesOrdersListFilterDraftsEqual(filterDraft, filterDraftFromUrl(url))
 
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -216,6 +210,7 @@ export function useSalesOrdersListFilters(
         filterPanelOpen,
         setFilterPanelOpen,
         hasStructuredFilters,
+        hasPendingChanges,
         applyFilters,
         removeFilter,
         resetMoreFilters,

@@ -1,25 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
-    FilterChip,
     FixedOptionRadioFilter,
-    ListToolbar,
     MultiOptionCombobox,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
+import { Input } from "@/components/ui/input"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { MOVEMENT_TYPE_OPTIONS } from "@/features/inventory/lib/presentation"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     LedgerAppliedChip,
     LedgerFilterKey,
@@ -57,8 +53,8 @@ interface LedgerToolbarProps {
     setOccurredToDraft: SetState<string>
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
-    hasStructuredFilters: boolean
-    hasActiveFilters: boolean
+    hasStructuredFilters?: boolean
+    hasActiveFilters?: boolean
     appliedChips: readonly LedgerAppliedChip[]
     removeFilter: (key: LedgerFilterKey) => void
     applyFilters: () => void
@@ -66,12 +62,15 @@ interface LedgerToolbarProps {
     clearAllFilters: () => void
     filterError: string | null
     setFilterError: SetState<string | null>
+    hasPendingChanges?: boolean
+    resultCount?: number
+    loading?: boolean
+    failed?: boolean
 }
 
 /**
- * 库存台账筛选条（docs/ui-filter-design.md §3 / §8.2）：
- * 单一 form；关键词 +「更多筛选」；已生效条件以 chip 展示；
- * 收起态 Enter 与展开态「应用全部筛选」共用 applyFilters。
+ * 库存台账筛选条：余额视图常用可用状态，其余视图常用仓库；
+ * 更多筛选放仓库 / 流水类型 / 发生日期。
  */
 export function LedgerToolbar({
     view,
@@ -90,8 +89,6 @@ export function LedgerToolbar({
     setOccurredToDraft,
     panelOpen,
     setPanelOpen,
-    hasStructuredFilters,
-    hasActiveFilters,
     appliedChips,
     removeFilter,
     applyFilters,
@@ -99,272 +96,195 @@ export function LedgerToolbar({
     clearAllFilters,
     filterError,
     setFilterError,
+    hasPendingChanges = false,
+    resultCount,
+    loading,
+    failed,
 }: LedgerToolbarProps) {
-    const panelId = React.useId()
-    const dateErrorId = React.useId()
-    const hasChips = hasActiveFilters && appliedChips.length > 0
+    const dateErrorId = "inventory-ledger-occurred-error"
+    const showAvailabilityCommon = view === "balance"
+    const showWarehouseCommon = view !== "balance"
+    const showWarehouseMore = view === "balance"
+    const showMovementMore = view === "movement"
+    const showMore = showWarehouseMore || showMovementMore
+    const moreCount = appliedChips.filter(({ key }) => {
+        if (key === "warehouseId") return showWarehouseMore
+        if (key === "movementType" || key === "occurredRange")
+            return showMovementMore
+        return (
+            key === "skuId" ||
+            key === "salesOrderLineId" ||
+            key === "adjustmentId"
+        )
+    }).length
+
+    const warehouseFilter = (
+        <WarehouseSearchCombobox
+            id="inventory-ledger-warehouse-filter"
+            className="w-full sm:w-60"
+            value={warehouseIdDraft ?? undefined}
+            onValueChange={(id) => setWarehouseIdDraft(id ?? null)}
+            purpose="filter"
+            aria-label="筛选仓库"
+            placeholder="全部仓库"
+        />
+    )
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault()
-                applyFilters()
-            }}
-        >
-            <ListToolbar
-                search={
-                    <InputGroup>
-                        <InputGroupAddon>
-                            <SearchIcon aria-hidden="true" />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            id="inventory-ledger-search"
-                            ref={searchInputRef}
-                            value={searchDraft}
-                            onChange={(event) =>
-                                setSearchDraft(event.target.value)
-                            }
-                            placeholder="SKU 编码、名称、规格、仓库"
-                            aria-label="搜索库存"
+        <ListWorkspaceFilterBar
+            idPrefix="inventory-ledger-filter"
+            formAriaLabel="库存台账查询"
+            onSubmit={applyFilters}
+            search={
+                <ListSearchField
+                    id="inventory-ledger-search"
+                    searchInputRef={searchInputRef}
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="SKU 编码、名称、规格、仓库"
+                    aria-label="搜索库存"
+                />
+            }
+            queryButtonId="inventory-ledger-apply-filters"
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={
+                showMore ? () => setPanelOpen((open) => !open) : undefined
+            }
+            moreButtonId="inventory-ledger-filters-trigger"
+            morePanelId="inventory-ledger-more-panel"
+            morePanelAriaLabel="库存台账更多筛选条件"
+            onResetMore={showMore ? resetMoreFilters : undefined}
+            resetMoreButtonId="inventory-ledger-reset-more"
+            commonFilters={
+                <>
+                    {showAvailabilityCommon ? (
+                        <FixedOptionRadioFilter
+                            id="inventory-ledger-availability-filter"
+                            label="可用状态"
+                            variant="quiet"
+                            value={availabilityDraft}
+                            onValueChange={setAvailabilityDraft}
+                            options={AVAILABILITY_RADIO_OPTIONS}
                         />
-                    </InputGroup>
-                }
-                filters={
-                    <Button
-                        id="inventory-ledger-filters-trigger"
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
-                    >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
+                    ) : null}
+                    {showWarehouseCommon ? (
+                        <ListWorkspaceInlineFilter
+                            htmlFor="inventory-ledger-warehouse-filter"
+                            label="仓库"
+                        >
+                            {warehouseFilter}
+                        </ListWorkspaceInlineFilter>
+                    ) : null}
+                </>
+            }
+            morePanel={
+                showMore ? (
+                    <div className="grid min-w-0 gap-5">
+                        {showWarehouseMore ? (
+                            <ListWorkspaceFilterField
+                                htmlFor="inventory-ledger-warehouse-filter"
+                                label="仓库"
+                            >
+                                {warehouseFilter}
+                            </ListWorkspaceFilterField>
                         ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
-                        />
-                    </Button>
-                }
-                secondary={
-                    hasChips || panelOpen ? (
-                        <div className="w-full space-y-3">
-                            {hasChips ? (
-                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <span className="text-xs text-muted-foreground">
-                                        已筛选
-                                    </span>
-                                    {appliedChips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`inventory-ledger-filter-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={`移除${chip.label}`}
-                                            onClear={() =>
-                                                removeFilter(chip.key)
+                        {showMovementMore ? (
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                <ListWorkspaceFilterField
+                                    htmlFor="inventory-ledger-movement-type-filter"
+                                    label="流水类型"
+                                >
+                                    <MultiOptionCombobox
+                                        id="inventory-ledger-movement-type-filter"
+                                        className="w-full"
+                                        value={movementTypeDraft}
+                                        onValueChange={setMovementTypeDraft}
+                                        options={MOVEMENT_TYPE_OPTIONS}
+                                        placeholder="全部流水类型"
+                                        aria-label="流水类型"
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    label="发生日期"
+                                    className="sm:col-span-2"
+                                >
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <Input
+                                            id="inventory-ledger-occurred-from"
+                                            type="date"
+                                            className="w-0 min-w-0 flex-1"
+                                            value={occurredFromDraft}
+                                            max={occurredToDraft || undefined}
+                                            onChange={(event) => {
+                                                setOccurredFromDraft(
+                                                    event.target.value,
+                                                )
+                                                setFilterError(null)
+                                            }}
+                                            autoComplete="off"
+                                            aria-label="发生日期起"
+                                            aria-invalid={Boolean(filterError)}
+                                            aria-describedby={
+                                                filterError
+                                                    ? dateErrorId
+                                                    : undefined
                                             }
                                         />
-                                    ))}
-                                    <Button
-                                        id="inventory-ledger-clear-all"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        onClick={clearAllFilters}
-                                    >
-                                        清空全部
-                                    </Button>
-                                </div>
-                            ) : null}
-                            {panelOpen ? (
-                                <div
-                                    id={panelId}
-                                    className="flex w-full flex-col gap-3 border-t pt-3"
-                                    aria-label="库存台账更多筛选条件"
-                                >
-                                    {view === "balance" ? (
-                                        <FixedOptionRadioFilter
-                                            id="inventory-ledger-availability-filter"
-                                            label="可用状态"
-                                            value={availabilityDraft}
-                                            onValueChange={setAvailabilityDraft}
-                                            options={AVAILABILITY_RADIO_OPTIONS}
+                                        <span className="text-xs text-muted-foreground">
+                                            至
+                                        </span>
+                                        <Input
+                                            id="inventory-ledger-occurred-to"
+                                            type="date"
+                                            className="w-0 min-w-0 flex-1"
+                                            value={occurredToDraft}
+                                            min={occurredFromDraft || undefined}
+                                            onChange={(event) => {
+                                                setOccurredToDraft(
+                                                    event.target.value,
+                                                )
+                                                setFilterError(null)
+                                            }}
+                                            autoComplete="off"
+                                            aria-label="发生日期止"
+                                            aria-invalid={Boolean(filterError)}
+                                            aria-describedby={
+                                                filterError
+                                                    ? dateErrorId
+                                                    : undefined
+                                            }
                                         />
-                                    ) : null}
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                            <span className="text-muted-foreground">
-                                                仓库
-                                            </span>
-                                            <WarehouseSearchCombobox
-                                                id="inventory-ledger-warehouse-filter"
-                                                className="w-full"
-                                                value={
-                                                    warehouseIdDraft ??
-                                                    undefined
-                                                }
-                                                onValueChange={(id) =>
-                                                    setWarehouseIdDraft(
-                                                        id ?? null,
-                                                    )
-                                                }
-                                                purpose="filter"
-                                                aria-label="筛选仓库"
-                                                placeholder="全部仓库"
-                                            />
-                                        </div>
-                                        {view === "movement" ? (
-                                            <>
-                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        流水类型
-                                                    </span>
-                                                    <MultiOptionCombobox
-                                                        id="inventory-ledger-movement-type-filter"
-                                                        className="w-full"
-                                                        value={
-                                                            movementTypeDraft
-                                                        }
-                                                        onValueChange={
-                                                            setMovementTypeDraft
-                                                        }
-                                                        options={
-                                                            MOVEMENT_TYPE_OPTIONS
-                                                        }
-                                                        placeholder="全部流水类型"
-                                                        aria-label="流水类型"
-                                                    />
-                                                </div>
-                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
-                                                    <span className="text-muted-foreground">
-                                                        发生日期
-                                                    </span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Input
-                                                            id="inventory-ledger-occurred-from"
-                                                            type="date"
-                                                            className="w-0 min-w-0 flex-1"
-                                                            value={
-                                                                occurredFromDraft
-                                                            }
-                                                            max={
-                                                                occurredToDraft ||
-                                                                undefined
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                setOccurredFromDraft(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                                setFilterError(
-                                                                    null,
-                                                                )
-                                                            }}
-                                                            autoComplete="off"
-                                                            aria-label="发生日期起"
-                                                            aria-invalid={Boolean(
-                                                                filterError,
-                                                            )}
-                                                            aria-describedby={
-                                                                filterError
-                                                                    ? dateErrorId
-                                                                    : undefined
-                                                            }
-                                                        />
-                                                        <span className="text-muted-foreground">
-                                                            至
-                                                        </span>
-                                                        <Input
-                                                            id="inventory-ledger-occurred-to"
-                                                            type="date"
-                                                            className="w-0 min-w-0 flex-1"
-                                                            value={
-                                                                occurredToDraft
-                                                            }
-                                                            min={
-                                                                occurredFromDraft ||
-                                                                undefined
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                setOccurredToDraft(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                                setFilterError(
-                                                                    null,
-                                                                )
-                                                            }}
-                                                            autoComplete="off"
-                                                            aria-label="发生日期止"
-                                                            aria-invalid={Boolean(
-                                                                filterError,
-                                                            )}
-                                                            aria-describedby={
-                                                                filterError
-                                                                    ? dateErrorId
-                                                                    : undefined
-                                                            }
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </>
-                                        ) : null}
                                     </div>
                                     {filterError ? (
-                                        <span
+                                        <p
                                             id={dateErrorId}
                                             className="text-xs text-destructive"
                                             role="alert"
                                         >
                                             {filterError}
-                                        </span>
-                                    ) : null}
-                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
                                         </p>
-                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <Button
-                                                id="inventory-ledger-reset-more"
-                                                type="button"
-                                                variant="ghost"
-                                                onClick={resetMoreFilters}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                            <Button
-                                                id="inventory-ledger-apply-filters"
-                                                type="submit"
-                                            >
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                应用全部筛选
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : undefined
-                }
-            />
-        </form>
+                                    ) : null}
+                                </ListWorkspaceFilterField>
+                            </div>
+                        ) : null}
+                    </div>
+                ) : undefined
+            }
+            resultStatus={listWorkspaceFilterStatusText({
+                loading,
+                failed,
+                resultCount,
+                noun: "条记录",
+                loadingLabel: "正在加载库存…",
+            })}
+            chips={appliedChips}
+            onClearChip={(key) => removeFilter(key as LedgerFilterKey)}
+            onClearAll={clearAllFilters}
+            clearButtonId="inventory-ledger-clear-all"
+            hasPendingChanges={hasPendingChanges}
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
+        />
     )
 }
