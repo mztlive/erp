@@ -96,6 +96,19 @@ export function useSupplierListFilters(
         supplierQualificationHealth ?? "all",
     )
 
+    const changeLifecycle = React.useCallback(
+        (next: "enabled" | "disabled" | "all") => {
+            if (next === lifecycleStatus) return
+            patchUrl({
+                lifecycleStatus: next === "all" ? null : next,
+                metricKey: next === "all" ? null : next,
+                page: null,
+            })
+            resetPagination()
+        },
+        [lifecycleStatus, patchUrl, resetPagination],
+    )
+
     const commitSearch = React.useCallback(() => {
         const next = searchDraft.trim()
         if (next === q.trim()) return
@@ -232,6 +245,7 @@ export function useSupplierListFilters(
         setPagination,
         changePagination,
         commitSearch,
+        changeLifecycle,
         applySupplierFilters,
         removeFilter,
         resetMoreFilters,

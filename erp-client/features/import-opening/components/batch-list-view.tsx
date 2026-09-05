@@ -1,24 +1,24 @@
 "use client"
 
-import * as React from "react"
 import { ShieldAlertIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataFreshness,
     DataTable,
     MetricItem,
     MetricStrip,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BatchListToolbar } from "@/features/import-opening/components/batch-list-toolbar"
 import { useImportBatchListQuery } from "@/features/import-opening/hooks/queries"
 import { useBatchListColumns } from "@/features/import-opening/hooks/use-batch-list-columns"
@@ -26,12 +26,24 @@ import { useBatchListFilters } from "@/features/import-opening/hooks/use-batch-l
 import { useBatchPagination } from "@/features/import-opening/hooks/use-batch-pagination"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { ImportEnvironment } from "@/features/import-opening/types"
-import {
-    BATCH_STATUS_LABEL,
-    ENVIRONMENT_LABEL,
-    OBJECT_CODE_LABEL,
-} from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
+
+const ENVIRONMENT_VIEWS: ReadonlyArray<{
+    value: ImportEnvironment
+    label: string
+    id: string
+}> = [
+    {
+        value: "VALIDATION",
+        label: "验证环境",
+        id: "operations-import-batches-filter-environment-validation-trigger",
+    },
+    {
+        value: "PRODUCTION",
+        label: "生产环境",
+        id: "operations-import-batches-filter-environment-production-trigger",
+    },
+]
 
 export function BatchListView({
     urlState,
@@ -57,95 +69,37 @@ export function BatchListView({
 
     const data = listQuery.data
     const { pagination, setPagination } = useBatchPagination(urlState.page)
-
-    /** 表头说明：有筛选时写人读摘要，否则默认操作说明（§2.1）。 */
-    const tableDescription = React.useMemo(() => {
-        if (listQuery.isError) {
-            return "列表加载失败，可调整筛选后重试"
-        }
-        const active: string[] = []
-        if (urlState.q?.trim()) active.push(`搜索「${urlState.q.trim()}」`)
-        if (filters.appliedObjectType) {
-            active.push(`对象 ${OBJECT_CODE_LABEL[filters.appliedObjectType]}`)
-        }
-        if (filters.appliedStatus) {
-            active.push(`状态 ${BATCH_STATUS_LABEL[filters.appliedStatus]}`)
-        }
-        if (active.length === 0) {
-            return `${ENVIRONMENT_LABEL[urlState.environment]} · 展示全部批次，点击批次号查看详情。`
-        }
-        return `${ENVIRONMENT_LABEL[urlState.environment]} · 当前筛选：${active.join(" · ")}`
-    }, [
-        filters.appliedObjectType,
-        filters.appliedStatus,
-        listQuery.isError,
-        urlState.environment,
-        urlState.q,
-    ])
-
     const listLoadFailed = listQuery.isError || !listQuery.data
 
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <ListWorkspaceHeader
+                eyebrow="治理"
                 title="导入与期初"
-                metadata={
-                    <DataFreshness
-                        updatedAt={
-                            data?.queriedAt
-                                ? formatDateTime(
-                                      data.queriedAt,
-                                      "dateStyle",
-                                      "passthrough",
-                                  )
-                                : "刚刚"
-                        }
-                        dateTime={data?.queriedAt}
-                        state={listQuery.isFetching ? "stale" : "fresh"}
-                        label="导入批次"
-                    />
+                description={
+                    <>
+                        查看导入批次与期初处理进度。
+                        <span className="ml-3 text-xs" role="status">
+                            {listQuery.isError ? (
+                                "查询失败"
+                            ) : listQuery.isFetching ? (
+                                "正在更新…"
+                            ) : data?.queriedAt ? (
+                                <time dateTime={data.queriedAt}>
+                                    更新于{" "}
+                                    {formatDateTime(
+                                        data.queriedAt,
+                                        "dateStyle",
+                                        "passthrough",
+                                    )}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </>
                 }
             />
-
-            <div className="flex flex-wrap items-center gap-3">
-                <Label className="text-sm text-muted-foreground">环境</Label>
-                <Tabs
-                    value={urlState.environment}
-                    onValueChange={(v) => {
-                        if (v == null) return
-                        patchUrl({
-                            environment: v as ImportEnvironment,
-                            page: 1,
-                            batchId: undefined,
-                        })
-                    }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="w-full overflow-x-auto border-b border-border"
-                    >
-                        <TabsTrigger
-                            id="operations-import-batches-filter-environment-validation-trigger"
-                            value="VALIDATION"
-                        >
-                            验证环境
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="operations-import-batches-filter-environment-production-trigger"
-                            value="PRODUCTION"
-                        >
-                            生产环境
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
-                {urlState.environment === "PRODUCTION" ? (
-                    <Badge variant="destructive">
-                        生产环境 · 操作需显著确认
-                    </Badge>
-                ) : (
-                    <Badge variant="secondary">验证环境</Badge>
-                )}
-            </div>
 
             <MetricStrip columns={4} aria-label="导入批次指标">
                 <MetricItem
@@ -175,20 +129,29 @@ export function BatchListView({
                 </AlertDescription>
             </Alert>
 
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        导入批次
-                        <span
-                            aria-live="polite"
-                            className="font-normal text-muted-foreground"
-                        >
-                            {(data?.totalCount ?? 0).toLocaleString("zh-CN")} 批
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="导入批次列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="导入环境"
+                        hint={
+                            urlState.environment === "PRODUCTION"
+                                ? "生产环境 · 操作需显著确认"
+                                : "验证环境"
+                        }
+                        items={ENVIRONMENT_VIEWS.map((item) => ({
+                            id: item.id,
+                            label: item.label,
+                            active: item.value === urlState.environment,
+                            onClick: () =>
+                                patchUrl({
+                                    environment: item.value,
+                                    page: 1,
+                                    batchId: undefined,
+                                }),
+                        }))}
+                    />
                 }
-                description={tableDescription}
                 toolbar={
                     <BatchListToolbar
                         searchInputRef={filters.searchInputRef}
@@ -258,7 +221,7 @@ export function BatchListView({
                                             ? "filter"
                                             : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         filters.hasAppliedBatchFilters
                                             ? "当前筛选无结果"

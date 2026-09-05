@@ -7,6 +7,7 @@ import {
     BusinessFailureState,
     DataTable,
 } from "@/components/business"
+import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type {
     ConnectionListItem,
@@ -48,48 +49,7 @@ export function ConnectionListTable({
     const filterEmpty =
         empty === "FILTER_NO_RESULT" ||
         (empty === "NO_CONNECTIONS" && hasFilters)
-    if (filterEmpty) {
-        return (
-            <BusinessEmptyState
-                kind="filter"
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                title="当前筛选无结果"
-                description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
-                action={
-                    <Button
-                        id="supplier-api-connections-list-clear-filters"
-                        type="button"
-                        variant="secondary"
-                        className="rounded-lg shadow-none"
-                        onClick={onClearFilters}
-                    >
-                        清除筛选
-                    </Button>
-                }
-            />
-        )
-    }
-    if (empty === "NO_CONNECTIONS") {
-        return (
-            <BusinessEmptyState
-                kind="no-data"
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                title="尚未接入供应商连接"
-                description="当前环境还没有连接身份。有权限时可新建连接。"
-                action={
-                    data?.hasModulePermission ? (
-                        <Button
-                            id="supplier-api-connections-list-empty-create"
-                            type="button"
-                            onClick={onCreate}
-                        >
-                            新建连接
-                        </Button>
-                    ) : null
-                }
-            />
-        )
-    }
+
     return (
         <DataTable
             id="supplier-api-connections-list-table"
@@ -116,6 +76,45 @@ export function ConnectionListTable({
                         title="连接列表加载失败"
                         error={error}
                         onRetry={onRetry}
+                    />
+                ) : undefined
+            }
+            emptyState={
+                filterEmpty ? (
+                    <BusinessEmptyState
+                        kind="filter"
+                        className={listWorkspaceEmptyStateClassName}
+                        title="当前筛选无结果"
+                        description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
+                        action={
+                            <Button
+                                id="supplier-api-connections-list-clear-filters"
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                onClick={onClearFilters}
+                            >
+                                清除筛选
+                            </Button>
+                        }
+                    />
+                ) : empty === "NO_CONNECTIONS" ? (
+                    <BusinessEmptyState
+                        kind="no-data"
+                        className={listWorkspaceEmptyStateClassName}
+                        title="尚未接入供应商连接"
+                        description="当前环境还没有连接身份。有权限时可新建连接。"
+                        action={
+                            data?.hasModulePermission ? (
+                                <Button
+                                    id="supplier-api-connections-list-empty-create"
+                                    type="button"
+                                    onClick={onCreate}
+                                >
+                                    新建连接
+                                </Button>
+                            ) : null
+                        }
                     />
                 ) : undefined
             }

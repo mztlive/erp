@@ -12,13 +12,19 @@ import {
 } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     DataTable,
     ListToolbar,
-    PageHeader,
     PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -31,7 +37,6 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { Separator } from "@/components/ui/separator"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
 import type { AccountDraft } from "@/features/admin/components/accounts/account-form-dialog"
 import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
@@ -43,7 +48,6 @@ import {
 import type { AdminAccount } from "@/features/admin/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 
 type AccountFormState = {
     mode: "create" | "edit"
@@ -215,110 +219,138 @@ export function AccountsPage() {
         [roleNameById, router],
     )
 
+    const hasSearch = keyword.trim().length > 0
+
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统"
                 title="账号管理"
-                description="维护登录账号与初始角色绑定；授权口径与有效权限在权限配置页查看。"
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            id="governance-admin-accounts-permission-config"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => router.push("/system/access-audit")}
-                        >
-                            <ShieldCheckIcon
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            权限配置
-                        </Button>
-                        <Button
-                            id="governance-admin-accounts-create"
-                            type="button"
-                            size="sm"
-                            onClick={() =>
-                                setAccountForm({
-                                    mode: "create",
-                                    account: null,
-                                })
-                            }
-                        >
-                            <PlusIcon className="size-3.5" aria-hidden="true" />
-                            新建账号
-                        </Button>
-                    </div>
+                description="维护登录账号与初始角色绑定。"
+            >
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        id="governance-admin-accounts-permission-config"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => router.push("/system/access-audit")}
+                    >
+                        <ShieldCheckIcon
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                        权限配置
+                    </Button>
+                    <Button
+                        id="governance-admin-accounts-create"
+                        type="button"
+                        size="sm"
+                        onClick={() =>
+                            setAccountForm({
+                                mode: "create",
+                                account: null,
+                            })
+                        }
+                    >
+                        <PlusIcon className="size-3.5" aria-hidden="true" />
+                        新建账号
+                    </Button>
+                </div>
+            </ListWorkspaceHeader>
+
+            <ListWorkSurface
+                ariaLabel="账号列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="账号管理视图"
+                        hint="选择账号查看详情"
+                        items={[
+                            {
+                                id: "governance-admin-accounts-view-all",
+                                label: "全部账号",
+                                count: rows.length,
+                                active: true,
+                                onClick: () => undefined,
+                            },
+                        ]}
+                    />
+                }
+                toolbar={
+                    <ListToolbar
+                        search={
+                            <InputGroup>
+                                <InputGroupAddon>
+                                    <SearchIcon aria-hidden="true" />
+                                </InputGroupAddon>
+                                <InputGroupInput
+                                    id="governance-admin-accounts-search"
+                                    value={keyword}
+                                    onChange={(event) =>
+                                        setKeyword(event.target.value)
+                                    }
+                                    placeholder="账号、姓名或角色"
+                                    aria-label="搜索账号"
+                                />
+                            </InputGroup>
+                        }
+                    />
+                }
+                table={
+                    <DataTable
+                        id="governance-admin-accounts-table"
+                        columns={columns}
+                        data={rows}
+                        getRowId={(row) => row.id}
+                        rowCount={rows.length}
+                        layout="flush"
+                        loading={adminsQuery.isPending}
+                        defaultColumnPinning={{
+                            left: ["identity"],
+                            right: ["actions"],
+                        }}
+                        errorState={
+                            adminsQuery.isError ? (
+                                <BusinessFailureState
+                                    error={adminsQuery.error}
+                                    title="账号列表加载失败"
+                                    action={
+                                        <Button
+                                            id="governance-admin-accounts-retry"
+                                            type="button"
+                                            variant="secondary"
+                                            className="rounded-lg shadow-none"
+                                            onClick={() =>
+                                                void adminsQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        emptyState={
+                            !adminsQuery.isError && rows.length === 0 ? (
+                                <BusinessEmptyState
+                                    kind={hasSearch ? "filter" : "no-data"}
+                                    className={listWorkspaceEmptyStateClassName}
+                                    title={
+                                        hasSearch
+                                            ? "当前筛选无结果"
+                                            : "还没有登录账号"
+                                    }
+                                    description={
+                                        hasSearch
+                                            ? "没有账号符合当前搜索条件。"
+                                            : "点击「新建账号」创建第一条账号记录。"
+                                    }
+                                />
+                            ) : undefined
+                        }
+                    />
                 }
             />
-
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            >
-                <div className="flex flex-wrap items-center gap-2 px-0 pb-4">
-                    <div className="min-w-[16rem] flex-1">
-                        <ListToolbar
-                            search={
-                                <InputGroup>
-                                    <InputGroupAddon>
-                                        <SearchIcon aria-hidden="true" />
-                                    </InputGroupAddon>
-                                    <InputGroupInput
-                                        id="governance-admin-accounts-search"
-                                        value={keyword}
-                                        onChange={(event) =>
-                                            setKeyword(event.target.value)
-                                        }
-                                        placeholder="账号、姓名或角色"
-                                        aria-label="搜索账号"
-                                    />
-                                </InputGroup>
-                            }
-                        />
-                    </div>
-                    <span
-                        className="shrink-0 text-xs text-muted-foreground"
-                        aria-live="polite"
-                    >
-                        共 {rows.length} 条
-                    </span>
-                </div>
-                <Separator />
-                <div data-slot="business-table-frame-table">
-                    {adminsQuery.isError ? (
-                        <BusinessFailureState
-                            error={adminsQuery.error}
-                            title="账号列表加载失败"
-                            action={
-                                <Button
-                                    id="governance-admin-accounts-retry"
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() => void adminsQuery.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : (
-                        <DataTable
-                            id="governance-admin-accounts-table"
-                            columns={columns}
-                            data={rows}
-                            getRowId={(row) => row.id}
-                            rowCount={rows.length}
-                            layout="flush"
-                            loading={adminsQuery.isPending}
-                            defaultColumnPinning={{
-                                left: ["identity"],
-                                right: ["actions"],
-                            }}
-                        />
-                    )}
-                </div>
-            </div>
 
             {accountForm ? (
                 <AccountFormDialog

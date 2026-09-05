@@ -7,25 +7,32 @@ import { PlusIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataFreshness,
-    PageActions,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
-import { SORT_COLUMN_TO_FIELD } from "@/features/customers/lib/directory-url"
-import { describeCustomerDirectoryTable } from "@/features/customers/lib/customer-center-description"
-import { useCustomerDirectoryColumns } from "@/features/customers/hooks/use-directory-columns"
-import { useCustomerDirectoryQuery } from "@/features/customers/hooks/queries"
 import {
     useCustomerCenterDirectoryState,
     useCustomerCenterScopeGuard,
     useCustomerCenterSearchShortcut,
 } from "@/features/customers/hooks/use-customer-center-directory-state"
+import { useCustomerDirectoryColumns } from "@/features/customers/hooks/use-directory-columns"
+import { useCustomerDirectoryQuery } from "@/features/customers/hooks/queries"
+import { SORT_COLUMN_TO_FIELD } from "@/features/customers/lib/directory-url"
+import {
+    SCOPE_LABELS,
+    SCOPE_ORDER,
+} from "@/features/customers/lib/filter-customers"
 import { CustomerCenterDirectoryTable } from "@/features/customers/pages/customer-center-directory-table"
 import { CustomerCenterDirectoryToolbar } from "@/features/customers/pages/customer-center-directory-toolbar"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function CustomerCenterPage() {
     const router = useRouter()
@@ -92,9 +99,52 @@ export function CustomerCenterPage() {
     ) : data && !data.hasCustomerScope ? (
         <BusinessEmptyState
             kind="no-scope"
+            className={listWorkspaceEmptyStateClassName}
             title="当前角色无客户范围"
             description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
         />
+    ) : data && items.length === 0 ? (
+        data.totalInScope === 0 && !q.trim() && status === "active" ? (
+            <BusinessEmptyState
+                kind="no-data"
+                className={listWorkspaceEmptyStateClassName}
+                title="当前范围尚无客户"
+                description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
+                action={
+                    canCreate ? (
+                        <Button
+                            id="customers-directory-empty-create"
+                            type="button"
+                            variant="secondary"
+                            className="rounded-lg shadow-none"
+                            onClick={() => setCreateOpen(true)}
+                        >
+                            新建客户
+                        </Button>
+                    ) : null
+                }
+            />
+        ) : (
+            <BusinessEmptyState
+                kind="filter"
+                className={listWorkspaceEmptyStateClassName}
+                title="当前筛选无结果"
+                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
+                action={
+                    directoryState.hasActiveFilters ? (
+                        <Button
+                            id="customers-directory-empty-clear-filters"
+                            type="button"
+                            variant="secondary"
+                            className="rounded-lg shadow-none"
+                            onClick={directoryState.clearAllFilters}
+                        >
+                            清除筛选
+                        </Button>
+                    ) : null
+                }
+            />
+        )
     ) : data ? (
         <CustomerCenterDirectoryTable
             items={items}
@@ -116,72 +166,68 @@ export function CustomerCenterPage() {
     ) : null
 
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="销售"
                 title="客户中心"
-                metadata={
-                    <DataFreshness
-                        updatedAt={data?.queriedAt?.slice(11, 16) ?? "—"}
-                        dateTime={data?.queriedAt}
-                        state={directoryQuery.isError ? "failed" : "fresh"}
-                        label="客户目录"
-                    />
-                }
-                actions={
-                    <PageActions
-                        actions={
-                            canCreate
-                                ? [
-                                      {
-                                          actionKey: "create",
-                                          id: "customers-directory-create",
-                                          label: "新建客户",
-                                          icon: PlusIcon,
-                                          onClick: () => setCreateOpen(true),
-                                      },
-                                  ]
-                                : []
-                        }
-                    />
-                }
-            />
-
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        客户结果
-                        {data ? (
-                            <span
-                                className="font-normal text-muted-foreground"
-                                aria-live="polite"
-                            >
-                                {data.totalInScope.toLocaleString("zh-CN")} 条
-                            </span>
-                        ) : null}
-                    </span>
-                }
                 description={
-                    data
-                        ? describeCustomerDirectoryTable({
-                              scope,
-                              status,
-                              q,
-                              totalInScope: data.totalInScope,
-                              itemsLength: items.length,
-                          })
-                        : undefined
+                    <>
+                        查看客户资料与合作范围。
+                        <span className="ml-3 text-xs" role="status">
+                            {directoryQuery.isError ? (
+                                "查询失败"
+                            ) : directoryQuery.isFetching ? (
+                                "正在更新…"
+                            ) : data?.queriedAt ? (
+                                <time dateTime={data.queriedAt}>
+                                    更新于 {data.queriedAt.slice(11, 16)}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </>
+                }
+            >
+                {canCreate ? (
+                    <Button
+                        id="customers-directory-create"
+                        type="button"
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                        新建客户
+                    </Button>
+                ) : null}
+            </ListWorkspaceHeader>
+
+            <ListWorkSurface
+                ariaLabel="客户目录"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="客户范围"
+                        hint="选择客户查看详情"
+                        items={SCOPE_ORDER.filter(
+                            (key) => key !== "all_authorized" || canReadAll,
+                        ).map((key) => ({
+                            id: `customers-directory-scope-${toAutomationIdSegment(key)}`,
+                            label: SCOPE_LABELS[key],
+                            count:
+                                data && scope === key
+                                    ? data.totalInScope
+                                    : undefined,
+                            active: scope === key,
+                            onClick: () => directoryState.applyScope(key),
+                        }))}
+                    />
                 }
                 toolbar={
                     <CustomerCenterDirectoryToolbar
                         searchInputRef={directoryState.searchInputRef}
                         searchDraft={directoryState.searchDraft}
                         setSearchDraft={directoryState.setSearchDraft}
-                        scope={scope}
-                        onScopeChange={directoryState.applyScope}
                         statusDraft={directoryState.statusDraft}
                         setStatusDraft={directoryState.setStatusDraft}
-                        canReadAll={canReadAll}
                         hasActiveFilters={directoryState.hasActiveFilters}
                         appliedChips={directoryState.appliedChips}
                         removeFilter={directoryState.removeFilter}

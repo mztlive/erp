@@ -6,21 +6,24 @@ import type { ColumnPinningState } from "@tanstack/react-table"
 import { ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataFreshness,
     DataTable,
     FormalActionResult,
     GuardedBusinessAction,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CreateDraftDialog } from "@/features/supplier-settlements/components/create-draft-dialog"
 import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
-import { SettlementListEmptyState } from "@/features/supplier-settlements/components/settlement-list-empty"
 import { SettlementMetricsStrip } from "@/features/supplier-settlements/components/settlement-list-metrics"
 import { SettlementListPreviewSheet } from "@/features/supplier-settlements/components/settlement-list-preview"
 import { SettlementListToolbar } from "@/features/supplier-settlements/components/settlement-list-toolbar"
@@ -89,7 +92,10 @@ function SettlementList({
 
     if (listQuery.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
                 <div className="h-16 animate-pulse rounded-lg bg-muted" />
                 <div className="h-72 animate-pulse rounded-lg bg-muted" />
@@ -101,66 +107,67 @@ function SettlementList({
     const empty = data?.emptyReason
 
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <ListWorkspaceHeader
+                eyebrow="供应商"
                 title="供应商结算"
-                metadata={
-                    <DataFreshness
-                        updatedAt={
-                            data?.sourceAsOf
-                                ? formatDateTime(data.sourceAsOf, "default")
-                                : "—"
-                        }
-                        dateTime={data?.sourceAsOf}
-                        label="结算数据更新时间"
-                        state={
-                            listLoadFailed
-                                ? "failed"
-                                : listQuery.isFetching
-                                  ? "syncing"
-                                  : "fresh"
-                        }
-                    />
+                description={
+                    <>
+                        查看结算单、对账差异与期间。
+                        <span className="ml-3 text-xs" role="status">
+                            {listLoadFailed ? (
+                                "查询失败"
+                            ) : listQuery.isFetching ? (
+                                "正在更新…"
+                            ) : data?.sourceAsOf ? (
+                                <time dateTime={data.sourceAsOf}>
+                                    更新于{" "}
+                                    {formatDateTime(data.sourceAsOf, "default")}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </>
                 }
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            id="supplier-settlements-list-refresh"
+            >
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        id="supplier-settlements-list-refresh"
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => void listQuery.refetch()}
+                    >
+                        <RefreshCwIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        刷新
+                    </Button>
+                    <div className="max-sm:hidden">
+                        <GuardedBusinessAction
+                            id="supplier-settlements-list-create"
                             type="button"
                             size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => void listQuery.refetch()}
+                            disabled={!canCreate}
+                            reason={
+                                canCreate
+                                    ? undefined
+                                    : "当前账号无模块权限或数据范围"
+                            }
+                            onClick={() => setCreateOpen(true)}
                         >
-                            <RefreshCwIcon
-                                className="size-3.5"
+                            <PlusIcon
+                                data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                            刷新
-                        </Button>
-                        <div className="max-sm:hidden">
-                            <GuardedBusinessAction
-                                id="supplier-settlements-list-create"
-                                type="button"
-                                size="sm"
-                                disabled={!canCreate}
-                                reason={
-                                    canCreate
-                                        ? undefined
-                                        : "当前账号无模块权限或数据范围"
-                                }
-                                onClick={() => setCreateOpen(true)}
-                            >
-                                <PlusIcon
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                />
-                                新建结算草稿
-                            </GuardedBusinessAction>
-                        </div>
+                            新建结算草稿
+                        </GuardedBusinessAction>
                     </div>
-                }
-            />
+                </div>
+            </ListWorkspaceHeader>
 
             {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
 
@@ -182,7 +189,10 @@ function SettlementList({
                                 render={<Link href={result.w12Href} />}
                             >
                                 打开供应商往来应付
-                                <ExternalLinkIcon className="size-3.5" />
+                                <ExternalLinkIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                />
                             </Button>
                         ) : null
                     }
@@ -200,51 +210,34 @@ function SettlementList({
                 />
             ) : null}
 
-            <Tabs
-                value={urlState.view}
-                onValueChange={(v) =>
-                    patchUrl({
-                        view: v as SettlementsUrlState["view"],
-                        status: undefined,
-                        differenceType: undefined,
-                        page: 1,
-                    })
+            <ListWorkSurface
+                ariaLabel="供应商结算列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="供应商结算工作视图"
+                        hint="选择记录查看详情"
+                        items={(
+                            Object.keys(VIEW_LABEL) as Array<
+                                keyof typeof VIEW_LABEL
+                            >
+                        ).map((item) => ({
+                            id: `supplier-settlements-list-view-${toAutomationIdSegment(item)}`,
+                            label: VIEW_LABEL[item],
+                            count:
+                                item === urlState.view
+                                    ? total.toLocaleString("zh-CN")
+                                    : undefined,
+                            active: item === urlState.view,
+                            onClick: () =>
+                                patchUrl({
+                                    view: item,
+                                    status: undefined,
+                                    differenceType: undefined,
+                                    page: 1,
+                                }),
+                        }))}
+                    />
                 }
-            >
-                <TabsList
-                    variant="line"
-                    className="w-full overflow-x-auto border-b border-border"
-                >
-                    {(
-                        Object.keys(VIEW_LABEL) as Array<
-                            keyof typeof VIEW_LABEL
-                        >
-                    ).map((k) => (
-                        <TabsTrigger
-                            key={k}
-                            value={k}
-                            id={`supplier-settlements-list-view-${toAutomationIdSegment(k)}`}
-                        >
-                            {VIEW_LABEL[k]}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-            </Tabs>
-
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        结算单列表
-                        <span
-                            aria-live="polite"
-                            className="font-normal text-muted-foreground"
-                        >
-                            {total.toLocaleString("zh-CN")} 条
-                        </span>
-                    </span>
-                }
-                description={data?.filterSummary ?? "默认待处理"}
                 toolbar={
                     <SettlementListToolbar
                         urlState={urlState}
@@ -311,12 +304,51 @@ function SettlementList({
                         }
                         emptyState={
                             !listLoadFailed && total === 0 ? (
-                                <SettlementListEmptyState
-                                    empty={empty ?? "NO_STATEMENTS"}
-                                    canCreate={Boolean(canCreate)}
-                                    onClearFilters={filters.clearAllFilters}
-                                    onCreateDraft={() => setCreateOpen(true)}
-                                />
+                                empty === "FILTER_NO_RESULT" ? (
+                                    <BusinessEmptyState
+                                        kind="filter"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title="当前筛选无结果"
+                                        description="没有记录符合当前筛选条件，可清除筛选后重试。"
+                                        action={
+                                            <Button
+                                                id="supplier-settlements-list-empty-clear"
+                                                type="button"
+                                                variant="secondary"
+                                                className="rounded-lg shadow-none"
+                                                onClick={
+                                                    filters.clearAllFilters
+                                                }
+                                            >
+                                                清除筛选
+                                            </Button>
+                                        }
+                                    />
+                                ) : (
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title="当前范围没有结算单"
+                                        description="可选择供应商与期间后重查，或新建结算草稿。"
+                                        action={
+                                            canCreate ? (
+                                                <Button
+                                                    id="supplier-settlements-list-empty-create"
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setCreateOpen(true)
+                                                    }
+                                                >
+                                                    新建结算草稿
+                                                </Button>
+                                            ) : null
+                                        }
+                                    />
+                                )
                             ) : undefined
                         }
                         onRowPreview={(row) =>

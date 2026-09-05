@@ -7,13 +7,17 @@ import { useIsMutating } from "@tanstack/react-query"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
+import { productsListStyles } from "./products-list-styles"
 import { ProductSupplyDialog } from "@/features/master-data/components/product/product-supply-dialog"
 import { ProductDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -69,7 +73,8 @@ export function ProductsListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("商品列表")}
+            title="商品列表"
+            description="查看商品资料、上架状态与供应覆盖。"
             alerts={
                 state.listingError ? (
                     <p className="text-sm text-destructive" role="alert">
@@ -104,33 +109,23 @@ export function ProductsListPage() {
                     onClick: openCreate,
                 },
             ]}
-            metrics={
-                <LifecycleMetricStrip
-                    idPrefix="master-data-products-list-metrics"
-                    metrics={state.syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel="商品列表指标筛选"
-                    onChangeLifecycle={filters.changeLifecycle}
-                />
-            }
             resultsLabel={`商品列表 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        商品列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="商品列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-products-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="商品列表指标筛选"
+                        allLabel="全部商品"
+                        hint="选择商品查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <ProductListToolbar
                         idPrefix="master-data-products-list-toolbar"
@@ -201,6 +196,7 @@ export function ProductsListPage() {
                         }
                     />
                 }
+                tableClassName={productsListStyles.table}
                 table={
                     <DataTable
                         id="master-data-products-list-table"
@@ -242,7 +238,7 @@ export function ProductsListPage() {
                                     kind={
                                         hasActiveFilters ? "filter" : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"

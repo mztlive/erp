@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { PageScaffold, surfaceInsetClassName } from "@/components/business"
+import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
 import { useInventoryColumns } from "@/features/inventory/hooks/use-inventory-columns"
@@ -30,7 +31,6 @@ import {
 import { LedgerHeader } from "./components/ledger-header"
 import { LedgerMetricStrip } from "./components/ledger-metric-strip"
 import { LedgerTableFrame } from "./components/ledger-table-frame"
-import { LedgerViewTabs } from "./components/ledger-view-tabs"
 import { useAdjustmentWorkflow } from "./hooks/use-adjustment-workflow"
 import { useInventoryExportJob } from "./hooks/use-inventory-export-job"
 import { useInventoryLedgerPagination } from "./hooks/use-inventory-ledger-pagination"
@@ -358,7 +358,7 @@ export function InventoryLedgerPage() {
     const detail = detailQuery.data
 
     return (
-        <PageScaffold>
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <LedgerHeader
                 isPhoneNarrow={isPhoneNarrow}
                 queriedAt={data?.queriedAt ?? ""}
@@ -426,8 +426,6 @@ export function InventoryLedgerPage() {
                 />
             ) : null}
 
-            <LedgerViewTabs view={view} onViewChange={handleViewChange} />
-
             <LedgerTableFrame
                 view={view}
                 data={data}
@@ -443,6 +441,7 @@ export function InventoryLedgerPage() {
                 adjustmentColumns={adjustmentColumns}
                 onOpenDetail={openDetail}
                 onOpenAdjustment={openAdjustment}
+                onViewChange={handleViewChange}
                 sortValue={sortValue}
                 onSortChange={handleSortChange}
                 hasActiveFilters={hasActiveFilters}

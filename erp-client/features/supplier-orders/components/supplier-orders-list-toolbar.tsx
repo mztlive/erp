@@ -17,7 +17,6 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
@@ -26,7 +25,6 @@ import type {
 } from "@/features/supplier-orders/hooks/use-supplier-orders-filters"
 import type {
     CancelStatus,
-    ListView,
     RefundStatus,
     SupplierFulfillmentStatus,
 } from "@/features/supplier-orders/types"
@@ -37,15 +35,12 @@ import {
     FULFILLMENT_STATUSES,
     REFUND_STATUS_LABEL,
     REFUND_STATUSES,
-    VIEW_LABEL,
 } from "@/features/supplier-orders/types"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 export type SupplierOrdersListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    view: ListView
-    onViewChange: (view: ListView) => void
     searchDraft: string
     onSearchDraftChange: (value: string) => void
     panelOpen: boolean
@@ -79,8 +74,6 @@ export type SupplierOrdersListToolbarProps = {
  */
 export function SupplierOrdersListToolbar({
     searchInputRef,
-    view,
-    onViewChange,
     searchDraft,
     onSearchDraftChange,
     panelOpen,
@@ -118,28 +111,6 @@ export function SupplierOrdersListToolbar({
             }}
         >
             <ListToolbar
-                savedView={
-                    <ToggleGroup
-                        value={[view]}
-                        onValueChange={(values) => {
-                            const next = values[0] as ListView | undefined
-                            if (next) onViewChange(next)
-                        }}
-                        variant="outline"
-                        spacing={0}
-                        aria-label="列表视图"
-                    >
-                        {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => (
-                            <ToggleGroupItem
-                                key={v}
-                                value={v}
-                                id={`supplier-orders-list-view-${toAutomationIdSegment(v)}`}
-                            >
-                                {VIEW_LABEL[v]}
-                            </ToggleGroupItem>
-                        ))}
-                    </ToggleGroup>
-                }
                 search={
                     <InputGroup className="w-full">
                         <InputGroupAddon>

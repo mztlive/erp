@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { FormalActionResult, PageScaffold } from "@/components/business"
+import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { type ResultState } from "@/components/business/feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -44,6 +45,7 @@ import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
 import { CustomerReceivablesHeader } from "@/features/customer-receivables/pages/components/customer-receivables-header"
 import { CustomerReceivablesListPane } from "@/features/customer-receivables/pages/components/customer-receivables-list-pane"
+import { CustomerReceivablesStandaloneListProvider } from "@/features/customer-receivables/pages/components/customer-receivables-table"
 import { SalesOrderReturnAlert } from "@/features/customer-receivables/pages/components/sales-order-return-alert"
 import { useAutoAllocationSession } from "@/features/customer-receivables/pages/hooks/use-auto-allocation-session"
 import { useCustomerReceivablesAppliedChips } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-applied-chips"
@@ -670,5 +672,14 @@ export function CustomerReceivablesWorkspace({
     if (embedded) {
         return <div className="flex flex-col gap-4">{content}</div>
     }
-    return <PageScaffold density="compact">{content}</PageScaffold>
+    return (
+        <CustomerReceivablesStandaloneListProvider>
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
+                {content}
+            </PageScaffold>
+        </CustomerReceivablesStandaloneListProvider>
+    )
 }

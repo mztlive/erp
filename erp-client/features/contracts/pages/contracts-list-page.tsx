@@ -3,24 +3,23 @@
 import * as React from "react"
 import { DownloadIcon, FileUpIcon, LoaderCircleIcon } from "lucide-react"
 
+import { PageActions, PageScaffold } from "@/components/business"
 import {
-    DataFreshness,
-    PageActions,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { ContractListResults } from "@/features/contracts/components/contract-list-results"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
 import { ContractPreviewSheet } from "@/features/contracts/components/contract-preview-sheet"
 import { ContractUploadDialog } from "@/features/contracts/components/contract-upload-dialog"
 import { ContractsTablePanel } from "@/features/contracts/components/contracts-table-panel"
 import { useContractListActions } from "@/features/contracts/hooks/use-contract-list-actions"
+import { useContractListColumns } from "@/features/contracts/hooks/use-contract-list-columns"
 import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
 import {
     useContractCenterQuery,
     useContractsQuery,
 } from "@/features/contracts/hooks/queries"
-import { useContractListColumns } from "@/features/contracts/hooks/use-contract-list-columns"
 
 export function ContractsListPage() {
     const contractsQuery = useContractsQuery()
@@ -48,70 +47,66 @@ export function ContractsListPage() {
     })
 
     const columns = useContractListColumns()
+    const updatedAt = contractsQuery.data
+        ? new Date(contractsQuery.dataUpdatedAt).toISOString()
+        : undefined
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="销售"
                 title="合同"
-                metadata={
-                    <DataFreshness
-                        updatedAt={
-                            contractsQuery.isError
-                                ? "查询失败"
-                                : contractsQuery.data
-                                  ? new Date(
-                                        contractsQuery.dataUpdatedAt,
-                                    ).toLocaleTimeString("zh-CN", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                    })
-                                  : "正在查询"
-                        }
-                        dateTime={
-                            contractsQuery.data
-                                ? new Date(
-                                      contractsQuery.dataUpdatedAt,
-                                  ).toISOString()
-                                : undefined
-                        }
-                        state={
-                            contractsQuery.isError
-                                ? "failed"
-                                : contractsQuery.isFetching
-                                  ? "syncing"
-                                  : "fresh"
-                        }
-                    />
+                description={
+                    <>
+                        查看合同文本、客户与结算主体。
+                        <span className="ml-3 text-xs" role="status">
+                            {contractsQuery.isError ? (
+                                "查询失败"
+                            ) : contractsQuery.isFetching ? (
+                                "正在更新…"
+                            ) : updatedAt ? (
+                                <time dateTime={updatedAt}>
+                                    更新于{" "}
+                                    {new Date(updatedAt).toLocaleTimeString(
+                                        "zh-CN",
+                                        {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                        },
+                                    )}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </>
                 }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "export",
-                                label: actions.exportPending
-                                    ? "导出中…"
-                                    : "导出",
-                                icon: actions.exportPending
-                                    ? LoaderCircleIcon
-                                    : DownloadIcon,
-                                variant: "outline",
-                                disabled:
-                                    list.filtered.length === 0 ||
-                                    actions.exportPending,
-                                onClick: () => {
-                                    void actions.handleExport()
-                                },
+            >
+                <PageActions
+                    actions={[
+                        {
+                            actionKey: "export",
+                            label: actions.exportPending ? "导出中…" : "导出",
+                            icon: actions.exportPending
+                                ? LoaderCircleIcon
+                                : DownloadIcon,
+                            variant: "outline",
+                            disabled:
+                                list.filtered.length === 0 ||
+                                actions.exportPending,
+                            onClick: () => {
+                                void actions.handleExport()
                             },
-                            {
-                                actionKey: "upload",
-                                label: "上传合同 PDF",
-                                icon: FileUpIcon,
-                                onClick: () => setUploadOpen(true),
-                            },
-                        ]}
-                    />
-                }
-            />
+                        },
+                        {
+                            actionKey: "upload",
+                            label: "上传合同 PDF",
+                            icon: FileUpIcon,
+                            onClick: () => setUploadOpen(true),
+                        },
+                    ]}
+                />
+            </ListWorkspaceHeader>
 
             <ContractListResults
                 actionResult={actions.actionResult}

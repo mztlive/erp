@@ -2,11 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
-    BusinessFailureState,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { useActualProfitLossPage } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
 import { AnalysisBlockedPanel } from "@/features/actual-profit-loss/components/analysis-blocked-panel"
 import { CostDetailSheet } from "@/features/actual-profit-loss/components/cost-detail-sheet"
@@ -25,10 +25,11 @@ export function ActualProfitLossPage() {
     // —— 初载 / 配置加载 ——
     if (page.basisQuery.isPending) {
         return (
-            <PageScaffold>
-                <PageHeader
-                    title={`实际经营盈亏（${SCOPE_LABEL}）`}
-                    description="读取期间归属口径配置…"
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="分析"
+                    title="实际经营盈亏"
+                    description={`数据范围：${SCOPE_LABEL} · 读取期间归属口径配置…`}
                 />
                 <Skeleton className="h-16 w-full rounded-lg" />
                 <Skeleton className="h-24 w-full rounded-lg" />
@@ -43,8 +44,12 @@ export function ActualProfitLossPage() {
 
     if (page.basisQuery.isError || !page.basisConfig) {
         return (
-            <PageScaffold>
-                <PageHeader title={`实际经营盈亏（${SCOPE_LABEL}）`} />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="分析"
+                    title="实际经营盈亏"
+                    description={`数据范围：${SCOPE_LABEL}`}
+                />
                 <BusinessFailureState
                     error={page.basisQuery.error}
                     title="期间归属口径配置读取失败"
@@ -63,7 +68,7 @@ export function ActualProfitLossPage() {
     }
 
     return (
-        <PageScaffold>
+        <PageScaffold density="compact" className={styles.page}>
             <ProfitLossPageHeader
                 hasData={page.data != null}
                 projectedAt={page.data?.freshness.projectedAt}

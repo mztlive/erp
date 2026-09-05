@@ -11,12 +11,14 @@ import { DownloadIcon, PlusIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DataFreshness,
     PageActions,
-    PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import {
     CategoryCreateDialog,
@@ -70,49 +72,38 @@ export function CategoryTreePage() {
     const listLoadFailed = listQuery.isError || !listQuery.data
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
-                title={masterDataCopy.pageTitle("商品分类")}
-                metadata={
-                    listQuery.data ? (
-                        <DataFreshness
-                            updatedAt="刚刚"
-                            dateTime={listQuery.data.queriedAt}
-                            state="fresh"
-                            label="商品分类树"
-                        />
-                    ) : undefined
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="基础资料"
+                title="商品分类"
+                description={
+                    listQuery.data
+                        ? masterDataCopy.categoryTreeDesc(rows.length)
+                        : "按树形维护商品分类上下级。"
                 }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                id: "master-data-category-tree-export",
-                                actionKey: "export",
-                                label: masterDataCopy.actionExport,
-                                icon: DownloadIcon,
-                                variant: "outline",
-                                mobileVisibility: "hide",
-                                disabled: rows.length === 0,
-                                onClick: onExport,
-                            },
-                            {
-                                id: "master-data-category-tree-create-root",
-                                actionKey: "create-root",
-                                label: masterDataCopy.categoryAddRoot,
-                                icon: PlusIcon,
-                                onClick: openCreateRoot,
-                            },
-                        ]}
-                    />
-                }
-            />
-
-            {listQuery.data ? (
-                <p className="text-sm text-muted-foreground">
-                    {masterDataCopy.categoryTreeDesc(rows.length)}
-                </p>
-            ) : null}
+            >
+                <PageActions
+                    actions={[
+                        {
+                            id: "master-data-category-tree-export",
+                            actionKey: "export",
+                            label: masterDataCopy.actionExport,
+                            icon: DownloadIcon,
+                            variant: "outline",
+                            mobileVisibility: "hide",
+                            disabled: rows.length === 0,
+                            onClick: onExport,
+                        },
+                        {
+                            id: "master-data-category-tree-create-root",
+                            actionKey: "create-root",
+                            label: masterDataCopy.categoryAddRoot,
+                            icon: PlusIcon,
+                            onClick: openCreateRoot,
+                        },
+                    ]}
+                />
+            </ListWorkspaceHeader>
 
             {exportMeta ? (
                 <p className="text-xs text-muted-foreground">

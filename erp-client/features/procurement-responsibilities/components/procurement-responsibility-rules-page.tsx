@@ -7,11 +7,16 @@ import { z } from "zod"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { CategoryCombobox } from "@/components/business/entity-comboboxes"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -435,8 +440,8 @@ export function ProcurementResponsibilityRulesPage() {
 
     if (profileQuery.isPending) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="采购责任规则" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
                 <div
                     className="h-40 animate-pulse rounded-lg bg-muted"
                     aria-busy
@@ -447,8 +452,8 @@ export function ProcurementResponsibilityRulesPage() {
 
     if (profileQuery.isError) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="采购责任规则" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
                 <BusinessFailureState
                     kind="system"
                     title="权限信息加载失败"
@@ -474,8 +479,8 @@ export function ProcurementResponsibilityRulesPage() {
 
     if (!canList && !canManage) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="采购责任规则" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
                 <BusinessFailureState
                     kind="permission"
                     title="权限不足"
@@ -498,33 +503,33 @@ export function ProcurementResponsibilityRulesPage() {
     const rows = [...(rulesQuery.data ?? [])]
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="基础资料"
                 title="采购责任规则"
                 description="维护销售实物行到采购负责人的分配规则；越具体的规则优先命中。"
-                actions={
-                    canManage ? (
-                        <Button
-                            id="procurement-responsibility-rules-create"
-                            type="button"
-                            size="sm"
-                            data-testid="procurement-responsibility-create"
-                            disabled={dependenciesPending || dependenciesFailed}
-                            title={
-                                dependenciesPending
-                                    ? "正在加载负责人和分类选项"
-                                    : dependenciesFailed
-                                      ? "负责人或分类选项加载失败，请先重试"
-                                      : undefined
-                            }
-                            onClick={openCreate}
-                        >
-                            <PlusIcon data-icon="inline-start" />
-                            新增规则
-                        </Button>
-                    ) : undefined
-                }
-            />
+            >
+                {canManage ? (
+                    <Button
+                        id="procurement-responsibility-rules-create"
+                        type="button"
+                        size="sm"
+                        data-testid="procurement-responsibility-create"
+                        disabled={dependenciesPending || dependenciesFailed}
+                        title={
+                            dependenciesPending
+                                ? "正在加载负责人和分类选项"
+                                : dependenciesFailed
+                                  ? "负责人或分类选项加载失败，请先重试"
+                                  : undefined
+                        }
+                        onClick={openCreate}
+                    >
+                        <PlusIcon data-icon="inline-start" />
+                        新增规则
+                    </Button>
+                ) : null}
+            </ListWorkspaceHeader>
             {canManage && dependenciesFailed ? (
                 <BusinessFailureState
                     kind="system"
@@ -555,88 +560,97 @@ export function ProcurementResponsibilityRulesPage() {
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <BusinessTableFrame
+            <div
                 data-testid="procurement-responsibility-rules"
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        责任规则列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {rows.length} 条
-                        </span>
-                    </span>
-                }
-                description="支持 SKU、分类与区域、分类、商品类型和默认调度人五个层级。"
-                table={
-                    <DataTable
-                        id="procurement-responsibility-rules-table"
-                        data={rows}
-                        columns={columns}
-                        getRowId={(row) => row.ruleId}
-                        rowCount={rows.length}
-                        layout="flush"
-                        loading={
-                            rulesQuery.isPending ||
-                            Boolean(rulesQuery.isFetching)
-                        }
-                        showPagination={false}
-                        errorState={
-                            rulesQuery.isError ? (
-                                <BusinessFailureState
-                                    kind="system"
-                                    title="规则加载失败"
-                                    description={getErrorMessage(
-                                        rulesQuery.error,
-                                        "暂时无法读取采购责任规则。",
-                                    )}
-                                    action={
-                                        <Button
-                                            id="procurement-responsibility-rules-retry"
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() =>
-                                                void rulesQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !rulesQuery.isError && rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind="no-data"
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                    title="还没有采购责任规则"
-                                    description="请先新增默认调度人，再逐步补充更具体的规则。"
-                                    action={
-                                        canManage &&
-                                        !dependenciesPending &&
-                                        !dependenciesFailed ? (
+                className="contents"
+            >
+                <ListWorkSurface
+                    ariaLabel="采购责任规则列表"
+                    views={
+                        <ListWorkspaceViews
+                            ariaLabel="采购责任规则视图"
+                            hint="支持 SKU、分类与区域、分类、商品类型和默认调度人五个层级。"
+                            items={[
+                                {
+                                    id: "procurement-responsibility-rules-view-all",
+                                    label: "全部规则",
+                                    count: rows.length,
+                                    active: true,
+                                    onClick: () => undefined,
+                                },
+                            ]}
+                        />
+                    }
+                    table={
+                        <DataTable
+                            id="procurement-responsibility-rules-table"
+                            data={rows}
+                            columns={columns}
+                            getRowId={(row) => row.ruleId}
+                            rowCount={rows.length}
+                            layout="flush"
+                            loading={
+                                rulesQuery.isPending ||
+                                Boolean(rulesQuery.isFetching)
+                            }
+                            showPagination={false}
+                            errorState={
+                                rulesQuery.isError ? (
+                                    <BusinessFailureState
+                                        kind="system"
+                                        title="规则加载失败"
+                                        description={getErrorMessage(
+                                            rulesQuery.error,
+                                            "暂时无法读取采购责任规则。",
+                                        )}
+                                        action={
                                             <Button
-                                                id="procurement-responsibility-rules-empty-create"
+                                                id="procurement-responsibility-rules-retry"
                                                 type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={openCreate}
+                                                variant="outline"
+                                                onClick={() =>
+                                                    void rulesQuery.refetch()
+                                                }
                                             >
-                                                新增规则
+                                                重试
                                             </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        onRowOpen={canManage ? openEdit : undefined}
-                    />
-                }
-            />
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            emptyState={
+                                !rulesQuery.isError && rows.length === 0 ? (
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title="还没有采购责任规则"
+                                        description="请先新增默认调度人，再逐步补充更具体的规则。"
+                                        action={
+                                            canManage &&
+                                            !dependenciesPending &&
+                                            !dependenciesFailed ? (
+                                                <Button
+                                                    id="procurement-responsibility-rules-empty-create"
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="rounded-lg shadow-none"
+                                                    onClick={openCreate}
+                                                >
+                                                    新增规则
+                                                </Button>
+                                            ) : undefined
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            onRowOpen={canManage ? openEdit : undefined}
+                        />
+                    }
+                />
+            </div>
             {canManage ? (
                 <RuleDialog
                     open={dialogOpen}

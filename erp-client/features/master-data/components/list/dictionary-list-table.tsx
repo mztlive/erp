@@ -8,6 +8,7 @@ import {
     BusinessFailureState,
     DataTable,
 } from "@/components/business"
+import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -74,7 +75,7 @@ export function DictionaryListTable({
                 !listLoadFailed && rows.length === 0 ? (
                     <BusinessEmptyState
                         kind={hasActiveFilters ? "filter" : "no-data"}
-                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                        className={listWorkspaceEmptyStateClassName}
                         title={hasActiveFilters ? "当前筛选无结果" : emptyTitle}
                         description={
                             hasActiveFilters

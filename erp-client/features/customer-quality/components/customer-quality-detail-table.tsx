@@ -10,16 +10,19 @@ import type {
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type { CustomerQualityRow, CustomerQualityView } from "../types"
 
 /**
- * 客户明细结果卡（docs/ui-filter-design.md §8 结构）：
- * 筛选 form 经 toolbar 承载在 BusinessTableFrame 内，空态/错误态只替换
- * 表格内容，工具栏常驻；筛选无结果使用与工具栏同一个 clearAllFilters。
+ * 客户明细结果区：筛选工具栏常驻，空态与错误态只替换表格内容。
+ * 筛选无结果时复用工具栏的 clearAllFilters。
  */
 export function CustomerQualityDetailTable({
     sectionRef,
@@ -66,25 +69,28 @@ export function CustomerQualityDetailTable({
             ref={sectionRef}
             tabIndex={-1}
             data-slot="customer-detail-table"
-            className="focus:outline-none"
+            className="flex min-w-0 flex-col focus:outline-none"
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        客户明细
-                        <span
-                            className="num font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {filteredTotal} 户
-                        </span>
-                    </span>
-                }
-                description={
-                    hasActiveFilters
-                        ? `筛选：${filterSummary} · 明细 ${filteredTotal}/${total} 户`
-                        : "点击客户进入客户中心；逾期与实际盈亏可分别下钻。金额口径与指标、图表、导出一致。"
+            <ListWorkSurface
+                ariaLabel="客户经营质量明细"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="客户经营质量明细视图"
+                        hint={
+                            hasActiveFilters
+                                ? `筛选：${filterSummary} · 明细 ${filteredTotal}/${total} 户`
+                                : "点击客户进入客户中心；逾期与实际盈亏可分别下钻。"
+                        }
+                        items={[
+                            {
+                                id: "customers-quality-detail-view-all",
+                                label: "客户明细",
+                                count: filteredTotal,
+                                active: true,
+                                onClick: () => undefined,
+                            },
+                        ]}
+                    />
                 }
                 toolbar={toolbar}
                 table={
@@ -121,7 +127,9 @@ export function CustomerQualityDetailTable({
                                                 {filterSummary}
                                             </>
                                         }
-                                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
                                         action={
                                             <Button
                                                 id="customers-quality-detail-clear-filters"
@@ -140,7 +148,9 @@ export function CustomerQualityDetailTable({
                                         kind="no-data"
                                         title="期间内无授权经营记录"
                                         description="可调整统计期间或数据范围后重查。"
-                                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
                                     />
                                 )
                             ) : undefined

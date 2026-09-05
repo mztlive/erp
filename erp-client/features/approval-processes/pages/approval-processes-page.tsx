@@ -6,14 +6,19 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     ListToolbar,
     MetricItem,
     MetricStrip,
     OptionCombobox,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
@@ -90,8 +95,12 @@ export function ApprovalProcessesPage() {
 
     if (unknownParams) {
         return (
-            <PageScaffold>
-                <PageHeader title="审批流程配置" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="系统"
+                    title="审批流程配置"
+                    description="按固定单据类型维护审批节点与审批人。"
+                />
                 <BusinessFailureState
                     kind="validation"
                     title="查询条件无效"
@@ -114,8 +123,12 @@ export function ApprovalProcessesPage() {
 
     if (profileQuery.data && !canReadCatalog(permissions)) {
         return (
-            <PageScaffold>
-                <PageHeader title="审批流程配置" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="系统"
+                    title="审批流程配置"
+                    description="按固定单据类型维护审批节点与审批人。"
+                />
                 <BusinessFailureState
                     kind="permission"
                     title="权限不足"
@@ -126,11 +139,13 @@ export function ApprovalProcessesPage() {
     }
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统"
                 title="审批流程配置"
-                description="按固定单据类型维护审批节点、审批人和版本。不得创建自定义单据类型。"
+                description="按固定单据类型维护审批节点与审批人。"
             />
+
             <MetricStrip columns={4}>
                 <MetricItem
                     label="必须审批"
@@ -153,9 +168,24 @@ export function ApprovalProcessesPage() {
                     density="compact"
                 />
             </MetricStrip>
-            <BusinessTableFrame
-                title="单据类型目录"
-                description="目录固定展示 20 个单据类型。配置缺失是阻断状态，不是无需审批。"
+
+            <ListWorkSurface
+                ariaLabel="审批流程单据类型目录"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="审批流程配置视图"
+                        hint="选择单据类型查看配置"
+                        items={[
+                            {
+                                id: "governance-approval-processes-catalog-view-all",
+                                label: "全部单据类型",
+                                count: filtered.length,
+                                active: true,
+                                onClick: () => undefined,
+                            },
+                        ]}
+                    />
+                }
                 toolbar={
                     <ListToolbar
                         search={
@@ -271,6 +301,7 @@ export function ApprovalProcessesPage() {
                     ) : filtered.length === 0 ? (
                         <BusinessEmptyState
                             kind="filter"
+                            className={listWorkspaceEmptyStateClassName}
                             action={
                                 <Button
                                     id="governance-approval-processes-catalog-empty-clear"
@@ -304,6 +335,7 @@ export function ApprovalProcessesPage() {
                     )
                 }
             />
+
             <CreateDraftDialog
                 id="governance-approval-processes-catalog-create-draft-dialog"
                 item={draftTarget}

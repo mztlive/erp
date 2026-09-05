@@ -3,12 +3,13 @@
 import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
-import { BusinessTableFrame } from "@/components/business"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
+import { dictionaryListStyles } from "./dictionary-list-styles"
 import { WarehousePreviewSheet } from "@/features/master-data/components/list/warehouse-preview-sheet"
 import {
     WarehouseDisableDialog,
@@ -65,7 +66,8 @@ export function WarehousesListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("仓库")}
+            title="仓库"
+            description="查看仓库资料与库存摘要。"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -90,33 +92,23 @@ export function WarehousesListPage() {
                     title: masterDataCopy.warehouseWriteBody,
                 },
             ]}
-            metrics={
-                <LifecycleMetricStrip
-                    idPrefix="master-data-warehouses-list-metrics"
-                    metrics={state.syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel="仓库指标筛选"
-                    onChangeLifecycle={filters.changeLifecycle}
-                />
-            }
             resultsLabel={`仓库 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        仓库列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="仓库列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-warehouses-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="仓库指标筛选"
+                        allLabel="全部仓库"
+                        hint="选择仓库查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
                         idPrefix="master-data-warehouses-list-toolbar"
@@ -146,6 +138,7 @@ export function WarehousesListPage() {
                         setRevisionTimingDraft={filters.setRevisionTimingDraft}
                     />
                 }
+                tableClassName={dictionaryListStyles.table}
                 table={
                     <DictionaryListTable
                         id="master-data-warehouses-list-table"

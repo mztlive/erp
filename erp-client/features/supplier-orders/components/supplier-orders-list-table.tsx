@@ -9,14 +9,13 @@ import type {
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
 
 export type SupplierOrdersListTableProps = {
-    toolbar: React.ReactNode
     rows: SupplierOrderListRow[]
     columns: ColumnDef<SupplierOrderListRow>[]
     total: number
@@ -25,8 +24,6 @@ export type SupplierOrdersListTableProps = {
     onRetry: () => void
     hasActiveFilters: boolean
     onClearFilters: () => void
-    /** 结果卡可见说明：有筛选时为人读摘要，否则为默认操作说明。 */
-    description: string
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
     pagination: PaginationState
@@ -35,7 +32,6 @@ export type SupplierOrdersListTableProps = {
 }
 
 export function SupplierOrdersListTable({
-    toolbar,
     rows,
     columns,
     total,
@@ -44,7 +40,6 @@ export function SupplierOrdersListTable({
     onRetry,
     hasActiveFilters,
     onClearFilters,
-    description,
     sorting,
     onSortingChange,
     pagination,
@@ -52,92 +47,74 @@ export function SupplierOrdersListTable({
     onRowPreview,
 }: SupplierOrdersListTableProps) {
     return (
-        <BusinessTableFrame
-            showHeader
-            title={
-                <span className="inline-flex items-baseline gap-2">
-                    供应商订单
-                    <span
-                        className="font-normal text-muted-foreground"
-                        aria-live="polite"
-                    >
-                        {total.toLocaleString("zh-CN")} 条
-                    </span>
-                </span>
+        <DataTable
+            id="supplier-orders-list-table"
+            data={rows}
+            columns={columns}
+            getRowId={(row) => row.orderId}
+            rowCount={total}
+            loading={loading}
+            errorState={
+                error ? (
+                    <BusinessFailureState
+                        title="供应商订单列表加载失败"
+                        error={error}
+                        action={
+                            <Button
+                                id="supplier-orders-list-table-error-retry"
+                                type="button"
+                                size="sm"
+                                onClick={onRetry}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                ) : undefined
             }
-            description={description}
-            toolbar={toolbar}
-            table={
-                <DataTable
-                    id="supplier-orders-list-table"
-                    data={rows}
-                    columns={columns}
-                    getRowId={(row) => row.orderId}
-                    rowCount={total}
-                    loading={loading}
-                    errorState={
-                        error ? (
-                            <BusinessFailureState
-                                title="供应商订单列表加载失败"
-                                error={error}
-                                action={
-                                    <Button
-                                        id="supplier-orders-list-table-error-retry"
-                                        type="button"
-                                        size="sm"
-                                        onClick={onRetry}
-                                    >
-                                        重试
-                                    </Button>
-                                }
-                            />
-                        ) : undefined
-                    }
-                    emptyState={
-                        !loading && rows.length === 0 ? (
-                            <BusinessEmptyState
-                                kind={hasActiveFilters ? "filter" : "no-data"}
-                                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                title={
-                                    hasActiveFilters
-                                        ? "当前筛选无结果"
-                                        : "当前范围没有供应商订单"
-                                }
-                                description={
-                                    hasActiveFilters
-                                        ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                        : "调整视图、供应商或支付时间后重试。"
-                                }
-                                action={
-                                    hasActiveFilters ? (
-                                        <Button
-                                            id="supplier-orders-list-table-empty-clear"
-                                            type="button"
-                                            size="sm"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            onClick={onClearFilters}
-                                        >
-                                            清除筛选
-                                        </Button>
-                                    ) : undefined
-                                }
-                            />
-                        ) : undefined
-                    }
-                    sorting={sorting}
-                    onSortingChange={onSortingChange}
-                    pagination={pagination}
-                    onPaginationChange={onPaginationChange}
-                    layout="flush"
-                    defaultColumnPinning={{
-                        left: ["identity"],
-                        right: ["actions"],
-                    }}
-                    onRowPreview={(row) => onRowPreview(row.orderId)}
-                    onRowOpen={(row) => onRowPreview(row.orderId)}
-                />
+            emptyState={
+                !loading && rows.length === 0 ? (
+                    <BusinessEmptyState
+                        kind={hasActiveFilters ? "filter" : "no-data"}
+                        className={listWorkspaceEmptyStateClassName}
+                        title={
+                            hasActiveFilters
+                                ? "当前筛选无结果"
+                                : "当前范围没有供应商订单"
+                        }
+                        description={
+                            hasActiveFilters
+                                ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                : "调整视图、供应商或支付时间后重试。"
+                        }
+                        action={
+                            hasActiveFilters ? (
+                                <Button
+                                    id="supplier-orders-list-table-empty-clear"
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    onClick={onClearFilters}
+                                >
+                                    清除筛选
+                                </Button>
+                            ) : undefined
+                        }
+                    />
+                ) : undefined
             }
+            sorting={sorting}
+            onSortingChange={onSortingChange}
+            pagination={pagination}
+            onPaginationChange={onPaginationChange}
+            layout="flush"
+            defaultColumnPinning={{
+                left: ["identity"],
+                right: ["actions"],
+            }}
+            onRowPreview={(row) => onRowPreview(row.orderId)}
+            onRowOpen={(row) => onRowPreview(row.orderId)}
         />
     )
 }

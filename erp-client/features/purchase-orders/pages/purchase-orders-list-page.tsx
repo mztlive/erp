@@ -6,19 +6,31 @@ import { DownloadIcon, PlusIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataFreshness,
     DataTable,
     FormalActionResult,
     PageActions,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
+import {
+    PO_METRIC_LABEL,
+    type PurchaseOrderMetricFilter,
+} from "@/features/purchase-orders/types"
+
+const PURCHASE_ORDER_VIEWS = (
+    Object.keys(PO_METRIC_LABEL) as PurchaseOrderMetricFilter[]
+).filter((metric) => metric !== "pending_create")
 
 export function PurchaseOrdersListPage() {
     const ctrl = usePurchaseOrdersListController()
@@ -35,75 +47,75 @@ export function PurchaseOrdersListPage() {
         [ctrl.focusedIndex, ctrl.listReturnHref, ctrl.pageRows, ctrl.rowRefs],
     )
 
-    if (ctrl.listQuery.isPending) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="采购单" description="正在加载列表…" />
-                <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                <div className="h-96 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
-    }
-
     const { filters } = ctrl
     const listLoadFailed = ctrl.listQuery.isError
-    // 表头说明：有筛选时展示 Applied 摘要，无筛选时展示默认操作说明
-    const filterDescription = filters.hasActiveFilters
-        ? `当前筛选：${filters.appliedChips.map((chip) => chip.label).join(" · ")}`
-        : "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开详情，/ 聚焦搜索。"
+    const metrics = ctrl.listQuery.data?.metrics ?? []
+    const updatedAt = ctrl.listQuery.data?.freshness.updatedAt
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="采购"
                 title="采购单"
-                metadata={
-                    <DataFreshness
-                        updatedAt={
-                            ctrl.listQuery.data?.freshness.updatedAt
-                                ? new Date(
-                                      ctrl.listQuery.data.freshness.updatedAt,
-                                  ).toLocaleString("zh-CN", { hour12: false })
-                                : "刚刚"
-                        }
-                        dateTime={ctrl.listQuery.data?.freshness.updatedAt}
-                        state="fresh"
-                        label="列表数据"
-                    />
+                description={
+                    <>
+                        查看采购单、履约进度与金额。
+                        <span className="ml-3 text-xs" role="status">
+                            {listLoadFailed ? (
+                                "查询失败"
+                            ) : ctrl.listQuery.isFetching ? (
+                                "正在更新…"
+                            ) : updatedAt ? (
+                                <time dateTime={updatedAt}>
+                                    更新于{" "}
+                                    {new Date(updatedAt).toLocaleTimeString(
+                                        "zh-CN",
+                                        {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                            hour12: false,
+                                        },
+                                    )}
+                                </time>
+                            ) : (
+                                "正在查询"
+                            )}
+                        </span>
+                    </>
                 }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "export",
-                                label: exportPending ? (
-                                    <>
-                                        <Spinner
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                        />
-                                        导出中…
-                                    </>
-                                ) : (
-                                    "导出"
-                                ),
-                                icon: exportPending ? undefined : DownloadIcon,
-                                variant: "outline",
-                                mobileVisibility: "hide",
-                                disabled: exportPending || ctrl.total === 0,
-                                onClick: () => void ctrl.exportCsv(),
-                                id: "procurement-orders-list-export",
-                            },
-                            {
-                                actionKey: "create",
-                                label: "新建采购单",
-                                icon: PlusIcon,
-                                onClick: ctrl.openCreatePage,
-                                id: "procurement-orders-list-create",
-                            },
-                        ]}
-                    />
-                }
-            />
+            >
+                <PageActions
+                    actions={[
+                        {
+                            actionKey: "export",
+                            label: exportPending ? (
+                                <>
+                                    <Spinner
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    导出中…
+                                </>
+                            ) : (
+                                "导出"
+                            ),
+                            icon: exportPending ? undefined : DownloadIcon,
+                            variant: "outline",
+                            mobileVisibility: "hide",
+                            disabled: exportPending || ctrl.total === 0,
+                            onClick: () => void ctrl.exportCsv(),
+                            id: "procurement-orders-list-export",
+                        },
+                        {
+                            actionKey: "create",
+                            label: "新建采购单",
+                            icon: PlusIcon,
+                            onClick: ctrl.openCreatePage,
+                            id: "procurement-orders-list-create",
+                        },
+                    ]}
+                />
+            </ListWorkspaceHeader>
 
             {ctrl.actionResult ? (
                 <FormalActionResult
@@ -131,20 +143,33 @@ export function PurchaseOrdersListPage() {
                 />
             ) : null}
 
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        采购单列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {ctrl.total} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="采购单列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="采购单视图"
+                        hint="选择采购单查看详情"
+                        items={PURCHASE_ORDER_VIEWS.map((metric) => {
+                            const active = ctrl.url.metric === metric
+                            const metricCount = metrics.find(
+                                (item) => item.key === metric,
+                            )?.count
+                            return {
+                                id: `procurement-orders-list-view-${metric}`,
+                                label: PO_METRIC_LABEL[metric],
+                                count:
+                                    metrics.length > 0
+                                        ? metricCount
+                                        : ctrl.listQuery.data && active
+                                          ? ctrl.total
+                                          : undefined,
+                                active,
+                                onClick: () =>
+                                    ctrl.pushUrl({ metric, page: 1 }),
+                            }
+                        })}
+                    />
                 }
-                description={filterDescription}
                 toolbar={
                     <PurchaseOrdersListToolbar
                         searchInputRef={ctrl.searchInputRef}
@@ -211,7 +236,7 @@ export function PurchaseOrdersListPage() {
                                             ? "filter"
                                             : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         filters.hasActiveFilters
                                             ? "当前筛选无结果"

@@ -12,12 +12,16 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
     FilterChip,
     ListToolbar,
     OptionCombobox,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,10 +44,7 @@ type ContractsTablePanelProps = {
     highlightedContractId?: string
 }
 
-/**
- * 合同列表区：筛选 form（ListToolbar + 更多筛选面板 + 已筛选 chip 行）+ 空态/失败态 + 数据表。
- * 结构契约见 docs/ui-filter-design.md §1.2 / §3 / §8.2。
- */
+/** 合同列表筛选工具栏与数据表。 */
 export function ContractsTablePanel({
     list,
     columns,
@@ -72,7 +73,6 @@ export function ContractsTablePanel({
         clearAllFilters,
         appliedChips,
         isFiltered,
-        filterDescription,
         settlementPartyOptions,
         ownerOptions,
         pageRows,
@@ -87,20 +87,23 @@ export function ContractsTablePanel({
     const hasChips = appliedChips.length > 0
 
     return (
-        <BusinessTableFrame
-            showHeader
-            title={
-                <span className="inline-flex items-baseline gap-2">
-                    合同列表
-                    <span
-                        aria-live="polite"
-                        className="font-normal text-muted-foreground"
-                    >
-                        {sorted.length.toLocaleString("zh-CN")} 条
-                    </span>
-                </span>
+        <ListWorkSurface
+            ariaLabel="合同列表"
+            views={
+                <ListWorkspaceViews
+                    ariaLabel="合同视图"
+                    hint="选择合同查看详情"
+                    items={[
+                        {
+                            id: "card-contracts-list-view-all",
+                            label: "全部合同",
+                            count: isPending ? undefined : sorted.length,
+                            active: true,
+                            onClick: () => undefined,
+                        },
+                    ]}
+                />
             }
-            description={filterDescription}
             toolbar={
                 <form
                     onSubmit={(event) => {
@@ -266,72 +269,77 @@ export function ContractsTablePanel({
                 </form>
             }
             table={
-                isError ? (
-                    <BusinessFailureState
-                        id="card-contracts-list-failure"
-                        title="合同列表加载失败"
-                        error={error}
-                        onRetry={onRetry}
-                    />
-                ) : pageRows.length === 0 && !isPending ? (
-                    <BusinessEmptyState
-                        kind={isFiltered ? "filter" : "no-data"}
-                        title={isFiltered ? undefined : "还没有合同"}
-                        description={
-                            isFiltered
-                                ? "换一个关键词或清除筛选后再试。"
-                                : "上传第一份合同 PDF，即可用于新建销售单。"
-                        }
-                        action={
-                            isFiltered ? (
-                                <Button
-                                    id="card-contracts-list-empty-clear"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={clearAllFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                            ) : (
-                                <Button
-                                    id="card-contracts-list-empty-upload"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={onOpenUpload}
-                                >
-                                    <FileUpIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    上传合同 PDF
-                                </Button>
-                            )
-                        }
-                    />
-                ) : (
-                    <DataTable<ContractListRow>
-                        id="card-contracts-list-table"
-                        data={pageRows}
-                        columns={columns}
-                        getRowId={(row) => row.contractId}
-                        rowCount={sorted.length}
-                        sorting={sorting}
-                        onSortingChange={handleSortingChange}
-                        pagination={pagination}
-                        onPaginationChange={handlePaginationChange}
-                        loading={isPending}
-                        layout="flush"
-                        defaultColumnPinning={{
-                            left: ["contractNo"],
-                            right: ["actions"],
-                        }}
-                        onRowPreview={(row) => onPreview(row.contractId)}
-                        onRowOpen={(row) => onPreview(row.contractId)}
-                        highlightedRowId={highlightedContractId}
-                    />
-                )
+                <DataTable<ContractListRow>
+                    id="card-contracts-list-table"
+                    data={pageRows}
+                    columns={columns}
+                    getRowId={(row) => row.contractId}
+                    rowCount={sorted.length}
+                    sorting={sorting}
+                    onSortingChange={handleSortingChange}
+                    pagination={pagination}
+                    onPaginationChange={handlePaginationChange}
+                    loading={isPending}
+                    layout="flush"
+                    defaultColumnPinning={{
+                        left: ["contractNo"],
+                        right: ["actions"],
+                    }}
+                    errorState={
+                        isError ? (
+                            <BusinessFailureState
+                                id="card-contracts-list-failure"
+                                title="合同列表加载失败"
+                                error={error}
+                                onRetry={onRetry}
+                            />
+                        ) : undefined
+                    }
+                    emptyState={
+                        !isError && pageRows.length === 0 && !isPending ? (
+                            <BusinessEmptyState
+                                kind={isFiltered ? "filter" : "no-data"}
+                                className={listWorkspaceEmptyStateClassName}
+                                title={isFiltered ? undefined : "还没有合同"}
+                                description={
+                                    isFiltered
+                                        ? "换一个关键词或清除筛选后再试。"
+                                        : "上传第一份合同 PDF，即可用于新建销售单。"
+                                }
+                                action={
+                                    isFiltered ? (
+                                        <Button
+                                            id="card-contracts-list-empty-clear"
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={clearAllFilters}
+                                        >
+                                            清除筛选
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            id="card-contracts-list-empty-upload"
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={onOpenUpload}
+                                        >
+                                            <FileUpIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            上传合同 PDF
+                                        </Button>
+                                    )
+                                }
+                            />
+                        ) : undefined
+                    }
+                    onRowPreview={(row) => onPreview(row.contractId)}
+                    onRowOpen={(row) => onPreview(row.contractId)}
+                    highlightedRowId={highlightedContractId}
+                />
             }
         />
     )

@@ -6,13 +6,17 @@ import { useIsMutating } from "@tanstack/react-query"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
+import { dictionaryListStyles } from "./dictionary-list-styles"
 import {
     BrandCreateDialog,
     BrandReviseDialog,
@@ -61,8 +65,8 @@ export function BrandsListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("品牌")}
-            hint={masterDataCopy.brandListHint}
+            title="品牌"
+            description="查看品牌字典，供商品与 SKU 选用。"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -90,33 +94,23 @@ export function BrandsListPage() {
                     onClick: () => state.setCreateOpen(true),
                 },
             ]}
-            metrics={
-                <LifecycleMetricStrip
-                    idPrefix="master-data-brands-list-metrics"
-                    metrics={state.syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel="品牌指标筛选"
-                    onChangeLifecycle={filters.changeLifecycle}
-                />
-            }
             resultsLabel={`品牌 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        品牌列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="品牌列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-brands-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="品牌指标筛选"
+                        allLabel="全部品牌"
+                        hint="选择品牌查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
                         idPrefix="master-data-brands-list-toolbar"
@@ -146,6 +140,7 @@ export function BrandsListPage() {
                         setRevisionTimingDraft={filters.setRevisionTimingDraft}
                     />
                 }
+                tableClassName={dictionaryListStyles.table}
                 table={
                     <DataTable
                         id="master-data-brands-list-table"
@@ -187,7 +182,7 @@ export function BrandsListPage() {
                                     kind={
                                         hasActiveFilters ? "filter" : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"

@@ -7,11 +7,11 @@ import type {
     SortingState,
 } from "@tanstack/react-table"
 
+import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import {
-    BusinessEmptyState,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import type {
     BusinessTag,
     BusinessTypeFilter,
@@ -125,7 +125,7 @@ export function CustomerQualityMainView({
     const filterSummary = data?.filterSummary ?? ""
 
     return (
-        <PageScaffold>
+        <PageScaffold density="compact" className={styles.page}>
             {data ? (
                 <CustomerQualityPageHeader
                     freshness={data.freshness}
@@ -139,7 +139,7 @@ export function CustomerQualityMainView({
                     onExport={onExport}
                 />
             ) : (
-                <PageHeader title="客户经营质量" />
+                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
             )}
 
             {data ? (

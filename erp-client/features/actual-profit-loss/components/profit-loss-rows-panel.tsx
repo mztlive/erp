@@ -11,13 +11,17 @@ import type {
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
     FilterChip,
     ListToolbar,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import type { ComboboxOption } from "@/components/business/option-combobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,7 +31,6 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ProfitLossAppliedChip } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 import {
@@ -138,23 +141,31 @@ export function ProfitLossRowsPanel({
     const listLoadFailed = isError && !data
 
     return (
-        <BusinessTableFrame
-            showHeader
-            title={
-                <span className="inline-flex items-baseline gap-2">
-                    {`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
-                    <span
-                        aria-live="polite"
-                        className="font-normal text-muted-foreground"
-                    >
-                        {data ? data.rows.total.toLocaleString("zh-CN") : 0} 条
-                    </span>
-                </span>
-            }
-            description={
-                data
-                    ? "明细与指标、汇总同一数据范围（趋势与构成图为固定口径序列）· 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情"
-                    : undefined
+        <ListWorkSurface
+            ariaLabel={`实际经营盈亏明细 · ${SCOPE_LABEL}`}
+            views={
+                <ListWorkspaceViews
+                    ariaLabel="盈亏明细维度"
+                    hint={
+                        data
+                            ? "明细与指标、汇总同一数据范围 · 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情"
+                            : undefined
+                    }
+                    items={(
+                        Object.keys(DIMENSION_LABEL) as ProfitLossDimension[]
+                    ).map((key) => ({
+                        id: `actual-profit-loss-dimension-${toAutomationIdSegment(key)}`,
+                        label: DIMENSION_LABEL[key],
+                        count:
+                            key === dimension
+                                ? data
+                                    ? data.rows.total.toLocaleString("zh-CN")
+                                    : 0
+                                : undefined,
+                        active: dimension === key,
+                        onClick: () => onDimensionChange(key),
+                    }))}
+                />
             }
             toolbar={
                 <div className="space-y-2">
@@ -392,31 +403,6 @@ export function ProfitLossRowsPanel({
                             }
                         />
                     </form>
-                    <Tabs
-                        value={dimension}
-                        onValueChange={(v) => {
-                            onDimensionChange(v)
-                        }}
-                    >
-                        <TabsList
-                            variant="line"
-                            className="w-full overflow-x-auto border-b border-border"
-                        >
-                            {(
-                                Object.keys(
-                                    DIMENSION_LABEL,
-                                ) as ProfitLossDimension[]
-                            ).map((key) => (
-                                <TabsTrigger
-                                    key={key}
-                                    id={`actual-profit-loss-dimension-${toAutomationIdSegment(key)}`}
-                                    value={key}
-                                >
-                                    {DIMENSION_LABEL[key]}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
                 </div>
             }
             table={
@@ -455,7 +441,7 @@ export function ProfitLossRowsPanel({
                                 ? "没有记录符合当前筛选条件，可清除筛选后重试。"
                                 : "可调整统计期间或覆盖口径后重试。"
                         }
-                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                        className={listWorkspaceEmptyStateClassName}
                         action={
                             hasFilters ? (
                                 <Button

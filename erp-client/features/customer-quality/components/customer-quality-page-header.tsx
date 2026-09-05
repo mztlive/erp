@@ -2,11 +2,8 @@
 
 import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
 
-import {
-    DataFreshness,
-    GuardedBusinessAction,
-    PageHeader,
-} from "@/components/business"
+import { DataFreshness, GuardedBusinessAction } from "@/components/business"
+import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { formatClock, freshnessPresentation } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"
@@ -39,31 +36,25 @@ export function CustomerQualityPageHeader({
     )
 
     return (
-        <PageHeader
+        <ListWorkspaceHeader
+            eyebrow="分析"
             title="客户经营质量"
-            metadata={
-                <div className="flex flex-col gap-1">
-                    <DataFreshness
-                        updatedAt={formatClock(freshness.projectedAt)}
-                        dateTime={freshness.projectedAt}
-                        state={freshUi.state}
-                        statusLabel={freshUi.statusLabel}
-                        label="经营质量汇总"
-                    />
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>
-                            期间 {period.from} ~ {period.to}
-                            {period.selectionSource === "SERVER_DEFAULT"
-                                ? " · 系统默认"
-                                : period.selectionSource === "CONFIGURED_PRESET"
-                                  ? " · 配置快捷项"
-                                  : " · 显式选择"}
-                        </span>
-                        <span>· {scopeLabel}</span>
-                    </div>
-                </div>
-            }
-            actions={
+            description={`期间 ${period.from} ~ ${period.to}${
+                period.selectionSource === "SERVER_DEFAULT"
+                    ? " · 系统默认"
+                    : period.selectionSource === "CONFIGURED_PRESET"
+                      ? " · 配置快捷项"
+                      : " · 显式选择"
+            } · ${scopeLabel}`}
+        >
+            <div className="flex flex-wrap items-center justify-end gap-3">
+                <DataFreshness
+                    updatedAt={formatClock(freshness.projectedAt)}
+                    dateTime={freshness.projectedAt}
+                    state={freshUi.state}
+                    statusLabel={freshUi.statusLabel}
+                    label="经营质量汇总"
+                />
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
                         id="customers-quality-refresh"
@@ -109,7 +100,7 @@ export function CustomerQualityPageHeader({
                         {exportPending ? "导出中…" : "导出"}
                     </GuardedBusinessAction>
                 </div>
-            }
-        />
+            </div>
+        </ListWorkspaceHeader>
     )
 }

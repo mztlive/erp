@@ -4,12 +4,13 @@ import * as React from "react"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 import { DownloadIcon, Loader2Icon } from "lucide-react"
 
+import { FormalActionResult, PageScaffold } from "@/components/business"
 import {
-    DataFreshness,
-    FormalActionResult,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { SupplierOrdersListExportPreview } from "@/features/supplier-orders/components/supplier-orders-list-export"
 import { SupplierOrdersListExportResult } from "@/features/supplier-orders/components/supplier-orders-list-export"
@@ -27,7 +28,12 @@ import {
     useSupplierOrderDetailQuery,
     useSupplierOrdersQuery,
 } from "@/features/supplier-orders/hooks/queries"
-import type { SupplierOrderListQuery } from "@/features/supplier-orders/types"
+import type {
+    ListView,
+    SupplierOrderListQuery,
+} from "@/features/supplier-orders/types"
+import { VIEW_LABEL } from "@/features/supplier-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const SORT_COLUMN_TO_FIELD: Record<
     string,
@@ -38,9 +44,7 @@ const SORT_COLUMN_TO_FIELD: Record<
     updated: "lastBusinessAt",
 }
 
-/** 结果卡默认操作说明（无筛选时展示）。 */
-const DEFAULT_TABLE_DESCRIPTION =
-    "身份列与操作列固定；履约/取消/退款三种状态独立展示。"
+const SUPPLIER_ORDER_VIEWS = Object.keys(VIEW_LABEL) as ListView[]
 
 export function SupplierOrdersListPage() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -168,53 +172,57 @@ export function SupplierOrdersListPage() {
         queryPending,
     })
 
-    /** 表头说明：有筛选时读已生效条件摘要，无筛选时展示默认操作说明。 */
-    const tableDescription = React.useMemo(() => {
-        if (filters.appliedChips.length === 0) {
-            return DEFAULT_TABLE_DESCRIPTION
-        }
-        return `当前筛选：${filters.appliedChips
-            .map((chip) => chip.label)
-            .join(" · ")}`
-    }, [filters.appliedChips])
-
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="供应商"
                 title="供应商订单"
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <DataFreshness
-                            updatedAt="刚刚"
-                            dateTime={listQuery.data?.queriedAt}
-                            state={listQuery.isFetching ? "syncing" : "fresh"}
-                            label="列表数据"
-                        />
-                        <Button
-                            id="supplier-orders-list-export-trigger"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                                !listQuery.data ||
-                                total === 0 ||
-                                exportMutation.isPending
-                            }
-                            onClick={openExportPreview}
-                        >
-                            {exportMutation.isPending ? (
-                                <Loader2Icon
-                                    className="size-3.5 animate-spin"
-                                    aria-hidden="true"
-                                />
+                description={
+                    <>
+                        查看供应商订单、履约与售后状态。
+                        <span className="ml-3 text-xs" role="status">
+                            {listQuery.isError ? (
+                                "查询失败"
+                            ) : listQuery.isFetching ? (
+                                "正在更新…"
+                            ) : listQuery.data?.queriedAt ? (
+                                <time dateTime={listQuery.data.queriedAt}>
+                                    更新于{" "}
+                                    {listQuery.data.queriedAt.slice(11, 16)}
+                                </time>
                             ) : (
-                                <DownloadIcon className="size-3.5" />
+                                "正在查询"
                             )}
-                            {exportMutation.isPending ? "导出中…" : "导出"}
-                        </Button>
-                    </div>
+                        </span>
+                    </>
                 }
-            />
+            >
+                <Button
+                    id="supplier-orders-list-export-trigger"
+                    type="button"
+                    variant="outline"
+                    disabled={
+                        !listQuery.data ||
+                        total === 0 ||
+                        exportMutation.isPending
+                    }
+                    onClick={openExportPreview}
+                >
+                    {exportMutation.isPending ? (
+                        <Loader2Icon
+                            data-icon="inline-start"
+                            className="animate-spin"
+                            aria-hidden="true"
+                        />
+                    ) : (
+                        <DownloadIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    )}
+                    {exportMutation.isPending ? "导出中…" : "导出"}
+                </Button>
+            </ListWorkspaceHeader>
 
             {returnTo ? (
                 <SupplierOrdersListReturnBanner returnTo={returnTo} />
@@ -267,12 +275,27 @@ export function SupplierOrdersListPage() {
                 />
             ) : null}
 
-            <SupplierOrdersListTable
+            <ListWorkSurface
+                ariaLabel="供应商订单列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="供应商订单视图"
+                        hint="选择供应商订单查看详情"
+                        items={SUPPLIER_ORDER_VIEWS.map((view) => ({
+                            id: `supplier-orders-list-view-${toAutomationIdSegment(view)}`,
+                            label: VIEW_LABEL[view],
+                            count:
+                                listQuery.data && url.view === view
+                                    ? total
+                                    : undefined,
+                            active: url.view === view,
+                            onClick: () => updateUrl({ view, page: 1 }),
+                        }))}
+                    />
+                }
                 toolbar={
                     <SupplierOrdersListToolbar
                         searchInputRef={searchInputRef}
-                        view={url.view}
-                        onViewChange={(view) => updateUrl({ view, page: 1 })}
                         searchDraft={filters.searchDraft}
                         onSearchDraftChange={filters.setSearchDraft}
                         panelOpen={filters.panelOpen}
@@ -303,25 +326,28 @@ export function SupplierOrdersListPage() {
                         setPaidToDraft={filters.setPaidToDraft}
                     />
                 }
-                rows={rows}
-                columns={columns}
-                total={total}
-                loading={listQuery.isPending}
-                error={listQuery.isError ? listQuery.error : null}
-                onRetry={() => void listQuery.refetch()}
-                hasActiveFilters={filters.hasActiveFilters}
-                onClearFilters={filters.clearAllFilters}
-                description={tableDescription}
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                pagination={pagination}
-                onPaginationChange={(next) => {
-                    updateUrl({
-                        page: next.pageIndex + 1,
-                        pageSize: next.pageSize,
-                    })
-                }}
-                onRowPreview={openPreview}
+                table={
+                    <SupplierOrdersListTable
+                        rows={rows}
+                        columns={columns}
+                        total={total}
+                        loading={listQuery.isPending}
+                        error={listQuery.isError ? listQuery.error : null}
+                        onRetry={() => void listQuery.refetch()}
+                        hasActiveFilters={filters.hasActiveFilters}
+                        onClearFilters={filters.clearAllFilters}
+                        sorting={sorting}
+                        onSortingChange={handleSortingChange}
+                        pagination={pagination}
+                        onPaginationChange={(next) => {
+                            updateUrl({
+                                page: next.pageIndex + 1,
+                                pageSize: next.pageSize,
+                            })
+                        }}
+                        onRowPreview={openPreview}
+                    />
+                }
             />
 
             <SupplierOrdersListPreviewSheet

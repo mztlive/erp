@@ -3,25 +3,25 @@
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 
 export function InventoryLedgerLoading() {
     return (
-        <PageScaffold>
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="库存"
+                title="库存台账"
+                description="查看账面现存、预占与可用数量。"
+            />
             <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                    <div
-                        key={i}
-                        className="h-20 animate-pulse rounded-lg bg-muted"
-                    />
-                ))}
-            </div>
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
-            <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
+            <div className="h-[28rem] animate-pulse bg-muted" />
         </PageScaffold>
     )
 }
@@ -32,8 +32,9 @@ export function InventoryLedgerPermissionRevoked({
     onRetry: () => void
 }) {
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="库存"
                 title="库存台账"
                 description="模块权限已收回，相关数据已不再展示。"
             />
@@ -57,8 +58,9 @@ export function InventoryLedgerPermissionRevoked({
 
 export function InventoryLedgerNoScope() {
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="库存"
                 title="库存台账"
                 description="有模块权限但未配置仓库数据范围。"
             />

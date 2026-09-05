@@ -10,9 +10,9 @@ import {
 import {
     DataFreshness,
     PageActions,
-    PageHeader,
     surfaceInsetClassName,
 } from "@/components/business"
+import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { cn } from "@/lib/utils"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
 import { freshnessText } from "@/lib/ui-text"
@@ -70,12 +70,8 @@ export function CustomerReceivablesHeader({
                     id: embedded
                         ? "customer-receivables-header-embedded-register-invoice"
                         : "customer-receivables-header-register-invoice",
-                    label: startSessionPending
-                        ? "创建中…"
-                        : "登记销项发票",
-                    icon: startSessionPending
-                        ? LoaderCircleIcon
-                        : FileTextIcon,
+                    label: startSessionPending ? "创建中…" : "登记销项发票",
+                    icon: startSessionPending ? LoaderCircleIcon : FileTextIcon,
                     variant: "outline",
                     mobileVisibility: embedded ? "show" : "hide",
                     disabled: !canRegisterInvoice || startSessionPending,
@@ -134,19 +130,25 @@ export function CustomerReceivablesHeader({
     }
 
     return (
-        <PageHeader
+        <ListWorkspaceHeader
+            eyebrow="财务"
             title="客户往来"
-            metadata={
-                data ? (
-                    <DataFreshness
-                        updatedAt={freshnessText.dataUpdatedAt}
-                        dateTime={data.queriedAt}
-                        state="fresh"
-                        label="客户往来"
-                    />
-                ) : null
+            description={
+                <>
+                    查看应收、回款与销项发票。
+                    <span className="ml-3 text-xs" role="status">
+                        {data ? (
+                            <time dateTime={data.queriedAt}>
+                                更新于 {data.queriedAt.slice(11, 16)}
+                            </time>
+                        ) : (
+                            "正在查询"
+                        )}
+                    </span>
+                </>
             }
-            actions={actions}
-        />
+        >
+            {actions}
+        </ListWorkspaceHeader>
     )
 }

@@ -5,6 +5,7 @@ import {
     PageScaffold,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
+import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -233,7 +234,7 @@ export function IntegrationErrorsPage({
         <PageScaffold
             density={embedded ? "compact" : "default"}
             className={
-                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                embedded ? workspaceEmbeddedScaffoldClassName : styles.page
             }
         >
             {!embedded ? (

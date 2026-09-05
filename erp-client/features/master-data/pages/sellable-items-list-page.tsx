@@ -13,13 +13,18 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { sellableItemsListStyles as productStyles } from "./sellable-items-list-styles"
 import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
@@ -63,55 +68,47 @@ export function SellableItemsListPage() {
 
     return (
         <PageScaffold density="compact" className={styles.page}>
-            <header className={styles.header}>
-                <div>
-                    <p className={styles.eyebrow}>基础资料</p>
-                    <h1 className={styles.title}>公司商品池</h1>
-                    <p className={styles.description}>
-                        查看可售商品、销售价格与供货范围。
-                    </p>
-                </div>
-                <div className={styles.headerActions}>
-                    <Popover>
-                        <PopoverTrigger
-                            render={
-                                <Button
-                                    id="master-data-sellable-items-help"
-                                    variant="ghost"
-                                    type="button"
-                                    className={styles.quietButton}
-                                />
-                            }
-                        >
-                            <CircleHelpIcon aria-hidden="true" />
-                            查询说明
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="rounded-xl p-5">
-                            <p className="font-medium">商品池查询说明</p>
-                            <p className="text-sm leading-6 text-muted-foreground">
-                                {masterDataCopy.sellableItemsHint}
-                            </p>
-                            <p className="text-sm leading-6 text-muted-foreground">
-                                此页面用于查询。点击商品可查看资料，导出范围与当前筛选结果一致。
-                            </p>
-                        </PopoverContent>
-                    </Popover>
-                    <Button
-                        id="master-data-sellable-items-list-export"
-                        type="button"
-                        variant="outline"
-                        className={styles.exportButton}
-                        disabled={exportPending || state.rows.length === 0}
-                        onClick={state.onExport}
+            <ListWorkspaceHeader
+                eyebrow="基础资料"
+                title="公司商品池"
+                description="查看可售商品、销售价格与供货范围。"
+            >
+                <Popover>
+                    <PopoverTrigger
+                        render={
+                            <Button
+                                id="master-data-sellable-items-help"
+                                variant="ghost"
+                                type="button"
+                                className={styles.quietButton}
+                            />
+                        }
                     >
-                        <DownloadIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        {exportPending ? "导出中…" : "导出当前结果"}
-                    </Button>
-                </div>
-            </header>
+                        <CircleHelpIcon aria-hidden="true" />
+                        查询说明
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="rounded-xl p-5">
+                        <p className="font-medium">商品池查询说明</p>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            {masterDataCopy.sellableItemsHint}
+                        </p>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            此页面用于查询。点击商品可查看资料，导出范围与当前筛选结果一致。
+                        </p>
+                    </PopoverContent>
+                </Popover>
+                <Button
+                    id="master-data-sellable-items-list-export"
+                    type="button"
+                    variant="outline"
+                    className={styles.exportButton}
+                    disabled={exportPending || state.rows.length === 0}
+                    onClick={state.onExport}
+                >
+                    <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+                    {exportPending ? "导出中…" : "导出当前结果"}
+                </Button>
+            </ListWorkspaceHeader>
 
             {state.exportMeta ? (
                 <BackgroundJobProgress
@@ -143,128 +140,87 @@ export function SellableItemsListPage() {
                 {`公司商品池 · ${state.rows.length} 条结果`}
             </h2>
 
-            <section
-                className={styles.workSurface}
-                data-business-component="table-frame"
-                aria-label="可售商品列表"
-            >
-                <div className={styles.viewBar}>
-                    <div
-                        className={styles.views}
-                        role="group"
-                        aria-label="供应快捷筛选"
-                    >
-                        {supplyViews.map(({ value, label }) => {
-                            const active =
-                                (filters.supplyPreset ?? "all") === value
-                            return (
-                                <button
-                                    key={value}
-                                    id={`master-data-sellable-preset-${value}`}
-                                    type="button"
-                                    aria-pressed={active}
-                                    className={cn(
-                                        styles.view,
-                                        active && styles.activeView,
-                                    )}
-                                    onClick={() =>
-                                        filters.applySupplyPreset(value)
-                                    }
-                                >
-                                    {label}
-                                    <span className={styles.viewCount}>
-                                        {state.listQuery.data
-                                            ? state.supplyPresetCounts[value]
-                                            : "—"}
-                                    </span>
-                                </button>
-                            )
-                        })}
-                    </div>
-                    <span className={styles.viewHint}>选择商品查看详情</span>
-                </div>
-                <div className={styles.toolbar}>
-                    <div className={styles.filters}>
-                        <SellableListToolbar
-                            variant="quiet"
-                            applyHint="筛选结果同时用于导出"
-                            actions={
-                                <div
-                                    className={styles.columnSettings}
-                                    data-slot="table-frame-view-options"
-                                />
-                            }
-                            idPrefix="master-data-sellable-items-list-toolbar"
-                            searchInputRef={searchInputRef}
-                            searchDraft={filters.searchDraft}
-                            setSearchDraft={filters.setSearchDraft}
-                            hasActiveFilters={hasActiveFilters}
-                            clearAllFilters={filters.clearAllFilters}
-                            appliedChips={state.appliedChips}
-                            removeFilter={filters.removeFilter}
-                            supplyPreset={filters.supplyPreset ?? "all"}
-                            supplyPresetCounts={state.supplyPresetCounts}
-                            applySupplyPreset={filters.applySupplyPreset}
-                            showSupplyPreset={false}
-                            sellableFilterPanelOpen={
-                                filters.sellableFilterPanelOpen
-                            }
-                            setSellableFilterPanelOpen={
-                                filters.setSellableFilterPanelOpen
-                            }
-                            hasStructuredSellableFilters={
-                                filters.hasStructuredSellableFilters
-                            }
-                            applySellableFilters={filters.applySellableFilters}
-                            resetMoreFilters={filters.resetMoreFilters}
-                            supplyRegionDraft={filters.supplyRegionDraft}
-                            setSupplyRegionDraft={filters.setSupplyRegionDraft}
-                            productKindDraft={filters.productKindDraft}
-                            setProductKindDraft={filters.setProductKindDraft}
-                            productCategoryIdDraft={
-                                filters.productCategoryIdDraft
-                            }
-                            setProductCategoryIdDraft={
-                                filters.setProductCategoryIdDraft
-                            }
-                            productBrandIdDraft={filters.productBrandIdDraft}
-                            setProductBrandIdDraft={
-                                filters.setProductBrandIdDraft
-                            }
-                            productSupplierIdDraft={
-                                filters.productSupplierIdDraft
-                            }
-                            setProductSupplierIdDraft={
-                                filters.setProductSupplierIdDraft
-                            }
-                            productSalesPriceMinDraft={
-                                filters.productSalesPriceMinDraft
-                            }
-                            setProductSalesPriceMinDraft={
-                                filters.setProductSalesPriceMinDraft
-                            }
-                            productSalesPriceMaxDraft={
-                                filters.productSalesPriceMaxDraft
-                            }
-                            setProductSalesPriceMaxDraft={
-                                filters.setProductSalesPriceMaxDraft
-                            }
-                            productSalesPriceError={
-                                filters.productSalesPriceError
-                            }
-                            setProductSalesPriceError={
-                                filters.setProductSalesPriceError
-                            }
-                            productFilterOptionsQuery={
-                                state.productFilterOptionsQuery
-                            }
-                        />
-                    </div>
-                </div>
-                <div
-                    className={cn(styles.table, productStyles.table)}
-                    data-slot="business-table-frame-table"
-                >
+            <ListWorkSurface
+                ariaLabel="可售商品列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="供应快捷筛选"
+                        hint="选择商品查看详情"
+                        items={supplyViews.map(({ value, label }) => ({
+                            id: `master-data-sellable-preset-${value}`,
+                            label,
+                            count: state.listQuery.data
+                                ? state.supplyPresetCounts[value]
+                                : "—",
+                            active: (filters.supplyPreset ?? "all") === value,
+                            onClick: () => filters.applySupplyPreset(value),
+                        }))}
+                    />
+                }
+                toolbar={
+                    <SellableListToolbar
+                        variant="quiet"
+                        applyHint="筛选结果同时用于导出"
+                        idPrefix="master-data-sellable-items-list-toolbar"
+                        searchInputRef={searchInputRef}
+                        searchDraft={filters.searchDraft}
+                        setSearchDraft={filters.setSearchDraft}
+                        hasActiveFilters={hasActiveFilters}
+                        clearAllFilters={filters.clearAllFilters}
+                        appliedChips={state.appliedChips}
+                        removeFilter={filters.removeFilter}
+                        supplyPreset={filters.supplyPreset ?? "all"}
+                        supplyPresetCounts={state.supplyPresetCounts}
+                        applySupplyPreset={filters.applySupplyPreset}
+                        showSupplyPreset={false}
+                        sellableFilterPanelOpen={
+                            filters.sellableFilterPanelOpen
+                        }
+                        setSellableFilterPanelOpen={
+                            filters.setSellableFilterPanelOpen
+                        }
+                        hasStructuredSellableFilters={
+                            filters.hasStructuredSellableFilters
+                        }
+                        applySellableFilters={filters.applySellableFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
+                        supplyRegionDraft={filters.supplyRegionDraft}
+                        setSupplyRegionDraft={filters.setSupplyRegionDraft}
+                        productKindDraft={filters.productKindDraft}
+                        setProductKindDraft={filters.setProductKindDraft}
+                        productCategoryIdDraft={filters.productCategoryIdDraft}
+                        setProductCategoryIdDraft={
+                            filters.setProductCategoryIdDraft
+                        }
+                        productBrandIdDraft={filters.productBrandIdDraft}
+                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
+                        productSupplierIdDraft={filters.productSupplierIdDraft}
+                        setProductSupplierIdDraft={
+                            filters.setProductSupplierIdDraft
+                        }
+                        productSalesPriceMinDraft={
+                            filters.productSalesPriceMinDraft
+                        }
+                        setProductSalesPriceMinDraft={
+                            filters.setProductSalesPriceMinDraft
+                        }
+                        productSalesPriceMaxDraft={
+                            filters.productSalesPriceMaxDraft
+                        }
+                        setProductSalesPriceMaxDraft={
+                            filters.setProductSalesPriceMaxDraft
+                        }
+                        productSalesPriceError={filters.productSalesPriceError}
+                        setProductSalesPriceError={
+                            filters.setProductSalesPriceError
+                        }
+                        productFilterOptionsQuery={
+                            state.productFilterOptionsQuery
+                        }
+                    />
+                }
+                tableClassName={productStyles.table}
+                table={
                     <DataTable
                         id="master-data-sellable-items-list-table"
                         data={state.rows}
@@ -317,7 +273,7 @@ export function SellableItemsListPage() {
                                     kind={
                                         hasActiveFilters ? "filter" : "no-data"
                                     }
-                                    className="rounded-none border-0 bg-transparent px-6 py-16 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"
@@ -352,8 +308,8 @@ export function SellableItemsListPage() {
                             state.setPreviewId(row.stableId)
                         }}
                     />
-                </div>
-            </section>
+                }
+            />
 
             <SellablePreviewSheet
                 idPrefix="master-data-sellable-items-preview"

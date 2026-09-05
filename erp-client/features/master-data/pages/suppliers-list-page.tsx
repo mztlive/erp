@@ -7,13 +7,17 @@ import { useIsMutating } from "@tanstack/react-query"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
+import { suppliersListStyles } from "./suppliers-list-styles"
 import { SupplierDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
@@ -55,7 +59,8 @@ export function SuppliersListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("供应商与资质")}
+            title="供应商与资质"
+            description="查看供应商资料、资质与供货能力。"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -83,33 +88,23 @@ export function SuppliersListPage() {
                     onClick: () => router.push("/master-data/suppliers/new"),
                 },
             ]}
-            metrics={
-                <LifecycleMetricStrip
-                    idPrefix="master-data-suppliers-list-metrics"
-                    metrics={state.syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel="供应商与资质指标"
-                    interactive={false}
-                />
-            }
             resultsLabel={`供应商与资质 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        供应商与资质列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="供应商与资质列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-suppliers-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="供应商与资质指标"
+                        allLabel="全部供应商"
+                        hint="选择供应商查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <SupplierListToolbar
                         idPrefix="master-data-suppliers-list-toolbar"
@@ -155,6 +150,7 @@ export function SuppliersListPage() {
                         }
                     />
                 }
+                tableClassName={suppliersListStyles.table}
                 table={
                     <DataTable
                         id="master-data-suppliers-list-table"
@@ -196,7 +192,7 @@ export function SuppliersListPage() {
                                     kind={
                                         hasActiveFilters ? "filter" : "no-data"
                                     }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    className={listWorkspaceEmptyStateClassName}
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"

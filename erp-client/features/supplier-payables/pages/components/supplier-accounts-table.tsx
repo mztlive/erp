@@ -6,12 +6,17 @@ import type { PaginationState, SortingState } from "@tanstack/react-table"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { useSupplierAccountsColumns } from "@/features/supplier-payables/hooks/use-supplier-accounts-columns"
 import {
+    SUPPLIER_ACCOUNT_VIEWS,
     VIEW_LABEL,
     type PayableRow,
     type PaymentRow,
@@ -23,7 +28,7 @@ import {
     type SupplierRefundRequest,
     type UnallocatedRow,
 } from "@/features/supplier-payables/types"
-import { SupplierAccountsViewTabs } from "./supplier-accounts-view-tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export interface SupplierAccountsTableProps {
     view: SupplierAccountsView
@@ -44,7 +49,6 @@ export interface SupplierAccountsTableProps {
     onPaginationChange: (next: PaginationState) => void
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
-    filterDescription: string
     onClearFilters: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
@@ -75,7 +79,6 @@ export function SupplierAccountsTable({
     onPaginationChange,
     sorting,
     onSortingChange,
-    filterDescription,
     onClearFilters,
     returnTo,
     fromWorkspace,
@@ -109,48 +112,51 @@ export function SupplierAccountsTable({
     })
 
     return (
-        <>
-            <SupplierAccountsViewTabs view={view} onViewChange={onViewChange} />
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        {VIEW_LABEL[view]}
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {rowCount.toLocaleString("zh-CN")} 条
-                        </span>
-                    </span>
-                }
-                description={filterDescription}
-                toolbar={toolbar}
-                table={
-                    <SupplierAccountsTableBody
-                        view={view}
-                        data={data}
-                        pageRows={pageRows}
-                        rowCount={rowCount}
-                        loading={loading}
-                        isError={isError}
-                        error={error}
-                        onRetry={onRetry}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        sorting={sorting}
-                        onSortingChange={onSortingChange}
-                        onClearFilters={onClearFilters}
-                        payableColumns={payableColumns}
-                        paymentColumns={paymentColumns}
-                        invoiceColumns={invoiceColumns}
-                        unallocatedColumns={unallocatedColumns}
-                        openPreview={openPreview}
-                        openPaymentPreview={openPaymentPreview}
+        <ListWorkSurface
+            ariaLabel="供应商往来列表"
+            views={
+                <div id="supplier-payables-view-tabs">
+                    <ListWorkspaceViews
+                        ariaLabel="供应商往来工作视图"
+                        hint="选择记录查看详情"
+                        items={SUPPLIER_ACCOUNT_VIEWS.map((item) => ({
+                            id: `supplier-payables-view-tabs-trigger-${toAutomationIdSegment(item)}`,
+                            label: VIEW_LABEL[item],
+                            count:
+                                item === view
+                                    ? rowCount.toLocaleString("zh-CN")
+                                    : undefined,
+                            active: item === view,
+                            onClick: () => onViewChange(item),
+                        }))}
                     />
-                }
-            />
-        </>
+                </div>
+            }
+            toolbar={toolbar}
+            table={
+                <SupplierAccountsTableBody
+                    view={view}
+                    data={data}
+                    pageRows={pageRows}
+                    rowCount={rowCount}
+                    loading={loading}
+                    isError={isError}
+                    error={error}
+                    onRetry={onRetry}
+                    pagination={pagination}
+                    onPaginationChange={onPaginationChange}
+                    sorting={sorting}
+                    onSortingChange={onSortingChange}
+                    onClearFilters={onClearFilters}
+                    payableColumns={payableColumns}
+                    paymentColumns={paymentColumns}
+                    invoiceColumns={invoiceColumns}
+                    unallocatedColumns={unallocatedColumns}
+                    openPreview={openPreview}
+                    openPaymentPreview={openPaymentPreview}
+                />
+            }
+        />
     )
 }
 
@@ -225,6 +231,7 @@ function SupplierAccountsTableBody({
         return (
             <BusinessEmptyState
                 kind="filter"
+                className={listWorkspaceEmptyStateClassName}
                 title="当前筛选无结果"
                 description="换一个关键词或清除筛选后再试。"
                 action={
@@ -247,6 +254,7 @@ function SupplierAccountsTableBody({
         return (
             <BusinessEmptyState
                 kind="no-data"
+                className={listWorkspaceEmptyStateClassName}
                 title="当前范围尚无供应商往来记录"
                 description="应付形成后刷新；可从采购单或结算来源进入。"
             />

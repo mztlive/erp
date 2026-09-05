@@ -1,6 +1,7 @@
 "use client"
 
 import { BusinessEmptyState, PageScaffold } from "@/components/business"
+import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
 import { PaymentReversalSubmitConfirmDialog } from "@/features/supplier-payables/components/payment-reversal-submit-confirm-dialog"
 import { SupplierRefundRequestDialog } from "@/features/supplier-payables/components/supplier-refund-request-dialog"
@@ -238,17 +239,8 @@ export function SupplierAccountsPage() {
         pagination.pageIndex * pagination.pageSize + pagination.pageSize,
     )
 
-    const filterDescription =
-        listQuery.isError && !data
-            ? "列表加载失败"
-            : !data
-              ? "正在查询"
-              : hasActiveFilters
-                ? `当前筛选：${appliedChips.map((chip) => chip.label).join(" · ")}`
-                : "搜索供应商、采购单、结算单、付款单或发票号；筛选条件会保存在网址中，便于刷新、返回与分享。"
-
     return (
-        <PageScaffold density="compact">
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <SupplierAccountsHeader
                 data={data}
                 isError={listQuery.isError}
@@ -313,7 +305,6 @@ export function SupplierAccountsPage() {
                         onPaginationChange={handlePaginationChange}
                         sorting={sorting}
                         onSortingChange={setSorting}
-                        filterDescription={filterDescription}
                         onClearFilters={clearFilters}
                         returnTo={returnTo}
                         fromWorkspace={fromWorkspace}

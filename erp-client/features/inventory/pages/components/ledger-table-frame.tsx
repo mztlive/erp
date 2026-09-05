@@ -1,20 +1,25 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     OptionCombobox,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import {
     defaultSortValue,
     sortOptions,
 } from "@/features/inventory/lib/presentation"
 import type { LedgerAppliedChip } from "@/features/inventory/pages/hooks/use-ledger-filters"
 import type { useLedgerFilters } from "@/features/inventory/pages/hooks/use-ledger-filters"
-import { VIEW_LABEL } from "@/features/inventory/types"
 import type {
     InventoryListView,
     InventoryView,
@@ -23,8 +28,9 @@ import type {
     StockMovementRow,
     StockReservationRow,
 } from "@/features/inventory/types"
-import { LedgerDataTable, LedgerTableEmpty } from "./ledger-table"
+import { LedgerDataTable } from "./ledger-table"
 import { LedgerToolbar } from "./ledger-toolbar"
+import { LedgerViewTabs } from "./ledger-view-tabs"
 
 interface LedgerTableFrameProps {
     view: InventoryView
@@ -41,6 +47,7 @@ interface LedgerTableFrameProps {
     adjustmentColumns: ColumnDef<StockAdjustmentRow, unknown>[]
     onOpenDetail: (balanceId: string) => void
     onOpenAdjustment: (adjustmentId: string) => void
+    onViewChange: (nextView: InventoryView) => void
     sortValue: string
     onSortChange: (value: string) => void
     hasActiveFilters: boolean
@@ -64,6 +71,7 @@ export function LedgerTableFrame({
     adjustmentColumns,
     onOpenDetail,
     onOpenAdjustment,
+    onViewChange,
     sortValue,
     onSortChange,
     hasActiveFilters,
@@ -85,36 +93,29 @@ export function LedgerTableFrame({
     })()
 
     return (
-        <BusinessTableFrame
-            showHeader
-            title={
-                <span className="inline-flex items-baseline gap-2">
-                    {VIEW_LABEL[view]}
-                    <span
-                        aria-live="polite"
-                        className="font-normal text-muted-foreground"
-                    >
-                        {(data?.total ?? 0).toLocaleString("zh-CN")} 条
-                    </span>
-                </span>
+        <ListWorkSurface
+            ariaLabel="库存台账列表"
+            views={
+                <LedgerViewTabs
+                    view={view}
+                    total={data?.total ?? 0}
+                    onViewChange={onViewChange}
+                />
             }
-            description={
-                <span aria-live="polite">
-                    {data?.filterSummary ?? ""}
-                    {view === "balance" ? (
-                        <span className="text-muted-foreground">
-                            {" "}
-                            · 数量均带基础单位；可用数量以系统数据为准
-                        </span>
-                    ) : null}
-                </span>
-            }
-            headerActions={
-                <div className="flex items-center gap-1.5 text-sm">
-                    <span className="sr-only">排序</span>
+            toolbar={
+                <div className="flex min-w-0 items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                        <LedgerToolbar
+                            view={view}
+                            hasActiveFilters={hasActiveFilters}
+                            appliedChips={appliedChips}
+                            searchInputRef={searchInputRef}
+                            {...filters}
+                        />
+                    </div>
                     <OptionCombobox
                         id="inventory-ledger-sort"
-                        className="w-40"
+                        className="w-40 shrink-0"
                         value={sortValue}
                         onValueChange={(value) =>
                             onSortChange(value ?? defaultSortValue(view))
@@ -126,15 +127,6 @@ export function LedgerTableFrame({
                     />
                 </div>
             }
-            toolbar={
-                <LedgerToolbar
-                    view={view}
-                    hasActiveFilters={hasActiveFilters}
-                    appliedChips={appliedChips}
-                    searchInputRef={searchInputRef}
-                    {...filters}
-                />
-            }
             table={
                 isError ? (
                     <BusinessFailureState
@@ -143,7 +135,7 @@ export function LedgerTableFrame({
                         onRetry={onRetry}
                     />
                 ) : (data?.total ?? 0) === 0 ? (
-                    <LedgerTableEmpty
+                    <LedgerTableEmptyContent
                         emptyReason={data?.emptyReason}
                         filterSummary={data?.filterSummary ?? ""}
                         onClearFilters={filters.clearAllFilters}
@@ -209,6 +201,60 @@ export function LedgerTableFrame({
                         onRowOpen={(row) => onOpenAdjustment(row.adjustmentId)}
                     />
                 )
+            }
+        />
+    )
+}
+
+function LedgerTableEmptyContent({
+    emptyReason,
+    filterSummary,
+    onClearFilters,
+}: {
+    emptyReason: InventoryListView["emptyReason"]
+    filterSummary: string
+    onClearFilters: () => void
+}) {
+    if (emptyReason === "FILTER_NO_RESULT") {
+        return (
+            <BusinessEmptyState
+                kind="filter"
+                className={listWorkspaceEmptyStateClassName}
+                title="当前筛选无结果"
+                description={`没有符合「${filterSummary}」的记录。可清除筛选或切换视图。`}
+                action={
+                    <Button
+                        id="inventory-ledger-empty-clear-filters"
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-lg shadow-none"
+                        onClick={onClearFilters}
+                    >
+                        清除筛选
+                    </Button>
+                }
+            />
+        )
+    }
+
+    return (
+        <BusinessEmptyState
+            kind="no-data"
+            className={listWorkspaceEmptyStateClassName}
+            title="当前仓库尚无 ERP 自有库存记录"
+            description="期初库存需在「导入与期初」完成导入后才会形成流水；商城旧库存不会自动显示在此。"
+            action={
+                <Button
+                    id="inventory-ledger-empty-go-imports"
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-lg shadow-none"
+                    render={<Link href="/governance/imports" />}
+                >
+                    前往导入与期初
+                </Button>
             }
         />
     )

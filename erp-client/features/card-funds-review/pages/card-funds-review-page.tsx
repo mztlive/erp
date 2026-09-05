@@ -9,6 +9,10 @@ import {
     PageScaffold,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     useCardFundsReviewDefaultUrlSync,
@@ -199,10 +203,14 @@ export function CardFundsReviewPage({
             <PageScaffold
                 density={embedded ? "compact" : "default"}
                 className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                    embedded ? workspaceEmbeddedScaffoldClassName : styles.page
                 }
             >
-                <PageHeader title="卡券票款复核" />
+                {embedded ? (
+                    <PageHeader title="卡券票款复核" />
+                ) : (
+                    <ListWorkspaceHeader eyebrow="财务" title="卡券票款复核" />
+                )}
                 <BusinessFailureState
                     id="card-contracts-funds-review-queue"
                     error={queueQuery.error}
@@ -216,7 +224,7 @@ export function CardFundsReviewPage({
         <PageScaffold
             density={embedded ? "compact" : "default"}
             className={
-                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                embedded ? workspaceEmbeddedScaffoldClassName : styles.page
             }
         >
             {!embedded ? <ReviewPageHeader context={context} /> : null}

@@ -9,12 +9,15 @@ import {
 
 import {
     BusinessFailureState,
-    DataFreshness,
     FormalActionResult,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { formatDateTime } from "@/lib/datetime"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
@@ -37,10 +40,11 @@ export function AccessAuditPage() {
 
     if (page.rejectedWorkItemId) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="系统"
                     title="权限配置"
-                    description="这里只处理角色权限与有效权限解释；用户授权在账号管理中维护。"
+                    description="查看角色、授权与有效权限来源。"
                 />
                 <FormalActionResult
                     status="blocked"
@@ -77,7 +81,7 @@ export function AccessAuditPage() {
 
     if (page.pageQuery.isPending) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold density="compact" className={styles.page}>
                 <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
                 <div className="h-10 animate-pulse rounded-lg bg-muted" />
                 <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
@@ -90,49 +94,50 @@ export function AccessAuditPage() {
     const rows = data?.roles ?? []
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统"
                 title="权限配置"
-                description="角色决定能做什么；在账号管理中绑定角色后立即生效；点击任意一行查看有效权限来源。"
-                metadata={
-                    <DataFreshness
-                        label="配置更新时间"
-                        state={page.pageQuery.isFetching ? "syncing" : "fresh"}
-                        updatedAt={
-                            data
-                                ? formatDateTime(data.calculatedAt, "full")
-                                : "—"
+                description="查看角色、授权与有效权限来源。"
+            >
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        id="operations-access-export"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={page.exportBlocked}
+                        title={
+                            page.exportBlocked
+                                ? (page.exportBlocker?.message ?? "导出已禁用")
+                                : "导出当前筛选的配置"
                         }
-                        dateTime={data?.calculatedAt}
-                    />
-                }
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            id="operations-access-config-create-role"
-                            type="button"
-                            size="sm"
-                            onClick={() => page.routerPush("/system/roles/new")}
-                        >
-                            <PlusIcon className="size-3.5" aria-hidden="true" />
-                            新建角色
-                        </Button>
-                        <Button
-                            id="operations-access-config-manage-accounts"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => page.routerPush("/system/accounts")}
-                        >
-                            <UsersIcon
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            账号管理
-                        </Button>
-                    </div>
-                }
-            />
+                        onClick={() => page.handleExport()}
+                    >
+                        <DownloadIcon className="size-3.5" aria-hidden="true" />
+                        导出配置
+                    </Button>
+                    <Button
+                        id="operations-access-config-manage-accounts"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => page.routerPush("/system/accounts")}
+                    >
+                        <UsersIcon className="size-3.5" aria-hidden="true" />
+                        账号管理
+                    </Button>
+                    <Button
+                        id="operations-access-config-create-role"
+                        type="button"
+                        size="sm"
+                        onClick={() => page.routerPush("/system/roles/new")}
+                    >
+                        <PlusIcon className="size-3.5" aria-hidden="true" />
+                        新建角色
+                    </Button>
+                </div>
+            </ListWorkspaceHeader>
 
             {data ? (
                 <PolicyBanner policies={data.governancePolicies} view={view} />
@@ -171,20 +176,23 @@ export function AccessAuditPage() {
                 />
             ) : null}
 
-            <AccessViewTable
-                view={view}
-                isAudit={false}
-                rows={rows}
-                pagination={page.pagination}
-                onPaginationChange={page.handlePaginationChange}
-                isFetching={
-                    page.pageQuery.isFetching && !page.pageQuery.isPending
+            <ListWorkSurface
+                ariaLabel="角色权限列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="权限配置视图"
+                        hint="选择角色查看有效权限来源"
+                        items={[
+                            {
+                                id: "operations-access-view-roles",
+                                label: "角色权限",
+                                count: rows.length,
+                                active: true,
+                                onClick: () => page.switchView("roles"),
+                            },
+                        ]}
+                    />
                 }
-                emptyReason={data?.emptyReason}
-                roleColumns={page.roleColumns}
-                userColumns={page.userColumns}
-                auditColumns={page.auditColumns}
-                onClearFilters={page.clearFilters}
                 toolbar={
                     <AccessListToolbar
                         isAudit={false}
@@ -204,46 +212,46 @@ export function AccessAuditPage() {
                         applyFilters={page.applyFilters}
                     />
                 }
-                headerAction={
-                    <Button
-                        id="operations-access-export"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={page.exportBlocked}
-                        title={
-                            page.exportBlocked
-                                ? (page.exportBlocker?.message ?? "导出已禁用")
-                                : "导出当前筛选的配置"
+                table={
+                    <AccessViewTable
+                        view={view}
+                        isAudit={false}
+                        rows={rows}
+                        pagination={page.pagination}
+                        onPaginationChange={page.handlePaginationChange}
+                        isFetching={
+                            page.pageQuery.isFetching &&
+                            !page.pageQuery.isPending
                         }
-                        onClick={() => page.handleExport()}
-                    >
-                        <DownloadIcon className="size-3.5" aria-hidden="true" />
-                        导出配置
-                    </Button>
-                }
-                onRowPreview={(row) =>
-                    page.openExplain("ROLE", (row as RoleRow).id)
-                }
-                errorState={
-                    page.pageQuery.isError && !data ? (
-                        <BusinessFailureState
-                            error={page.pageQuery.error}
-                            action={
-                                <Button
-                                    id="operations-access-config-retry"
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() =>
-                                        void page.pageQuery.refetch()
+                        emptyReason={data?.emptyReason}
+                        roleColumns={page.roleColumns}
+                        userColumns={page.userColumns}
+                        auditColumns={page.auditColumns}
+                        onClearFilters={page.clearFilters}
+                        onRowPreview={(row) =>
+                            page.openExplain("ROLE", (row as RoleRow).id)
+                        }
+                        errorState={
+                            page.pageQuery.isError && !data ? (
+                                <BusinessFailureState
+                                    error={page.pageQuery.error}
+                                    action={
+                                        <Button
+                                            id="operations-access-config-retry"
+                                            type="button"
+                                            variant="secondary"
+                                            className="rounded-lg shadow-none"
+                                            onClick={() =>
+                                                void page.pageQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : undefined
+                                />
+                            ) : undefined
+                        }
+                    />
                 }
             />
 

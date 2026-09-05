@@ -1,4 +1,5 @@
-import { DataFreshness, PageHeader } from "@/components/business"
+import { DataFreshness } from "@/components/business"
+import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { formatDateTime } from "@/lib/datetime"
 import { freshnessText } from "@/lib/ui-text"
 
@@ -12,20 +13,20 @@ export function IntegrationPageHeader({
     updatedAt: string | undefined
 }) {
     return (
-        <PageHeader
+        <ListWorkspaceHeader
+            eyebrow="治理"
             title={
                 focusMode
                     ? (itemNumber ?? "接口错误与对账中心")
                     : "接口错误与对账中心"
             }
-            metadata={
-                <DataFreshness
-                    state="fresh"
-                    label={freshnessText.dataUpdatedAt}
-                    updatedAt={formatDateTime(updatedAt, "default")}
-                    dateTime={updatedAt}
-                />
-            }
-        />
+        >
+            <DataFreshness
+                state="fresh"
+                label={freshnessText.dataUpdatedAt}
+                updatedAt={formatDateTime(updatedAt, "default")}
+                dateTime={updatedAt}
+            />
+        </ListWorkspaceHeader>
     )
 }

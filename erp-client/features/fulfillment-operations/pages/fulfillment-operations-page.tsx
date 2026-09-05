@@ -3,7 +3,11 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-import { DataFreshness, PageHeader, PageScaffold } from "@/components/business"
+import { DataFreshness, PageScaffold } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import {
@@ -168,28 +172,28 @@ export function FulfillmentOperationsPage({
         )
         if (embedded) return state
         return (
-            <PageScaffold>
-                <PageHeader
+            <PageScaffold className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="履约"
                     title={header.label}
                     description={header.description}
-                    metadata={
-                        <div className="flex flex-wrap items-center gap-3">
-                            <DataFreshness
-                                updatedAt="刚刚"
-                                dateTime={context?.snapshotUpdatedAt}
-                                state="fresh"
-                                label={freshnessText.dataUpdatedAt}
-                            />
-                            <span
-                                className="text-xs text-muted-foreground"
-                                aria-live="polite"
-                            >
-                                {context?.filterSummary ?? "全部类型"} · 待处理{" "}
-                                {context?.total ?? 0}
-                            </span>
-                        </div>
-                    }
-                />
+                >
+                    <div className="flex flex-wrap items-center gap-3">
+                        <DataFreshness
+                            updatedAt="刚刚"
+                            dateTime={context?.snapshotUpdatedAt}
+                            state="fresh"
+                            label={freshnessText.dataUpdatedAt}
+                        />
+                        <span
+                            className="text-xs text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {context?.filterSummary ?? "全部类型"} · 待处理{" "}
+                            {context?.total ?? 0}
+                        </span>
+                    </div>
+                </ListWorkspaceHeader>
 
                 <SourceReturnBanner
                     fromWorkspace={fromWorkspace}
@@ -239,28 +243,28 @@ export function FulfillmentOperationsPage({
     if (embedded) return workspace
 
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="履约"
                 title={header.label}
                 description={header.description}
-                metadata={
-                    <div className="flex flex-wrap items-center gap-3">
-                        <DataFreshness
-                            updatedAt="刚刚"
-                            dateTime={context?.snapshotUpdatedAt}
-                            state="fresh"
-                            label={freshnessText.dataUpdatedAt}
-                        />
-                        <span
-                            className="text-xs text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {context?.filterSummary ?? "全部类型"} · 待处理{" "}
-                            {context?.total ?? 0}
-                        </span>
-                    </div>
-                }
-            />
+            >
+                <div className="flex flex-wrap items-center gap-3">
+                    <DataFreshness
+                        updatedAt="刚刚"
+                        dateTime={context?.snapshotUpdatedAt}
+                        state="fresh"
+                        label={freshnessText.dataUpdatedAt}
+                    />
+                    <span
+                        className="text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >
+                        {context?.filterSummary ?? "全部类型"} · 待处理{" "}
+                        {context?.total ?? 0}
+                    </span>
+                </div>
+            </ListWorkspaceHeader>
 
             <SourceReturnBanner
                 fromWorkspace={fromWorkspace}

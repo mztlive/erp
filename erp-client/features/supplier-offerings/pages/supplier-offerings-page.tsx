@@ -4,7 +4,14 @@ import * as React from "react"
 import Link from "next/link"
 import { PlusIcon } from "lucide-react"
 
-import { PageHeader, PageScaffold } from "@/components/business"
+import { PageScaffold } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/components/dialogs/register-supply-for-sku-dialog"
@@ -74,71 +81,68 @@ export const SupplierOfferingsPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [items, state.urlState],
     )
+    const title = state.taskMode
+        ? "供应停止核对"
+        : state.skuLocked
+          ? "SKU 供给"
+          : "供应商供给"
+    const description = state.taskMode
+        ? "核对安全暂停来源与影响并登记处置证据；完成任务不恢复供给或商品销售。"
+        : state.skuLocked
+          ? "维护当前公司 SKU 的供应商、订货编码、商业条款与可供情况。"
+          : "维护商品的供应商、供货价格、可供数量与配送范围。"
+    const showWorkspaceEmptyState =
+        !query.isError && items.length === 0 && !query.isPending
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
-                title={
-                    state.taskMode
-                        ? "供应停止核对"
-                        : state.skuLocked
-                          ? "SKU 供给"
-                          : "供应商供给"
-                }
-                description={
-                    state.taskMode
-                        ? "核对安全暂停来源与影响并登记处置证据；完成任务不恢复供给或商品销售。"
-                        : state.skuLocked
-                          ? "维护当前公司 SKU 的供应商、订货编码、商业条款与可供情况。"
-                          : "维护商品的供应商、供货价格、可供数量与配送范围。"
-                }
-                actions={
-                    <div className="flex items-center gap-2">
-                        {state.taskMode ? (
-                            <Button
-                                id="supplier-offerings-page-back-workspace"
-                                type="button"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/workspace?${new URLSearchParams(
-                                            {
-                                                currentWorkItemId:
-                                                    state.urlState.workItemId ??
-                                                    "",
-                                            },
-                                        ).toString()}`}
-                                    />
-                                }
-                            >
-                                返回待办队列
-                            </Button>
-                        ) : state.urlState.returnTo ? (
-                            <Button
-                                id="supplier-offerings-page-back-product"
-                                type="button"
-                                variant="outline"
-                                render={<Link href={state.urlState.returnTo} />}
-                            >
-                                返回商品
-                            </Button>
-                        ) : null}
-                        {!state.taskMode ? (
-                            <Button
-                                id="supplier-offerings-page-create"
-                                type="button"
-                                onClick={() => setCreateOpen(true)}
-                            >
-                                <PlusIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="采购"
+                title={title}
+                description={description}
+            >
+                <div className="flex items-center gap-2">
+                    {state.taskMode ? (
+                        <Button
+                            id="supplier-offerings-page-back-workspace"
+                            type="button"
+                            variant="outline"
+                            render={
+                                <Link
+                                    href={`/workspace?${new URLSearchParams({
+                                        currentWorkItemId:
+                                            state.urlState.workItemId ?? "",
+                                    }).toString()}`}
                                 />
-                                添加供给
-                            </Button>
-                        ) : null}
-                    </div>
-                }
-            />
+                            }
+                        >
+                            返回待办队列
+                        </Button>
+                    ) : state.urlState.returnTo ? (
+                        <Button
+                            id="supplier-offerings-page-back-product"
+                            type="button"
+                            variant="outline"
+                            render={<Link href={state.urlState.returnTo} />}
+                        >
+                            返回商品
+                        </Button>
+                    ) : null}
+                    {!state.taskMode ? (
+                        <Button
+                            id="supplier-offerings-page-create"
+                            type="button"
+                            onClick={() => setCreateOpen(true)}
+                        >
+                            <PlusIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            添加供给
+                        </Button>
+                    ) : null}
+                </div>
+            </ListWorkspaceHeader>
 
             {state.taskMode && state.urlState.workItemId ? (
                 <SupplyExceptionTaskPanel
@@ -152,108 +156,61 @@ export const SupplierOfferingsPage = () => {
             ) : null}
 
             {!state.taskMode || taskQuery.data ? (
-                <div className="min-w-0 overflow-hidden bg-card">
-                    {/* 状态筛选沿页面基线排列，当前项使用下划线标识。 */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-                        <div className="inline-flex flex-wrap items-center gap-5 text-sm">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    state.patchUrl({
-                                        status: undefined,
-                                        availabilityStatus: undefined,
-                                        page: 1,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex items-center gap-2 border-b-2 border-transparent py-2 font-medium transition-colors",
-                                    !state.urlState.status &&
-                                        !state.urlState.availabilityStatus
-                                        ? "border-foreground text-foreground font-semibold"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                全部供给
-                                <span
-                                    className={cn(
-                                        "text-xs tabular-nums font-normal",
+                <ListWorkSurface
+                    ariaLabel="供应商供给列表"
+                    views={
+                        <ListWorkspaceViews
+                            ariaLabel="供应商供给状态视图"
+                            hint={
+                                state.appliedFilterLabels.length > 0
+                                    ? `已生效筛选：${state.appliedFilterLabels.join("、")}`
+                                    : "商业条款按版本追加 · 状态与数量独立更新"
+                            }
+                            items={[
+                                {
+                                    id: "supplier-offerings-view-all",
+                                    label: "全部供给",
+                                    count: query.data?.total ?? 0,
+                                    active:
                                         !state.urlState.status &&
-                                            !state.urlState.availabilityStatus
-                                            ? "text-foreground"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {query.data?.total ?? 0}
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    state.patchUrl({
-                                        status: "ACTIVE",
-                                        availabilityStatus: undefined,
-                                        page: 1,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex items-center gap-2 border-b-2 border-transparent py-2 font-medium transition-colors",
-                                    state.urlState.status === "ACTIVE"
-                                        ? "border-foreground text-foreground font-semibold"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                已启用
-                                <span
-                                    className={cn(
-                                        "text-xs tabular-nums font-normal",
-                                        state.urlState.status === "ACTIVE"
-                                            ? "text-foreground"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {activeCount}
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    state.patchUrl({
-                                        availabilityStatus: "AVAILABLE",
-                                        status: undefined,
-                                        page: 1,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex items-center gap-2 border-b-2 border-transparent py-2 font-medium transition-colors",
-                                    state.urlState.availabilityStatus ===
-                                        "AVAILABLE"
-                                        ? "border-foreground text-foreground font-semibold"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                当前可供
-                                <span
-                                    className={cn(
-                                        "text-xs tabular-nums font-normal",
+                                        !state.urlState.availabilityStatus,
+                                    onClick: () =>
+                                        state.patchUrl({
+                                            status: undefined,
+                                            availabilityStatus: undefined,
+                                            page: 1,
+                                        }),
+                                },
+                                {
+                                    id: "supplier-offerings-view-active",
+                                    label: "已启用",
+                                    count: activeCount,
+                                    active: state.urlState.status === "ACTIVE",
+                                    onClick: () =>
+                                        state.patchUrl({
+                                            status: "ACTIVE",
+                                            availabilityStatus: undefined,
+                                            page: 1,
+                                        }),
+                                },
+                                {
+                                    id: "supplier-offerings-view-available",
+                                    label: "当前可供",
+                                    count: availableCount,
+                                    active:
                                         state.urlState.availabilityStatus ===
-                                            "AVAILABLE"
-                                            ? "text-foreground"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {availableCount}
-                                </span>
-                            </button>
-                        </div>
-                        <div className="text-xs text-muted-foreground font-medium">
-                            {state.appliedFilterLabels.length > 0
-                                ? `已生效筛选：${state.appliedFilterLabels.join("、")}`
-                                : "商业条款按版本追加 · 状态与数量独立更新"}
-                        </div>
-                    </div>
-
-                    {/* 2. 内嵌工具栏（搜索框已收敛比例，筛选成组紧邻） */}
-                    <div className="py-4">
+                                        "AVAILABLE",
+                                    onClick: () =>
+                                        state.patchUrl({
+                                            availabilityStatus: "AVAILABLE",
+                                            status: undefined,
+                                            page: 1,
+                                        }),
+                                },
+                            ]}
+                        />
+                    }
+                    toolbar={
                         <SupplierOfferingsToolbar
                             searchInputRef={state.searchInputRef}
                             searchDraft={state.searchDraft}
@@ -286,38 +243,51 @@ export const SupplierOfferingsPage = () => {
                             supplierIdDraft={state.supplierIdDraft}
                             onSupplierIdDraftChange={state.setSupplierIdDraft}
                         />
-                    </div>
-
-                    {/* 3. 核心数据表（无缝嵌入，去除了多余的二次标题卡片） */}
-                    <div className="border-t border-border/70">
-                        <SupplierOfferingsTable
-                            items={items}
-                            isPending={query.isPending}
-                            isError={query.isError}
-                            error={query.error}
-                            hasFilters={state.hasFilters}
-                            taskMode={state.taskMode}
-                            taskBusinessObjectId={
-                                taskQuery.data?.businessObjectId
-                            }
-                            onRetry={() => void query.refetch()}
-                            onClearFilters={state.clearFilters}
-                            onCreateOffering={() => setCreateOpen(true)}
-                            onUpdateAvailability={setAvailabilityOffering}
-                            onReviseOffering={setReviseOffering}
-                        />
-                    </div>
-
-                    {/* 4. 底部分页栏（内嵌整洁对齐） */}
-                    <div className="border-t border-border py-3">
-                        <SupplierOfferingsPagination
-                            page={state.urlState.page}
-                            totalPages={totalPages}
-                            disabled={query.isPending}
-                            onPageChange={(page) => state.patchUrl({ page })}
-                        />
-                    </div>
-                </div>
+                    }
+                    tableClassName="flex flex-col"
+                    table={
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <div
+                                className={cn(
+                                    "min-h-0 flex-1 overflow-auto",
+                                    showWorkspaceEmptyState &&
+                                        listWorkspaceEmptyStateClassName,
+                                    showWorkspaceEmptyState &&
+                                        "[&>[data-slot=business-empty-state]]:p-0",
+                                )}
+                            >
+                                <SupplierOfferingsTable
+                                    items={items}
+                                    isPending={query.isPending}
+                                    isError={query.isError}
+                                    error={query.error}
+                                    hasFilters={state.hasFilters}
+                                    taskMode={state.taskMode}
+                                    taskBusinessObjectId={
+                                        taskQuery.data?.businessObjectId
+                                    }
+                                    onRetry={() => void query.refetch()}
+                                    onClearFilters={state.clearFilters}
+                                    onCreateOffering={() => setCreateOpen(true)}
+                                    onUpdateAvailability={
+                                        setAvailabilityOffering
+                                    }
+                                    onReviseOffering={setReviseOffering}
+                                />
+                            </div>
+                            <div className="shrink-0 border-t border-border py-3">
+                                <SupplierOfferingsPagination
+                                    page={state.urlState.page}
+                                    totalPages={totalPages}
+                                    disabled={query.isPending}
+                                    onPageChange={(page) =>
+                                        state.patchUrl({ page })
+                                    }
+                                />
+                            </div>
+                        </div>
+                    }
+                />
             ) : null}
 
             {!state.taskMode ? (

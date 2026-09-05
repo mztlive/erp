@@ -4,12 +4,15 @@ import { DownloadIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DataFreshness,
     FormalActionResult,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { formatDateTime } from "@/lib/datetime"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +23,7 @@ import { AccessPreviewSheets } from "@/features/access-audit/components/access-p
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import type { AuditEventRow } from "@/features/access-audit/types"
+import { formatDateTime } from "@/lib/datetime"
 
 /**
  * 审计查询：追加式事件的只读查询页。
@@ -32,7 +36,7 @@ export function AuditPage() {
 
     if (page.pageQuery.isPending) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold density="compact" className={styles.page}>
                 <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
                 <div className="h-10 animate-pulse rounded-lg bg-muted" />
                 <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
@@ -43,25 +47,19 @@ export function AuditPage() {
     const data = page.data
     const rows = data?.auditEvents ?? []
     const auditPolicy = data?.governancePolicies.auditAccessPolicy
+    const coverageHint =
+        data?.auditCoverageFrom && data.auditCoverageTo
+            ? `覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")}`
+            : "选择事件查看详情"
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统"
                 title="审计查询"
-                description="按时间、操作者与对象查询审计事件；无记录不等于动作未发生。"
-                metadata={
-                    <DataFreshness
-                        label="审计更新时间"
-                        state={page.pageQuery.isFetching ? "syncing" : "fresh"}
-                        updatedAt={
-                            data
-                                ? formatDateTime(data.calculatedAt, "full")
-                                : "—"
-                        }
-                        dateTime={data?.calculatedAt}
-                    />
-                }
-                actions={
+                description="按时间、操作者与对象查询审计事件。"
+            >
+                <div className="flex flex-wrap items-center gap-2">
                     <Button
                         id="operations-audit-go-access-config"
                         type="button"
@@ -75,8 +73,24 @@ export function AuditPage() {
                         />
                         权限配置
                     </Button>
-                }
-            />
+                    <Button
+                        id="operations-audit-export"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={page.exportBlocked}
+                        title={
+                            page.exportBlocked
+                                ? (page.exportBlocker?.message ?? "导出已禁用")
+                                : "导出当前筛选的审计事件"
+                        }
+                        onClick={() => page.handleExport()}
+                    >
+                        <DownloadIcon className="size-3.5" aria-hidden="true" />
+                        导出审计
+                    </Button>
+                </div>
+            </ListWorkspaceHeader>
 
             {auditPolicy?.state === "MISSING" ? (
                 <Alert variant="info">
@@ -121,22 +135,23 @@ export function AuditPage() {
                 />
             ) : null}
 
-            <AccessViewTable
-                view="audit"
-                isAudit
-                rows={rows}
-                pagination={page.pagination}
-                onPaginationChange={page.handlePaginationChange}
-                isFetching={
-                    page.pageQuery.isFetching && !page.pageQuery.isPending
+            <ListWorkSurface
+                ariaLabel="审计事件列表"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="审计查询视图"
+                        hint={coverageHint}
+                        items={[
+                            {
+                                id: "operations-audit-view-events",
+                                label: "审计事件",
+                                count: rows.length,
+                                active: true,
+                                onClick: () => page.switchView("audit"),
+                            },
+                        ]}
+                    />
                 }
-                emptyReason={data?.emptyReason}
-                auditCoverageFrom={data?.auditCoverageFrom}
-                auditCoverageTo={data?.auditCoverageTo}
-                roleColumns={page.roleColumns}
-                userColumns={page.userColumns}
-                auditColumns={page.auditColumns}
-                onClearFilters={page.clearFilters}
                 toolbar={
                     <>
                         <AccessListToolbar
@@ -168,46 +183,46 @@ export function AuditPage() {
                         ) : null}
                     </>
                 }
-                headerAction={
-                    <Button
-                        id="operations-audit-export"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={page.exportBlocked}
-                        title={
-                            page.exportBlocked
-                                ? (page.exportBlocker?.message ?? "导出已禁用")
-                                : "导出当前筛选的审计事件"
+                table={
+                    <AccessViewTable
+                        view="audit"
+                        isAudit
+                        rows={rows}
+                        pagination={page.pagination}
+                        onPaginationChange={page.handlePaginationChange}
+                        isFetching={
+                            page.pageQuery.isFetching &&
+                            !page.pageQuery.isPending
                         }
-                        onClick={() => page.handleExport()}
-                    >
-                        <DownloadIcon className="size-3.5" aria-hidden="true" />
-                        导出审计
-                    </Button>
-                }
-                onRowPreview={(row) =>
-                    page.openEvent((row as AuditEventRow).auditEventId)
-                }
-                errorState={
-                    page.pageQuery.isError && !data ? (
-                        <BusinessFailureState
-                            error={page.pageQuery.error}
-                            action={
-                                <Button
-                                    id="operations-audit-retry"
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() =>
-                                        void page.pageQuery.refetch()
+                        emptyReason={data?.emptyReason}
+                        roleColumns={page.roleColumns}
+                        userColumns={page.userColumns}
+                        auditColumns={page.auditColumns}
+                        onClearFilters={page.clearFilters}
+                        onRowPreview={(row) =>
+                            page.openEvent((row as AuditEventRow).auditEventId)
+                        }
+                        errorState={
+                            page.pageQuery.isError && !data ? (
+                                <BusinessFailureState
+                                    error={page.pageQuery.error}
+                                    action={
+                                        <Button
+                                            id="operations-audit-retry"
+                                            type="button"
+                                            variant="secondary"
+                                            className="rounded-lg shadow-none"
+                                            onClick={() =>
+                                                void page.pageQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : undefined
+                                />
+                            ) : undefined
+                        }
+                    />
                 }
             />
 

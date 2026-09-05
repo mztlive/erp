@@ -3,11 +3,13 @@
 import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
-import { BusinessTableFrame } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
+import { dictionaryListStyles } from "./dictionary-list-styles"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import { useVoucherCategoryListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
@@ -52,7 +54,8 @@ export function VoucherCategoriesListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("卡券类目")}
+            title="卡券类目"
+            description="查看卡券类目资料。"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -84,20 +87,19 @@ export function VoucherCategoriesListPage() {
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        卡券类目列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="卡券类目列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-voucher-categories-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="卡券类目指标筛选"
+                        allLabel="全部类目"
+                        hint="选择类目查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
                         idPrefix="master-data-voucher-categories-list-toolbar"
@@ -127,6 +129,7 @@ export function VoucherCategoriesListPage() {
                         setRevisionTimingDraft={filters.setRevisionTimingDraft}
                     />
                 }
+                tableClassName={dictionaryListStyles.table}
                 table={
                     <DictionaryListTable
                         id="master-data-voucher-categories-list-table"

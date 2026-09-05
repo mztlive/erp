@@ -3,12 +3,13 @@
 import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
-import { BusinessTableFrame } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
+import { dictionaryListStyles } from "./dictionary-list-styles"
 import {
     UnitOfMeasureCreateDialog,
     UnitOfMeasureReviseDialog,
@@ -57,8 +58,8 @@ export function UnitOfMeasuresListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("计量单位")}
-            hint={masterDataCopy.unitListHint}
+            title="计量单位"
+            description="查看计量单位，供商品选择基础单位。"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -86,33 +87,23 @@ export function UnitOfMeasuresListPage() {
                     onClick: () => state.setCreateOpen(true),
                 },
             ]}
-            metrics={
-                <LifecycleMetricStrip
-                    idPrefix="master-data-unit-of-measures-list-metrics"
-                    metrics={state.syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel="计量单位指标筛选"
-                    onChangeLifecycle={filters.changeLifecycle}
-                />
-            }
             resultsLabel={`计量单位 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <BusinessTableFrame
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        计量单位列表
-                        <span
-                            className="font-normal text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            {state.rows.length} 条
-                        </span>
-                    </span>
+            <ListWorkSurface
+                ariaLabel="计量单位列表"
+                views={
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-unit-of-measures-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="计量单位指标筛选"
+                        allLabel="全部单位"
+                        hint="选择单位查看详情"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
                 }
-                description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
                         idPrefix="master-data-unit-of-measures-list-toolbar"
@@ -142,6 +133,7 @@ export function UnitOfMeasuresListPage() {
                         setRevisionTimingDraft={filters.setRevisionTimingDraft}
                     />
                 }
+                tableClassName={dictionaryListStyles.table}
                 table={
                     <DictionaryListTable
                         id="master-data-unit-of-measures-list-table"

@@ -4,11 +4,11 @@ import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
+import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
-    BusinessFailureState,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Button } from "@/components/ui/button"
 
@@ -217,8 +217,8 @@ export function CustomerQualityPage() {
 
     if (period.periodPolicyQuery.isError) {
         return (
-            <PageScaffold>
-                <PageHeader title="客户经营质量" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
                 <BusinessFailureState
                     title="期间配置加载失败"
                     error={period.periodPolicyQuery.error}
@@ -249,8 +249,12 @@ export function CustomerQualityPage() {
     // —— Period blocker ——
     if (period.needsPeriodBlocker) {
         return (
-            <PageScaffold>
-                <PageHeader title="客户经营质量" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow="分析"
+                    title="客户经营质量"
+                    description="未配置默认统计期间，请选择起止日期后开始分析。"
+                />
                 <PeriodBlockerCard
                     periodPolicy={period.periodPolicy}
                     explicitFrom={period.explicitFrom}
@@ -270,7 +274,8 @@ export function CustomerQualityPage() {
 
     if (data && data.emptyKind === "forbidden") {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
                 <BusinessFailureState
                     kind="permission"
                     title="无客户经营质量权限"

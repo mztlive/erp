@@ -7,11 +7,16 @@ import { z } from "zod"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
     DataTable,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkSurface,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -374,8 +379,8 @@ export function FinanceResponsibilityRulesPage() {
 
     if (profileQuery.isPending) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="财务责任配置" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="财务" title="财务责任配置" />
                 <div
                     className="h-40 animate-pulse rounded-lg bg-muted"
                     aria-busy
@@ -385,8 +390,8 @@ export function FinanceResponsibilityRulesPage() {
     }
     if (profileQuery.isError) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="财务责任配置" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="财务" title="财务责任配置" />
                 <BusinessFailureState
                     kind="system"
                     title="权限信息加载失败"
@@ -410,8 +415,8 @@ export function FinanceResponsibilityRulesPage() {
     }
     if (!canList) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="财务责任配置" density="compact" />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="财务" title="财务责任配置" />
                 <BusinessFailureState
                     kind="permission"
                     title="权限不足"
@@ -433,26 +438,26 @@ export function FinanceResponsibilityRulesPage() {
     }
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="财务"
                 title="财务责任配置"
                 description="为供应商付款、客户销项开票和卡券票款复核指定具体负责人；指定往来方优先，默认规则兜底。"
-                actions={
-                    canManage ? (
-                        <Button
-                            id="finance-responsibilities-create"
-                            type="button"
-                            size="sm"
-                            data-testid="finance-responsibility-create"
-                            disabled={ownerUnavailable}
-                            onClick={openCreate}
-                        >
-                            <PlusIcon data-icon="inline-start" />
-                            新增规则
-                        </Button>
-                    ) : undefined
-                }
-            />
+            >
+                {canManage ? (
+                    <Button
+                        id="finance-responsibilities-create"
+                        type="button"
+                        size="sm"
+                        data-testid="finance-responsibility-create"
+                        disabled={ownerUnavailable}
+                        onClick={openCreate}
+                    >
+                        <PlusIcon data-icon="inline-start" />
+                        新增规则
+                    </Button>
+                ) : null}
+            </ListWorkspaceHeader>
             {canManage && ownersQuery.isError ? (
                 <BusinessFailureState
                     kind="system"
@@ -480,83 +485,97 @@ export function FinanceResponsibilityRulesPage() {
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <BusinessTableFrame
+            <div
                 data-testid="finance-responsibility-rules"
-                showHeader
-                title={
-                    <span className="inline-flex items-baseline gap-2">
-                        责任规则列表
-                        <span className="font-normal text-muted-foreground">
-                            {rows.length} 条
-                        </span>
-                    </span>
-                }
-                description="负责人保存时校验账号状态及完整执行权限；缺少有效规则时业务单据不能形成付款或开票任务。"
-                table={
-                    <DataTable
-                        id="finance-responsibilities-rules-table"
-                        data={rows}
-                        columns={columns}
-                        getRowId={(row) => row.id}
-                        rowCount={rows.length}
-                        layout="flush"
-                        loading={rulesQuery.isPending || rulesQuery.isFetching}
-                        showPagination={false}
-                        errorState={
-                            rulesQuery.isError ? (
-                                <BusinessFailureState
-                                    kind="system"
-                                    title="规则加载失败"
-                                    description={getErrorMessage(
-                                        rulesQuery.error,
-                                        "暂时无法读取财务责任规则。",
-                                    )}
-                                    action={
-                                        <Button
-                                            id="finance-responsibilities-rules-retry"
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() =>
-                                                void rulesQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !rulesQuery.isError && rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind="no-data"
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                    title="还没有财务责任规则"
-                                    description="请先分别配置供应商付款和销项开票的默认负责人。"
-                                    action={
-                                        canManage && !ownerUnavailable ? (
+                className="contents"
+            >
+                <ListWorkSurface
+                    ariaLabel="财务责任规则列表"
+                    views={
+                        <ListWorkspaceViews
+                            ariaLabel="财务责任规则视图"
+                            hint="负责人保存时校验账号状态及完整执行权限；缺少有效规则时业务单据不能形成付款或开票任务。"
+                            items={[
+                                {
+                                    id: "finance-responsibilities-rules-view-all",
+                                    label: "全部规则",
+                                    count: rows.length,
+                                    active: true,
+                                    onClick: () => undefined,
+                                },
+                            ]}
+                        />
+                    }
+                    table={
+                        <DataTable
+                            id="finance-responsibilities-rules-table"
+                            data={rows}
+                            columns={columns}
+                            getRowId={(row) => row.id}
+                            rowCount={rows.length}
+                            layout="flush"
+                            loading={
+                                rulesQuery.isPending || rulesQuery.isFetching
+                            }
+                            showPagination={false}
+                            errorState={
+                                rulesQuery.isError ? (
+                                    <BusinessFailureState
+                                        kind="system"
+                                        title="规则加载失败"
+                                        description={getErrorMessage(
+                                            rulesQuery.error,
+                                            "暂时无法读取财务责任规则。",
+                                        )}
+                                        action={
                                             <Button
-                                                id="finance-responsibilities-empty-create"
+                                                id="finance-responsibilities-rules-retry"
                                                 type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={openCreate}
+                                                variant="outline"
+                                                onClick={() =>
+                                                    void rulesQuery.refetch()
+                                                }
                                             >
-                                                新增规则
+                                                重试
                                             </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        onRowOpen={
-                            canManage && !ownerUnavailable
-                                ? openEdit
-                                : undefined
-                        }
-                    />
-                }
-            />
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            emptyState={
+                                !rulesQuery.isError && rows.length === 0 ? (
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title="还没有财务责任规则"
+                                        description="请先分别配置供应商付款和销项开票的默认负责人。"
+                                        action={
+                                            canManage && !ownerUnavailable ? (
+                                                <Button
+                                                    id="finance-responsibilities-empty-create"
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={openCreate}
+                                                >
+                                                    新增规则
+                                                </Button>
+                                            ) : undefined
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            onRowOpen={
+                                canManage && !ownerUnavailable
+                                    ? openEdit
+                                    : undefined
+                            }
+                        />
+                    }
+                />
+            </div>
             {canManage && ownersQuery.data ? (
                 <RuleDialog
                     open={dialogOpen}

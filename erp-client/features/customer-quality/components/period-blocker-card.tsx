@@ -2,7 +2,7 @@
 
 import { CalendarRangeIcon } from "lucide-react"
 
-import { PageHeader, surfacePanelClassName } from "@/components/business"
+import { surfacePanelClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,10 +35,6 @@ export function PeriodBlockerCard({
 }) {
     return (
         <>
-            <PageHeader
-                title="客户经营质量"
-                description="未配置默认统计期间，请选择起止日期后开始分析。"
-            />
             <Alert variant="warning">
                 <CalendarRangeIcon aria-hidden="true" />
                 <AlertTitle>请选择统计期间</AlertTitle>

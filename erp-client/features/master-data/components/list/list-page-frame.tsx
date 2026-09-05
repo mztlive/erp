@@ -5,37 +5,34 @@ import * as React from "react"
 import {
     BackgroundJobProgress,
     PageActions,
-    PageHeader,
     PageScaffold,
     type PageAction,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { ListExportMeta } from "@/features/master-data/hooks/use-master-data-list-export"
 
 export function ListPageFrame({
+    eyebrow = "基础资料",
     title,
-    hint,
-    metadata,
-    headerDensity = "compact",
-    banner,
+    description,
     alerts,
     exportMeta,
     actions,
-    metrics,
     resultsLabel,
     resultsHeadingRef,
     loading,
     children,
 }: {
+    eyebrow?: string
     title: string
-    hint?: React.ReactNode
-    metadata?: React.ReactNode
-    headerDensity?: "default" | "compact"
-    banner?: React.ReactNode
+    description?: React.ReactNode
     alerts?: React.ReactNode
     exportMeta?: ListExportMeta | null
     actions: readonly PageAction[]
-    metrics?: React.ReactNode
     resultsLabel: string
     resultsHeadingRef: React.RefObject<HTMLHeadingElement | null>
     loading: boolean
@@ -43,31 +40,30 @@ export function ListPageFrame({
 }) {
     if (loading) {
         return (
-            <PageScaffold density={headerDensity}>
-                <PageHeader title={title} density={headerDensity} />
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader
+                    eyebrow={eyebrow}
+                    title={title}
+                    description={description}
+                />
                 <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
+                    className="h-10 animate-pulse rounded-lg bg-muted"
                     aria-busy
                 />
+                <div className="h-96 animate-pulse bg-muted" aria-busy />
             </PageScaffold>
         )
     }
 
     return (
-        <PageScaffold density={headerDensity}>
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow={eyebrow}
                 title={title}
-                description={hint}
-                metadata={metadata}
-                density={headerDensity}
-                actions={
-                    <PageActions
-                        actions={actions}
-                        size={headerDensity === "default" ? "default" : "sm"}
-                    />
-                }
-            />
-            {banner}
+                description={description}
+            >
+                <PageActions actions={actions} size="sm" />
+            </ListWorkspaceHeader>
             {alerts}
             {exportMeta ? (
                 <BackgroundJobProgress
@@ -86,7 +82,6 @@ export function ListPageFrame({
                     }
                 />
             ) : null}
-            {metrics}
             <h2
                 ref={resultsHeadingRef}
                 tabIndex={-1}

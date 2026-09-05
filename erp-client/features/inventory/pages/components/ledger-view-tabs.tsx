@@ -1,41 +1,39 @@
 "use client"
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import { ListWorkspaceViews } from "@/components/business/list-workspace"
 import { VIEW_LABEL } from "@/features/inventory/types"
 import type { InventoryView } from "@/features/inventory/types"
 
 interface LedgerViewTabsProps {
     view: InventoryView
+    total: number
     onViewChange: (nextView: InventoryView) => void
 }
 
-export function LedgerViewTabs({ view, onViewChange }: LedgerViewTabsProps) {
+const LEDGER_VIEWS = [
+    "balance",
+    "movement",
+    "reservation",
+    "adjustment",
+] as const
+
+export function LedgerViewTabs({
+    view,
+    total,
+    onViewChange,
+}: LedgerViewTabsProps) {
     return (
-        <Tabs
-            value={view}
-            onValueChange={(v) => {
-                onViewChange(v as InventoryView)
-            }}
-        >
-            <TabsList variant="line" className="w-full justify-start">
-                {(
-                    [
-                        "balance",
-                        "movement",
-                        "reservation",
-                        "adjustment",
-                    ] as const
-                ).map((v) => (
-                    <TabsTrigger
-                        key={v}
-                        id={`inventory-ledger-view-${toAutomationIdSegment(v)}`}
-                        value={v}
-                    >
-                        {VIEW_LABEL[v]}
-                    </TabsTrigger>
-                ))}
-            </TabsList>
-        </Tabs>
+        <ListWorkspaceViews
+            ariaLabel="库存台账工作视图"
+            hint="选择记录查看详情"
+            items={LEDGER_VIEWS.map((item) => ({
+                id: `inventory-ledger-view-${item}`,
+                label: VIEW_LABEL[item],
+                count:
+                    item === view ? total.toLocaleString("zh-CN") : undefined,
+                active: item === view,
+                onClick: () => onViewChange(item),
+            }))}
+        />
     )
 }
