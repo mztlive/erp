@@ -2280,5 +2280,6 @@
     "job_status_snapshot": "ImportJobStatus snake_case",
     "note": "HTTP DTO 字段名与 serde 保持原契约；WorkItem/Job 外域枚举改为同 wire 快照。真实数据库运行未验证"
   },
-  "recorded_at": "2026-09-06T23:13:28Z"
+  "recorded_at": "2026-09-07T00:45:00Z",
+  "source_dir": "backend/logs/phase-07-qg-run"
 }

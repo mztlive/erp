@@ -10,8 +10,31 @@
   "executor": {
     "file": "crates/persistence-core/src/executor.rs",
     "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
     "nested_transactions": "forbidden",
-    "external_io_holds_session": false
+    "external_io_holds_session": false,
+    "unchanged_versus_phase_06": true
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden",
+    "unchanged_versus_phase_06": true
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "sha256": "daae5edfd64c4e70bd11e28abb80d400e7da03f8c49114ff426bf3377ed67fb7",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true,
+    "note": "run_audited 仅在 erp-processes。import_apply 根命令使用 Client::with_transaction 同一 session，审计经同一 Executor。真实数据库运行未验证"
   },
   "import_apply": {
     "process": "crates/erp-processes/src/import_apply",
@@ -23,6 +46,14 @@
       "create_confirmation.rs",
       "supersede.rs"
     ],
+    "sha256": {
+      "batch.rs": "da5ec05fb0fdad38d184287fd209377637ff5139516725d4363281f76b1e0047",
+      "create_batch.rs": "1a40eb81ab9f64e68504a2f639be1cc0c67db56e159a3c5a76f5f35257d393a9",
+      "execution.rs": "09626ab305b71943dd9dd3789e1f3fb9698e84ff1047badf0d72ebb8db9c9f6b",
+      "complete.rs": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895",
+      "create_confirmation.rs": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c",
+      "supersede.rs": "60fda6d42161348853469e17594b0a32bf48ef8c468e10b1b5a280a3ca2513c1"
+    },
     "root_transaction": "Client::with_transaction one Executor",
     "same_executor": true,
     "no_nested_transactions": true,
@@ -30,6 +61,8 @@
     "confirmation_invalidation": "erp-import LegacyImportConfirmationRepository::persist_invalidated_confirmations",
     "work_item_construction": "erp-processes/src/import_apply/factories.rs",
     "port_failure_test": "crates/erp-processes/src/import_apply/port_failure_tests.rs",
+    "adapters": "crates/erp-processes/src/adapters/import.rs",
+    "adapter_sha256": "b5d9a43c95eafd27be187ed18aa592a3f1099f988ceb2171ef2bdef8967b2f61",
     "note": "apply/execute/complete/create_confirmation 共用传入 session；外部 I/O 不持有 session。真实数据库运行未验证"
   },
   "owned_repositories_moved": {
@@ -47,6 +80,6 @@
   },
   "source_contains_with_transaction": true,
   "real_database_rollback_concurrency": "未验证",
-  "note": "静态源码合同：跨域导入应用/确认/替代复用同一个 Executor；WorkItem 写入委托 workflow。真实数据库运行未验证",
-  "recorded_at": "2026-09-06T23:13:28Z"
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 import_apply 根事务同一 Executor。真实数据库运行未验证",
+  "recorded_at": "2026-09-07T00:45:00Z"
 }

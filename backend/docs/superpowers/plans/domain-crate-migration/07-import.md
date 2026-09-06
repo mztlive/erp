@@ -152,12 +152,12 @@ git diff --check
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
 | 输入基线 | 前序本地门禁通过 `2f77816b06145648ecb11dbe4f151b914457c267`；分支 `chore/domain-crate-07-import`；source-map phase=07 行 25；owned types 3 | 已采集 `.domain-migration-evidence/07/input.json` |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 已采集 `.domain-migration-evidence/07/files.tsv` |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 已采集 `.domain-migration-evidence/07/boundary.log` |
+| 文件与符号 | 相对输入 71 路径变化（18 add / 2 delete / 25 modify / 26 rename）；3 owned EntityRepository 迁入 erp-import；apply/execution/confirmation/supersede 根用例迁入 erp-processes/import_apply；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/07/files.tsv` |
+| 依赖 | 29 个成员；无 kind=test；erp-import 不依赖 workflow/support/业务领域且无旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/07/boundary.log` |
 | 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 已采集 `.domain-migration-evidence/07/boundary.log` |
 | 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3308 passed / 0 failed / 68 ignored；exit 0 | 已执行 `.domain-migration-evidence/07/unit-tests.log` |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 已采集 `.domain-migration-evidence/07/contract-comparison.json` |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/07/transaction-contract.json` |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 已执行 `.domain-migration-evidence/07/quality-gates.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 06 哈希相等 | 已采集 `.domain-migration-evidence/07/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 import_apply 同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/07/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0；review_approved=true；状态为本地门禁通过 | 已执行 `.domain-migration-evidence/07/quality-gates.log` |
 | 编译收益 | 阶段 07 不执行编译收益复测；阈值在阶段 17 判定 | 不适用 |
-| 阶段提交 | 实现提交 `8911cb1f466130b565868a8ec9daf087997a6eb3`；证据目录 `.domain-migration-evidence/07/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/07/metadata.json` |
+| 阶段提交 | 实现提交 `8911cb1f466130b565868a8ec9daf087997a6eb3`；证据目录 `.domain-migration-evidence/07/`；review_approved=true；状态本地门禁通过；禁止标记已验收 | 已写入 `.domain-migration-evidence/07/metadata.json` |

@@ -18,6 +18,18 @@
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
+  "files_tsv_rows": 87,
+  "path_changes": {
+    "add": 18,
+    "delete": 2,
+    "modify": 25,
+    "rename": 26,
+    "total": 71,
+    "versus": "2f77816b06145648ecb11dbe4f151b914457c267",
+    "rename_detection": true,
+    "evidence_rows": 87,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
+  },
   "owned_repositories_moved": [
     "LegacyImportBatchRepository",
     "LegacyImportConfirmationRepository",
@@ -31,17 +43,51 @@
   "no_deref": true,
   "no_type_alias": true,
   "autotests": false,
+  "workspace_members": 29,
+  "workspace_member_names": [
+    "application-core",
+    "bpm",
+    "cli",
+    "config",
+    "database",
+    "entities",
+    "entity-core",
+    "entity-macros",
+    "erp-audit",
+    "erp-catalog",
+    "erp-contract",
+    "erp-core",
+    "erp-customer",
+    "erp-identity",
+    "erp-import",
+    "erp-party",
+    "erp-processes",
+    "erp-read-models",
+    "erp-supplier",
+    "erp-support",
+    "erp-warehouse",
+    "erp-workflow",
+    "id-generator",
+    "permission-macros",
+    "persistence-core",
+    "services",
+    "storage",
+    "test-support",
+    "web-api"
+  ],
   "kind_test_targets": 0,
+  "recorded_at": "2026-09-07T00:45:00Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
     "passed": 3308,
     "failed": 0,
     "ignored": 68,
+    "crates": 28,
     "mongodb_started": false,
     "include_ignored": false,
     "log": ".domain-migration-evidence/07/unit-tests.log",
-    "source_log": "backend/logs/phase-07-qg-gates/04-test-lib.log"
+    "source_log": "backend/logs/phase-07-qg-run/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -54,9 +100,10 @@
     "permissions": 0,
     "git-diff-check": 0,
     "all_exit_0": true,
+    "files_changed": [],
     "log": ".domain-migration-evidence/07/quality-gates.log",
-    "source_dir": "backend/logs/phase-07-qg-gates",
-    "summary": "Phase 07 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-07-qg-gates/. Lib unit tests passed with ERP_TEST_MONGO_URI unset; no MongoDB, crate tests, integration targets, or ignored tests were run. 3308 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+    "source_dir": "backend/logs/phase-07-qg-run",
+    "summary": "Phase 07 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-07-qg-run/. Domain boundary script exists and passed. Lib unit tests passed with ERP_TEST_MONGO_URI unset; no MongoDB, crate tests, integration targets, or ignored tests were run. No fmt/lockfile/business-code changes from the quality-gate run. 3308 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
   },
   "contracts": {
     "admin_routes": 369,
@@ -86,8 +133,8 @@
       "branch": "chore/domain-crate-07-import",
       "committed": true,
       "commit_sha": "8911cb1f466130b565868a8ec9daf087997a6eb3",
-      "summary": "Solo integrator created erp-import (autotests=false) with batch/row/confirmation state, three owned repositories, and query service via BulkJobFactsPort. apply/execute/complete/create_confirmation/supersede live in erp-processes/import_apply sharing one Executor; WorkItem construction is in process factories; WorkItem writes go through workflow. Old services/entities/database legacy_import modules deleted with no façade. Public gates passed (3308 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+      "summary": "Phase 07 Import unique-cut on chore/domain-crate-07-import. erp-import owns batch/row/confirmation state and queries; erp-processes/import_apply owns apply/execution/confirmation/supersede on one Executor with WorkItem writes via workflow. Old three-layer modules deleted with no façade. Public gates passed (3308 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
     }
   ],
-  "implement_summary": "Phase 07 import unique-cut on chore/domain-crate-07-import. erp-import owns batch/row/confirmation; import_apply holds root txns. Public gates passed (3308 lib tests, 0 failed, 68 ignored). review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+  "implement_summary": "Phase 07 Import unique-cut on chore/domain-crate-07-import. erp-import owns batch/row/confirmation state and queries; erp-processes/import_apply owns apply/execution/confirmation/supersede on one Executor with WorkItem writes via workflow. Old three-layer modules deleted with no façade. Public gates passed (3308 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
 }

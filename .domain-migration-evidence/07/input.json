@@ -1,6 +1,6 @@
 {
   "phase": "07",
-  "recorded_at": "2026-09-07T00:00:00Z",
+  "recorded_at": "2026-09-07T00:45:00Z",
   "evidence_dir": ".domain-migration-evidence/07",
   "input_head": "2f77816b06145648ecb11dbe4f151b914457c267",
   "implement_commits": [
@@ -55,5 +55,23 @@
     "apps/web-api/src/main.rs"
   ],
   "section_6_callers_still_bind_old_services": false,
+  "workspace_member_count": 29,
+  "kind_test_targets": 0,
+  "historical_tests_archives_byte_for_byte": true,
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "compile_measurement": "not applicable for phase 07; threshold judged in phase 17",
+  "path_changes": {
+    "add": 18,
+    "delete": 2,
+    "modify": 25,
+    "rename": 26,
+    "total": 71,
+    "versus": "2f77816b06145648ecb11dbe4f151b914457c267",
+    "rename_detection": true,
+    "evidence_rows": 87,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
+  },
+  "files_tsv_rows": 87,
   "note": "前序输入为阶段 06 本地门禁通过提交 2f77816b06145648ecb11dbe4f151b914457c267（证据提交；实现提交 b3f9ea48）。inventory 记载的 b3f9ea48 之后还有证据提交，禁止用较旧 HEAD 覆盖。review_approved=true。公共门禁全部 exit 0（3308 lib tests, 0 failed, 68 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
 }

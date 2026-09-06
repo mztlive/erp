@@ -1,1 +1,8 @@
+cmd: ./scripts/check-service-boundaries.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+start: 2026-09-06T23:23:52Z
+
 Service 边界检查通过；当前基线共 0 个受控命中。
+
+exit: 0
+end: 2026-09-06T23:23:52Z

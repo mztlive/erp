@@ -1,18 +1,18 @@
+cmd: ./scripts/check-permissions-drift.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+start: 2026-09-06T23:23:54Z
+
 重新构建 web-api 以生成权限定义…
-   Compiling erp-import v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-import)
-   Compiling entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
-   Compiling database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
-   Compiling services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
-   Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
-   Compiling erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
-   Compiling web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
   |
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `web-api` (bin "web-api") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 08s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 检查生成物: /Users/huangjiajiang/Development/erp/erp-client/lib/permissions.generated.ts
 权限生成物无漂移。
+
+exit: 0
+end: 2026-09-06T23:23:54Z
