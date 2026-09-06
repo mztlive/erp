@@ -3,16 +3,12 @@
 //! Command/query services live in `erp-workflow` / `erp-read-models`. This
 //! module only adapts unmigrated domain repositories into workflow ports.
 
-#![allow(dead_code)]
-
-mod brief;
+mod amount;
 mod change_order_brief;
 mod facts;
 mod fulfillment_operation_brief;
 mod funds_document_brief;
 mod inventory_settlement_brief;
-mod party_names;
-mod presentation;
 mod procurement_brief;
 mod purchase_review_brief;
 mod sales_order_brief;

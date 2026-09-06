@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
@@ -10,14 +12,7 @@ use super::super::presentation::{
 use super::status::{ProcessingBlockerView, ProcessingState, WorkItemAllowedAction};
 use crate::errors::{Error, Result};
 
-/// 用户或组织安全摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkItemPartyView {
-    /// 稳定身份。
-    pub id: String,
-    /// 权限安全的展示名。
-    pub display_name: String,
-}
+pub use erp_workflow::dto::work_item::{WorkItemApprovalContextView, WorkItemPartyView};
 
 /// 事项简报中的只读键值。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -50,28 +45,6 @@ pub struct WorkItemRouteContext {
     /// 单据审批的 DocumentType 稳定代码。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub document_type: Option<String>,
-}
-
-/// 工作台审批任务的有界运行上下文。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkItemApprovalContextView {
-    /// 审批运行实例主键；只作运行查询键，不承担单据识别。
-    pub instance_id: String,
-    /// 审批运行状态。
-    pub status: String,
-    /// 当前审批轮次。
-    pub current_round_no: u32,
-    /// 当前节点冻结名称。
-    pub current_node_label: String,
-    /// 当前审批人冻结名称。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_assignee_label: Option<String>,
-    /// 最近一次驳回原因摘要。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latest_rejection_reason: Option<String>,
-    /// 当前实例绑定的流程定义业务版本。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub process_version: Option<u32>,
 }
 
 /// 人工任务队列安全投影。
@@ -176,43 +149,43 @@ impl WorkItemView {
     /// # 错误
     /// DocumentApproval 缺少已签署页面映射时返回错误。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
+        let WorkItemFields { inner, brief_source } = fields;
         let route = handler_route(
-            fields.work_item_type,
-            &fields.business_object_type,
-            &fields.owner_role,
+            inner.work_item_type,
+            &inner.business_object_type,
+            &inner.owner_role,
         )?;
-        let owner_user = fields.owner_user_id.as_ref().map(|id| WorkItemPartyView {
+        let owner_user = inner.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
             display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
         });
-        let brief = fields
-            .brief_source
+        let brief = brief_source
             .as_ref()
-            .map(|source| assemble_brief(source, fields.reason_code.as_deref()));
+            .map(|source| assemble_brief(source, inner.reason_code.as_deref()));
         Ok(Self {
-            id: fields.id,
-            work_item_type: fields.work_item_type,
+            id: inner.id,
+            work_item_type: inner.work_item_type,
             handler_key: route.handler_key.to_string(),
             destination_workspace_id: route.destination_workspace_id.to_string(),
             route_context: route.route_context,
-            approval_node_execution_id: fields.approval_node_execution_id,
+            approval_node_execution_id: inner.approval_node_execution_id,
             approval_context: None,
-            status: fields.status,
-            assignment_source: fields.assignment_source,
-            owner_role_label: role_label(&fields.owner_role),
-            owner_role: fields.owner_role,
+            status: inner.status,
+            assignment_source: inner.assignment_source,
+            owner_role_label: role_label(&inner.owner_role),
+            owner_role: inner.owner_role,
             owner_organization: WorkItemPartyView {
-                id: fields.owner_organization_id.clone(),
+                id: inner.owner_organization_id.clone(),
                 display_name: "责任组织".to_string(),
             },
-            owner_organization_id: fields.owner_organization_id,
-            owner_user_id: fields.owner_user_id,
+            owner_organization_id: inner.owner_organization_id,
+            owner_user_id: inner.owner_user_id,
             owner_user,
             processing_state: ProcessingState::Ready,
             processing_blocker: None,
-            business_object_label: fields.business_object_label,
-            counterparty_label: fields.counterparty_label,
-            next_action_hint: next_action_hint(fields.work_item_type),
+            business_object_label: inner.business_object_label,
+            counterparty_label: inner.counterparty_label,
+            next_action_hint: next_action_hint(inner.work_item_type),
             summary_sections: brief
                 .as_ref()
                 .map(|assembled| {
@@ -250,103 +223,60 @@ impl WorkItemView {
                 .as_ref()
                 .map(|assembled| assembled.list_summary.clone())
                 .filter(|text| !text.trim().is_empty()),
-            business_object_type: fields.business_object_type,
-            business_object_id: fields.business_object_id,
-            root_business_object_id: fields.root_business_object_id,
-            subject_version: fields.subject_version,
-            task_version: fields.task_version.to_string(),
+            business_object_type: inner.business_object_type,
+            business_object_id: inner.business_object_id,
+            root_business_object_id: inner.root_business_object_id,
+            subject_version: inner.subject_version,
+            task_version: inner.task_version.to_string(),
             allowed_actions: Vec::new(),
             action_blockers: Vec::new(),
-            priority: fields.priority,
-            due_at: seconds(fields.due_at),
-            reason_label: reason_label(fields.reason_code.as_deref(), fields.work_item_type),
-            reason_code: fields.reason_code,
-            impact_summary: usable_impact_summary(fields.impact_summary.as_deref(), fields.work_item_type),
-            assigned_at: seconds(fields.assigned_at),
-            started_at: seconds(fields.started_at),
-            current_assignment_at: seconds(fields.current_assignment_at),
-            last_activity_at: seconds(fields.last_activity_at),
-            completed_at: seconds(fields.completed_at),
-            completed_by: fields.completed_by,
-            closed_at: seconds(fields.closed_at),
-            closed_by: fields.closed_by,
-            close_reason: fields.close_reason,
-            created_at: fields.created_at,
+            priority: inner.priority,
+            due_at: seconds(inner.due_at),
+            reason_label: reason_label(inner.reason_code.as_deref(), inner.work_item_type),
+            reason_code: inner.reason_code,
+            impact_summary: usable_impact_summary(inner.impact_summary.as_deref(), inner.work_item_type),
+            assigned_at: seconds(inner.assigned_at),
+            started_at: seconds(inner.started_at),
+            current_assignment_at: seconds(inner.current_assignment_at),
+            last_activity_at: seconds(inner.last_activity_at),
+            completed_at: seconds(inner.completed_at),
+            completed_by: inner.completed_by,
+            closed_at: seconds(inner.closed_at),
+            closed_by: inner.closed_by,
+            close_reason: inner.close_reason,
+            created_at: inner.created_at,
             queue_context_id,
         })
     }
 }
 
+/// Authorized work-item projection plus workbench brief source.
+///
+/// Identity and status fields are [`erp_workflow::dto::work_item::WorkItemFields`].
 #[derive(Debug, Clone)]
 pub(crate) struct WorkItemFields {
-    pub id: String,
-    pub work_item_type: WorkItemType,
-    pub approval_node_execution_id: Option<String>,
-    pub business_object_type: String,
-    pub business_object_id: String,
-    pub root_business_object_id: String,
-    pub business_object_label: String,
-    pub counterparty_label: Option<String>,
-    pub subject_version: String,
-    pub status: WorkItemStatus,
-    pub owner_role: String,
-    pub owner_organization_id: String,
-    pub owner_user_id: Option<String>,
-    pub assignment_source: AssignmentSource,
-    pub assigned_at: Option<erp_core::common::time::Instant>,
-    pub started_at: Option<erp_core::common::time::Instant>,
-    pub current_assignment_at: Option<erp_core::common::time::Instant>,
-    pub last_activity_at: Option<erp_core::common::time::Instant>,
-    pub priority: WorkItemPriority,
-    pub due_at: Option<erp_core::common::time::Instant>,
-    pub reason_code: Option<String>,
-    pub impact_summary: Option<String>,
-    pub completed_at: Option<erp_core::common::time::Instant>,
-    pub completed_by: Option<String>,
-    pub closed_at: Option<erp_core::common::time::Instant>,
-    pub closed_by: Option<String>,
-    pub close_reason: Option<String>,
-    pub task_version: u64,
-    pub created_at: u64,
+    inner: erp_workflow::dto::work_item::WorkItemFields,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
+}
+
+impl Deref for WorkItemFields {
+    type Target = erp_workflow::dto::work_item::WorkItemFields;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for WorkItemFields {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }
 
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
-        let root_business_object_id = item.business_object_id.clone();
         Self {
-            id: item.base.id,
-            work_item_type: item.work_item_type,
-            approval_node_execution_id: item
-                .approval_node_execution_id
-                .as_ref()
-                .map(|id| id.as_ref().to_string()),
-            business_object_type: item.business_object_type,
-            business_object_id: item.business_object_id,
-            root_business_object_id,
-            business_object_label: item.work_item_type.label().to_string(),
-            counterparty_label: None,
-            subject_version: item.subject_version,
-            status: item.status,
-            owner_role: item.owner_role,
-            owner_organization_id: item.owner_organization_id,
-            owner_user_id: item.owner_user_id,
-            assignment_source: item.assignment_source,
-            assigned_at: item.assigned_at,
-            started_at: item.started_at,
-            current_assignment_at: item.current_assignment_at,
-            last_activity_at: item.last_activity_at,
-            priority: item.priority,
-            due_at: item.due_at,
-            reason_code: item.reason_code,
-            impact_summary: item.impact_summary,
-            completed_at: item.completed_at,
-            completed_by: item.completed_by,
-            closed_at: item.closed_at,
-            closed_by: item.closed_by,
-            close_reason: item.close_reason,
-            task_version: item.base.version,
-            created_at: item.base.created_at,
+            inner: item.into(),
             brief_source: None,
         }
     }
@@ -354,37 +284,8 @@ impl From<WorkItem> for WorkItemFields {
 
 impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     fn from(item: erp_workflow::WorkItemRow) -> Self {
-        let root_business_object_id = item.business_object_id.clone();
         Self {
-            id: item.id,
-            work_item_type: item.work_item_type,
-            approval_node_execution_id: item.approval_node_execution_id,
-            business_object_type: item.business_object_type,
-            business_object_id: item.business_object_id,
-            root_business_object_id,
-            business_object_label: item.work_item_type.label().to_string(),
-            counterparty_label: None,
-            subject_version: item.subject_version,
-            status: item.status,
-            owner_role: item.owner_role,
-            owner_organization_id: item.owner_organization_id,
-            owner_user_id: item.owner_user_id,
-            assignment_source: item.assignment_source,
-            assigned_at: item.assigned_at,
-            started_at: item.started_at,
-            current_assignment_at: item.current_assignment_at,
-            last_activity_at: item.last_activity_at,
-            priority: item.priority,
-            due_at: item.due_at,
-            reason_code: item.reason_code,
-            impact_summary: item.impact_summary,
-            completed_at: item.completed_at,
-            completed_by: item.completed_by,
-            closed_at: item.closed_at,
-            closed_by: item.closed_by,
-            close_reason: item.close_reason,
-            task_version: item.version,
-            created_at: item.created_at,
+            inner: item.into(),
             brief_source: None,
         }
     }
