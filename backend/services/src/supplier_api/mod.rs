@@ -15,12 +15,13 @@
 
 use std::sync::Arc;
 
-use database::{SupplierApiExt, SupplierExt};
+use database::SupplierApiExt;
 use entities::integration_ops::ErrorClass;
 use entities::supplier_api::{
     PreparedSupplierConnectionCreate, SupplierApiConnection, SupplierApiConnectionData,
 };
 use erp_audit::AuditExt;
+use erp_supplier::SupplierExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};

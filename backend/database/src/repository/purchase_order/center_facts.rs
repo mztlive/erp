@@ -15,7 +15,7 @@ use entities::purchase_order::{
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use mongodb::Database;
 
-use crate::repository::extensions::{PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use crate::repository::extensions::{PayableExt, PurchaseOrderExt, SalesOrderExt};
 use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::Result;
@@ -80,10 +80,9 @@ pub async fn load_purchase_order_center_facts(
     let Some(order) = db.purchase_orders().find_by_id(order_id, executor).await? else {
         return Ok(PurchaseOrderCenterFacts::default());
     };
-    let supplier_names = db
-        .supplier()
-        .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), executor)
-        .await?;
+    let supplier_names =
+        crate::current_legal_names_by_account_ids(db, std::slice::from_ref(&order.supplier_id), executor)
+            .await?;
     let supplier_name = supplier_names.get(&order.supplier_id.to_string()).cloned();
     let sales_id = order.sales_order_id.clone();
     let sales_orders = db

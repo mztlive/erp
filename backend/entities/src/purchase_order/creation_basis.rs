@@ -12,12 +12,12 @@ use std::str::FromStr;
 
 use crate::catalog::ProductKind;
 use crate::sales_order::{SalesOrder, SalesOrderRevision};
-use crate::supplier::{SupplierAccount, SupplierCommercialProfileRevision};
 use crate::supplier_offering::{SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, WarehouseId};
 use erp_core::money::{Quantity, UnitPrice};
 use erp_core::{Error, Result};
+use erp_supplier::{SupplierAccount, SupplierCommercialProfileRevision};
 
 use super::command_receipt::digest_parts;
 use super::coverage::SalesProcurementCoverageLine;

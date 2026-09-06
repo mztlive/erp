@@ -5,13 +5,14 @@
 
 use std::collections::HashMap;
 
-use database::{LegacyImportExt, PartyExt};
+use database::LegacyImportExt;
 use entities::legacy_import::{
     ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportBatch,
     LegacyImportRow,
 };
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_party::PartyExt;
 use erp_support::BulkJobExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -470,10 +471,7 @@ fn collect_customer_import_targets(
 ///
 /// # 约束
 /// 纯内存映射，不访问数据库；未命中目标一律视为不存在。
-fn map_customer_party_ok(
-    targets: &[(String, String)],
-    found: &[entities::party::Party],
-) -> HashMap<String, bool> {
+fn map_customer_party_ok(targets: &[(String, String)], found: &[erp_party::Party]) -> HashMap<String, bool> {
     use std::collections::{HashMap, HashSet};
     let existing = found
         .iter()

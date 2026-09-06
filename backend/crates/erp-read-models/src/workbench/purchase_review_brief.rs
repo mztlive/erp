@@ -10,9 +10,9 @@ use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
-use entities::supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 use erp_core::ids::PurchaseOrderSubmissionId;
 use erp_core::money::{Amount, Quantity};
+use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 use persistence_core::Executor;
 
 use super::brief::{

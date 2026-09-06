@@ -4,27 +4,30 @@
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
 use crate::repository::owned::{
-    PartyRepository, PartyRevisionRepository, ProductRepository, SkuRepository, SkuRevisionRepository,
-    SupplierAccountRepository, SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository,
-    SupplierOfferingRepository, SupplierOfferingRevisionRepository,
+    ProductRepository, SkuRepository, SkuRevisionRepository, SupplierOfferingAvailabilityRepository,
+    SupplierOfferingCommandRepository, SupplierOfferingRepository, SupplierOfferingRevisionRepository,
 };
+use erp_party::{PartyRepository, PartyRevisionRepository};
+use erp_supplier::SupplierAccountRepository;
 use std::collections::HashMap;
 
 use entities::catalog::{Product, Sku, SkuRevision};
-use entities::party::{Party, PartyRevision};
-use entities::supplier::SupplierAccount;
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
+use erp_party::{Party, PartyRevision};
+use erp_supplier::SupplierAccount;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{CatalogExt, PartyExt, SupplierExt, SupplierOfferingExt};
+use super::extensions::{CatalogExt, SupplierOfferingExt};
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};

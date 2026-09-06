@@ -1424,7 +1424,10 @@ dependencies = [
  "entity-core",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
+ "erp-supplier",
  "erp-support",
  "erp-workflow",
  "futures-util",
@@ -1618,7 +1621,10 @@ dependencies = [
  "entity-macros",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
+ "erp-supplier",
  "erp-support",
  "erp-workflow",
  "hex",
@@ -1694,6 +1700,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-customer"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "hex",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "erp-identity"
 version = "0.1.0"
 dependencies = [
@@ -1720,6 +1747,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-party"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "application-core",
+ "async-trait",
+ "base64 0.23.1",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "hmac 0.13.0",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-processes"
 version = "0.1.0"
 dependencies = [
@@ -1731,7 +1783,10 @@ dependencies = [
  "entity-core",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
+ "erp-supplier",
  "erp-support",
  "erp-workflow",
  "id-generator",
@@ -1758,7 +1813,10 @@ dependencies = [
  "entity-core",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
+ "erp-supplier",
  "erp-workflow",
  "futures-util",
  "mongodb",
@@ -1770,6 +1828,30 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "validator",
+]
+
+[[package]]
+name = "erp-supplier"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "hex",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
  "validator",
 ]
 
@@ -4219,7 +4301,10 @@ dependencies = [
  "entity-core",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
+ "erp-supplier",
  "erp-support",
  "erp-workflow",
  "hex",
@@ -5386,9 +5471,12 @@ dependencies = [
  "entities",
  "erp-audit",
  "erp-core",
+ "erp-customer",
  "erp-identity",
+ "erp-party",
  "erp-processes",
  "erp-read-models",
+ "erp-supplier",
  "erp-support",
  "erp-workflow",
  "hmac 0.12.1",

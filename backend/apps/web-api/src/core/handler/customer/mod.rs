@@ -1,7 +1,7 @@
 //! 域 D08 `customer` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::customer` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_customer` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
@@ -9,15 +9,14 @@ use axum::{
     Extension, Json,
 };
 use erp_core::common::time::Instant;
+use erp_customer::{
+    CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
+    CustomerDetailView, CustomerListParams, CustomerProfileDetailView, CustomerProfileMutationView,
+    CustomerScope, CustomerSensitiveRevealView, CustomerView, PageView, RevealCustomerSensitiveRequest,
+    SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
+};
 use erp_identity::Permission;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
-use services::customer::{
-    assignment::CustomerAssignmentService, profile::CustomerProfileService, CreateCustomerRequest,
-    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView,
-    CustomerListParams, CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope,
-    CustomerSensitiveRevealView, CustomerService, CustomerView, PageView, RevealCustomerSensitiveRequest,
-    SaveCustomerProfileRequest, UpdateCustomerRequest,
-};
 
 use crate::{
     app_state::AppState,
@@ -52,9 +51,7 @@ pub async fn customer_profile_create(
     if req.bank_accounts.is_some() {
         ensure_permission(&state, &subject, "party_bank_account:create").await?;
     }
-    let view = CustomerProfileService::new(state.db(), state.sensitive_data())
-        .create(req, &actor)
-        .await?;
+    let view = state.customer_profile_service().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -87,9 +84,7 @@ pub async fn customer_profile_update(
         ensure_permission(&state, &subject, "party_bank_account:detail").await?;
         ensure_permission(&state, &subject, "party_bank_account:update").await?;
     }
-    let view = CustomerProfileService::new(state.db(), state.sensitive_data())
-        .update(&id, req, &actor)
-        .await?;
+    let view = state.customer_profile_service().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -108,9 +103,7 @@ pub async fn customer_profile_detail(
     Path(id): Path<String>,
 ) -> Result<CustomerProfileDetailView> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    let mut view = CustomerProfileService::new(state.db(), state.sensitive_data())
-        .detail(&id)
-        .await?;
+    let mut view = state.customer_profile_service().detail(&id).await?;
     view.allowed_actions = allowed_actions(&state, &subject, view.account.status.is_active()).await?;
     let can_view_contact = has_permission(&state, &subject, "party_contact:detail").await?;
     let can_view_address = has_permission(&state, &subject, "party_address:detail").await?;
@@ -123,9 +116,9 @@ pub async fn customer_profile_detail(
     let can_reveal_bank =
         can_view_bank && has_permission(&state, &subject, "party_bank_account:reveal").await?;
     view.sensitive_fields.retain(|field| match field.kind {
-        services::party::SensitiveFieldKind::ContactMobile => can_reveal_contact,
-        services::party::SensitiveFieldKind::Address => can_reveal_address,
-        services::party::SensitiveFieldKind::BankAccountNumber => can_reveal_bank,
+        SensitiveFieldKind::ContactMobile => can_reveal_contact,
+        SensitiveFieldKind::Address => can_reveal_address,
+        SensitiveFieldKind::BankAccountNumber => can_reveal_bank,
     });
     if !can_view_bank {
         view.bank_accounts.clear();
@@ -197,7 +190,8 @@ pub async fn customer_profile_command_detail(
     Extension(UserID(user_id)): Extension<UserID>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<CustomerProfileMutationView>> {
-    let view = CustomerProfileService::new(state.db(), state.sensitive_data())
+    let view = state
+        .customer_profile_service()
         .command_result(&idempotency_key)
         .await?;
     if let Some(result) = &view {
@@ -229,18 +223,17 @@ pub async fn customer_sensitive_reveal(
         .sensitive_data()
         .verify_reveal_token(&req.reveal_token, now)?;
     let (detail_permission, reveal_permission) = match scope.kind {
-        services::party::SensitiveFieldKind::ContactMobile => {
-            ("party_contact:detail", "party_contact:reveal")
-        }
-        services::party::SensitiveFieldKind::Address => ("party_address:detail", "party_address:reveal"),
-        services::party::SensitiveFieldKind::BankAccountNumber => {
+        erp_party::SensitiveFieldKind::ContactMobile => ("party_contact:detail", "party_contact:reveal"),
+        erp_party::SensitiveFieldKind::Address => ("party_address:detail", "party_address:reveal"),
+        erp_party::SensitiveFieldKind::BankAccountNumber => {
             ("party_bank_account:detail", "party_bank_account:reveal")
         }
     };
     ensure_customer_access(&state, &subject, &user_id, &scope.supplier_id).await?;
     ensure_permission(&state, &subject, detail_permission).await?;
     ensure_permission(&state, &subject, reveal_permission).await?;
-    let view = CustomerProfileService::new(state.db(), state.sensitive_data())
+    let view = state
+        .customer_profile_service()
         .reveal_sensitive(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -271,9 +264,7 @@ pub async fn customer_list(
             "全部有权客户必须通过专用授权范围查询".to_string(),
         ));
     }
-    let page = CustomerService::new(state.db())
-        .customer_list(&params, &user_id)
-        .await?;
+    let page = state.customer_service().customer_list(&params, &user_id).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -293,9 +284,7 @@ pub async fn customer_all_authorized_list(
 ) -> Result<PageView<CustomerView>> {
     ensure_permission(&state, &subject, "customer:list").await?;
     params.scope = CustomerScope::AllAuthorized;
-    let page = CustomerService::new(state.db())
-        .customer_list(&params, &user_id)
-        .await?;
+    let page = state.customer_service().customer_list(&params, &user_id).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -320,9 +309,7 @@ pub async fn customer_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerRequest>,
 ) -> Result<CustomerView> {
-    let view = CustomerService::new(state.db())
-        .create_customer(req, &actor)
-        .await?;
+    let view = state.customer_service().create_customer(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -348,7 +335,7 @@ pub async fn customer_detail(
     Path(id): Path<String>,
 ) -> Result<CustomerDetailView> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    let view = CustomerService::new(state.db()).customer_detail(&id).await?;
+    let view = state.customer_service().customer_detail(&id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -378,9 +365,7 @@ pub async fn customer_update(
     Json(req): Json<UpdateCustomerRequest>,
 ) -> Result<CustomerView> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    let view = CustomerService::new(state.db())
-        .update_customer(&id, req, &actor)
-        .await?;
+    let view = state.customer_service().update_customer(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -436,7 +421,8 @@ pub async fn customer_assignment_list(
     Query(params): Query<CustomerAssignmentListParams>,
 ) -> Result<PageView<CustomerAssignmentView>> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    let page = CustomerAssignmentService::new(state.db())
+    let page = state
+        .customer_assignment_service()
         .customer_assignment_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -468,7 +454,8 @@ pub async fn customer_assignment_apply(
     Json(req): Json<CustomerAssignmentRequest>,
 ) -> Result<Vec<CustomerAssignmentView>> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    let views = CustomerAssignmentService::new(state.db())
+    let views = state
+        .customer_assignment_service()
         .apply_assignment(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(views))
@@ -558,7 +545,8 @@ pub(crate) async fn ensure_customer_access(
     if has_permission(state, subject, "customer_scope:detail").await? {
         return Ok(());
     }
-    if CustomerService::new(state.db())
+    if state
+        .customer_service()
         .customer_is_assigned_to(customer_id, user_id)
         .await?
     {

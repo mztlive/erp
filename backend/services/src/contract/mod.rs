@@ -11,13 +11,14 @@
 //! 审计写入复用 `audit::AuditActor::resource_log` + `AccessControlExt::audit_logs`，
 //! 与既有 `source_registry` 模板一致。
 
-use database::{ContractExt, CustomerExt};
+use database::ContractExt;
 use entities::contract::{
     ArchiveSource, Contract, ContractData, ContractId, ContractRevision, ContractRevisionData,
     ContractRevisionId,
 };
 use erp_audit::AuditExt;
 use erp_core::ids::FileAssetId;
+use erp_customer::CustomerExt;
 use erp_support::FileAsset;
 use erp_support::FileAssetExt;
 use id_generator::next_id;

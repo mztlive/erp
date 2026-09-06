@@ -1,22 +1,20 @@
 //! 域 D07 `party` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::party` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_party` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::party::{
-    address::PartyAddressService, bank_account::PartyBankAccountService, contact::PartyContactService,
-    tax_profile::PartyTaxProfileService, CreatePartyAddressRequest, CreatePartyBankAccountRequest,
-    CreatePartyContactRequest, CreatePartyRequest, CreatePartyTaxProfileRequest, PageView,
-    PartyAddressListParams, PartyAddressView, PartyBankAccountListParams, PartyBankAccountView,
-    PartyContactListParams, PartyContactView, PartyDetailView, PartyListParams, PartyRevisionListParams,
-    PartyRevisionView, PartyService, PartyTaxProfileListParams, PartyTaxProfileView, PartyView,
-    UpdatePartyAddressRequest, UpdatePartyBankAccountRequest, UpdatePartyContactRequest, UpdatePartyRequest,
-    UpdatePartyTaxProfileRequest,
+use erp_party::{
+    CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
+    CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
+    PartyBankAccountListParams, PartyBankAccountView, PartyContactListParams, PartyContactView,
+    PartyDetailView, PartyListParams, PartyRevisionListParams, PartyRevisionView, PartyTaxProfileListParams,
+    PartyTaxProfileView, PartyView, UpdatePartyAddressRequest, UpdatePartyBankAccountRequest,
+    UpdatePartyContactRequest, UpdatePartyRequest, UpdatePartyTaxProfileRequest,
 };
 
 use crate::{
@@ -43,7 +41,7 @@ pub async fn party_list(
     State(state): State<AppState>,
     Query(params): Query<PartyListParams>,
 ) -> Result<PageView<PartyView>> {
-    let page = PartyService::new(state.db()).party_list(&params).await?;
+    let page = state.party_service().party_list(&params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -68,7 +66,7 @@ pub async fn party_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePartyRequest>,
 ) -> Result<PartyView> {
-    let view = PartyService::new(state.db()).create_party(req, &actor).await?;
+    let view = state.party_service().create_party(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -88,7 +86,7 @@ pub async fn party_create(
 /// # 返回
 /// 返回主体详情视图。
 pub async fn party_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<PartyDetailView> {
-    let view = PartyService::new(state.db()).party_detail(&id).await?;
+    let view = state.party_service().party_detail(&id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -115,9 +113,7 @@ pub async fn party_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyRequest>,
 ) -> Result<PartyView> {
-    let view = PartyService::new(state.db())
-        .update_party(&id, req, &actor)
-        .await?;
+    let view = state.party_service().update_party(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -167,9 +163,7 @@ pub async fn party_revision_list(
     Path(id): Path<String>,
     Query(params): Query<PartyRevisionListParams>,
 ) -> Result<PageView<PartyRevisionView>> {
-    let page = PartyService::new(state.db())
-        .party_revision_list(&id, &params)
-        .await?;
+    let page = state.party_service().party_revision_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -194,7 +188,8 @@ pub async fn party_contact_list(
     Path(id): Path<String>,
     Query(params): Query<PartyContactListParams>,
 ) -> Result<PageView<PartyContactView>> {
-    let page = PartyContactService::new(state.db(), state.sensitive_data())
+    let page = state
+        .party_contact_service()
         .party_contact_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -223,7 +218,8 @@ pub async fn party_contact_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = PartyContactService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_contact_service()
         .create_party_contact(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -252,7 +248,8 @@ pub async fn party_contact_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = PartyContactService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_contact_service()
         .update_party_contact(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -279,7 +276,8 @@ pub async fn party_address_list(
     Path(id): Path<String>,
     Query(params): Query<PartyAddressListParams>,
 ) -> Result<PageView<PartyAddressView>> {
-    let page = PartyAddressService::new(state.db(), state.sensitive_data())
+    let page = state
+        .party_address_service()
         .party_address_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -308,7 +306,8 @@ pub async fn party_address_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = PartyAddressService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_address_service()
         .create_party_address(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -337,7 +336,8 @@ pub async fn party_address_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = PartyAddressService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_address_service()
         .update_party_address(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -364,7 +364,8 @@ pub async fn party_tax_profile_list(
     Path(id): Path<String>,
     Query(params): Query<PartyTaxProfileListParams>,
 ) -> Result<PageView<PartyTaxProfileView>> {
-    let page = PartyTaxProfileService::new(state.db())
+    let page = state
+        .party_tax_profile_service()
         .party_tax_profile_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -393,7 +394,8 @@ pub async fn party_tax_profile_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyTaxProfileRequest>,
 ) -> Result<PartyTaxProfileView> {
-    let view = PartyTaxProfileService::new(state.db())
+    let view = state
+        .party_tax_profile_service()
         .create_party_tax_profile(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -422,7 +424,8 @@ pub async fn party_tax_profile_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyTaxProfileRequest>,
 ) -> Result<PartyTaxProfileView> {
-    let view = PartyTaxProfileService::new(state.db())
+    let view = state
+        .party_tax_profile_service()
         .update_party_tax_profile(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -449,7 +452,8 @@ pub async fn party_bank_account_list(
     Path(id): Path<String>,
     Query(params): Query<PartyBankAccountListParams>,
 ) -> Result<PageView<PartyBankAccountView>> {
-    let page = PartyBankAccountService::new(state.db(), state.sensitive_data())
+    let page = state
+        .party_bank_account_service()
         .party_bank_account_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -478,7 +482,8 @@ pub async fn party_bank_account_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = PartyBankAccountService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_bank_account_service()
         .create_party_bank_account(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -507,7 +512,8 @@ pub async fn party_bank_account_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = PartyBankAccountService::new(state.db(), state.sensitive_data())
+    let view = state
+        .party_bank_account_service()
         .update_party_bank_account(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))

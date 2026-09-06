@@ -6,12 +6,10 @@
 mod catalog;
 mod contract;
 mod cost;
-mod customer;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
 mod legacy_import;
-mod party;
 mod payable;
 mod procurement_responsibility;
 mod purchase_order;
@@ -19,7 +17,6 @@ mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
-mod supplier;
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
@@ -29,12 +26,10 @@ mod warehouse;
 pub use catalog::CatalogExt;
 pub use contract::ContractExt;
 pub use cost::CostExt;
-pub use customer::CustomerExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 pub use inventory::InventoryExt;
 pub use legacy_import::LegacyImportExt;
-pub use party::PartyExt;
 pub use payable::PayableExt;
 pub use procurement_responsibility::ProcurementResponsibilityExt;
 pub use purchase_order::PurchaseOrderExt;
@@ -42,7 +37,6 @@ pub use receivable::ReceivableExt;
 pub use returns::ReturnsExt;
 pub use sales_order::SalesOrderExt;
 pub use sales_review::SalesReviewExt;
-pub use supplier::SupplierExt;
 pub use supplier_api::SupplierApiExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
 pub use supplier_offering::SupplierOfferingExt;
@@ -62,14 +56,14 @@ pub trait DatabaseExt:
     + CatalogExt
     + ContractExt
     + CostExt
-    + CustomerExt
+    + erp_customer::CustomerExt
     + erp_workflow::DocumentRegistryExt
     + erp_support::FileAssetExt
     + FulfillmentExt
     + IntegrationOpsExt
     + InventoryExt
     + LegacyImportExt
-    + PartyExt
+    + erp_party::PartyExt
     + PayableExt
     + ProcurementResponsibilityExt
     + PurchaseOrderExt
@@ -78,7 +72,7 @@ pub trait DatabaseExt:
     + SalesOrderExt
     + SalesReviewExt
     + erp_support::SourceRegistryExt
-    + SupplierExt
+    + erp_supplier::SupplierExt
     + SupplierApiExt
     + SupplierOfferingExt
     + SupplierFulfillmentExt
@@ -97,14 +91,14 @@ impl<
             + CatalogExt
             + ContractExt
             + CostExt
-            + CustomerExt
+            + erp_customer::CustomerExt
             + erp_workflow::DocumentRegistryExt
             + erp_support::FileAssetExt
             + FulfillmentExt
             + IntegrationOpsExt
             + InventoryExt
             + LegacyImportExt
-            + PartyExt
+            + erp_party::PartyExt
             + PayableExt
             + ProcurementResponsibilityExt
             + PurchaseOrderExt
@@ -113,7 +107,7 @@ impl<
             + SalesOrderExt
             + SalesReviewExt
             + erp_support::SourceRegistryExt
-            + SupplierExt
+            + erp_supplier::SupplierExt
             + SupplierApiExt
             + SupplierOfferingExt
             + SupplierFulfillmentExt

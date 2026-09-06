@@ -2,11 +2,12 @@
 
 use std::str::FromStr;
 
-use database::{PartyExt, SupplierExt};
-use entities::party::PartyBankAccount;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, SupplierAccountId};
 use erp_core::money::Amount;
+use erp_party::PartyBankAccount;
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::Executor;
 

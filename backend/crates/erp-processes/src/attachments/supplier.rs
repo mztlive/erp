@@ -3,12 +3,13 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_party::SensitiveDataCodec;
+use erp_supplier::SaveSupplierProfileRequest;
 use erp_support::PendingFileAssetRequest;
 use mongodb::Database;
-use services::party::SensitiveDataCodec;
-use services::supplier::profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
-use services::supplier::SaveSupplierProfileRequest;
 use services::Result;
+
+use crate::supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
 
 use super::pending::PendingFileAssets;
 

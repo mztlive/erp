@@ -13,7 +13,8 @@ use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use mongodb::bson::doc;
 use mongodb::Database;
 
-use crate::repository::extensions::{SupplierExt, SupplierOfferingExt};
+use crate::repository::extensions::SupplierOfferingExt;
+use erp_supplier::SupplierExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -88,10 +89,7 @@ pub async fn load_creation_basis_facts(
         .supplier()
         .list_commercial_profiles_by_ids(&profile_revision_ids, executor)
         .await?;
-    let supplier_names = db
-        .supplier()
-        .current_legal_names_by_account_ids(&supplier_ids, executor)
-        .await?;
+    let supplier_names = crate::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
     Ok(CreationBasisFacts {
         revisions: revisions
             .into_iter()
@@ -164,11 +162,6 @@ fn unique_supplier_ids(
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
-    use entities::supplier::{
-        InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData,
-        SupplierAccountStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
-    };
     use entities::supplier_offering::{
         AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
         SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
@@ -180,10 +173,17 @@ mod isolation_tests {
         SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
     use erp_core::money::{Quantity, Rate, UnitPrice};
+    use erp_party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
+    use erp_supplier::{
+        InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData,
+        SupplierAccountStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
+    };
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
-    use crate::repository::extensions::{PartyExt, SupplierExt, SupplierOfferingExt};
+    use crate::repository::extensions::SupplierOfferingExt;
+    use erp_party::PartyExt;
+    use erp_supplier::SupplierExt;
     use persistence_core::{NoTransaction, Transactional};
 
     use super::load_creation_basis_facts;

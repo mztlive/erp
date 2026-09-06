@@ -2,14 +2,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PayableExt, ReceivableExt, SupplierExt};
+use database::{PayableExt, ReceivableExt};
 use entities::payable::{
     PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
 };
 use entities::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
-use entities::supplier::SupplierAccount;
 use erp_audit::AuditExt;
 use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, SupplierAccountId};
+use erp_supplier::SupplierAccount;
+use erp_supplier::SupplierExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

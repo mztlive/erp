@@ -20,6 +20,9 @@ erp-identity = { workspace = true }
 erp-audit = { workspace = true }
 erp-workflow = { workspace = true }
 erp-support = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
 entities = { workspace = true }
 application-core = { workspace = true }
 regex = { workspace = true }

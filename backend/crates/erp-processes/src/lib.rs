@@ -1,13 +1,16 @@
 //! Cross-domain processes: approval dispatch, audited transactions and named use cases.
 
+pub mod adapters;
 pub mod approval_dispatch;
 pub mod attachments;
 pub mod audit;
 pub mod catalog;
 pub mod customer;
+pub mod customer_profile;
 pub mod party;
 pub mod source_registry;
 pub mod supplier;
+pub mod supplier_profile;
 pub mod warehouse;
 
 pub use approval_dispatch::ApprovalActionRegistry;
@@ -21,7 +24,9 @@ pub use catalog::{
     create_product_category, create_sku_attribute, create_sku_attribute_value, create_unit_of_measure,
 };
 pub use customer::delete_customer;
+pub use customer_profile::CustomerProfileService;
 pub use party::delete_party;
 pub use source_registry::create_source_system;
 pub use supplier::delete_supplier;
+pub use supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
 pub use warehouse::create_warehouse_sku_policy;

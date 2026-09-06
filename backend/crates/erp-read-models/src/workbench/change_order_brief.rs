@@ -611,8 +611,8 @@ fn push_line_difference_summary(
 
 /// 将采购付款条件快照转成可读标签。
 fn purchase_payment_label(snapshot: &entities::purchase_order::PaymentTermSnapshot) -> String {
-    let label = entities::supplier::SupplierPaymentTerm::parse(&snapshot.payment_term_code)
-        .map(entities::supplier::SupplierPaymentTerm::label)
+    let label = erp_supplier::SupplierPaymentTerm::parse(&snapshot.payment_term_code)
+        .map(erp_supplier::SupplierPaymentTerm::label)
         .unwrap_or(snapshot.payment_term_code.as_str());
     if snapshot.prepay_gate {
         format!("{label}（先款后货）")

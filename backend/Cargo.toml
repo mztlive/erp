@@ -12,6 +12,9 @@ members = [
   "crates/erp-processes",
   "crates/erp-read-models",
   "crates/erp-support",
+  "crates/erp-party",
+  "crates/erp-customer",
+  "crates/erp-supplier",
   "crates/entity-macros", # 过程宏项目
   "crates/entity-core",
   "crates/permission-macros",
@@ -38,6 +41,9 @@ erp-workflow = { path = "crates/erp-workflow" }
 erp-processes = { path = "crates/erp-processes" }
 erp-read-models = { path = "crates/erp-read-models" }
 erp-support = { path = "crates/erp-support" }
+erp-party = { path = "crates/erp-party" }
+erp-customer = { path = "crates/erp-customer" }
+erp-supplier = { path = "crates/erp-supplier" }
 config = { path = "config" }
 database = { path = "database" }
 entities = { path = "entities" }

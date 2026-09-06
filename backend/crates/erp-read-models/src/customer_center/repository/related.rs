@@ -75,9 +75,9 @@ impl<'a> CustomerCenterRepository<'a> {
     ///
     /// # 错误
     /// 无。
-    fn collection(&self) -> mongodb::Collection<entities::customer::CustomerAccount> {
+    fn collection(&self) -> mongodb::Collection<erp_customer::CustomerAccount> {
         self.db
-            .collection(<Database as database::CustomerExt>::CUSTOMER_ACCOUNTS)
+            .collection(<Database as erp_customer::CustomerExt>::CUSTOMER_ACCOUNTS)
     }
 
     /// 查询指定客户的关联业务跨页指标与最近摘要。

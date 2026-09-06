@@ -1,0 +1,517 @@
+//! `supplier_commercial_profile_revision`：供应商商务结算版本（§6.2）。
+//!
+//! 不可变修订：新版本保存即成为当前版本，没有生效窗口概念；付款条件按
+//! §2.2 / §4.4 内联为结构化快照字段。
+
+use entity_core::BaseModel;
+use entity_macros::Entity;
+use serde::{Deserialize, Serialize};
+
+use super::business_category::{normalize_business_category, split_encoded_payment_term_snapshot};
+pub use super::payment_term::SettlementMode;
+use super::payment_term::SupplierPaymentTerm;
+use erp_core::common::revision::RevisionBase;
+use erp_core::money::Rate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
+
+pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+
+/// 付款条件快照最大长度。
+const PAYMENT_TERM_SNAPSHOT_MAX_LEN: usize = 64;
+/// 变更原因最大长度。
+const CHANGE_REASON_MAX_LEN: usize = 500;
+
+/// 对账周期（§6.2：日、周、月、季、年或无需周期对账；固定枚举）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconciliationCycle {
+    /// 日。
+    Daily,
+    /// 周。
+    Weekly,
+    /// 月。
+    Monthly,
+    /// 季。
+    Quarterly,
+    /// 年。
+    Yearly,
+    /// 无需周期对账。
+    None,
+}
+
+impl ReconciliationCycle {
+    /// 返回周期的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Daily => "日",
+            Self::Weekly => "周",
+            Self::Monthly => "月",
+            Self::Quarterly => "季",
+            Self::Yearly => "年",
+            Self::None => "无需周期对账",
+        }
+    }
+
+    /// 返回周期的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Quarterly => "quarterly",
+            Self::Yearly => "yearly",
+            Self::None => "none",
+        }
+    }
+}
+
+/// 发票类型（§6.2：增值税专用发票、增值税普通发票、电子发票等受控代码）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InvoiceType {
+    /// 增值税专用发票。
+    VatSpecial,
+    /// 增值税普通发票。
+    VatNormal,
+    /// 电子发票。
+    Electronic,
+}
+
+impl InvoiceType {
+    /// 返回类型的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::VatSpecial => "增值税专用发票",
+            Self::VatNormal => "增值税普通发票",
+            Self::Electronic => "电子发票",
+        }
+    }
+
+    /// 返回类型的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::VatSpecial => "vat_special",
+            Self::VatNormal => "vat_normal",
+            Self::Electronic => "electronic",
+        }
+    }
+}
+
+/// 商务结算版本创建数据（不含系统字段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupplierCommercialProfileRevisionData {
+    /// 供应商角色 ID。
+    pub supplier_id: SupplierAccountId,
+    /// 同一稳定对象内从 1 递增的修订序号。
+    pub revision_no: u32,
+    /// 结算方式。
+    pub settlement_mode: SettlementMode,
+    /// 对账周期。
+    pub reconciliation_cycle: ReconciliationCycle,
+    /// 结构化付款条件快照（受控码表稳定代码，§2.2 内联快照）。
+    pub payment_term_snapshot: String,
+    /// 经营类目；未登记时为空。
+    pub business_category: Option<String>,
+    /// 发票类型。
+    pub invoice_type: InvoiceType,
+    /// 发票税点（如 `0.13` 表示 13%；定点类型，§4.2）。
+    pub invoice_tax_rate: Rate,
+    /// 与我司签约的公司主体（内部 `party` 引用）。
+    pub signing_entity_party_id: PartyId,
+    /// 付款时的公司主体（内部 `party` 引用）。
+    pub payment_entity_party_id: PartyId,
+    /// 变更原因。
+    pub change_reason: String,
+}
+
+/// 商务结算版本实体（不可变修订，§6.2）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct SupplierCommercialProfileRevision {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    #[serde(flatten)]
+    pub revision: RevisionBase,
+    /// 供应商角色 ID。
+    pub supplier_id: SupplierAccountId,
+    /// 结算方式。
+    pub settlement_mode: SettlementMode,
+    /// 对账周期。
+    pub reconciliation_cycle: ReconciliationCycle,
+    /// 结构化付款条件快照。
+    pub payment_term_snapshot: String,
+    /// 经营类目；历史修订可能缺省，读取时从付款条件快照拆出。
+    #[serde(default)]
+    pub business_category: Option<String>,
+    /// 发票类型。
+    pub invoice_type: InvoiceType,
+    /// 发票税点。
+    pub invoice_tax_rate: Rate,
+    /// 签约主体。
+    pub signing_entity_party_id: PartyId,
+    /// 付款主体。
+    pub payment_entity_party_id: PartyId,
+    /// 变更原因。
+    pub change_reason: String,
+}
+
+impl SupplierCommercialProfileRevision {
+    /// 创建商务结算版本。
+    ///
+    /// 完成付款条件快照与变更原因的必填校验与规范化（去首尾空白、
+    /// 长度上限）；发票税点必须是 `[0, 1)` 的定点小数（§4.2 税率约定）。
+    /// 历史把经营类目编码进付款条件快照时，在此拆成独立字段。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`erp_core::ids::SupplierCommercialProfileRevisionId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的版本实体。
+    ///
+    /// # 错误
+    /// 当付款条件缺少可计算规则、与结算方式不一致，或其他版本字段非法时返回错误。
+    pub fn new(
+        id: SupplierCommercialProfileRevisionId,
+        data: SupplierCommercialProfileRevisionData,
+    ) -> Result<Self> {
+        let (payment_term_snapshot, business_category) =
+            split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
+        let payment_term = SupplierPaymentTerm::parse(&payment_term_snapshot)?;
+        if payment_term.settlement_mode() != data.settlement_mode {
+            return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
+        }
+        let change_reason = normalize_required_text(
+            data.change_reason,
+            "变更原因不能为空",
+            CHANGE_REASON_MAX_LEN,
+            "变更原因过长",
+        )?;
+        ensure_tax_rate_valid(data.invoice_tax_rate)?;
+
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            revision: RevisionBase::new(data.revision_no),
+            supplier_id: data.supplier_id,
+            settlement_mode: data.settlement_mode,
+            reconciliation_cycle: data.reconciliation_cycle,
+            payment_term_snapshot: payment_term.code().to_string(),
+            business_category,
+            invoice_type: data.invoice_type,
+            invoice_tax_rate: data.invoice_tax_rate,
+            signing_entity_party_id: data.signing_entity_party_id,
+            payment_entity_party_id: data.payment_entity_party_id,
+            change_reason,
+        })
+    }
+
+    /// 返回不含经营类目编码的付款条件代码。
+    ///
+    /// 历史修订可能仍把类目写在快照里；调用方落采购单或展示时必须用本方法，
+    /// 不得直接使用 `payment_term_snapshot`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 去编码后的付款条件；无标记时原样返回去空白快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn effective_payment_term_code(&self) -> String {
+        let code = split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code;
+        SupplierPaymentTerm::parse(&code)
+            .map(|term| term.code().to_string())
+            .unwrap_or(code)
+    }
+
+    /// 返回经营类目：独立字段优先，否则从历史付款条件快照拆出。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未登记时返回 `None`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn effective_business_category(&self) -> Option<String> {
+        self.business_category
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| split_encoded_payment_term_snapshot(&self.payment_term_snapshot).business_category)
+    }
+}
+
+/// 把付款条件快照与经营类目规范成两个独立字段。
+///
+/// 显式传入的经营类目优先于快照内历史编码。
+///
+/// # 参数
+/// * `payment_term_snapshot` - 原始付款条件快照
+/// * `business_category` - 显式经营类目
+///
+/// # 返回
+/// 不含类目编码的付款条件快照，以及独立经营类目。
+///
+/// # 错误
+/// 付款条件为空/超长，或经营类目超长时返回错误。
+fn split_payment_term_fields(
+    payment_term_snapshot: String,
+    business_category: Option<String>,
+) -> Result<(String, Option<String>)> {
+    let parts = split_encoded_payment_term_snapshot(&payment_term_snapshot);
+    let payment_term_snapshot = normalize_required_text(
+        parts.payment_term_code,
+        "付款条件快照不能为空",
+        PAYMENT_TERM_SNAPSHOT_MAX_LEN,
+        "付款条件快照过长",
+    )?;
+    let explicit = normalize_business_category(business_category)?;
+    let encoded = normalize_business_category(parts.business_category)?;
+    Ok((payment_term_snapshot, explicit.or(encoded)))
+}
+
+/// 校验发票税点是否落在合法区间。
+///
+/// # 参数
+/// * `rate` - 发票税点（如 `0.13`）
+///
+/// # 返回
+/// 税点在 `[0, 1)` 内返回 `Ok(())`。
+///
+/// # 错误
+/// 税点小于 0 或大于等于 1 时返回错误。
+fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
+    let decimal = rate.to_decimal();
+    if decimal < rust_decimal::Decimal::ZERO || decimal >= rust_decimal::Decimal::ONE {
+        return Err(Error::from("发票税点必须在 [0, 1) 区间内（如 0.13 表示 13%）"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::{
+        InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
+        SupplierCommercialProfileRevisionData,
+    };
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
+
+    fn profile_data() -> SupplierCommercialProfileRevisionData {
+        SupplierCommercialProfileRevisionData {
+            supplier_id: SupplierAccountId::new("supplier-1"),
+            revision_no: 1,
+            settlement_mode: SettlementMode::Prepayment,
+            reconciliation_cycle: ReconciliationCycle::Monthly,
+            payment_term_snapshot: " PREPAY_30 ".to_string(),
+            business_category: None,
+            invoice_type: InvoiceType::VatSpecial,
+            invoice_tax_rate: Rate::from_str("0.13").unwrap(),
+            signing_entity_party_id: PartyId::new("party-internal-1"),
+            payment_entity_party_id: PartyId::new("party-internal-2"),
+            change_reason: " 首次建档 ".to_string(),
+        }
+    }
+
+    /// happy path：快照与原因去空白，受控代码与税点落库。
+    #[test]
+    fn new_trims_and_normalizes() {
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-1"),
+            profile_data(),
+        )
+        .unwrap();
+        assert_eq!(profile.payment_term_snapshot, "PREPAY_30");
+        assert_eq!(profile.business_category, None);
+        assert_eq!(profile.change_reason, "首次建档");
+        assert_eq!(profile.settlement_mode, SettlementMode::Prepayment);
+        assert_eq!(profile.reconciliation_cycle, ReconciliationCycle::Monthly);
+        assert_eq!(profile.invoice_type, InvoiceType::VatSpecial);
+        assert_eq!(profile.revision.revision_no, 1);
+    }
+
+    /// 失败路径：快照/原因为空或超长、付款条件不受控、结算方式不匹配或税点越界。
+    #[test]
+    fn new_rejects_invalid_inputs() {
+        let blank_snapshot = SupplierCommercialProfileRevisionData {
+            payment_term_snapshot: "   ".to_string(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            blank_snapshot,
+        )
+        .is_err());
+
+        let overlong_reason = SupplierCommercialProfileRevisionData {
+            change_reason: "x".repeat(501),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            overlong_reason,
+        )
+        .is_err());
+
+        let bad_rate = SupplierCommercialProfileRevisionData {
+            invoice_tax_rate: Rate::from_str("1.05").unwrap(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            bad_rate,
+        )
+        .is_err());
+
+        let ambiguous_payment_term = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::PayAfterUse,
+            payment_term_snapshot: "先用后付".to_string(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            ambiguous_payment_term,
+        )
+        .is_err());
+
+        let mismatched_settlement = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::PayAfterUse,
+            payment_term_snapshot: "PREPAY_30".to_string(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            mismatched_settlement,
+        )
+        .is_err());
+    }
+
+    /// 金额三元组：发票税点参与行金额计算时保持 gross = net + tax。
+    #[test]
+    fn invoice_tax_rate_produces_consistent_line_amounts() {
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-2"),
+            profile_data(),
+        )
+        .unwrap();
+
+        let (gross, net, tax) = line_amounts(
+            UnitPrice::from_str("100.0000").unwrap(),
+            Quantity::from_str("3.000000").unwrap(),
+            profile.invoice_tax_rate,
+        );
+        assert_eq!(
+            gross.to_decimal(),
+            net.to_decimal() + tax.to_decimal(),
+            "gross = net + tax 对税点 {} 不成立",
+            profile.invoice_tax_rate
+        );
+        assert_eq!(tax.to_decimal(), Amount::from_str("39.00").unwrap().to_decimal());
+    }
+
+    /// 历史编码快照在构造时拆成独立经营类目，显式类目优先于快照内编码。
+    #[test]
+    fn new_splits_encoded_snapshot_and_prefers_explicit_category() {
+        let encoded = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::CashSettlement,
+            payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
+            business_category: None,
+            ..profile_data()
+        };
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-encoded"),
+            encoded,
+        )
+        .unwrap();
+        assert_eq!(profile.payment_term_snapshot, "CASH_ON_APPROVAL");
+        assert_eq!(profile.business_category.as_deref(), Some("礼盒"));
+        assert_eq!(profile.effective_payment_term_code(), "CASH_ON_APPROVAL");
+        assert_eq!(profile.effective_business_category().as_deref(), Some("礼盒"));
+
+        let explicit = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::CashSettlement,
+            payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
+            business_category: Some(" 鲜花 ".to_string()),
+            ..profile_data()
+        };
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-explicit"),
+            explicit,
+        )
+        .unwrap();
+        assert_eq!(profile.payment_term_snapshot, "CASH_ON_APPROVAL");
+        assert_eq!(profile.business_category.as_deref(), Some("鲜花"));
+    }
+
+    /// 缺省 `business_category` 的历史文档仍可反序列化，并从快照拆出类目。
+    #[test]
+    fn legacy_document_without_category_field_splits_on_read() {
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-legacy"),
+            profile_data(),
+        )
+        .unwrap();
+        let mut doc = serde_json::to_value(&profile).unwrap();
+        let object = doc.as_object_mut().expect("商务资料必须是 JSON 对象");
+        object.remove("business_category");
+        object.insert(
+            "payment_term_snapshot".to_string(),
+            serde_json::Value::String("现结｜经营类目：礼盒".to_string()),
+        );
+        let loaded: SupplierCommercialProfileRevision = serde_json::from_value(doc).unwrap();
+        assert_eq!(loaded.business_category, None);
+        assert_eq!(loaded.effective_payment_term_code(), "CASH_ON_APPROVAL");
+        assert_eq!(loaded.effective_business_category().as_deref(), Some("礼盒"));
+    }
+
+    /// 实体 BSON 往返（含 Rate 与 ID）。
+    #[test]
+    fn bson_roundtrip() {
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-3"),
+            profile_data(),
+        )
+        .unwrap();
+        let roundtrip: SupplierCommercialProfileRevision =
+            serde_json::from_value(serde_json::to_value(&profile).unwrap()).unwrap();
+        assert_eq!(roundtrip, profile);
+    }
+
+    /// 受控代码的稳定序列化形态与中文标签。
+    #[test]
+    fn enums_serialize_with_stable_codes() {
+        assert_eq!(
+            serde_json::to_string(&SettlementMode::PayAfterUse).unwrap(),
+            "\"pay_after_use\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ReconciliationCycle::Yearly).unwrap(),
+            "\"yearly\""
+        );
+        assert_eq!(
+            serde_json::to_string(&InvoiceType::Electronic).unwrap(),
+            "\"electronic\""
+        );
+        assert_eq!(SettlementMode::CashSettlement.label(), "现结");
+        assert_eq!(ReconciliationCycle::None.label(), "无需周期对账");
+        assert_eq!(InvoiceType::VatSpecial.label(), "增值税专用发票");
+    }
+}

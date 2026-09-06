@@ -1,8 +1,9 @@
-use database::{ContractExt, CustomerExt, SalesOrderExt};
+use database::{ContractExt, SalesOrderExt};
 use entities::sales_order::{SalesOrder, SalesOrderData};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
+use erp_customer::CustomerExt;
 use erp_workflow::entity::document_registry::{
     BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };

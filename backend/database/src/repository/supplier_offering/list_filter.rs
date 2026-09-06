@@ -7,13 +7,13 @@
 use std::collections::HashMap;
 
 use entities::catalog::{Product, Sku, SkuRevision};
-use entities::party::{Party, PartyRevision};
-use entities::supplier::SupplierAccount;
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingAvailability,
     SupplierOfferingRevision,
 };
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
+use erp_party::{Party, PartyRevision};
+use erp_supplier::SupplierAccount;
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
 use super::{SupplierOfferingDomainRepository, SupplierOfferingFilter, SupplierOfferingRow};

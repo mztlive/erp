@@ -1,0 +1,22 @@
+[package]
+name = "erp-customer"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+entity-core = { workspace = true }
+entity-macros = { workspace = true }
+erp-core = { workspace = true }
+hex = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+validator = { workspace = true }

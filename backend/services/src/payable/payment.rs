@@ -3,13 +3,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use database::{PartyExt, PayableExt, SupplierExt};
-use entities::party::PartyBankAccount;
+use database::PayableExt;
 use entities::payable::{
     AllocationAction, PayableAccount, PayableEntry, PaymentAllocation, PaymentAllocationLedger,
     PendingPaymentAllocation, SupplierPayment, SupplierPaymentData, SupplierPaymentStatus,
 };
-use entities::supplier::SupplierAccount;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -17,6 +15,10 @@ use erp_core::ids::{
     SupplierAccountId, SupplierPaymentId,
 };
 use erp_core::money::Amount;
+use erp_party::PartyBankAccount;
+use erp_party::PartyExt;
+use erp_supplier::SupplierAccount;
+use erp_supplier::SupplierExt;
 use erp_support::{
     BankReceiptEvidencePolicy, EmptyPendingAttachments, FileAssetExt, FileAssetView, PendingAttachmentBatch,
 };

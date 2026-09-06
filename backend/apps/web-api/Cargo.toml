@@ -52,6 +52,9 @@ erp-workflow = { workspace = true }
 erp-processes = { workspace = true }
 erp-read-models = { workspace = true }
 erp-support = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
 services = { workspace = true }
 config = { workspace = true }
 permission-macros = { workspace = true }

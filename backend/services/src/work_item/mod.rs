@@ -48,8 +48,9 @@ impl ProcessObjectFacts {
         ids: &[String],
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::errors::Result<std::collections::HashMap<String, String>> {
-        use database::{CustomerExt, SupplierExt};
         use erp_core::ids::{CustomerAccountId, SupplierAccountId};
+        use erp_customer::CustomerExt;
+        use erp_supplier::SupplierExt;
         let mut numbers = std::collections::HashMap::new();
         match kind {
             "supplier" => {

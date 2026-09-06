@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PartyExt, PayableExt, PurchaseOrderExt, SupplierExt, SupplierSettlementExt};
+use database::{PayableExt, PurchaseOrderExt, SupplierSettlementExt};
 use entities::payable::{
     EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
     PayableSourceType,
@@ -10,6 +10,8 @@ use entities::payable::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyBankAccountId, PayableAccountId, PayableEntryId, SupplierAccountId};
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -26,9 +28,9 @@ use super::mapping::{
 use super::payment_task;
 use super::{PayableAccountFilter, PayableService};
 use crate::errors::{Error, Result};
-use crate::party::SensitiveDataCodec;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_party::SensitiveDataCodec;
 
 impl PayableService {
     // -----------------------------------------------------------------------

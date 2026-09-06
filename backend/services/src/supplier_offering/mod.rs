@@ -6,10 +6,8 @@
 
 use std::collections::HashMap;
 
-use database::{CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt};
+use database::{CatalogExt, SupplierApiExt, SupplierOfferingExt};
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
-use entities::party::{Party, PartyRevision};
-use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
     SupplierOfferingRevision,
@@ -19,6 +17,9 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
+use erp_party::{Party, PartyRevision};
+use erp_supplier::SupplierExt;
+use erp_supplier::{CapabilityCode, SupplierAccount};
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
@@ -637,13 +638,8 @@ impl SupplierOfferingService {
             .as_deref()
             .map(erp_core::ids::SupplierCapabilityRevisionId::new)
             .ok_or_else(|| Error::BusinessLogicError("供应商能力缺少当前版本".to_string()))?;
-        crate::supplier::eligibility::ensure_capability_qualified(
-            &self.db,
-            supplier_id,
-            &revision_id,
-            on_date,
-        )
-        .await
+        erp_supplier::ensure_capability_qualified(&self.db, supplier_id, &revision_id, on_date).await?;
+        Ok(())
     }
 
     async fn current_revision_no(&self, offering: &SupplierOffering) -> Result<u32> {

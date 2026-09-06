@@ -13,7 +13,7 @@ use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrd
 use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
-use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
 use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::PageResult;
@@ -70,10 +70,7 @@ pub async fn load_purchase_order_list_page(
         return Ok((page, PurchaseOrderListFacts::default()));
     }
     let supplier_ids = unique_supplier_ids(&page);
-    let supplier_names = db
-        .supplier()
-        .current_legal_names_by_account_ids(&supplier_ids, executor)
-        .await?;
+    let supplier_names = crate::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
     let sales_ids = unique_sales_ids(&page);
     let sales_orders = db.sales_orders().find_orders_by_ids(&sales_ids, executor).await?;
     let sales_order_nos = sales_orders

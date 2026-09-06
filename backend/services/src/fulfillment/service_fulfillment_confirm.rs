@@ -18,9 +18,9 @@ use persistence_core::Transactional;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::party::SensitiveDataCodec;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_party::SensitiveDataCodec;
 
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::{ConfirmServiceFulfillmentRequest, FulfillmentService, ServiceFulfillmentView};
@@ -338,10 +338,10 @@ async fn ensure_service_evidence_asset_in_transaction(
 #[cfg(test)]
 mod tests {
     use super::service_confirmation_from_request;
-    use crate::party::SensitiveDataCodec;
     use entities::fulfillment::{FulfillmentResult, ServiceFulfillment};
     use erp_core::ids::FileAssetId;
     use erp_core::money::Quantity;
+    use erp_party::SensitiveDataCodec;
     use std::str::FromStr;
 
     use super::ConfirmServiceFulfillmentRequest;

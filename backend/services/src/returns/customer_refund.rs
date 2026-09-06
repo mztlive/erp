@@ -28,7 +28,7 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{CustomerExt, ReceivableExt, ReturnsExt};
+use database::{ReceivableExt, ReturnsExt};
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::CommandReceiptServiceExt as _;
@@ -37,6 +37,7 @@ use erp_core::ids::{
     CustomerAccountId, CustomerReceiptId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId,
     ReceivableEntryOffsetId,
 };
+use erp_customer::CustomerExt;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::DocumentType;

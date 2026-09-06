@@ -23,8 +23,8 @@ use std::sync::Arc;
 use mongodb::Database;
 
 use crate::identity_compose::shared_rbac_service;
-use crate::party::SensitiveDataCodec;
 use erp_identity::SharedRbacService;
+use erp_party::SensitiveDataCodec;
 
 mod acceptance_eligibility;
 mod customer_acceptance;

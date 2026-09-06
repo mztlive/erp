@@ -1,4 +1,4 @@
-use database::{PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseOrder,
     PurchaseOrderRevision,
@@ -363,11 +363,12 @@ impl PurchaseOrderService {
                 .change_lines_from_base_revision(&change.base_revision_id)
                 .await?;
         }
-        let supplier_names = self
-            .db
-            .supplier()
-            .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), &mut NoTransaction)
-            .await?;
+        let supplier_names = database::current_legal_names_by_account_ids(
+            &self.db,
+            std::slice::from_ref(&order.supplier_id),
+            &mut NoTransaction,
+        )
+        .await?;
         let supplier_name = supplier_names
             .get(&order.supplier_id.to_string())
             .cloned()

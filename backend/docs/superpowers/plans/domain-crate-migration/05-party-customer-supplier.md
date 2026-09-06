@@ -5,11 +5,11 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 05 |
-| 状态 | 未开始 |
+| 状态 | 执行中 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-party`, `erp-customer`, `erp-supplier` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
+| 执行负责人 | chore/domain-crate-05-party-customer-supplier integrator |
 | 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
@@ -81,17 +81,17 @@ party/customer/supplier 三者互不依赖；processes 的 customer_profile/supp
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结主体匹配、客户OWNER/分配、资料修改版本、供应商资质与敏感字段揭示行为；客户中心 JSON 与权限作为独立读模型合同。
+1. [x] 冻结主体匹配、客户OWNER/分配、资料修改版本、供应商资质与敏感字段揭示行为；客户中心 JSON 与权限作为独立读模型合同。
 
-2. [ ] 迁入 Party/Customer/Supplier 各自实体、DTO、仓储和索引；外域引用以稳定 ID 和已固化事实表达，禁止跨域持久化模型依赖。
+2. [x] 迁入 Party/Customer/Supplier 各自实体、DTO、仓储和索引；外域引用以稳定 ID 和已固化事实表达，禁止跨域持久化模型依赖。
 
-3. [ ] 拆 services/customer/profile.rs 及 profile/*：请求校验/指纹等纯输入逻辑保留在消费方 DTO，跨主体/客户/联系方式/审计命令进 processes::customer_profile，客户本域创建和分配进入 erp-customer 事务内接口。
+3. [x] 拆 services/customer/profile.rs 及 profile/*：请求校验/指纹等纯输入逻辑保留在消费方 DTO，跨主体/客户/联系方式/审计命令进 processes::customer_profile，客户本域创建和分配进入 erp-customer 事务内接口。
 
-4. [ ] 按同一规则拆 SupplierProfileService 的主体/供应商/资质/附件写入，根 Executor 统一由 supplier_profile 流程持有；支付与供应链通过消费方 Port 读取供应商资格、账期、敏感字段事实。
+4. [x] 按同一规则拆 SupplierProfileService 的主体/供应商/资质/附件写入，根 Executor 统一由 supplier_profile 流程持有；支付与供应链通过消费方 Port 读取供应商资格、账期、敏感字段事实。
 
-5. [ ] read-models::customer_center 替换客户与合同等供应方的已迁移接口；仍未迁移的财务提供方允许留在 read-models 的旧依赖中，不能渗入 erp-customer。
+5. [x] read-models::customer_center 替换客户与合同等供应方的已迁移接口；仍未迁移的财务提供方允许留在 read-models 的旧依赖中，不能渗入 erp-customer。
 
-6. [ ] 更新 party/customer/supplier Handler、旧采购/应付/供应链调用方、AppState 注入与索引注册。删除旧同名三层实现，复核 customer/profile 的任何实际写入只有一个定义源。
+6. [x] 更新 party/customer/supplier Handler、旧采购/应付/供应链调用方、AppState 注入与索引注册。删除旧同名三层实现，复核 customer/profile 的任何实际写入只有一个定义源。
 
 7. [ ] 按 compile-measurement.md 对 Customer 的目标内部实现复测 check/build，与阶段 00 相同语义补丁比较。保留中间态旧大 crate 被重编译的真实清单；不得将本阶段结果冒充最终 Sales/Finance 隔离达标。
 

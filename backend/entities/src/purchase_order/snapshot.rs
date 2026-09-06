@@ -5,12 +5,12 @@
 use chrono::{Datelike, Days};
 use serde::{Deserialize, Serialize};
 
-use crate::supplier::business_category::split_encoded_payment_term_snapshot;
-use crate::supplier::SupplierPaymentTerm;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::{Amount, Rate};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use erp_supplier::split_encoded_payment_term_snapshot;
+use erp_supplier::SupplierPaymentTerm;
 
 /// 供应商名称最大长度。
 const SUPPLIER_NAME_MAX_LEN: usize = 256;

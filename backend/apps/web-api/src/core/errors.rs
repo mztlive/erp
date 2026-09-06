@@ -158,6 +158,27 @@ impl From<erp_support::Error> for Error {
     }
 }
 
+impl From<erp_party::Error> for Error {
+    /// 将主体领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_party::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
+impl From<erp_customer::Error> for Error {
+    /// 将客户领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_customer::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
+impl From<erp_supplier::Error> for Error {
+    /// 将供应商领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_supplier::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<services::Error> for Error {
     /// 从给定值构建实例。
     ///

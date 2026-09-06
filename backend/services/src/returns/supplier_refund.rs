@@ -28,7 +28,7 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{PayableExt, ReturnsExt, SupplierExt};
+use database::{PayableExt, ReturnsExt};
 use entities::payable::{
     AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableEntry,
     PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType, PaymentAllocation,
@@ -45,6 +45,7 @@ use erp_core::ids::{
 };
 use erp_core::money::Amount;
 use erp_identity::SharedRbacService;
+use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};

@@ -1,4 +1,4 @@
-use database::{SupplierApiExt, SupplierExt, SupplierFulfillmentExt};
+use database::{SupplierApiExt, SupplierFulfillmentExt};
 use entities::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionType,
@@ -131,12 +131,13 @@ impl SupplierFulfillmentService {
         let refund_views = self.refund_views_for_order(&order_id).await?;
 
         let supplier_id = order.supplier_id.to_string();
-        let supplier_name = self
-            .db
-            .supplier()
-            .current_legal_names_by_account_ids(std::slice::from_ref(&order.supplier_id), &mut NoTransaction)
-            .await?
-            .remove(&supplier_id);
+        let supplier_name = database::current_legal_names_by_account_ids(
+            &self.db,
+            std::slice::from_ref(&order.supplier_id),
+            &mut NoTransaction,
+        )
+        .await?
+        .remove(&supplier_id);
         let mut action_blockers = Vec::new();
         if supplier_name.is_none() {
             action_blockers.push(supplier_order_blocker(

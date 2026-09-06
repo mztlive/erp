@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
-use database::{PartyExt, SupplierApiExt, SupplierExt};
+use database::SupplierApiExt;
 use entities::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectionAction,
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use persistence_core::NoTransaction;
 
 use crate::errors::Result;

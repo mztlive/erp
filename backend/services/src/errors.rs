@@ -53,6 +53,66 @@ impl From<erp_workflow::Error> for Error {
     }
 }
 
+impl From<erp_party::Error> for Error {
+    /// 将主体领域错误映射为服务错误。
+    fn from(error: erp_party::Error) -> Self {
+        match error {
+            erp_party::Error::Internal(message) => Self::Internal(message),
+            erp_party::Error::NotFound(message) => Self::NotFound(message),
+            erp_party::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_party::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_party::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_party::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_party::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_party::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_party::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_party::Error::Logic(error) => Self::Logic(error),
+            erp_party::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_party::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
+impl From<erp_customer::Error> for Error {
+    /// 将客户领域错误映射为服务错误。
+    fn from(error: erp_customer::Error) -> Self {
+        match error {
+            erp_customer::Error::Internal(message) => Self::Internal(message),
+            erp_customer::Error::NotFound(message) => Self::NotFound(message),
+            erp_customer::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_customer::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_customer::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_customer::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_customer::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_customer::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_customer::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_customer::Error::Logic(error) => Self::Logic(error),
+            erp_customer::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_customer::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
+impl From<erp_supplier::Error> for Error {
+    /// 将供应商领域错误映射为服务错误。
+    fn from(error: erp_supplier::Error) -> Self {
+        match error {
+            erp_supplier::Error::Internal(message) => Self::Internal(message),
+            erp_supplier::Error::NotFound(message) => Self::NotFound(message),
+            erp_supplier::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_supplier::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_supplier::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_supplier::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_supplier::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_supplier::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_supplier::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_supplier::Error::Logic(error) => Self::Logic(error),
+            erp_supplier::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_supplier::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_support::Error> for Error {
     /// 将支撑领域错误映射为服务错误。
     fn from(error: erp_support::Error) -> Self {

@@ -1,19 +1,18 @@
 //! 域 D09 `supplier` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::supplier` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_supplier` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use erp_support::SensitivityClass;
-use services::supplier::{
-    profile::SupplierProfileService, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
-    SupplierDetailView, SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView,
-    SupplierService, SupplierView,
+use erp_supplier::{
+    PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest, SupplierDetailView,
+    SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView, SupplierView,
 };
+use erp_support::SensitivityClass;
 
 use crate::{
     app_state::AppState,
@@ -40,9 +39,7 @@ pub async fn supplier_profile_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<SaveSupplierProfileRequest>,
 ) -> Result<SupplierProfileMutationView> {
-    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
-        .create(req, &actor)
-        .await?;
+    let view = state.supplier_profile_service().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -99,9 +96,7 @@ pub async fn supplier_profile_update(
     Path(id): Path<String>,
     Json(req): Json<SaveSupplierProfileRequest>,
 ) -> Result<SupplierProfileMutationView> {
-    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
-        .update(&id, req, &actor)
-        .await?;
+    let view = state.supplier_profile_service().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -167,7 +162,8 @@ pub async fn supplier_profile_command_detail(
     State(state): State<AppState>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<SupplierProfileMutationView>> {
-    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+    let view = state
+        .supplier_profile_service()
         .command_result(&idempotency_key)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -186,7 +182,8 @@ pub async fn supplier_sensitive_reveal(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RevealSupplierSensitiveRequest>,
 ) -> Result<SupplierSensitiveRevealView> {
-    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+    let view = state
+        .supplier_profile_service()
         .reveal_sensitive(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -211,7 +208,7 @@ pub async fn supplier_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierListParams>,
 ) -> Result<PageView<SupplierView>> {
-    let page = SupplierService::new(state.db()).supplier_list(&params).await?;
+    let page = state.supplier_service().supplier_list(&params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -234,9 +231,7 @@ pub async fn supplier_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierDetailView> {
-    let view = SupplierService::with_sensitive_data(state.db(), state.sensitive_data())
-        .supplier_detail(&id)
-        .await?;
+    let view = state.supplier_service().supplier_detail(&id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

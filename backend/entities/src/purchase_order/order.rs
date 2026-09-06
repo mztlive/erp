@@ -6,7 +6,6 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
-use crate::supplier::SupplierPaymentTerm;
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::{ensure_transition, DocumentState};
 use erp_core::ids::{
@@ -15,6 +14,7 @@ use erp_core::ids::{
 };
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use erp_supplier::SupplierPaymentTerm;
 
 /// 采购单号最大长度。
 const PURCHASE_NO_MAX_LEN: usize = 64;

@@ -4,6 +4,6 @@ pub mod repository;
 pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
 pub use repository::{
-    CustomerCenterReceivableRow, ProcurementResponsibilityRuleFilter, ReceivableListScope,
-    ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SkuRow, SupplierOfferingRow,
+    current_legal_names_by_account_ids, CustomerCenterReceivableRow, ProcurementResponsibilityRuleFilter,
+    ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SkuRow, SupplierOfferingRow,
 };

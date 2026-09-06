@@ -1,5 +1,6 @@
 use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
+use erp_party::SensitiveDataCodec;
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::ApprovalActionRegistry;
 use erp_support::{BulkJobService, FileAssetService, SourceRegistryService};
@@ -7,7 +8,6 @@ use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
 use mongodb::Database;
 use serde::Serialize;
-use services::party::SensitiveDataCodec;
 use services::supplier_api::{
     SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
     UnavailableSupplierReferenceRegistry,
@@ -309,6 +309,56 @@ impl AppState {
     /// 返回敏感资料 Service 共享的进程内单例；启动密钥变化后必须先迁移既有密文。
     pub fn sensitive_data(&self) -> Arc<SensitiveDataCodec> {
         Arc::clone(&self.sensitive_data)
+    }
+
+    /// Party identity service with audit and supplier-role adapters.
+    pub fn party_service(&self) -> erp_party::PartyService {
+        erp_processes::adapters::party_service(self.db())
+    }
+
+    /// Party contact service with composition adapters.
+    pub fn party_contact_service(&self) -> erp_party::PartyContactService {
+        erp_processes::adapters::party_contact_service(self.db(), self.sensitive_data())
+    }
+
+    /// Party address service with composition adapters.
+    pub fn party_address_service(&self) -> erp_party::PartyAddressService {
+        erp_processes::adapters::party_address_service(self.db(), self.sensitive_data())
+    }
+
+    /// Party bank-account service with composition adapters.
+    pub fn party_bank_account_service(&self) -> erp_party::PartyBankAccountService {
+        erp_processes::adapters::party_bank_account_service(self.db(), self.sensitive_data())
+    }
+
+    /// Party tax-profile service with composition adapters.
+    pub fn party_tax_profile_service(&self) -> erp_party::PartyTaxProfileService {
+        erp_processes::adapters::party_tax_profile_service(self.db())
+    }
+
+    /// Customer account service with composition adapters.
+    pub fn customer_service(&self) -> erp_customer::CustomerService {
+        erp_processes::adapters::customer_service(self.db())
+    }
+
+    /// Customer assignment service with composition adapters.
+    pub fn customer_assignment_service(&self) -> erp_customer::CustomerAssignmentService {
+        erp_processes::adapters::customer_assignment_service(self.db())
+    }
+
+    /// Customer profile root process.
+    pub fn customer_profile_service(&self) -> erp_processes::CustomerProfileService {
+        erp_processes::CustomerProfileService::new(self.db(), self.sensitive_data())
+    }
+
+    /// Supplier list/detail service with party facts and reveal tokens.
+    pub fn supplier_service(&self) -> erp_supplier::SupplierService {
+        erp_processes::adapters::supplier_service_with_sensitive(self.db(), self.sensitive_data())
+    }
+
+    /// Supplier profile root process.
+    pub fn supplier_profile_service(&self) -> erp_processes::SupplierProfileService {
+        erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data())
     }
 
     /// 使 JWT 引擎缓存失效。

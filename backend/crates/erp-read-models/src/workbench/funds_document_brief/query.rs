@@ -2,15 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    CustomerExt, PartyExt, PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SupplierExt,
-};
-use entities::party::Party;
+use database::{PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt};
 use entities::payable::{PayableAccount, SupplierPayment};
 use entities::receivable::{CustomerReceipt, ReceivableAccount};
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
+use erp_customer::CustomerExt;
+use erp_party::Party;
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, non_empty, BriefLine, BRIEF_LINE_LIMIT};

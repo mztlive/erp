@@ -16,6 +16,9 @@ erp-audit = { workspace = true }
 erp-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-workflow = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
 futures-util = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }

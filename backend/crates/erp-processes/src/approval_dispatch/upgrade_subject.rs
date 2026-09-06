@@ -7,13 +7,14 @@
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
 use database::{
-    CustomerExt, InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt,
-    SalesReviewExt, SupplierExt,
+    InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt, SalesReviewExt,
 };
 use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use entities::sales_review::SalesChangeOrderStatus;
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
+use erp_customer::CustomerExt;
+use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;

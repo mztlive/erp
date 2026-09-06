@@ -3,8 +3,8 @@
 use std::str::FromStr;
 
 use entities::purchase_order::{PaymentTermSnapshot, PurchaseChangeOrder, PurchaseOrder};
-use entities::supplier::SupplierPaymentTerm;
 use erp_core::money::{Amount, Rate};
+use erp_supplier::SupplierPaymentTerm;
 
 use super::PurchaseOrderService;
 use crate::errors::{Error, Result};

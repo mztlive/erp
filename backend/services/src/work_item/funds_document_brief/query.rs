@@ -2,13 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    CustomerExt, PartyExt, PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SupplierExt,
-};
-use entities::party::Party;
+use database::{PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt};
 use entities::payable::PayableAccount;
 use entities::receivable::ReceivableAccount;
 use erp_audit::AuditExt;
+use erp_customer::CustomerExt;
+use erp_party::Party;
+use erp_party::PartyExt;
+use erp_supplier::SupplierExt;
 use persistence_core::Executor;
 
 use super::super::amount::non_empty;
