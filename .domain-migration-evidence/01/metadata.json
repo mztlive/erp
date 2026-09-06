@@ -12,6 +12,18 @@
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
+  "repair": {
+    "reason": "review blocker: restore frozen historical tests/ archive byte-for-byte",
+    "restored_from": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
+    "restored_paths": [
+      "backend/database/tests/sales_order_existing_ids.rs"
+    ],
+    "restored_blob": "31bde01e6eb4ab831adcfc1a3eaf538500454e6e",
+    "files_tsv": "dropped modify of frozen tests/ archive; dropped untracked bytecode inventory row",
+    "recorded_at": "2026-09-06T07:07:21Z",
+    "mongodb_started": false,
+    "disclaimer": "真实数据库运行未验证"
+  },
   "owned_repositories": 141,
   "no_e0116": true,
   "no_deref": true,

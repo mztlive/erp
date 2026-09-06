@@ -3426,3 +3426,14 @@ test core::handler::auth::login::tests::token_payload_should_keep_account_kind .
 test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
 
 test_exit=0
+
+=== repair 2026-09-06T07:07:21Z re-run ===
+command=env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+test_exit=0
+passed=3262
+failed=0
+ignored=71
+crates=15
+mongodb_started=false
+include_ignored=false
+disclaimer=真实数据库运行未验证

@@ -144,7 +144,6 @@ modify	backend/database/src/repository/work_item/integration_task_binding.rs
 modify	backend/database/src/repository/work_item/mapping_task.rs	
 modify	backend/database/src/repository/work_item/query.rs	
 modify	backend/database/src/repository/work_item_fulfillment_queue.rs	
-modify	backend/database/tests/sales_order_existing_ids.rs	
 modify	backend/services/src/party/mod.rs	
 modify	backend/services/src/work_item/change_order_brief.rs	
 modify	backend/services/src/work_item/facts.rs	
@@ -304,4 +303,3 @@ add	backend/database/src/repository/owned/warehouse_revision.rs	owned EntityRepo
 add	backend/database/src/repository/owned/warehouse_sku_policy.rs	owned EntityRepository prepare_at
 add	backend/database/src/repository/owned/work_item.rs	owned EntityRepository prepare_at
 add	backend/database/src/repository/owned/workflow_action.rs	owned EntityRepository prepare_at
-add	backend/scripts/__pycache__/capture-domain-contract.cpython-314.pyc	

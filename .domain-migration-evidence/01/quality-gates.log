@@ -3478,3 +3478,21 @@ note: to see what the problems were, use the option `--future-incompat-report`, 
 perm_exit=0
 === git diff --check ===
 diff_exit=0
+
+=== repair 2026-09-06T07:07:21Z historical tests/ archive freeze ===
+restored backend/database/tests/sales_order_existing_ids.rs from 7640f7b916891225ff19f5f1e1148b8a093fe0ff
+blob=31bde01e6eb4ab831adcfc1a3eaf538500454e6e
+git_diff_vs_input_tests_empty=1
+fmt_exit=0
+check_exit=0
+clippy_exit=0
+test_exit=0
+bpm_exit=0
+svc_exit=0
+domain_exit=0
+perm_exit=0
+diff_exit=0
+archive_exit=0
+mongodb_started=false
+disclaimer=真实数据库运行未验证
+all_exit_0=true
