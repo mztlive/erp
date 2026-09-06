@@ -1,6 +1,8 @@
 {
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
   "executor": {
     "file": "crates/persistence-core/src/executor.rs",
     "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
@@ -29,6 +31,7 @@
   "source_contains_with_transaction": true,
   "owned_repositories": {
     "count": 141,
+    "unique_types": 141,
     "prepare_at": "database/src/repository/owned",
     "compose": "persistence_core::Repository",
     "no_deref": true,

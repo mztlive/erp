@@ -79,7 +79,7 @@
     {
       "id": "01",
       "file": "01-foundations.md",
-      "status": "未开始",
+      "status": "本地门禁通过",
       "crates": [
         "erp-core",
         "application-core",

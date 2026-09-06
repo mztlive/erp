@@ -1,305 +1,1066 @@
 action	path	note
-modify	backend/crates/persistence-core/src/repository/base.rs	add database() accessor for owned composition
-modify	backend/database/src/lib.rs	
-modify	backend/database/src/repository/access_control.rs	
-modify	backend/database/src/repository/account_core.rs	
-modify	backend/database/src/repository/approval_integration.rs	
-modify	backend/database/src/repository/audit_log.rs	
-delete	backend/database/src/repository/base.rs	delete duplicate generic Repository; mechanical CRUD lives in persistence-core
-modify	backend/database/src/repository/bpm.rs	
-modify	backend/database/src/repository/bulk_job.rs	
-modify	backend/database/src/repository/catalog/attribute.rs	
-modify	backend/database/src/repository/catalog/category.rs	
-modify	backend/database/src/repository/catalog/dictionary.rs	
-modify	backend/database/src/repository/catalog/parent_chain.rs	
-modify	backend/database/src/repository/catalog/product.rs	
-modify	backend/database/src/repository/catalog/product_pipeline.rs	
-modify	backend/database/src/repository/catalog/sellable.rs	
-modify	backend/database/src/repository/catalog/sku.rs	
-modify	backend/database/src/repository/catalog/voucher.rs	
-modify	backend/database/src/repository/contract.rs	
-modify	backend/database/src/repository/cost.rs	
-modify	backend/database/src/repository/customer.rs	
-modify	backend/database/src/repository/customer_center_receivable.rs	
-modify	backend/database/src/repository/customer_center_related.rs	
-modify	backend/database/src/repository/document_registry.rs	
-modify	backend/database/src/repository/extensions/access_control.rs	
-modify	backend/database/src/repository/extensions/approval_integration.rs	
-modify	backend/database/src/repository/extensions/bpm.rs	
-modify	backend/database/src/repository/extensions/bulk_job.rs	
-modify	backend/database/src/repository/extensions/catalog.rs	
-modify	backend/database/src/repository/extensions/contract.rs	
-modify	backend/database/src/repository/extensions/cost.rs	
-modify	backend/database/src/repository/extensions/customer.rs	
-modify	backend/database/src/repository/extensions/document_registry.rs	
-modify	backend/database/src/repository/extensions/file_asset.rs	
-modify	backend/database/src/repository/extensions/fulfillment.rs	
-modify	backend/database/src/repository/extensions/integration_ops.rs	
-modify	backend/database/src/repository/extensions/inventory.rs	
-modify	backend/database/src/repository/extensions/legacy_import.rs	
-modify	backend/database/src/repository/extensions/party.rs	
-modify	backend/database/src/repository/extensions/payable.rs	
-modify	backend/database/src/repository/extensions/procurement_responsibility.rs	
-modify	backend/database/src/repository/extensions/purchase_order.rs	
-modify	backend/database/src/repository/extensions/receivable.rs	
-modify	backend/database/src/repository/extensions/returns.rs	
-modify	backend/database/src/repository/extensions/sales_order.rs	
-modify	backend/database/src/repository/extensions/sales_review.rs	
-modify	backend/database/src/repository/extensions/source_registry.rs	
-modify	backend/database/src/repository/extensions/supplier.rs	
-modify	backend/database/src/repository/extensions/supplier_api.rs	
-modify	backend/database/src/repository/extensions/supplier_fulfillment.rs	
-modify	backend/database/src/repository/extensions/supplier_offering.rs	
-modify	backend/database/src/repository/extensions/supplier_settlement.rs	
-modify	backend/database/src/repository/extensions/warehouse.rs	
-modify	backend/database/src/repository/extensions/work_item.rs	
-modify	backend/database/src/repository/file_asset.rs	
-modify	backend/database/src/repository/fulfillment/customer_acceptance.rs	
-modify	backend/database/src/repository/fulfillment/delivery.rs	
-modify	backend/database/src/repository/fulfillment/electronic_delivery.rs	
-modify	backend/database/src/repository/fulfillment/purchase_receipt.rs	
-modify	backend/database/src/repository/fulfillment/service_fulfillment.rs	
-modify	backend/database/src/repository/integration_ops.rs	
-modify	backend/database/src/repository/integration_ops/difference_resolution_batch.rs	
-modify	backend/database/src/repository/inventory/adjustment.rs	
-modify	backend/database/src/repository/inventory/balance.rs	
-modify	backend/database/src/repository/inventory/movement.rs	
-modify	backend/database/src/repository/inventory/reservation.rs	
-modify	backend/database/src/repository/legacy_import/apply_scope.rs	
-modify	backend/database/src/repository/legacy_import/failed_retry.rs	
-modify	backend/database/src/repository/legacy_import/mod.rs	
-modify	backend/database/src/repository/legacy_import/supersede_batch.rs	
-modify	backend/database/src/repository/mod.rs	
-modify	backend/database/src/repository/party/address.rs	
-modify	backend/database/src/repository/party/aggregate.rs	
-modify	backend/database/src/repository/party/bank_account.rs	
-modify	backend/database/src/repository/party/contact.rs	
-modify	backend/database/src/repository/party/mod.rs	
-modify	backend/database/src/repository/party/record.rs	
-modify	backend/database/src/repository/party/revision.rs	
-modify	backend/database/src/repository/party/tax_profile.rs	
-modify	backend/database/src/repository/payable/account/invoicing.rs	
-modify	backend/database/src/repository/payable/account/mod.rs	
-modify	backend/database/src/repository/payable/account/query.rs	
-modify	backend/database/src/repository/payable/account/settlement.rs	
-modify	backend/database/src/repository/payable/account/tests.rs	
-modify	backend/database/src/repository/payable/account/write.rs	
-modify	backend/database/src/repository/payable/allocation.rs	
-modify	backend/database/src/repository/payable/entry.rs	
-modify	backend/database/src/repository/payable/payment.rs	
-modify	backend/database/src/repository/procurement_responsibility/mod.rs	
-modify	backend/database/src/repository/procurement_responsibility/query.rs	
-modify	backend/database/src/repository/purchase_order/allocation.rs	
-modify	backend/database/src/repository/purchase_order/change.rs	
-modify	backend/database/src/repository/purchase_order/list_facts.rs	
-modify	backend/database/src/repository/purchase_order/mod.rs	
-modify	backend/database/src/repository/purchase_order/order.rs	
-modify	backend/database/src/repository/purchase_order/revision.rs	
-modify	backend/database/src/repository/purchase_order/submission.rs	
-modify	backend/database/src/repository/receivable/account.rs	
-modify	backend/database/src/repository/receivable/command.rs	
-modify	backend/database/src/repository/receivable/entry.rs	
-modify	backend/database/src/repository/receivable/invoice.rs	
-modify	backend/database/src/repository/receivable/receipt.rs	
-modify	backend/database/src/repository/receivable_card_funds.rs	
-modify	backend/database/src/repository/receivable_sales_order_summary.rs	
-modify	backend/database/src/repository/returns.rs	
-modify	backend/database/src/repository/returns_posted_totals.rs	
-modify	backend/database/src/repository/role.rs	
-modify	backend/database/src/repository/sales_order/mod.rs	
-modify	backend/database/src/repository/sales_order/order.rs	
-modify	backend/database/src/repository/sales_order/revision.rs	
-modify	backend/database/src/repository/sales_order/submission.rs	
-modify	backend/database/src/repository/sales_order/working_copy.rs	
-modify	backend/database/src/repository/sales_review.rs	
-modify	backend/database/src/repository/source_registry.rs	
-modify	backend/database/src/repository/supplier.rs	
-modify	backend/database/src/repository/supplier/account.rs	
-modify	backend/database/src/repository/supplier/bundle/detail.rs	
-modify	backend/database/src/repository/supplier/bundle/list.rs	
-modify	backend/database/src/repository/supplier/bundle/mod.rs	
-modify	backend/database/src/repository/supplier/capability.rs	
-modify	backend/database/src/repository/supplier/command.rs	
-modify	backend/database/src/repository/supplier/qualification.rs	
-modify	backend/database/src/repository/supplier/revision.rs	
-modify	backend/database/src/repository/supplier_api.rs	
-modify	backend/database/src/repository/supplier_api/capability_change_batch.rs	
-modify	backend/database/src/repository/supplier_fulfillment.rs	
-modify	backend/database/src/repository/supplier_offering.rs	
-modify	backend/database/src/repository/supplier_offering/list_filter.rs	
-modify	backend/database/src/repository/supplier_offering/query.rs	
-modify	backend/database/src/repository/supplier_settlement/command.rs	
-modify	backend/database/src/repository/supplier_settlement/detail_snapshot.rs	
-modify	backend/database/src/repository/supplier_settlement/difference.rs	
-modify	backend/database/src/repository/supplier_settlement/item.rs	
-modify	backend/database/src/repository/supplier_settlement/source_scope.rs	
-modify	backend/database/src/repository/supplier_settlement/statement.rs	
-modify	backend/database/src/repository/supplier_settlement/tests.rs	
-modify	backend/database/src/repository/warehouse.rs	
-modify	backend/database/src/repository/work_item.rs	
-modify	backend/database/src/repository/work_item/approval.rs	
-modify	backend/database/src/repository/work_item/finance.rs	
-modify	backend/database/src/repository/work_item/fulfillment.rs	
-modify	backend/database/src/repository/work_item/integration_task_binding.rs	
-modify	backend/database/src/repository/work_item/mapping_task.rs	
-modify	backend/database/src/repository/work_item/query.rs	
-modify	backend/database/src/repository/work_item_fulfillment_queue.rs	
-modify	backend/services/src/party/mod.rs	
-modify	backend/services/src/work_item/change_order_brief.rs	
-modify	backend/services/src/work_item/facts.rs	
-modify	backend/services/src/work_item/fulfillment_operation_brief.rs	
-modify	backend/services/src/work_item/funds_document_brief/account.rs	
-modify	backend/services/src/work_item/funds_document_brief/payment.rs	
-modify	backend/services/src/work_item/funds_document_brief/query.rs	
-modify	backend/services/src/work_item/funds_document_brief/receipt.rs	
-modify	backend/services/src/work_item/inventory_settlement_brief.rs	
-modify	backend/services/src/work_item/purchase_review_brief.rs	
-modify	backend/services/src/work_item/reassign.rs	
-modify	backend/services/src/work_item/sales_order_brief.rs	
-add	.domain-migration-evidence/01/boundary.log	
-add	.domain-migration-evidence/01/contract-comparison.json	
-add	.domain-migration-evidence/01/quality-gates.log	
-add	.domain-migration-evidence/01/transaction-contract.json	
-add	.domain-migration-evidence/01/unit-tests.log	
-add	backend/database/src/repository/owned/account_core.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/approval_notification_outbox.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/approval_subject_snapshot.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/audit_event.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/audit_log.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/background_job.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/background_job_item.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/bulk_selection_item.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/bulk_selection_snapshot.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/business_capability_confirmation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/business_document.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/contract.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/contract_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/cost_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/cost_entry.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_acceptance.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_account.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_assignment.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_profile_command.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_receipt.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/customer_refund.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/data_scope.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/delivery.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/document_attachment.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/document_participant.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/document_relation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/electronic_delivery.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/external_identity_map.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/external_identity_target.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/file_asset.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/finance_responsibility_rule.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/inbox_message.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/integration_error_task.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/invoice.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/legacy_import_batch.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/legacy_import_confirmation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/legacy_import_row.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/mod.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party_address.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party_bank_account.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party_contact.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/party_tax_profile.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/payable_account.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/payable_entry.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/payable_entry_offset.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/payment_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/payment_reversal.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/permission.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/procurement_responsibility_rule.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product_brand.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product_category.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product_category_attribute.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/product_revision_media.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_change_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_change_submission.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_change_submission_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_invoice_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_line_sales_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_order_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_order_revision_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_order_submission.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_order_submission_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_receipt.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_return_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/purchase_return_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receipt_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receipt_reversal.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receivable_account.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receivable_entry.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receivable_entry_offset.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/receivable_funds_review.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/reconciliation_difference.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/reconciliation_difference_resolution.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/role.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_change_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_change_submission.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_change_submission_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_invoice_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_goods_service_line_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_revision_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_submission.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_submission_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_voucher_line_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_working_copy.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_order_working_copy_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_return_case.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sales_return_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/service_fulfillment.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sku.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sku_attribute.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sku_attribute_value.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/sku_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/source_system.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/stock_adjustment.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/stock_adjustment_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/stock_balance.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/stock_movement.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/stock_reservation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_account.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_api_capability.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_api_connection.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_capability.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_commercial_profile_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_connection_command_receipt.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_fulfillment_item.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_fulfillment_order.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_health_check_run.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_offering.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_offering_availability.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_offering_command.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_offering_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_order_action.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_order_action_line.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_order_status_history.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_payment.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_profile_command.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_qualification.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_qualification_capability.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_refund.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_refund_allocation.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_refund_fact.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_settlement_difference.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_settlement_difference_evidence.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_settlement_item.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_settlement_source_evidence.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/supplier_settlement_statement.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/unit_of_measure.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/user_role.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/voucher_category_profile_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/warehouse.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/warehouse_revision.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/warehouse_sku_policy.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/work_item.rs	owned EntityRepository prepare_at
-add	backend/database/src/repository/owned/workflow_action.rs	owned EntityRepository prepare_at
+add	.domain-migration-evidence/01/boundary.log	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/contract-comparison.json	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/files.tsv	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/input.json	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/metadata.json	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/quality-gates.log	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/transaction-contract.json	阶段证据；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/01/unit-tests.log	阶段证据；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.lock	workspace path crate 注册或锁文件
+modify	backend/Cargo.toml	workspace path crate 注册或锁文件
+modify	backend/apps/cli/Cargo.toml	入口/调用方导入与类型接线
+modify	backend/apps/cli/src/error.rs	入口/调用方导入与类型接线
+modify	backend/apps/cli/src/runtime.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/Cargo.toml	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/auth/jwt.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/errors.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/extractor/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/access_control/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/admin/account.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/admin/audit_log.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/admin/procurement_responsibility.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/admin/role.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/approval_instance/error.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/approval_instance/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/approval_process/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/auth/login.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/bulk_job/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/catalog/product.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/contract/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/cost/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/customer/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/document_registry/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/file_asset/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/fulfillment/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/integration_ops/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/inventory/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/legacy_import/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/party/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/payable/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/purchase_order/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/receivable/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/returns/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/sales_order/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/sales_review/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/source_registry/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/supplier/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/supplier_api/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/supplier_fulfillment/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/supplier_offering/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/supplier_settlement/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/warehouse/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/work_item/finance_responsibility.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/handler/work_item/mod.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/core/middleware/authentication.rs	入口/调用方导入与类型接线
+modify	backend/apps/web-api/src/main.rs	入口/调用方导入与类型接线
+add	backend/crates/application-core/Cargo.toml	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+rename	backend/entities/src/command.rs -> backend/crates/application-core/src/command.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+add	backend/crates/application-core/src/context.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+add	backend/crates/application-core/src/error.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+add	backend/crates/application-core/src/lib.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+rename	backend/services/src/owned_task.rs -> backend/crates/application-core/src/owned_task.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+rename	backend/services/src/page.rs -> backend/crates/application-core/src/page.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+rename	backend/services/src/query.rs -> backend/crates/application-core/src/query.rs	application-core 分页/命令指纹/ErrorClass/AuditActor 数据
+add	backend/crates/erp-core/Cargo.toml	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/README.md -> backend/crates/erp-core/src/common/README.md	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/fact.rs -> backend/crates/erp-core/src/common/fact.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/mod.rs -> backend/crates/erp-core/src/common/mod.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/revision.rs -> backend/crates/erp-core/src/common/revision.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/source.rs -> backend/crates/erp-core/src/common/source.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/stable.rs -> backend/crates/erp-core/src/common/stable.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/state.rs -> backend/crates/erp-core/src/common/state.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/common/time.rs -> backend/crates/erp-core/src/common/time.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/errors.rs -> backend/crates/erp-core/src/errors.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/field_update.rs -> backend/crates/erp-core/src/field_update.rs	erp-core 稳定共享值/ID/时间/金额
+add	backend/crates/erp-core/src/identity.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/ids.rs -> backend/crates/erp-core/src/ids.rs	erp-core 稳定共享值/ID/时间/金额
+add	backend/crates/erp-core/src/lib.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/money.rs -> backend/crates/erp-core/src/money.rs	erp-core 稳定共享值/ID/时间/金额
+rename	backend/entities/src/validation.rs -> backend/crates/erp-core/src/validation.rs	erp-core 稳定共享值/ID/时间/金额
+modify	backend/crates/id-generator/Cargo.toml	workspace path crate 注册或锁文件
+modify	backend/crates/id-generator/src/document_number.rs	为已迁符号编译所必需的导入、类型和装配更新
+modify	backend/crates/id-generator/src/lib.rs	为已迁符号编译所必需的导入、类型和装配更新
+add	backend/crates/persistence-core/Cargo.toml	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/connection.rs -> backend/crates/persistence-core/src/connection.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/errors.rs -> backend/crates/persistence-core/src/errors.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/executor.rs -> backend/crates/persistence-core/src/executor.rs	persistence-core 连接/执行器/事务/通用 Repository
+add	backend/crates/persistence-core/src/lib.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/mongo_ops.rs -> backend/crates/persistence-core/src/mongo_ops.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/repository/base.rs -> backend/crates/persistence-core/src/repository/base.rs	persistence-core 连接/执行器/事务/通用 Repository
+add	backend/crates/persistence-core/src/repository/mod.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/repository/regex_filter.rs -> backend/crates/persistence-core/src/repository/regex_filter.rs	persistence-core 连接/执行器/事务/通用 Repository
+rename	backend/database/src/transaction.rs -> backend/crates/persistence-core/src/transaction.rs	persistence-core 连接/执行器/事务/通用 Repository
+modify	backend/crates/test-support/Cargo.toml	workspace path crate 注册或锁文件
+modify	backend/crates/test-support/src/error.rs	为已迁符号编译所必需的导入、类型和装配更新
+modify	backend/database/Cargo.toml	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/casbin_adapter.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/access_control.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/approval_integration.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/bpm.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/bulk_job.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/catalog.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/contract.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/cost.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/customer.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/document_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/file_asset.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/integration_ops.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/inventory.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/legacy_import.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/party.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/payable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/procurement_responsibility.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/purchase_order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/receivable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/returns.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/sales_order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/sales_review.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/source_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/supplier.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/supplier_api.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/supplier_fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/supplier_offering.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/supplier_settlement.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/warehouse.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/indexes/work_item.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/lib.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/access_control.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/account_core.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/approval_integration.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/audit_log.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/cas.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/definition_command.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/definition_query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/execution_query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/instance_query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/mongo_catalog_and_published.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bpm/runtime_write.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/bulk_job.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/attribute.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/category.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/dictionary.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/listing.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/parent_chain.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/product.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/product_pipeline.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/sellable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/sku.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/specification_audit.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/catalog/voucher.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/contract.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/cost.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/customer.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/customer_center_receivable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/customer_center_related.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/document_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/access_control.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/approval_integration.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/bpm.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/bulk_job.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/catalog.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/contract.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/cost.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/customer.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/document_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/file_asset.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/integration_ops.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/inventory.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/legacy_import.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/party.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/payable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/procurement_responsibility.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/purchase_order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/receivable.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/returns.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/sales_order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/sales_review.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/source_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/supplier.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/supplier_api.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/supplier_fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/supplier_offering.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/supplier_settlement.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/warehouse.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/extensions/work_item.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/file_asset.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/customer_acceptance.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/delivery.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/electronic_delivery.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/purchase_receipt.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/purchase_receipt_totals.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/fulfillment/service_fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/integration_ops.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/integration_ops/difference_resolution_batch.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/adjustment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/aggregate.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/balance.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/movement.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/reservation.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/inventory/shared.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/legacy_import/apply_scope.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/legacy_import/failed_retry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/legacy_import/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/legacy_import/supersede_batch.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+add	backend/database/src/repository/owned/account_core.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/approval_notification_outbox.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/approval_subject_snapshot.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/audit_event.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/audit_log.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/background_job.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/background_job_item.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/bulk_selection_item.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/bulk_selection_snapshot.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/business_capability_confirmation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/business_document.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/contract.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/contract_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/cost_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/cost_entry.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_acceptance.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_account.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_assignment.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_profile_command.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_receipt.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/customer_refund.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/data_scope.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/delivery.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/document_attachment.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/document_participant.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/document_relation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/electronic_delivery.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/external_identity_map.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/external_identity_target.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/file_asset.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/finance_responsibility_rule.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/inbox_message.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/integration_error_task.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/invoice.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/legacy_import_batch.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/legacy_import_confirmation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/legacy_import_row.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/mod.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party_address.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party_bank_account.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party_contact.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/party_tax_profile.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/payable_account.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/payable_entry.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/payable_entry_offset.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/payment_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/payment_reversal.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/permission.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/procurement_responsibility_rule.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product_brand.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product_category.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product_category_attribute.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/product_revision_media.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_change_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_change_submission.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_change_submission_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_invoice_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_line_sales_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_order_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_order_revision_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_order_submission.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_order_submission_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_receipt.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_return_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/purchase_return_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receipt_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receipt_reversal.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receivable_account.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receivable_entry.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receivable_entry_offset.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/receivable_funds_review.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/reconciliation_difference.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/reconciliation_difference_resolution.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/role.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_change_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_change_submission.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_change_submission_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_invoice_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_goods_service_line_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_revision_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_submission.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_submission_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_voucher_line_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_working_copy.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_order_working_copy_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_return_case.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sales_return_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/service_fulfillment.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sku.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sku_attribute.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sku_attribute_value.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/sku_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/source_system.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/stock_adjustment.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/stock_adjustment_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/stock_balance.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/stock_movement.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/stock_reservation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_account.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_api_capability.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_api_connection.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_capability.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_commercial_profile_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_connection_command_receipt.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_fulfillment_item.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_fulfillment_order.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_health_check_run.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_offering.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_offering_availability.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_offering_command.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_offering_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_order_action.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_order_action_line.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_order_status_history.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_payment.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_profile_command.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_qualification.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_qualification_capability.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_refund.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_refund_allocation.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_refund_fact.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_settlement_difference.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_settlement_difference_evidence.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_settlement_item.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_settlement_source_evidence.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/supplier_settlement_statement.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/unit_of_measure.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/user_role.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/voucher_category_profile_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/warehouse.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/warehouse_revision.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/warehouse_sku_policy.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/work_item.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+add	backend/database/src/repository/owned/workflow_action.rs	owned EntityRepository prepare_at；组合 persistence_core::Repository
+modify	backend/database/src/repository/party/address.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/aggregate.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/bank_account.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/contact.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/record.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/revision.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/shared.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/party/tax_profile.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/invoicing.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/settlement.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/account/write.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/allocation.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/command.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/entry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/payable/payment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/catalog.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/isolation_tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/list.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/procurement_responsibility/rule_list_isolation_tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/allocation.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/center_facts.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/change.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/coverage.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/creation_basis.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/list_facts.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/revision.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/purchase_order/submission.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable/account.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable/command.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable/entry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable/invoice.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable/receipt.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable_card_funds.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/receivable_sales_order_summary.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/returns.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/returns_customer_refund_search.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/returns_posted_totals.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/role.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_order/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_order/order.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_order/revision.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_order/submission.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_order/working_copy.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/sales_review.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/source_registry.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/account.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/bundle/detail.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/bundle/list.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/bundle/mod.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/bundle/tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/capability.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/command.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/qualification.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier/revision.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_api.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_api/capability_change_batch.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_offering.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_offering/list_filter.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_offering/query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/command.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/detail_snapshot.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/difference.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/item.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/source_scope.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/statement.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/supplier_settlement/tests.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/warehouse.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/approval.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/finance.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/fulfillment.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/integration_task_binding.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/mapping_task.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item/query.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/database/src/repository/work_item_fulfillment_queue.rs	仓储固有 impl 改为拥有类型；工厂返回值同步
+modify	backend/docs/superpowers/plans/domain-crate-migration/01-foundations.md	状态 本地门禁通过；任务核销；禁止标记已验收
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 01 状态 本地门禁通过
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 01 status 本地门禁通过
+modify	backend/entities/Cargo.toml	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/access_control/audit_event.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/access_control/data_scope.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/access_control/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/access_control/permission.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/access_control/user_role.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/account_core.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/approval_integration/identity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/approval_integration/notification_outbox.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/approval_integration/subject_snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/audit_log.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/auth/secret.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/aggregate.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/background_job.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/background_job_item.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/bulk_selection_item.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/bulk_selection_snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/import_result_batch.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/legacy_import_job.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/bulk_job/supplier_governance_job.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product_brand.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product_category.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product_category_attribute.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/product_revision_media.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/sku.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/sku_attribute.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/sku_attribute_value.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/sku_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/sku_revision_attribute_value.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/specification.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/unit_of_measure.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/voucher_category_profile_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/catalog/voucher_defaults.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/contract/contract_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/contract/entity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/contract/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/contract/snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/cost/cost_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/cost/cost_allocation_set.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/cost/cost_entry.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/assignment_command.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/customer_account.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/customer_assignment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/customer_profile_command.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/customer/profile_validation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/document_registry/business_document.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/document_registry/document_participant.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/document_registry/document_relation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/document_registry/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/document_registry/workflow_action.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/file_asset/bank_receipt_evidence_policy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/file_asset/document_attachment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/file_asset/entity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/file_asset/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/file_asset/pending_reference.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/acceptance_eligibility.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/acceptance_fulfillment_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/customer_acceptance.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/customer_acceptance_line_batch.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/delivery.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/delivery_line_batch.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/electronic_delivery.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/electronic_delivery_draft.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/fingerprint.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/purchase_receipt.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/purchase_receipt_line_batch.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/service_evidence.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/service_fulfillment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/fulfillment/service_fulfillment_draft.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/decision_policy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/evidence_reference.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/inbox_message.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/integration_error_task.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/reconciliation_difference.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/reconciliation_difference_resolution.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/w29_close.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/integration_ops/w29_work_items.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/approval_snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/stock_adjustment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/stock_balance.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/stock_movement.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/inventory/stock_reservation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/apply_result_set.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/confirmation_factories.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/import_row_factory.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/legacy_import_batch.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/legacy_import_confirmation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/legacy_import_row.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/legacy_import/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/lib.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/close.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/content_match.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/entity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/party_address.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/party_bank_account.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/party_contact.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/party_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/party_tax_profile.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/party/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/payable_account.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/payable_entry.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/payable_entry_offset.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/payment_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/payment_allocation_ledger.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/purchase_invoice_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/purchase_invoice_allocation_plan.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/payable/supplier_payment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/procurement_responsibility/catalog.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/procurement_responsibility/resolution.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/procurement_responsibility/rule.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/procurement_responsibility/rule_list.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/change_order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/command_receipt.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/coverage.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/creation_basis.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/draft_edit.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/line_amounts.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/line_common.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/purchase_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/purchase_submission.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/sourcing_plan/assignment.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/sourcing_plan/plan.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/sourcing_plan/stock.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/purchase_order/sourcing_plan/tests.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/rbac.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/card_funds_review_decision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/customer_receipt.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/funds_ledger.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/funds_review_chain.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/funds_snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/invoice.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/receipt_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/receivable_account.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/receivable_entry.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/receivable_entry_offset.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/receivable_funds_review.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/sales_change_delta.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/sales_invoice_allocation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/sales_invoice_allocation_plan.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/receivable/sales_order_amount_summary.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/cumulative_limit.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/customer_refund.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/payment_reversal.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/purchase_return_line.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/purchase_return_order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/receipt_reversal.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/sales_return_case.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/sales_return_line.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/returns/supplier_refund.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/role.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/amount_validation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/approval_quantity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/closure.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/content_hash.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/draft_working_copy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/entity/line.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/entity/order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/entity/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/entity/tests.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/formal_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/procurement.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/submission.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/submission_from_working_copy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/types.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/working_copy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/working_copy_line.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/working_copy_test_support.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_order/working_copy_types.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/formal_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/sales_change_order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/sales_change_submission.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/sales_review/types.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/source_registry/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/business_category.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/creation_plan.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/eligibility.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/payment_term.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/profile_change/party.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/profile_change/plan.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/profile_change/qualification.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/profile_change/tests.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/profile_change/types.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_account.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_capability.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_capability_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_commercial_profile_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_profile_command.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_qualification.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_qualification_capability.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_qualification_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier/supplier_rating_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/capability.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/capability_change_set.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/connection.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/governance.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_api/prepared_commands.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/fulfillment_item.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/fulfillment_order.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/order_action.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/refund.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_fulfillment/status_history.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_offering/availability.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_offering/command.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_offering/offering.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_offering/write_data.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/difference.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/draft_snapshot.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/evidence.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/item.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/review_reason.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/source_evidence.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/supplier_settlement/statement.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/warehouse/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/warehouse/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/warehouse/warehouse_entity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/warehouse/warehouse_revision.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/warehouse/warehouse_sku_policy.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/card_funds_command.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/due.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity/approval.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity/permissions.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity/status.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity/types.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/entity/validation.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/finance_responsibility.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/finance_task.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/fulfillment_responsibility.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/entities/src/work_item/mod.rs	旧 entities 导入/类型接线；业务实体仍留旧 crate
+modify	backend/scripts/check-bpm-boundaries.sh	为已迁符号编译所必需的导入、类型和装配更新
+modify	backend/services/Cargo.toml	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/access_control/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/access_control/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/account_support.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/action.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/binding/bind.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/binding/revalidate.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/binding/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/binding/types.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/binding/upgrade.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/business_adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/publish.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/replace.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition/retire.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/definition_assignees.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/cancel.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/idempotency.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/notification_worker.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_persistence_contract.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/cancel_blocked.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/decision_apply.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/notifications.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/read_auth.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/resume_apply.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/tasks.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/runtime_service/upgrade.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/execution/store.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/scope.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval/upgrade_subject.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/approval_action_registry.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/audit/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/audit/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/auth/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/auth/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/auth/password.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/bulk_job/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/bulk_job/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/attribute.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/brand.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/category.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/attribute.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/brand_unit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/category.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/common.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/product.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/dto/voucher.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/listing.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/product_query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/product_workflow.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/sellable.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/sku_edit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/support.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/unit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/voucher.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/catalog/voucher_defaults.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/contract/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/contract/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/contract/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/contract/scope.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/cost/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/cost/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/assignment.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/center.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/facts.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/idempotency.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/sensitive.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/customer/profile/update.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/document_registry/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/document_registry/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/errors.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/file_asset/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/file_asset/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/acceptance_eligibility.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/customer_acceptance.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/customer_acceptance_lines.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/customer_acceptance_posting.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/customer_acceptance_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/delivery.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/delivery_lines.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/delivery_posting.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/document_number.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/electronic_delivery.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/electronic_delivery_crypto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/purchase_context.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/purchase_receipt.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/purchase_receipt_lines.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/purchase_receipt_posting.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/service_fulfillment.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/service_fulfillment_confirm.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/service_fulfillment_crypto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/fulfillment/task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/account/admin.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/account/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/account/profile.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/account/reset_password.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/authorize.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/enforcer.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/policy.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/root.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/seed.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/iam/rbac/transaction.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/dto/common.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/dto/error_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/dto/inbox_message.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/dto/prepared_inbox.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/dto/reconciliation_difference.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/error_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/evidence.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/inbox_message.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/producer.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/reconciliation_difference.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/task_decision/action.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/task_decision/complete.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/task_decision/direct.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/task_decision/guard.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/task_decision/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/integration_ops/transaction.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/adjustment_command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/adjustment_post.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/adjustment_query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/adjustment_submit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/approval_query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/authorization.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/balance.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/movement.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/reservation.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/start_approval/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/start_approval/persist.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/start_approval/prepare.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/inventory/start_approval/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/apply_batch.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/batch.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/confirmation/complete.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/confirmation/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/confirmation/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/confirmation/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/confirmation/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/execution.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/legacy_import/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/lib.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/address.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/bank_account.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/contact.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/party/tax_profile.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/account.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/display.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/invoice.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/payment.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/payable/payment_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/pending_file_assets.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/procurement_responsibility/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/procurement_responsibility/resolver.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/procurement_responsibility/rule_list.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/procurement_responsibility/service.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/allocation_maintenance.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/approval_query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/authorization.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change/effect.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change/submit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change_adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change_cancel.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/change_start.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/coverage.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/create_submit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/creation_basis.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/creation_basis/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/creation_basis/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/creation_basis/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/draft_edit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/dto/change_order.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/dto/command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/dto/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/formalization.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/line_input.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/procurement_task_sync.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/review.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/shared.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/sourcing_create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/start_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/submission.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/purchase_order/void_order.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/account.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_decision.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_identity.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_receipt.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_register.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_review.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/card_funds_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/customer_receipt.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/customer_receipt_commit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/dto/card_funds.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/dto/command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/dto/invoice.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/dto/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/invoice.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/invoice_commit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/invoice_task.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/red_invoice.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/receivable/start_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/adapter/customer_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/adapter/payment_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/adapter/receipt_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/adapter/supplier_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/customer_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/customer_refund_list.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/offset_batch.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/payment_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/purchase_return.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/receipt_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/sales_return.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/customer_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/payment_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/prepare.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/receipt_reversal.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/start_approval/supplier_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/supplier_refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/returns/version_conflict.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/approval_query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/cancel.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/identity.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/save.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/sellable.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/submit.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/command/void.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/draft_working_copy.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/formalize.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/mapper.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/progress.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/start_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_order/status.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/adapter.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/cancel_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/formalization.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/sales_change_order.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/sales_review/start_approval.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/source_registry/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/source_registry/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/eligibility.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/create.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/sensitive.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/update.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier/profile/validation.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/governance/command.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/governance/context.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/governance/jobs.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/governance/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/governance/tests.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_api/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/cancel.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/complete.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/gateway.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/investigate.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/place.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/refund.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/refund_result.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_fulfillment/reject.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_offering/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_offering/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/difference.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/draft.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/dto/difference.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/dto/draft.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/dto/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/dto/review.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/dto/source.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/evidence.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/item.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/review.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/source.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/supplier_settlement/void.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/transaction.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/warehouse/dto.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/warehouse/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/access.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/change_order_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/close.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/dto/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/dto/view.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/facts.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/finance_responsibility.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/fulfillment_operation_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/fulfillment_queue.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/funds_document_brief/account.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/funds_document_brief/mapping.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/funds_document_brief/payment.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/funds_document_brief/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/funds_document_brief/receipt.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/inventory_settlement_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/mod.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/party_names.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/presentation.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/procurement_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/purchase_review_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/query.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/reassign.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/sales_order_brief.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/stats.rs	旧 services 导入/类型接线；无第二业务实现
+modify	backend/services/src/work_item/write.rs	旧 services 导入/类型接线；无第二业务实现
+unchanged	backend/**/tests/**	历史 tests/ 档案相对输入 7640f7b9 字节不变；不作为 Cargo target
+not-committed	.grok/workflows/migrate-domain-crates.rhai	无关未跟踪文件，未 stash/reset/提交

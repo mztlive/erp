@@ -1,10 +1,14 @@
 {
   "phase": "01",
-  "slice": "owned",
-  "recorded_at": "2026-09-06T06:54:48+00:00",
+  "recorded_at": "2026-09-06T07:25:38Z",
   "evidence_dir": ".domain-migration-evidence/01",
   "input_head": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
-  "branch_head_before_owned_slice": "531267d2ea36a486252a25446203860c767282ed",
+  "implement_commits": [
+    "531267d2ea36a486252a25446203860c767282ed",
+    "72137e230d637833a480bc7cd5c8a61f1d117df5",
+    "63ebff5bde5ef2c5c278b27e0c120aedf711dd26"
+  ],
+  "implement_commit": "63ebff5bde5ef2c5c278b27e0c120aedf711dd26",
   "branch": "chore/domain-crate-01-foundations",
   "status": "本地门禁通过",
   "never_mark": "已验收",
@@ -12,7 +16,8 @@
   "real_database_verified": false,
   "git_at_start": {
     "unrelated_untracked_not_committed": [
-      ".grok/workflows/migrate-domain-crates.rhai"
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/__pycache__/"
     ],
     "actions_not_taken": [
       "stash",
@@ -24,6 +29,22 @@
   },
   "prerequisite_ok": true,
   "phase_00_status": "本地门禁通过",
-  "owned_repository_count": 141,
-  "note": "Phase 01 owned slice: create 141 owned <Entity>Repository at database/src/repository/owned, rewrite inherent impls, factories, delete duplicate database Repository. Foundations crates already present from prior commit on this branch. 真实数据库运行未验证."
+  "verify_plan_sources_at_implement_start": "passed (531267d2 checks_run)",
+  "verify_plan_sources_after_move": "expected fail: --sources is planning snapshot, not post-move gate",
+  "source_map_phase_01_rows": 23,
+  "repository_types_owner_phase_01": 0,
+  "repository_owned_type_count": 141,
+  "section_6_callers": [
+    "apps/cli/src/main.rs",
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/errors.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
+  "workspace_member_count": 16,
+  "kind_test_targets": 0,
+  "historical_tests_archives_byte_for_byte": true,
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "note": "前序输入为阶段 00 本地门禁通过提交 7640f7b9，不是已验收。实现提交 531267d2（基础 crate）、72137e23（141 owned Repository）、63ebff5b（恢复冻结 tests/ 档案）。公共门禁复跑 logs/phase-01-qg 全部 exit 0。真实数据库运行未验证。"
 }

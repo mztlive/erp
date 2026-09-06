@@ -1,4 +1,76 @@
-=== check-bpm-boundaries ===
+phase: 01
+status: 本地门禁通过
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+cwd: backend/
+recorded_at: 2026-09-06T07:25:38Z
+
+=== cargo metadata ===
+command: cargo metadata --no-deps --format-version 1
+workspace_members: 16
+members: application-core, bpm, cli, config, database, entities, entity-core, entity-macros, erp-core, id-generator, permission-macros, persistence-core, services, storage, test-support, web-api
+kind=test: 0
+autotests: false on erp-core, application-core, persistence-core and remaining members
+instantiated planned crates: application-core, erp-core, persistence-core
+forbidden-edge contract: loaded
+old-source clearance: loaded, not applied as 已验收 (phase 00 is 本地门禁通过)
+exit: 0
+
+=== cargo tree erp-core -e normal,build,dev --depth 1 --locked ===
+erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── bson v3.1.0
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── entity-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/entity-macros)
+├── regex v1.13.1
+├── rust_decimal v1.42.1
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── thiserror v2.0.20
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+note: erp-core depends on bson for Amount Decimal128 serde only; not mongodb driver
+
+=== cargo tree application-core -e normal,build,dev --depth 1 --locked ===
+application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── hex v0.4.3
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── sha2 v0.11.0
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+
+=== cargo tree persistence-core -e normal,build,dev --depth 1 --locked ===
+persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── async-trait v0.1.92 (proc-macro)
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── futures-util v0.3.34
+├── mongodb v3.8.1
+├── regex v1.13.1
+├── serde v1.0.229
+├── thiserror v2.0.20
+└── tracing v0.1.44
+forbidden_direct_or_workspace_hits: none
+
+=== owned repositories ===
+count: 141
+unique_types: 141
+prepare_at: database/src/repository/owned
+compose: persistence_core::Repository
+no_deref: True
+no_type_alias: True
+no_inherent_impl_on_foreign_repository: True
+old database/src/repository/base.rs: deleted
+
+=== bpm ===
+=== ./scripts/check-bpm-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
+started: 2026-09-06T07:17:20Z
 检查 BPM crate 与成员 manifest…
 检查 bpm 依赖图…
 检查 bpm 源码边界…
@@ -6,11 +78,23 @@
 检查 id_type 过程宏定义源…
 检查 DocumentType -> ProcessKind 映射入口…
 BPM 边界检查通过。
-bpm_exit=0
-=== check-service-boundaries ===
+exit:0
+ended: 2026-09-06T07:17:23Z
+exit: 0
+
+=== service ===
+=== ./scripts/check-service-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
+started: 2026-09-06T07:17:23Z
 Service 边界检查通过；当前基线共 0 个受控命中。
-svc_exit=0
-=== check-domain-boundaries ===
+exit:0
+ended: 2026-09-06T07:17:24Z
+exit: 0
+
+=== domain ===
+=== ./scripts/check-domain-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
+started: 2026-09-06T07:17:24Z
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -18,4 +102,8 @@ svc_exit=0
   说明: cargo metadata 无 kind=test 集成目标
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
-domain_exit=0
+exit:0
+ended: 2026-09-06T07:17:24Z
+exit: 0
+
+disclaimer: 真实数据库运行未验证

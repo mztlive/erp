@@ -10,7 +10,7 @@
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-core`, `application-core`, `persistence-core` |
 | 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-01-foundations`） |
-| 输入/输出提交 | 前序 `7640f7b916891225ff19f5f1e1148b8a093fe0ff` / 证据见 `.domain-migration-evidence/01/` |
+| 输入/输出提交 | 前序 `7640f7b916891225ff19f5f1e1148b8a093fe0ff` / 实现提交 `63ebff5bde5ef2c5c278b27e0c120aedf711dd26`（证据见 `.domain-migration-evidence/01/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -97,6 +97,8 @@ erp-core 不依赖业务、应用、MongoDB 驱动；application-core 不依赖�
 
 8. [x] 在同一阶段更新所有生产调用方、内联测试导入、#[path] 与 include_str! 路径；历史 tests/ 不修改且不作为 target。补齐基础 crate 的 BSON 纯内存测试依赖，执行基础/旧三层/入口窄检查与公共门禁；更新 BPM ID 检查路径。
 
+- [ ] 人工将状态改为已验收。本阶段执行者不得勾选；最高状态为本地门禁通过。
+
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
 ## 9. 阶段内编译中断规则
@@ -166,13 +168,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 已采集 `.domain-migration-evidence/01/input.json` |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 已采集 `.domain-migration-evidence/01/files.tsv` |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 已采集 `.domain-migration-evidence/01/boundary.log` |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 已采集：`database/src/repository/base.rs` 删除；无 `impl Repository<'a, Entity>` |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 3262 passed / 0 failed / 71 ignored；见 `unit-tests.log` |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 已采集 `contract-comparison.json`（369/21/368/154/32） |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 已采集 `transaction-contract.json`；真实数据库运行未验证 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 全部 exit 0；见 `quality-gates.log` |
+| 输入基线 | 前序本地门禁通过 `7640f7b916891225ff19f5f1e1148b8a093fe0ff`；分支 `chore/domain-crate-01-foundations`；source-map phase=01 行 23；owned types 141 | 已采集 `.domain-migration-evidence/01/input.json` |
+| 文件与符号 | 相对输入 1062 路径变化；141 owned EntityRepository；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/01/files.tsv` |
+| 依赖 | 16 个成员；无 kind=test；erp-core/application-core/persistence-core 无旧三层回边 | 已采集 `.domain-migration-evidence/01/boundary.log` |
+| 旧实现清零 | `database/src/repository/base.rs` 删除；无 `impl Repository<'a, Entity>`；无 Deref/type alias | 已采集：见 `boundary.log` / `files.tsv` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3262 passed / 0 failed / 71 ignored；exit 0 | 已执行 `.domain-migration-evidence/01/unit-tests.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；154 个集合常量；32 个 DTO 文件；与阶段 00 字段合同相等 | 已采集 `.domain-migration-evidence/01/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、run_audited 写入顺序；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/01/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `.domain-migration-evidence/01/quality-gates.log` |
 | 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 本地门禁通过，未验收 |
+| 阶段提交 | 实现提交 `63ebff5bde5ef2c5c278b27e0c120aedf711dd26`；证据目录 `.domain-migration-evidence/01/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/01/metadata.json` |

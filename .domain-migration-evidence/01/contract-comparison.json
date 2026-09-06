@@ -2612,9 +2612,16 @@
     "admin_auth": "JWT + RBAC with_permission"
   },
   "errors": {
+    "error_class_file": "crates/application-core/src/error.rs",
+    "error_class_sha256": "254cb0df1f261746d9a94c04a3abe98b0572a469a79ad449cb2cc364d609ce19",
     "services_errors_sha256": "080e1703ff1ce5292c5f39faf7e73d3f619646ad24e0161dd99a4bccee4a4730",
     "http_errors_sha256": "8c6691d8712400cc3e2f210aea03042cf32ce07224c35f6e849fc99c6cf3045c",
-    "error_class_variants": [],
+    "error_class_variants": [
+      "Internal",
+      "Conflict",
+      "BusinessRule",
+      "Forbidden"
+    ],
     "error_code_variants": [
       "ApprovalPolicyNotRegistered",
       "ApprovalProcessNotConfigured",
@@ -2682,7 +2689,7 @@
       "OutcomeUnknown": "OUTCOME_UNKNOWN",
       "RateLimited": "RATE_LIMITED"
     },
-    "notes": "错误类别不得靠字符串包含判断；HTTP 映射以 as_str/class 为准"
+    "notes": "ErrorClass 迁入 application-core；ErrorCode 仍在 services。HTTP 映射以 as_str/class 为准，不以字符串包含判断。"
   },
   "indexes": {
     "collection_constants": {
@@ -5057,6 +5064,7 @@
   "money": {
     "file": "crates/erp-core/src/money.rs",
     "sha256": "2e2c3c76ddcff291b35f97cd8bb40f0e74e495fda89270642cef2cb47b32da10",
+    "phase_00_file": "entities/src/money.rs",
     "types": {
       "Amount": {
         "scale": 2,
@@ -10471,5 +10479,27 @@
         ]
       }
     ]
+  },
+  "versus_phase_00": {
+    "baseline": ".domain-migration-evidence/00/contract-comparison.json",
+    "admin_route_count_equal": true,
+    "admin_routes_equal": true,
+    "permissions_generated_sha256_equal": true,
+    "error_code_variants_equal": true,
+    "error_code_as_str_equal": true,
+    "error_class_variants_equal": true,
+    "http_status_by_variant_equal": true,
+    "http_code_by_variant_equal": true,
+    "index_count_equal": true,
+    "indexes_equal": true,
+    "collection_constants_equal": true,
+    "dto_file_count_equal": true,
+    "dto_struct_fields_equal": true,
+    "money_types_equal": true,
+    "money_sha256_matches_phase_00": true,
+    "command_prefix_equal": true,
+    "command_domain_separator_equal": true,
+    "customer_profile_replay_sha256_equal": true,
+    "note": "DTO/HTTP/index/error 字段合同与阶段 00 黄金值比较；部分源 sha256 因导入路径迁移而变化，不以哈希替代字段合同。"
   }
 }
