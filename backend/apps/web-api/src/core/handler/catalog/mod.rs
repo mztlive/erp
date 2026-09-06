@@ -1,7 +1,7 @@
 //! 域 D10 `catalog` 的 HTTP handler（商品字典组）。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::catalog` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_catalog` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 本文件覆盖商品分类/品牌/计量单位/规格属性/规格属性值五组字典接口；
 //! SPU/SKU 与卡券类目接口见同目录 `product.rs`。
 
@@ -12,15 +12,15 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use erp_support::SensitivityClass;
-use services::catalog::{
-    CatalogService, CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
+use erp_catalog::{
+    CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, MoveProductCategoryRequest, PageView,
     ProductBrandListParams, ProductBrandView, ProductCategoryListParams, ProductCategoryView,
     SkuAttributeListParams, SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView,
     UnitOfMeasureListParams, UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest,
     UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
 };
+use erp_support::SensitivityClass;
 
 use crate::{
     app_state::AppState,
@@ -53,9 +53,7 @@ pub async fn product_category_list(
     State(state): State<AppState>,
     Query(params): Query<ProductCategoryListParams>,
 ) -> Result<PageView<ProductCategoryView>> {
-    let page = CatalogService::new(state.db())
-        .product_category_list(&params)
-        .await?;
+    let page = state.catalog_service().product_category_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -109,7 +107,8 @@ pub async fn product_category_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .product_category_update(&id, req, &actor)
         .await?;
 
@@ -139,7 +138,8 @@ pub async fn product_category_move(
     Path(id): Path<String>,
     Json(req): Json<MoveProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .product_category_move(&id, req, &actor)
         .await?;
 
@@ -167,7 +167,8 @@ pub async fn product_category_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    CatalogService::new(state.db())
+    state
+        .catalog_service()
         .product_category_delete(&id, &actor)
         .await?;
 
@@ -193,9 +194,7 @@ pub async fn product_brand_list(
     State(state): State<AppState>,
     Query(params): Query<ProductBrandListParams>,
 ) -> Result<PageView<ProductBrandView>> {
-    let page = CatalogService::new(state.db())
-        .product_brand_list(&params)
-        .await?;
+    let page = state.catalog_service().product_brand_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -221,9 +220,7 @@ pub async fn product_brand_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductBrandRequest>,
 ) -> Result<ProductBrandView> {
-    let view = CatalogService::new(state.db())
-        .product_brand_create(req, &actor)
-        .await?;
+    let view = state.catalog_service().product_brand_create(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -279,7 +276,8 @@ pub async fn product_brand_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductBrandRequest>,
 ) -> Result<ProductBrandView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .product_brand_update(&id, req, &actor)
         .await?;
 
@@ -336,9 +334,7 @@ pub async fn product_brand_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    CatalogService::new(state.db())
-        .product_brand_delete(&id, &actor)
-        .await?;
+    state.catalog_service().product_brand_delete(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -362,9 +358,7 @@ pub async fn unit_of_measure_list(
     State(state): State<AppState>,
     Query(params): Query<UnitOfMeasureListParams>,
 ) -> Result<PageView<UnitOfMeasureView>> {
-    let page = CatalogService::new(state.db())
-        .unit_of_measure_list(&params)
-        .await?;
+    let page = state.catalog_service().unit_of_measure_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -418,7 +412,8 @@ pub async fn unit_of_measure_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateUnitOfMeasureRequest>,
 ) -> Result<UnitOfMeasureView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .unit_of_measure_update(&id, req, &actor)
         .await?;
 
@@ -446,7 +441,8 @@ pub async fn unit_of_measure_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    CatalogService::new(state.db())
+    state
+        .catalog_service()
         .unit_of_measure_delete(&id, &actor)
         .await?;
 
@@ -472,9 +468,7 @@ pub async fn sku_attribute_list(
     State(state): State<AppState>,
     Query(params): Query<SkuAttributeListParams>,
 ) -> Result<PageView<SkuAttributeView>> {
-    let page = CatalogService::new(state.db())
-        .sku_attribute_list(&params)
-        .await?;
+    let page = state.catalog_service().sku_attribute_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -528,7 +522,8 @@ pub async fn sku_attribute_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuAttributeRequest>,
 ) -> Result<SkuAttributeView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .sku_attribute_update(&id, req, &actor)
         .await?;
 
@@ -556,9 +551,7 @@ pub async fn sku_attribute_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    CatalogService::new(state.db())
-        .sku_attribute_delete(&id, &actor)
-        .await?;
+    state.catalog_service().sku_attribute_delete(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -582,9 +575,7 @@ pub async fn sku_attribute_value_list(
     State(state): State<AppState>,
     Query(params): Query<SkuAttributeValueListParams>,
 ) -> Result<PageView<SkuAttributeValueView>> {
-    let page = CatalogService::new(state.db())
-        .sku_attribute_value_list(&params)
-        .await?;
+    let page = state.catalog_service().sku_attribute_value_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -638,7 +629,8 @@ pub async fn sku_attribute_value_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuAttributeValueRequest>,
 ) -> Result<SkuAttributeValueView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .sku_attribute_value_update(&id, req, &actor)
         .await?;
 
@@ -666,7 +658,8 @@ pub async fn sku_attribute_value_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    CatalogService::new(state.db())
+    state
+        .catalog_service()
         .sku_attribute_value_delete(&id, &actor)
         .await?;
 

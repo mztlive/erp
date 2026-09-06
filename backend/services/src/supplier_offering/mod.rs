@@ -6,13 +6,14 @@
 
 use std::collections::HashMap;
 
-use database::{CatalogExt, SupplierApiExt, SupplierOfferingExt};
-use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
+use database::{SupplierApiExt, SupplierOfferingExt};
 use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
     SupplierOfferingRevision,
 };
 use erp_audit::AuditExt;
+use erp_catalog::CatalogExt;
+use erp_catalog::{Product, ProductKind, Sku, SkuRevision};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,

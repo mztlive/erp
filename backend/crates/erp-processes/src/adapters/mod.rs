@@ -1,12 +1,18 @@
-//! Composition adapters that bind party/customer/supplier ports to providing domains.
+//! Composition adapters that bind consumer ports to providing domains.
 
+mod catalog;
+mod contract;
 mod customer;
 mod party;
 mod supplier;
+mod warehouse;
 
+pub use catalog::{catalog_service, CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets};
+pub use contract::contract_service;
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
 pub use party::{MongoPartyAudit, MongoSupplierRole};
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
+pub use warehouse::warehouse_service;
 
 use std::sync::Arc;
 

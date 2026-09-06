@@ -5,7 +5,7 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 06 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-catalog`, `erp-warehouse`, `erp-contract` |
@@ -80,15 +80,15 @@ catalog/warehouse/contract 互不依赖；销售/采购/客户中心读取适配
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固定可售 SKU 过滤、属性组合、启停、分页、商品/仓库/合同版本与快照测试。每个领域先保存相关 JSON/BSON 与索引定义。
+1. [x] 固定可售 SKU 过滤、属性组合、启停、分页、商品/仓库/合同版本与快照测试。每个领域先保存相关 JSON/BSON 与索引定义。
 
-2. [ ] 逐域迁入实体、DTO、拥有仓储、extensions 和 indexes；source-map.tsv 的 catalog/warehouse/contract 文件全部归位。
+2. [x] 逐域迁入实体、DTO、拥有仓储、extensions 和 indexes；source-map.tsv 的 catalog/warehouse/contract 文件全部归位。
 
-3. [ ] 把 catalog 和 contract 的 PendingFileAssets/审计根编排切到已有 processes 模块；新领域不直接依赖 support 或 audit。供应资格、合同主体、仓库候选责任人的事实由消费方 Port 注入。
+3. [x] 把 catalog 和 contract 的 PendingFileAssets/审计根编排切到已有 processes 模块；新领域不直接依赖 support 或 audit。供应资格、合同主体、仓库候选责任人的事实由消费方 Port 注入。
 
-4. [ ] 更新销售创建/商品池、采购创建依据、客户中心及仓库责任配置中的调用方；读取修订快照的地方继续读取原历史事实，禁止改成实时主数据覆盖。
+4. [x] 更新销售创建/商品池、采购创建依据、客户中心及仓库责任配置中的调用方；读取修订快照的地方继续读取原历史事实，禁止改成实时主数据覆盖。
 
-5. [ ] 逐域切换 Handler 和 registry，删除对应旧模块。将 include_str! 与内联查询测试指向实际目标文件，执行目标 crate 与入口窄检查和公共门禁。
+5. [x] 逐域切换 Handler 和 registry，删除对应旧模块。将 include_str! 与内联查询测试指向实际目标文件，执行目标 crate 与入口窄检查和公共门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 

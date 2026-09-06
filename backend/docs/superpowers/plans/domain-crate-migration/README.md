@@ -2,7 +2,7 @@
 
 ## 1. 目标与入口
 
-本计划用于把当前 backend 的 entities/database/services 生产代码迁移为领域 crate，缩小日常增量编译范围。执行模式为逐阶段硬切；阶段 00–05 已达「本地门禁通过」，06–17 仍未开始。
+本计划用于把当前 backend 的 entities/database/services 生产代码迁移为领域 crate，缩小日常增量编译范围。执行模式为逐阶段硬切；阶段 00–06 已达「本地门禁通过」，07–17 仍未开始。
 
 - 架构约束：[设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)。
 - 执行入口：[00 基线与执行治理](00-baseline.md)；开始前必须阅读[公共执行合同](execution-contract.md)。
@@ -45,7 +45,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | 03 | [工作流与组合层](03-workflow-composition.md) | erp-workflow, erp-processes, erp-read-models | 本地门禁通过 |
 | 04 | [通用支撑](04-support.md) | erp-support | 本地门禁通过 |
 | 05 | [主体、客户与供应商](05-party-customer-supplier.md) | erp-party, erp-customer, erp-supplier | 本地门禁通过 |
-| 06 | [商品、仓库与合同](06-catalog-warehouse-contract.md) | erp-catalog, erp-warehouse, erp-contract | 未开始 |
+| 06 | [商品、仓库与合同](06-catalog-warehouse-contract.md) | erp-catalog, erp-warehouse, erp-contract | 本地门禁通过 |
 | 07 | [导入任务](07-import.md) | erp-import | 未开始 |
 | 08 | [库存](08-inventory.md) | erp-inventory | 未开始 |
 | 09 | [财务](09-finance.md) | erp-finance | 未开始 |

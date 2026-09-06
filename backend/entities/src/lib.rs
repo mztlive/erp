@@ -1,5 +1,3 @@
-pub mod catalog;
-pub mod contract;
 pub mod cost;
 pub mod fulfillment;
 pub mod integration_ops;
@@ -16,6 +14,5 @@ pub mod supplier_api;
 pub mod supplier_fulfillment;
 pub mod supplier_offering;
 pub mod supplier_settlement;
-pub mod warehouse;
 
 pub use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};

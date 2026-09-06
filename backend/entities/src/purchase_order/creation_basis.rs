@@ -10,9 +10,9 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use crate::catalog::ProductKind;
 use crate::sales_order::{SalesOrder, SalesOrderRevision};
 use crate::supplier_offering::{SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision};
+use erp_catalog::ProductKind;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, WarehouseId};
 use erp_core::money::{Quantity, UnitPrice};
@@ -506,7 +506,7 @@ mod tests {
         SalesProcurementCoverageLine {
             revision_line: revision_line("sorl-1", stable_line_id),
             goods_line: goods_line("sorl-1"),
-            product_kind: crate::catalog::ProductKind::Physical,
+            product_kind: erp_catalog::ProductKind::Physical,
             summary: ProcurementCoverageSummary::new(
                 Quantity::from_str(total).unwrap(),
                 Quantity::from_str(covered).unwrap(),
@@ -711,39 +711,39 @@ mod tests {
     #[test]
     fn product_kind_determines_purchase_type() {
         assert_eq!(
-            purchase_type_from_product_kind(crate::catalog::ProductKind::Physical).unwrap(),
+            purchase_type_from_product_kind(erp_catalog::ProductKind::Physical).unwrap(),
             PurchaseType::Physical
         );
         assert_eq!(
-            purchase_type_from_product_kind(crate::catalog::ProductKind::Virtual).unwrap(),
+            purchase_type_from_product_kind(erp_catalog::ProductKind::Virtual).unwrap(),
             PurchaseType::Virtual
         );
         assert_eq!(
-            purchase_type_from_product_kind(crate::catalog::ProductKind::OfflineService).unwrap(),
+            purchase_type_from_product_kind(erp_catalog::ProductKind::OfflineService).unwrap(),
             PurchaseType::Service
         );
-        assert!(purchase_type_from_product_kind(crate::catalog::ProductKind::Voucher).is_err());
+        assert!(purchase_type_from_product_kind(erp_catalog::ProductKind::Voucher).is_err());
     }
 
     /// 实物由采购选择入仓或直发，其他商品类型只允许其固有路线。
     #[test]
     fn product_kind_limits_fulfillment_options() {
         assert_eq!(
-            fulfillment_options(crate::catalog::ProductKind::Physical).unwrap(),
+            fulfillment_options(erp_catalog::ProductKind::Physical).unwrap(),
             &[
                 FulfillmentResponsibility::Warehouse,
                 FulfillmentResponsibility::SupplierDirect,
             ]
         );
         assert_eq!(
-            fulfillment_options(crate::catalog::ProductKind::Virtual).unwrap(),
+            fulfillment_options(erp_catalog::ProductKind::Virtual).unwrap(),
             &[FulfillmentResponsibility::Electronic]
         );
         assert_eq!(
-            fulfillment_options(crate::catalog::ProductKind::OfflineService).unwrap(),
+            fulfillment_options(erp_catalog::ProductKind::OfflineService).unwrap(),
             &[FulfillmentResponsibility::Service]
         );
-        assert!(fulfillment_options(crate::catalog::ProductKind::Voucher).is_err());
+        assert!(fulfillment_options(erp_catalog::ProductKind::Voucher).is_err());
     }
 
     /// 有限可供量不足销售剩余时允许形成部分数量。

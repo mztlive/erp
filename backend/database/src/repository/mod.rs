@@ -2,8 +2,6 @@
 //!
 //! 提供基于MongoDB的数据访问层实现
 
-mod catalog;
-mod contract;
 mod cost;
 pub mod extensions;
 mod fulfillment;
@@ -23,9 +21,7 @@ mod supplier_fulfillment;
 mod supplier_names;
 mod supplier_offering;
 mod supplier_settlement;
-mod warehouse;
 
-pub use catalog::SkuRow;
 pub use extensions::DatabaseExt;
 pub use owned::*;
 pub use procurement_responsibility::ProcurementResponsibilityRuleFilter;

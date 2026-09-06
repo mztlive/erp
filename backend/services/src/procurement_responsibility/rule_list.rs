@@ -65,10 +65,10 @@ pub fn apply_rule_list_facts(
 mod tests {
     use std::collections::HashMap;
 
-    use entities::catalog::EnableStatus;
     use entities::procurement_responsibility::{
         ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
+    use erp_catalog::EnableStatus;
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 
     use super::*;

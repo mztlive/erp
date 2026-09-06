@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::catalog::ProductKind;
+use erp_catalog::ProductKind;
 use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_core::validation::normalize_required_text;
 use erp_core::AccountKind;
@@ -407,8 +407,8 @@ fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::EnableStatus;
     use crate::procurement_responsibility::ProcurementResponsibilityRuleData;
+    use erp_catalog::EnableStatus;
     use erp_core::ids::ProcurementResponsibilityRuleId;
     use erp_identity::{AccountCoreData, AccountStatus, LoginAccount, Secret};
 

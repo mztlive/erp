@@ -1,0 +1,16 @@
+phase 06 quality gates
+cwd=backend/
+rustc=rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo=cargo 1.97.0 (c980f4866 2026-06-30)
+fmt=0
+check=0
+clippy=0
+unit-tests=0 passed=3303 failed=0 ignored=68
+bpm=0
+service=0
+domain=0
+permissions=0
+git-diff-check=0
+disclaimer=真实数据库运行未验证
+status=本地门禁通过
+never_mark=已验收

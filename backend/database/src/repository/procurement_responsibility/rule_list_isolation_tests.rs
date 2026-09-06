@@ -1,12 +1,13 @@
 use crate::ensure_indexes;
-use crate::{CatalogExt, ProcurementResponsibilityExt};
-use entities::catalog::product_category::ProductCategoryData;
-use entities::catalog::sku::SkuData;
-use entities::catalog::sku_revision::SkuRevisionData;
-use entities::catalog::{EnableStatus, ListingStatus, ProductCategory, Sku, SkuRevision};
+use crate::ProcurementResponsibilityExt;
 use entities::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
 };
+use erp_catalog::entity::catalog::product_category::ProductCategoryData;
+use erp_catalog::entity::catalog::sku::SkuData;
+use erp_catalog::entity::catalog::sku_revision::SkuRevisionData;
+use erp_catalog::CatalogExt;
+use erp_catalog::{EnableStatus, ListingStatus, ProductCategory, Sku, SkuRevision};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProcurementResponsibilityRuleId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId,
@@ -88,7 +89,7 @@ fn test_category(id: &str, name: &str) -> ProductCategory {
             category_code: format!("code-{id}"),
             parent_category_id: None,
             name: name.to_string(),
-            product_kind: entities::catalog::ProductKind::Physical,
+            product_kind: erp_catalog::ProductKind::Physical,
             status: EnableStatus::Active,
         },
         "test",

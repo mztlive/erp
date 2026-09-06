@@ -1,0 +1,42 @@
+{
+  "phase": "06",
+  "recorded_at": "2026-09-06T22:23:32Z",
+  "evidence_dir": ".domain-migration-evidence/06",
+  "input_head": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+  "branch": "chore/domain-crate-06-catalog-warehouse-contract",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": false,
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/_phase03_fix_uses.py",
+      "backend/scripts/_phase03_integrate.py",
+      "backend/scripts/_phase03_qg_fix.py",
+      "backend/scripts/_phase03_read_models_fix.py",
+      "backend/scripts/_phase03_repair_blockers.py",
+      "backend/scripts/_phase03_repair_blockers2.py",
+      "backend/scripts/_phase03_transform.py",
+      "backend/scripts/_phase05_integrate.py",
+      "backend/scripts/__pycache__/"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_05_status": "本地门禁通过",
+  "source_map_phase_06_rows": 75,
+  "repository_types_owner_phase_06": 17,
+  "disclaimer_verify_plan": "verify_plan.py --sources expected fail: planning snapshot vs post-move tree; 前序阶段未验收 is a human gate",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "compile_measurement": "not applicable for phase 06; threshold judged in phase 17",
+  "note": "前序输入为阶段 05 本地门禁通过提交 88c386d071a72052b3c0d061de26a9c4ed5e76e9，不是已验收。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
+}

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use database::CatalogExt;
 use entities::sales_order::SalesOrderWorkingCopyLine;
+use erp_catalog::CatalogExt;
 use erp_core::common::time::BusinessDate;
 use persistence_core::{Executor, NoTransaction};
 
@@ -109,7 +109,7 @@ impl SalesOrderService {
         if invalid.is_empty() {
             Ok(())
         } else {
-            Err(crate::catalog::sellable_sku_invalid_error(&invalid))
+            Err(erp_catalog::sellable_sku_invalid_error(&invalid).into())
         }
     }
 }

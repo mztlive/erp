@@ -88,10 +88,10 @@ pub fn collect_rule_list_ids(
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::EnableStatus;
     use crate::procurement_responsibility::{
         ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
+    use erp_catalog::EnableStatus;
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 
     use super::*;

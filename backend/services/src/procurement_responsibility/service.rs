@@ -11,7 +11,7 @@ use super::rule_list::{apply_rule_list_facts, to_rule_list_views};
 use super::ProcurementResponsibilityService;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use database::{CatalogExt, ProcurementResponsibilityExt, ProcurementResponsibilityRuleFilter};
+use database::{ProcurementResponsibilityExt, ProcurementResponsibilityRuleFilter};
 use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
     ProcurementResponsibilityRuleData, ProcurementResponsibilitySelectorReference,
@@ -19,6 +19,7 @@ use entities::procurement_responsibility::{
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::AuditLog;
+use erp_catalog::CatalogExt;
 use erp_core::ids::ProcurementResponsibilityRuleId;
 use persistence_core::{Executor, NoTransaction};
 

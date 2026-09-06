@@ -1,0 +1,88 @@
+{
+  "phase": "06",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "failed_session_reuse": "forbidden"
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "sha256": "daae5edfd64c4e70bd11e28abb80d400e7da03f8c49114ff426bf3377ed67fb7",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "same_executor": true
+  },
+  "catalog_attachments": {
+    "process": "crates/erp-processes/src/attachments/catalog.rs",
+    "prepare": "PendingFileAssets::prepare in erp-processes",
+    "pending_port": "erp_catalog::PendingAttachmentBatch via CatalogPendingAttachments adapter",
+    "same_executor": true,
+    "s3_outside_session": true,
+    "note": "商品品牌/商品 multipart 附件由 processes 准备；catalog 在调用方事务内 persist pending + 业务 + 审计。"
+  },
+  "catalog_dictionary_creates": {
+    "process": "crates/erp-processes/src/catalog.rs",
+    "root_transaction": "run_audited",
+    "same_executor": true,
+    "no_nested_transactions": true
+  },
+  "warehouse_sku_policy_create": {
+    "process": "crates/erp-processes/src/warehouse.rs",
+    "root_transaction": "run_audited",
+    "same_executor": true,
+    "sku_existence_via": "erp_catalog::CatalogExt::skus",
+    "identity_port": "MongoWarehouseIdentity inbound=purchase_receipt:list/detail/update/post outbound=delivery:list/detail/update/post",
+    "fingerprint_port": "SupportFingerprint delegates to erp_support::content_fingerprint"
+  },
+  "contract_upload": {
+    "process": "crates/erp-processes/src/contract.rs",
+    "order": [
+      "plan_upload (no txn)",
+      "file_assets().create(session)",
+      "apply_create_in_transaction(session)",
+      "audit file_asset.register",
+      "audit contract.create"
+    ],
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "s3_outside_session": true,
+    "adapters": "crates/erp-processes/src/adapters/contract.rs"
+  },
+  "owned_repositories_moved": {
+    "count": 17,
+    "types": [
+      "ContractRepository",
+      "ContractRevisionRepository",
+      "ProductRepository",
+      "ProductBrandRepository",
+      "ProductCategoryRepository",
+      "ProductCategoryAttributeRepository",
+      "ProductRevisionRepository",
+      "ProductRevisionMediaRepository",
+      "SkuRepository",
+      "SkuAttributeRepository",
+      "SkuAttributeValueRepository",
+      "SkuRevisionRepository",
+      "UnitOfMeasureRepository",
+      "VoucherCategoryProfileRevisionRepository",
+      "WarehouseRepository",
+      "WarehouseRevisionRepository",
+      "WarehouseSkuPolicyRepository"
+    ]
+  },
+  "note": "跨域根事务由 erp-processes 持有；领域事务内方法接收传入 Executor。真实数据库运行未验证"
+}

@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::catalog::{Product, ProductCategory, ProductKind, ProductRevision, Sku};
+use erp_catalog::{Product, ProductCategory, ProductKind, ProductRevision, Sku};
 use erp_core::ids::{ProductCategoryId, ProductRevisionId};
 use erp_core::{Error, Result};
 
@@ -205,11 +205,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::product::ProductData;
-    use crate::catalog::product_category::ProductCategoryData;
-    use crate::catalog::product_revision::ProductRevisionData;
-    use crate::catalog::sku::SkuData;
-    use crate::catalog::{EnableStatus, ProductKind};
+    use erp_catalog::entity::catalog::product::ProductData;
+    use erp_catalog::entity::catalog::product_category::ProductCategoryData;
+    use erp_catalog::entity::catalog::product_revision::ProductRevisionData;
+    use erp_catalog::entity::catalog::sku::SkuData;
+    use erp_catalog::{EnableStatus, ProductKind};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{ProductBrandId, ProductCategoryId, ProductId, SkuId, UnitOfMeasureId};
 
@@ -271,7 +271,7 @@ mod tests {
                 base_unit_id: UnitOfMeasureId::new("unit-1"),
                 specification_signature: String::new(),
                 status: EnableStatus::Active,
-                listing_status: crate::catalog::ListingStatus::Unlisted,
+                listing_status: erp_catalog::ListingStatus::Unlisted,
             },
             "test",
         )

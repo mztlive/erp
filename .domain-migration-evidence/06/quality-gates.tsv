@@ -1,0 +1,10 @@
+command	exit_code
+cargo fmt --all -- --check	0
+cargo check --workspace --locked	0
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings	0
+env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked	0
+./scripts/check-bpm-boundaries.sh	0
+./scripts/check-service-boundaries.sh	0
+./scripts/check-domain-boundaries.sh	0
+./scripts/check-permissions-drift.sh	0
+git diff --check	0

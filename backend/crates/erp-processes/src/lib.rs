@@ -5,6 +5,7 @@ pub mod approval_dispatch;
 pub mod attachments;
 pub mod audit;
 pub mod catalog;
+pub mod contract;
 pub mod customer;
 pub mod customer_profile;
 pub mod party;
@@ -23,6 +24,7 @@ pub use audit::run_audited;
 pub use catalog::{
     create_product_category, create_sku_attribute, create_sku_attribute_value, create_unit_of_measure,
 };
+pub use contract::upload_contract;
 pub use customer::delete_customer;
 pub use customer_profile::CustomerProfileService;
 pub use party::delete_party;

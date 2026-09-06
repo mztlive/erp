@@ -11,8 +11,9 @@ use mongodb::bson::{doc, Document};
 use mongodb::Database;
 use serde::Deserialize;
 
-use database::{FulfillmentExt, PurchaseOrderExt, SalesOrderExt, WarehouseExt};
+use database::{FulfillmentExt, PurchaseOrderExt, SalesOrderExt};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
 

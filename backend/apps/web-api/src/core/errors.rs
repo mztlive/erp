@@ -179,6 +179,27 @@ impl From<erp_supplier::Error> for Error {
     }
 }
 
+impl From<erp_catalog::Error> for Error {
+    /// 将商品领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_catalog::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
+impl From<erp_warehouse::Error> for Error {
+    /// 将仓库领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_warehouse::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
+impl From<erp_contract::Error> for Error {
+    /// 将合同领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_contract::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<services::Error> for Error {
     /// 从给定值构建实例。
     ///

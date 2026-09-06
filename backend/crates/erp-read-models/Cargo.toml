@@ -19,6 +19,9 @@ erp-workflow = { workspace = true }
 erp-party = { workspace = true }
 erp-customer = { workspace = true }
 erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-contract = { workspace = true }
 futures-util = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }

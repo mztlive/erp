@@ -3,13 +3,13 @@
 use std::collections::{HashMap, HashSet};
 
 use database::ProcurementResponsibilityExt;
-use entities::catalog::{Product, ProductCategory, ProductRevision, Sku};
 use entities::procurement_responsibility::{
     build_catalog_facts, EligibleProcurementOwner, ProcurementResponsibilityContext,
     ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityResolutionIdentity,
     ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRuleSet,
     ProcurementResponsibilityRuleType,
 };
+use erp_catalog::{Product, ProductCategory, ProductRevision, Sku};
 use erp_core::AccountKind;
 use erp_identity::AccessControlExt;
 use erp_identity::{AccountCore, Permission};

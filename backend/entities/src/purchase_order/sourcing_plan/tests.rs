@@ -107,7 +107,7 @@ fn coverage_line(stable_line_id: &str, total: &str, covered: &str) -> SalesProcu
     SalesProcurementCoverageLine {
         revision_line: revision_line(&format!("sorl-{stable_line_id}"), stable_line_id),
         goods_line: goods_line(&format!("sorl-{stable_line_id}")),
-        product_kind: crate::catalog::ProductKind::Physical,
+        product_kind: erp_catalog::ProductKind::Physical,
         summary: ProcurementCoverageSummary::new(
             Quantity::from_str(total).unwrap(),
             Quantity::from_str(covered).unwrap(),

@@ -1,9 +1,9 @@
-use entities::catalog::ProductCategory;
 use entities::procurement_responsibility::ProcurementCatalogBundle;
+use erp_catalog::ProductCategory;
 use erp_core::ids::{ProductCategoryId, ProductRevisionId, SkuId};
 
 use super::ids::unique_ids;
-use crate::CatalogExt;
+use erp_catalog::CatalogExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 

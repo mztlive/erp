@@ -2,13 +2,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{CatalogExt, InventoryExt, SupplierSettlementExt, WarehouseExt};
+use database::{InventoryExt, SupplierSettlementExt};
 use entities::inventory::{StockAdjustment, StockAdjustmentLine};
 use entities::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
     SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
+use erp_catalog::CatalogExt;
 use erp_core::ids::SupplierSettlementItemId;
+use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 
 use super::brief::{

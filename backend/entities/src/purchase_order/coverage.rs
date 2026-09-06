@@ -13,12 +13,12 @@ use std::collections::{HashMap, HashSet};
 
 use rust_decimal::Decimal;
 
-use crate::catalog::{Product, ProductKind, Sku};
 use crate::inventory::StockReservation;
 use crate::sales_order::{
     LineType, ProcurementCoverageSummary, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
 };
+use erp_catalog::{Product, ProductKind, Sku};
 use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
@@ -590,9 +590,6 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use crate::catalog::product::ProductData;
-    use crate::catalog::sku::SkuData;
-    use crate::catalog::{EnableStatus, ListingStatus, Product, Sku};
     use crate::inventory::stock_reservation::{
         ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
@@ -600,6 +597,9 @@ mod tests {
         SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
     };
     use crate::sales_order::{LineType, ProcurementCoverageSummary, RevisionSource};
+    use erp_catalog::entity::catalog::product::ProductData;
+    use erp_catalog::entity::catalog::sku::SkuData;
+    use erp_catalog::{EnableStatus, ListingStatus, Product, Sku};
     use erp_core::common::revision::RevisionBase;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -749,7 +749,7 @@ mod tests {
             ProductId::new(id),
             ProductData {
                 product_no: format!("P-{id}"),
-                product_kind: crate::catalog::ProductKind::Physical,
+                product_kind: erp_catalog::ProductKind::Physical,
                 status: EnableStatus::Active,
             },
             "test",

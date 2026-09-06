@@ -4,7 +4,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{EnableStatus, ProductKind};
+use erp_catalog::{EnableStatus, ProductKind};
 use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};

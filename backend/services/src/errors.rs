@@ -153,6 +153,66 @@ impl From<erp_audit::Error> for Error {
     }
 }
 
+impl From<erp_catalog::Error> for Error {
+    /// 将商品领域错误映射为服务错误。
+    fn from(error: erp_catalog::Error) -> Self {
+        match error {
+            erp_catalog::Error::Internal(message) => Self::Internal(message),
+            erp_catalog::Error::NotFound(message) => Self::NotFound(message),
+            erp_catalog::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_catalog::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_catalog::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_catalog::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_catalog::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_catalog::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_catalog::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_catalog::Error::Logic(error) => Self::Logic(error),
+            erp_catalog::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_catalog::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
+impl From<erp_warehouse::Error> for Error {
+    /// 将仓库领域错误映射为服务错误。
+    fn from(error: erp_warehouse::Error) -> Self {
+        match error {
+            erp_warehouse::Error::Internal(message) => Self::Internal(message),
+            erp_warehouse::Error::NotFound(message) => Self::NotFound(message),
+            erp_warehouse::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_warehouse::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_warehouse::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_warehouse::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_warehouse::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_warehouse::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_warehouse::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_warehouse::Error::Logic(error) => Self::Logic(error),
+            erp_warehouse::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_warehouse::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
+impl From<erp_contract::Error> for Error {
+    /// 将合同领域错误映射为服务错误。
+    fn from(error: erp_contract::Error) -> Self {
+        match error {
+            erp_contract::Error::Internal(message) => Self::Internal(message),
+            erp_contract::Error::NotFound(message) => Self::NotFound(message),
+            erp_contract::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_contract::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_contract::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_contract::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_contract::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_contract::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_contract::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_contract::Error::Logic(error) => Self::Logic(error),
+            erp_contract::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_contract::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]

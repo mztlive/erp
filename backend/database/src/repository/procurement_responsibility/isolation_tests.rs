@@ -1,11 +1,11 @@
 use crate::ensure_indexes;
-use crate::CatalogExt;
-use entities::catalog::product::ProductData;
-use entities::catalog::product_category::ProductCategoryData;
-use entities::catalog::product_revision::ProductRevisionData;
-use entities::catalog::sku::SkuData;
-use entities::catalog::{EnableStatus, ListingStatus, Product, ProductCategory, ProductRevision, Sku};
 use entities::procurement_responsibility::{build_catalog_facts, ProcurementResponsibilityResolutionLine};
+use erp_catalog::entity::catalog::product::ProductData;
+use erp_catalog::entity::catalog::product_category::ProductCategoryData;
+use erp_catalog::entity::catalog::product_revision::ProductRevisionData;
+use erp_catalog::entity::catalog::sku::SkuData;
+use erp_catalog::CatalogExt;
+use erp_catalog::{EnableStatus, ListingStatus, Product, ProductCategory, ProductRevision, Sku};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId, SkuId, UnitOfMeasureId,
@@ -23,7 +23,7 @@ fn test_category(id: &str, parent: Option<&str>) -> ProductCategory {
             category_code: format!("code-{id}"),
             parent_category_id: parent.map(ProductCategoryId::new),
             name: format!("分类{id}"),
-            product_kind: entities::catalog::ProductKind::Physical,
+            product_kind: erp_catalog::ProductKind::Physical,
             status: EnableStatus::Active,
         },
         "test",
@@ -36,7 +36,7 @@ fn test_product(id: &str, revision_id: Option<&str>) -> Product {
         ProductId::new(id),
         ProductData {
             product_no: format!("P-{id}"),
-            product_kind: entities::catalog::ProductKind::Physical,
+            product_kind: erp_catalog::ProductKind::Physical,
             status: EnableStatus::Active,
         },
         "test",

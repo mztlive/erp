@@ -55,6 +55,9 @@ erp-support = { workspace = true }
 erp-party = { workspace = true }
 erp-customer = { workspace = true }
 erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-contract = { workspace = true }
 services = { workspace = true }
 config = { workspace = true }
 permission-macros = { workspace = true }

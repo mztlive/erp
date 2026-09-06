@@ -361,6 +361,21 @@ impl AppState {
         erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data())
     }
 
+    /// Catalog domain service with audit and file-asset adapters.
+    pub fn catalog_service(&self) -> erp_catalog::CatalogService {
+        erp_processes::adapters::catalog_service(self.db())
+    }
+
+    /// Warehouse domain service with identity, audit and fingerprint adapters.
+    pub fn warehouse_service(&self) -> erp_warehouse::WarehouseService {
+        erp_processes::adapters::warehouse_service(self.db(), self.rbac())
+    }
+
+    /// Contract domain service with customer, identity, attachment and audit adapters.
+    pub fn contract_service(&self) -> erp_contract::ContractService {
+        erp_processes::adapters::contract_service(self.db())
+    }
+
     /// 使 JWT 引擎缓存失效。
     ///
     /// # 返回

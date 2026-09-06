@@ -236,7 +236,6 @@ fn parse_required_quantity(
 mod tests {
     use std::str::FromStr;
 
-    use crate::catalog::ProductKind;
     use crate::purchase_order::coverage::SalesProcurementCoverageLine;
     use crate::purchase_order::purchase_submission::{
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
@@ -244,6 +243,7 @@ mod tests {
     use crate::purchase_order::PurchaseLineType;
     use crate::sales_order::revision::{SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
     use crate::sales_order::{LineType, ProcurementCoverageSummary};
+    use erp_catalog::ProductKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,

@@ -3,10 +3,8 @@
 //! 页面只接收最近摘要和跨页指标；Service 不返回可诱导客户端继续拉全量的分页游标。
 
 use database::ReceivableExt;
-use entities::{
-    contract::ContractStatus,
-    sales_order::{CloseStatus, CommercialStatus},
-};
+use entities::sales_order::{CloseStatus, CommercialStatus};
+use erp_contract::ContractStatus;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use erp_customer::CustomerExt;

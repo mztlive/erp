@@ -1,15 +1,15 @@
 //! Named warehouse processes that own audited outer transactions.
 
 use application_core::AuditActor;
-use database::{CatalogExt, WarehouseExt};
-use entities::warehouse::status::EnableStatus;
-use entities::warehouse::warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyData};
 use erp_audit::AuditActorLogs;
+use erp_catalog::CatalogExt;
 use erp_core::ids::WarehouseSkuPolicyId;
+use erp_warehouse::entity::warehouse::status::EnableStatus;
+use erp_warehouse::entity::warehouse::warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyData};
+use erp_warehouse::{CreateWarehouseSkuPolicyRequest, WarehouseExt, WarehouseSkuPolicyView};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use services::warehouse::{CreateWarehouseSkuPolicyRequest, WarehouseSkuPolicyView};
 use services::{Error, Result};
 use validator::Validate;
 

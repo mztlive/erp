@@ -23,6 +23,9 @@ erp-support = { workspace = true }
 erp-party = { workspace = true }
 erp-customer = { workspace = true }
 erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-contract = { workspace = true }
 entities = { workspace = true }
 application-core = { workspace = true }
 regex = { workspace = true }

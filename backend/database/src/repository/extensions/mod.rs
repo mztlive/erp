@@ -3,8 +3,6 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod catalog;
-mod contract;
 mod cost;
 mod fulfillment;
 mod integration_ops;
@@ -21,10 +19,7 @@ mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_settlement;
-mod warehouse;
 
-pub use catalog::CatalogExt;
-pub use contract::ContractExt;
 pub use cost::CostExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
@@ -41,7 +36,6 @@ pub use supplier_api::SupplierApiExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
 pub use supplier_offering::SupplierOfferingExt;
 pub use supplier_settlement::SupplierSettlementExt;
-pub use warehouse::WarehouseExt;
 
 /// Database 的统一仓储访问入口：聚合全部 34 个域的访问器 trait。
 ///
@@ -53,8 +47,8 @@ pub trait DatabaseExt:
     + erp_workflow::ApprovalIntegrationExt
     + erp_workflow::BpmExt
     + erp_support::BulkJobExt
-    + CatalogExt
-    + ContractExt
+    + erp_catalog::CatalogExt
+    + erp_contract::ContractExt
     + CostExt
     + erp_customer::CustomerExt
     + erp_workflow::DocumentRegistryExt
@@ -77,7 +71,7 @@ pub trait DatabaseExt:
     + SupplierOfferingExt
     + SupplierFulfillmentExt
     + SupplierSettlementExt
-    + WarehouseExt
+    + erp_warehouse::WarehouseExt
     + erp_workflow::WorkItemExt
 {
 }
@@ -88,8 +82,8 @@ impl<
             + erp_workflow::ApprovalIntegrationExt
             + erp_workflow::BpmExt
             + erp_support::BulkJobExt
-            + CatalogExt
-            + ContractExt
+            + erp_catalog::CatalogExt
+            + erp_contract::ContractExt
             + CostExt
             + erp_customer::CustomerExt
             + erp_workflow::DocumentRegistryExt
@@ -112,7 +106,7 @@ impl<
             + SupplierOfferingExt
             + SupplierFulfillmentExt
             + SupplierSettlementExt
-            + WarehouseExt
+            + erp_warehouse::WarehouseExt
             + erp_workflow::WorkItemExt,
     > DatabaseExt for T
 {

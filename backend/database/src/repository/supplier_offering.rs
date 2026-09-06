@@ -4,19 +4,19 @@
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
 use crate::repository::owned::{
-    ProductRepository, SkuRepository, SkuRevisionRepository, SupplierOfferingAvailabilityRepository,
-    SupplierOfferingCommandRepository, SupplierOfferingRepository, SupplierOfferingRevisionRepository,
+    SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository, SupplierOfferingRepository,
+    SupplierOfferingRevisionRepository,
 };
 use erp_party::{PartyRepository, PartyRevisionRepository};
 use erp_supplier::SupplierAccountRepository;
 use std::collections::HashMap;
 
-use entities::catalog::{Product, Sku, SkuRevision};
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_catalog::{Product, Sku, SkuRevision};
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
@@ -25,7 +25,8 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{CatalogExt, SupplierOfferingExt};
+use super::extensions::SupplierOfferingExt;
+use erp_catalog::CatalogExt;
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
 use persistence_core::insert_literal_regex_filter;
@@ -39,9 +40,6 @@ mod query;
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
 const OFFERING_AVAILABILITIES: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
-const SKUS: &str = <Database as CatalogExt>::SKUS;
-const SKU_REVISIONS: &str = <Database as CatalogExt>::SKU_REVISIONS;
-const PRODUCTS: &str = <Database as CatalogExt>::PRODUCTS;
 const SUPPLIER_ACCOUNTS: &str = <Database as SupplierExt>::SUPPLIER_ACCOUNTS;
 const PARTIES: &str = <Database as PartyExt>::PARTIES;
 const PARTY_REVISIONS: &str = <Database as PartyExt>::PARTY_REVISIONS;
@@ -553,7 +551,9 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingDisplayEntities> {
         let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
-        let skus = SkuRepository::new(self.db, SKUS)
+        let skus = self
+            .db
+            .skus()
             .find_many(in_filter("id", sku_ids), executor)
             .await?;
         let sku_revision_ids = unique_strings(
@@ -561,10 +561,14 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
                 .filter_map(|sku| sku.stable.current_revision_id.clone()),
         );
         let product_ids = unique_strings(skus.iter().map(|sku| sku.product_id.to_string()));
-        let sku_revisions = SkuRevisionRepository::new(self.db, SKU_REVISIONS)
+        let sku_revisions = self
+            .db
+            .sku_revisions()
             .find_many(in_filter("id", sku_revision_ids), executor)
             .await?;
-        let products = ProductRepository::new(self.db, PRODUCTS)
+        let products = self
+            .db
+            .products()
             .find_many(in_filter("id", product_ids), executor)
             .await?;
 

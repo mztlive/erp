@@ -1,5 +1,3 @@
-pub mod catalog;
-pub mod contract;
 pub mod cost;
 mod errors;
 pub mod fulfillment;
@@ -21,7 +19,6 @@ pub mod supplier_offering;
 pub mod supplier_settlement;
 pub mod support_audit;
 pub mod support_documents;
-pub mod warehouse;
 pub mod work_item;
 pub mod workflow_compose;
 

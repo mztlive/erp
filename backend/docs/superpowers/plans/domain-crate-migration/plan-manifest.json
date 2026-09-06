@@ -406,7 +406,7 @@
     {
       "id": "06",
       "file": "06-catalog-warehouse-contract.md",
-      "status": "未开始",
+      "status": "本地门禁通过",
       "crates": [
         "erp-catalog",
         "erp-warehouse",

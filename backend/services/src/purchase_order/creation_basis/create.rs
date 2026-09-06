@@ -1,4 +1,4 @@
-use database::{PurchaseOrderExt, SalesOrderExt, WarehouseExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     basis_id_for, stable_line_id, supply_cost, BasisGroup, BasisLine, BasisScope, CreationBasisFacts,
     FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -6,7 +6,6 @@ use entities::purchase_order::{
     PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, SupplierSnapshot,
 };
 use entities::sales_order::SalesOrder;
-use entities::warehouse::WarehouseFulfillmentOperation;
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
@@ -15,6 +14,8 @@ use erp_core::ids::{
 use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
 use erp_supplier::SupplierExt;
 use erp_supplier::SupplierPaymentTerm;
+use erp_warehouse::WarehouseExt;
+use erp_warehouse::WarehouseFulfillmentOperation;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;

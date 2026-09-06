@@ -1,7 +1,7 @@
 //! 域 D10 `catalog` 的 HTTP handler（SPU/SKU 与卡券类目组）。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::catalog` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_catalog` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 商品字典接口见同目录 `mod.rs`。
 
 use application_core::AuditActor;
@@ -9,14 +9,14 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use erp_support::SensitivityClass;
-use services::catalog::{
-    CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView,
-    ProductListParams, ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView,
-    SellableSkuListParams, SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
+use erp_catalog::{
+    CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView, ProductListParams,
+    ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams,
+    SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
+use erp_support::SensitivityClass;
 
 use crate::{
     app_state::AppState,
@@ -49,7 +49,7 @@ pub async fn sellable_sku_list(
     State(state): State<AppState>,
     Query(params): Query<SellableSkuListParams>,
 ) -> Result<PageView<SellableSkuView>> {
-    let view = CatalogService::new(state.db()).sellable_sku_list(&params).await?;
+    let view = state.catalog_service().sellable_sku_list(&params).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -72,7 +72,7 @@ pub async fn product_list(
     State(state): State<AppState>,
     Query(params): Query<ProductListParams>,
 ) -> Result<PageView<ProductView>> {
-    let page = CatalogService::new(state.db()).product_list(&params).await?;
+    let page = state.catalog_service().product_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -98,9 +98,7 @@ pub async fn product_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductRequest>,
 ) -> Result<ProductView> {
-    let view = CatalogService::new(state.db())
-        .product_create(req, &actor)
-        .await?;
+    let view = state.catalog_service().product_create(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -158,9 +156,7 @@ pub async fn product_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductRequest>,
 ) -> Result<ProductView> {
-    let view = CatalogService::new(state.db())
-        .product_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -219,9 +215,7 @@ pub async fn product_disable(
     Path(id): Path<String>,
     Json(req): Json<DisableProductRequest>,
 ) -> Result<ProductView> {
-    let view = CatalogService::new(state.db())
-        .product_disable(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_disable(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -249,7 +243,8 @@ pub async fn product_listing_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductListingRequest>,
 ) -> Result<ProductListingView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .product_listing_update(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -274,9 +269,7 @@ pub async fn product_revision_list(
     State(state): State<AppState>,
     Query(params): Query<ProductRevisionListParams>,
 ) -> Result<PageView<ProductRevisionView>> {
-    let page = CatalogService::new(state.db())
-        .product_revision_list(&params)
-        .await?;
+    let page = state.catalog_service().product_revision_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -300,7 +293,7 @@ pub async fn sku_list(
     State(state): State<AppState>,
     Query(params): Query<SkuListParams>,
 ) -> Result<PageView<SkuView>> {
-    let page = CatalogService::new(state.db()).sku_list(&params).await?;
+    let page = state.catalog_service().sku_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -328,7 +321,8 @@ pub async fn sku_listing_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuListingRequest>,
 ) -> Result<SkuView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .sku_listing_update(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -353,7 +347,7 @@ pub async fn sku_revision_list(
     State(state): State<AppState>,
     Query(params): Query<SkuRevisionListParams>,
 ) -> Result<PageView<SkuRevisionView>> {
-    let page = CatalogService::new(state.db()).sku_revision_list(&params).await?;
+    let page = state.catalog_service().sku_revision_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -377,7 +371,8 @@ pub async fn voucher_category_profile_list(
     State(state): State<AppState>,
     Query(params): Query<VoucherCategoryProfileListParams>,
 ) -> Result<PageView<VoucherCategoryProfileView>> {
-    let page = CatalogService::new(state.db())
+    let page = state
+        .catalog_service()
         .voucher_category_profile_list(&params)
         .await?;
 
@@ -407,7 +402,8 @@ pub async fn voucher_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateVoucherCategoryRequest>,
 ) -> Result<VoucherCategoryProfileView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .voucher_category_create(req, &actor)
         .await?;
 
@@ -437,7 +433,8 @@ pub async fn voucher_category_update(
     Path(sku_id): Path<String>,
     Json(req): Json<UpdateVoucherCategoryRequest>,
 ) -> Result<VoucherCategoryProfileView> {
-    let view = CatalogService::new(state.db())
+    let view = state
+        .catalog_service()
         .voucher_category_update(&sku_id, req, &actor)
         .await?;
 

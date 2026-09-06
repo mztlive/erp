@@ -6,7 +6,8 @@ use erp_core::ids::SkuRevisionId;
 
 use super::ids::unique_ids;
 use super::ProcurementResponsibilityRuleFilter;
-use crate::{CatalogExt, ProcurementResponsibilityExt};
+use crate::ProcurementResponsibilityExt;
+use erp_catalog::CatalogExt;
 use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::Result;

@@ -5,5 +5,5 @@ pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
 pub use repository::{
     current_legal_names_by_account_ids, CustomerCenterReceivableRow, ProcurementResponsibilityRuleFilter,
-    ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SkuRow, SupplierOfferingRow,
+    ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery, SupplierOfferingRow,
 };

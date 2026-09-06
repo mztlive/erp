@@ -1,19 +1,18 @@
 //! 域 D11 `warehouse` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::warehouse` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_warehouse` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::warehouse::{
+use erp_warehouse::{
     CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
     UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
     WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
-    WarehouseRevisionView, WarehouseService, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView,
-    WarehouseView,
+    WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
 };
 
 use crate::{
@@ -40,7 +39,7 @@ pub async fn warehouse_list(
     State(state): State<AppState>,
     Query(params): Query<WarehouseListParams>,
 ) -> Result<PageView<WarehouseView>> {
-    let page = WarehouseService::new(state.db()).warehouse_list(&params).await?;
+    let page = state.warehouse_service().warehouse_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -66,9 +65,7 @@ pub async fn warehouse_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateWarehouseRequest>,
 ) -> Result<WarehouseView> {
-    let view = WarehouseService::new(state.db())
-        .warehouse_create(req, &actor)
-        .await?;
+    let view = state.warehouse_service().warehouse_create(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -96,7 +93,8 @@ pub async fn warehouse_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateWarehouseRequest>,
 ) -> Result<WarehouseView> {
-    let view = WarehouseService::new(state.db())
+    let view = state
+        .warehouse_service()
         .warehouse_update(&id, req, &actor)
         .await?;
 
@@ -126,7 +124,8 @@ pub async fn warehouse_fulfillment_handlers_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateWarehouseFulfillmentHandlersRequest>,
 ) -> Result<WarehouseView> {
-    let view = WarehouseService::new(state.db())
+    let view = state
+        .warehouse_service()
         .warehouse_fulfillment_handlers_update(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -149,7 +148,8 @@ pub async fn warehouse_fulfillment_handlers_update(
 pub async fn warehouse_fulfillment_handler_options(
     State(state): State<AppState>,
 ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
-    let options = WarehouseService::new(state.db())
+    let options = state
+        .warehouse_service()
         .warehouse_fulfillment_handler_options()
         .await?;
     Ok(ApiResponse::ok_with_data(options))
@@ -174,9 +174,7 @@ pub async fn warehouse_revision_list(
     State(state): State<AppState>,
     Query(params): Query<WarehouseRevisionListParams>,
 ) -> Result<PageView<WarehouseRevisionView>> {
-    let page = WarehouseService::new(state.db())
-        .warehouse_revision_list(&params)
-        .await?;
+    let page = state.warehouse_service().warehouse_revision_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -200,7 +198,8 @@ pub async fn warehouse_sku_policy_list(
     State(state): State<AppState>,
     Query(params): Query<WarehouseSkuPolicyListParams>,
 ) -> Result<PageView<WarehouseSkuPolicyView>> {
-    let page = WarehouseService::new(state.db())
+    let page = state
+        .warehouse_service()
         .warehouse_sku_policy_list(&params)
         .await?;
 
@@ -256,7 +255,8 @@ pub async fn warehouse_sku_policy_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateWarehouseSkuPolicyRequest>,
 ) -> Result<WarehouseSkuPolicyView> {
-    let view = WarehouseService::new(state.db())
+    let view = state
+        .warehouse_service()
         .warehouse_sku_policy_update(&id, req, &actor)
         .await?;
 
@@ -284,7 +284,8 @@ pub async fn warehouse_sku_policy_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    WarehouseService::new(state.db())
+    state
+        .warehouse_service()
         .warehouse_sku_policy_delete(&id, &actor)
         .await?;
 

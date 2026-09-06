@@ -1,6 +1,6 @@
 use crate::repository::owned::ProcurementResponsibilityRuleRepository;
-use entities::catalog::EnableStatus;
 use entities::procurement_responsibility::ProcurementResponsibilityRule;
+use erp_catalog::EnableStatus;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
 

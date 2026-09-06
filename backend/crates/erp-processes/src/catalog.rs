@@ -1,25 +1,25 @@
 //! Named catalog processes that own audited outer transactions.
 
 use application_core::AuditActor;
-use database::CatalogExt;
-use entities::catalog::product_category::{ProductCategory, ProductCategoryData};
-use entities::catalog::sku_attribute::{SkuAttribute, SkuAttributeData};
-use entities::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueData};
-use entities::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData};
-use entities::catalog::{
+use erp_audit::AuditActorLogs;
+use erp_catalog::entity::catalog::product_category::{ProductCategory, ProductCategoryData};
+use erp_catalog::entity::catalog::sku_attribute::{SkuAttribute, SkuAttributeData};
+use erp_catalog::entity::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueData};
+use erp_catalog::entity::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData};
+use erp_catalog::entity::catalog::{
     EnableStatus, ProductCategoryId, SkuAttributeId, SkuAttributeValueId, UnitOfMeasureId,
 };
-use erp_audit::AuditActorLogs;
-use id_generator::next_id;
-use mongodb::Database;
-use services::catalog::{
-    CatalogService, CreateProductCategoryRequest, CreateSkuAttributeRequest, CreateSkuAttributeValueRequest,
+use erp_catalog::{
+    CatalogExt, CreateProductCategoryRequest, CreateSkuAttributeRequest, CreateSkuAttributeValueRequest,
     CreateUnitOfMeasureRequest, ProductCategoryView, SkuAttributeValueView, SkuAttributeView,
     UnitOfMeasureView,
 };
+use id_generator::next_id;
+use mongodb::Database;
 use services::Result;
 use validator::Validate;
 
+use crate::adapters::catalog_service;
 use crate::audit::run_audited;
 
 /// Process module name.
@@ -69,8 +69,8 @@ pub async fn create_product_category(
     req.validate()?;
     let parent_id = req.parent_category_id.clone();
     let id = ProductCategoryId::new(next_id());
-    CatalogService::new(db.clone())
-        .ensure_parent_chain_ok(&id, parent_id.as_ref())
+    catalog_service(db.clone())
+        .ensure_parent_chain_ok(id.as_ref(), parent_id.as_ref())
         .await?;
     let category = ProductCategory::new(
         id.clone(),
@@ -136,7 +136,7 @@ pub async fn create_sku_attribute_value(
     actor: AuditActor,
 ) -> Result<SkuAttributeValueView> {
     req.validate()?;
-    CatalogService::new(db.clone())
+    catalog_service(db.clone())
         .load_attribute(req.attribute_id.as_ref())
         .await?;
     let id = SkuAttributeValueId::new(next_id());

@@ -17,7 +17,8 @@ use erp_core::ids::{
 };
 use mongodb::Database;
 
-use crate::repository::extensions::{CatalogExt, InventoryExt, PurchaseOrderExt, SalesOrderExt};
+use crate::repository::extensions::{InventoryExt, PurchaseOrderExt, SalesOrderExt};
+use erp_catalog::CatalogExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -211,9 +212,6 @@ fn current_revision_pointer_ids(
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::catalog::product::ProductData;
-    use entities::catalog::sku::SkuData;
-    use entities::catalog::{EnableStatus, ListingStatus, Product, Sku};
     use entities::inventory::stock_reservation::{
         ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
@@ -230,6 +228,9 @@ mod isolation_tests {
     };
     use entities::sales_order::snapshot::HeaderSnapshotData;
     use entities::sales_order::{LineType, RevisionSource};
+    use erp_catalog::entity::catalog::product::ProductData;
+    use erp_catalog::entity::catalog::sku::SkuData;
+    use erp_catalog::{EnableStatus, ListingStatus, Product, Sku};
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ProductId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseOrderRevisionId,
@@ -241,7 +242,8 @@ mod isolation_tests {
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
-    use crate::repository::extensions::{CatalogExt, InventoryExt, PurchaseOrderExt, SalesOrderExt};
+    use crate::repository::extensions::{InventoryExt, PurchaseOrderExt, SalesOrderExt};
+    use erp_catalog::CatalogExt;
     use persistence_core::{NoTransaction, Transactional};
 
     use super::load_procurement_coverage_facts;
@@ -344,7 +346,7 @@ mod isolation_tests {
             ProductId::new(id),
             ProductData {
                 product_no: format!("P-{id}"),
-                product_kind: entities::catalog::ProductKind::Physical,
+                product_kind: erp_catalog::ProductKind::Physical,
                 status: EnableStatus::Active,
             },
             "test",

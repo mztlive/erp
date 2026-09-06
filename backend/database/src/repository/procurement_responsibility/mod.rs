@@ -1,8 +1,8 @@
 //! 采购责任规则仓储查询。
 
-use entities::catalog::EnableStatus;
 use entities::procurement_responsibility::ProcurementResponsibilityRuleType;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_catalog::EnableStatus;
 use mongodb::bson::{doc, Document};
 
 use persistence_core::{Pagination, QueryFilter};

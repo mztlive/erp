@@ -1,4 +1,4 @@
-use database::{InventoryExt, WarehouseExt};
+use database::InventoryExt;
 use entities::inventory::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentUpdate,
@@ -6,6 +6,7 @@ use entities::inventory::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
+use erp_warehouse::WarehouseExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;

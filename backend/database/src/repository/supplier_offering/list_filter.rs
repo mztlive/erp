@@ -6,17 +6,18 @@
 
 use std::collections::HashMap;
 
-use entities::catalog::{Product, Sku, SkuRevision};
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingAvailability,
     SupplierOfferingRevision,
 };
+use erp_catalog::{Product, Sku, SkuRevision};
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
 
-use super::super::extensions::{CatalogExt, SupplierOfferingExt};
+use super::super::extensions::SupplierOfferingExt;
 use super::{SupplierOfferingDomainRepository, SupplierOfferingFilter, SupplierOfferingRow};
+use erp_catalog::CatalogExt;
 use persistence_core::Executor;
 use persistence_core::PageResult;
 use persistence_core::Result;

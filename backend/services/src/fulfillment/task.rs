@@ -4,13 +4,14 @@
 //! 责任人或仓库分操作经办人。任务创建、活动记录和完成必须复用调用方事务，
 //! 禁止责任池、创建人或任意默认仓库回退。
 
-use database::{PurchaseOrderExt, SalesOrderExt, WarehouseExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
-use entities::warehouse::WarehouseFulfillmentOperation;
 use erp_identity::AccessControlExt;
 use erp_identity::{Permission, PermissionSet};
+use erp_warehouse::WarehouseExt;
+use erp_warehouse::WarehouseFulfillmentOperation;
 use erp_workflow::entity::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };

@@ -304,13 +304,13 @@ impl InventoryService {
 /// 余额列表/详情的基础信息投影映射。
 struct BalanceEnrichments {
     /// 仓库按主键索引。
-    warehouses: HashMap<String, entities::warehouse::Warehouse>,
+    warehouses: HashMap<String, erp_warehouse::Warehouse>,
     /// 仓库修订按主键索引。
-    warehouse_revisions: HashMap<String, entities::warehouse::WarehouseRevision>,
+    warehouse_revisions: HashMap<String, erp_warehouse::WarehouseRevision>,
     /// SKU 按主键索引。
-    skus: HashMap<String, entities::catalog::Sku>,
+    skus: HashMap<String, erp_catalog::Sku>,
     /// SKU 修订按主键索引。
-    sku_revisions: HashMap<String, entities::catalog::SkuRevision>,
+    sku_revisions: HashMap<String, erp_catalog::SkuRevision>,
     /// 库存流水按主键索引。
     movements: HashMap<String, StockMovement>,
 }
@@ -364,7 +364,7 @@ async fn active_reservation_dims(
 async fn load_warehouses_by_ids(
     db: &Database,
     ids: &[String],
-) -> Result<HashMap<String, entities::warehouse::Warehouse>> {
+) -> Result<HashMap<String, erp_warehouse::Warehouse>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -386,7 +386,7 @@ async fn load_warehouses_by_ids(
 ///
 /// # 错误
 /// 查询失败时返回 `RepositoryError`。
-async fn load_skus_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, entities::catalog::Sku>> {
+async fn load_skus_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, erp_catalog::Sku>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -407,8 +407,8 @@ async fn load_skus_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<Strin
 /// 查询失败时返回 `RepositoryError`。
 async fn load_warehouse_revisions(
     db: &Database,
-    warehouses: &HashMap<String, entities::warehouse::Warehouse>,
-) -> Result<HashMap<String, entities::warehouse::WarehouseRevision>> {
+    warehouses: &HashMap<String, erp_warehouse::Warehouse>,
+) -> Result<HashMap<String, erp_warehouse::WarehouseRevision>> {
     let revision_ids: Vec<String> = warehouses
         .values()
         .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
@@ -439,8 +439,8 @@ async fn load_warehouse_revisions(
 /// 查询失败时返回 `RepositoryError`。
 async fn load_sku_revisions(
     db: &Database,
-    skus: &HashMap<String, entities::catalog::Sku>,
-) -> Result<HashMap<String, entities::catalog::SkuRevision>> {
+    skus: &HashMap<String, erp_catalog::Sku>,
+) -> Result<HashMap<String, erp_catalog::SkuRevision>> {
     let revision_ids: Vec<String> = skus
         .values()
         .filter_map(|sku| sku.stable.current_revision_id.clone())

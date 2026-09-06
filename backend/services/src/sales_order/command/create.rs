@@ -1,6 +1,7 @@
-use database::{ContractExt, SalesOrderExt};
+use database::SalesOrderExt;
 use entities::sales_order::{SalesOrder, SalesOrderData};
 use erp_audit::AuditExt;
+use erp_contract::ContractExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
 use erp_customer::CustomerExt;
@@ -92,7 +93,7 @@ impl SalesOrderService {
             .find_by_id(contract_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        if contract.stable.status != entities::contract::ContractStatus::Effective {
+        if contract.stable.status != erp_contract::ContractStatus::Effective {
             return Err(Error::BusinessLogicError(
                 "合同当前不可用于新销售提交".to_string(),
             ));

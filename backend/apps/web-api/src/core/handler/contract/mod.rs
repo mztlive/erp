@@ -1,18 +1,18 @@
 //! 域 D12 `contract` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use erp_support::{RetentionClass, SensitivityClass};
-use services::contract::{
-    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractService, ContractView,
+use erp_contract::{
+    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractView,
     CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest, UploadContractView,
 };
+use erp_support::{RetentionClass, SensitivityClass};
 
 use super::file_asset::{extract_asset_file_with_limit, should_compensate_pending_assets, store_asset_file};
 
@@ -45,9 +45,7 @@ pub async fn contract_list(
     Extension(UserID(user_id)): Extension<UserID>,
     Query(params): Query<ContractListParams>,
 ) -> Result<PageView<ContractView>> {
-    let page = ContractService::new(state.db())
-        .contract_list(&params, &user_id)
-        .await?;
+    let page = state.contract_service().contract_list(&params, &user_id).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -76,9 +74,7 @@ pub async fn contract_create(
     Json(req): Json<CreateContractRequest>,
 ) -> Result<ContractView> {
     ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
-    let view = ContractService::new(state.db())
-        .create_contract(req, &actor)
-        .await?;
+    let view = state.contract_service().create_contract(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -133,9 +129,7 @@ pub async fn contract_upload(
     )
     .await?;
     let object_key = asset_request.storage_object_key.clone();
-    let result = ContractService::new(state.db())
-        .upload_contract(command, asset_request, &actor)
-        .await;
+    let result = erp_processes::upload_contract(state.db(), command, asset_request, actor).await;
     let view = match result {
         Ok(view) => view,
         Err(error) => {
@@ -167,7 +161,7 @@ pub async fn contract_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<ContractDetailView> {
-    let view = ContractService::new(state.db()).contract_detail(&id).await?;
+    let view = state.contract_service().contract_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -195,7 +189,8 @@ pub async fn contract_archive_revision(
     Path(id): Path<String>,
     Json(req): Json<ArchiveContractRevisionRequest>,
 ) -> Result<ContractDetailView> {
-    let view = ContractService::new(state.db())
+    let view = state
+        .contract_service()
         .archive_contract_revision(&id, req, &actor)
         .await?;
 
@@ -225,7 +220,8 @@ pub async fn contract_terminate(
     Path(id): Path<String>,
     Json(req): Json<TerminateContractRequest>,
 ) -> Result<ContractDetailView> {
-    let view = ContractService::new(state.db())
+    let view = state
+        .contract_service()
         .terminate_contract(&id, req, &actor)
         .await?;
 
