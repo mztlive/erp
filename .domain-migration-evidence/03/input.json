@@ -1,9 +1,13 @@
 {
   "phase": "03",
-  "recorded_at": "2026-09-06T11:26:18Z",
+  "recorded_at": "2026-09-06T11:38:16Z",
   "evidence_dir": ".domain-migration-evidence/03",
   "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
-  "head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+  "implement_commits": [
+    "36a850f63bf8192bff42c7ac955ac9f1a2561c80"
+  ],
+  "implement_commit": "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
+  "head": "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
   "branch": "chore/domain-crate-03-workflow-composition",
   "status": "本地门禁通过",
   "never_mark": "已验收",
@@ -27,7 +31,41 @@
   },
   "prerequisite_ok": true,
   "phase_02_status": "本地门禁通过",
+  "verify_plan_sources_after_move": "expected fail: --sources is planning snapshot, not post-move gate",
+  "source_map_phase_03_rows": 135,
+  "repository_types_owner_phase_03": 8,
+  "repository_owned_types_moved": [
+    "ApprovalNotificationOutboxRepository",
+    "ApprovalSubjectSnapshotRepository",
+    "BusinessDocumentRepository",
+    "DocumentParticipantRepository",
+    "DocumentRelationRepository",
+    "FinanceResponsibilityRuleRepository",
+    "WorkItemRepository",
+    "WorkflowActionRepository"
+  ],
+  "owned_read_model_repositories": [
+    "CustomerCenterRepository",
+    "FulfillmentQueueRepository"
+  ],
+  "section_6_callers": [
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/handler/approval_instance/http.rs",
+    "apps/web-api/src/core/handler/approval_process/http.rs",
+    "apps/web-api/src/core/handler/customer/mod.rs",
+    "apps/web-api/src/core/handler/document_registry/mod.rs",
+    "apps/web-api/src/core/handler/work_item/finance_responsibility.rs",
+    "apps/web-api/src/core/handler/work_item/mod.rs",
+    "apps/web-api/src/core/routes/document_registry.rs",
+    "apps/web-api/src/core/routes/work_item.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
+  "section_6_callers_still_bind_old_services": true,
+  "workspace_member_count": 21,
+  "kind_test_targets": 0,
+  "historical_tests_archives_byte_for_byte": true,
   "quality_passed": true,
   "unit_tests_passed": true,
-  "note": "阶段 03 本地门禁通过。旧 services 查询实现仍保留至已验收清零。真实数据库运行未验证。"
+  "note": "前序输入为阶段 02 本地门禁通过提交 fead5bad，不是已验收。实现提交 36a850f6（workflow-composition local quality gates）。erp-workflow/erp-processes/erp-read-models 已加入 workspace；owner_phase=03 的 8 个 workflow 拥有仓储与 CustomerCenterRepository/FulfillmentQueueRepository 专属只读仓储已落地。公共门禁全部 exit 0（3678 lib tests, 0 failed, 74 ignored）。旧 services/approval、work_item、document_registry、transaction 生产路径仍保留，HTTP 入口仍通过旧 services 类型装配；领域边界旧源清零规则已加载、当前不核销业务源文件。真实数据库运行未验证。"
 }

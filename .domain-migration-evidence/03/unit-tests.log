@@ -1,3 +1,19 @@
+phase: 03
+status: 本地门禁通过
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+cwd: backend/
+exit: 0
+passed: 3678
+failed: 0
+ignored: 74
+crates: 20
+mongodb_started: false
+include_ignored: false
+ERP_TEST_MONGO_URI: unset
+recorded_at: 2026-09-06T11:38:16Z
+
    Compiling erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
    Compiling services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
    Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)

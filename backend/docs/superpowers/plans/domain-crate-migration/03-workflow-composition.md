@@ -9,8 +9,8 @@
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-workflow`, `erp-processes`, `erp-read-models` |
-| 执行负责人 | chore/domain-crate-03-workflow-composition implementer |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-03-workflow-composition`） |
+| 输入/输出提交 | 前序 `fead5bad842092ddbdcbf598ab7b3d00384ff226` / 实现提交 `36a850f63bf8192bff42c7ac955ac9f1a2561c80`（证据见 `.domain-migration-evidence/03/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -102,6 +102,8 @@ workflow → bpm/基础；processes → workflow/身份/审计/旧 services；re
 
 8. [ ] 同步 check-bpm-boundaries.sh 的 process_kind.rs 路径、活动成员检查和 ID 位置；保留穷尽映射、无 I/O/无 ID 生成、唯一源等全部规则。旧模块声明/根 re-export 清零并运行门禁。
 
+- [ ] 人工将状态改为已验收。本阶段执行者不得勾选；最高状态为本地门禁通过。
+
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
 ## 9. 阶段内编译中断规则
@@ -170,13 +172,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序本地门禁通过 `fead5bad842092ddbdcbf598ab7b3d00384ff226`；分支 `chore/domain-crate-03-workflow-composition`；source-map phase=03 行 135；owned types 8 | 已采集 `.domain-migration-evidence/03/input.json` |
+| 文件与符号 | 相对输入 217 路径变化（195 add / 0 delete / 22 modify）；8 owned EntityRepository 迁入 erp-workflow；CustomerCenterRepository 与 FulfillmentQueueRepository 专属只读仓储；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/03/files.tsv` |
+| 依赖 | 21 个成员；无 kind=test；erp-workflow 无 processes/read-models/旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/03/boundary.log` |
+| 旧实现清零 | 旧 `services::approval/work_item/document_registry/transaction` 生产路径仍保留；领域边界旧源清零规则已加载、当前不核销；历史 tests/ 档案未改 | 已采集：见 `boundary.log` / `files.tsv` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3678 passed / 0 failed / 74 ignored；exit 0 | 已执行 `.domain-migration-evidence/03/unit-tests.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 02 哈希相等 | 已采集 `.domain-migration-evidence/03/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 WorkflowAuditPort 同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/03/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `.domain-migration-evidence/03/quality-gates.log` |
+| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
+| 阶段提交 | 实现提交 `36a850f63bf8192bff42c7ac955ac9f1a2561c80`；证据目录 `.domain-migration-evidence/03/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/03/metadata.json` |

@@ -10,19 +10,54 @@
     "admin_route_count": 369,
     "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
     "phase_02_permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
-    "index_count_equal": true,
+    "index_name_key_unique_equal": true,
     "index_count": 368,
+    "index_count_phase_02": 368,
     "error_code_variants_equal": true,
     "error_code_count": 21,
-    "note": "权限生成物与阶段 02 哈希对比见 equal 字段；HTTP 路径/方法/RBAC 未改。真实数据库运行未验证。"
+    "note": "权限生成物与阶段 02 哈希一致；HTTP 路径/方法/RBAC 未改。368 个唯一索引名称/键/唯一性与阶段 02 相等：database/src/indexes 349 + erp-identity 17 + erp-audit 2；erp-workflow 另有 51 条同名拷贝，键与唯一性不变。真实数据库运行未验证。"
   },
   "http": {
     "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
     "admin_route_count": 369,
-    "note": "权限生成物无漂移；HTTP 路径/方法/RBAC 未改"
+    "note": "权限生成物与阶段 02 哈希一致；HTTP 路径/方法/RBAC 未改"
+  },
+  "errors": {
+    "error_code_count": 21,
+    "error_code_variants": [
+      "ApprovalPolicyNotRegistered",
+      "ApprovalProcessNotConfigured",
+      "ApprovalDraftSourceNotAvailable",
+      "ApprovalDefinitionNotDraft",
+      "ApprovalDefinitionVersionConflict",
+      "ApprovalDefinitionInvalid",
+      "ApprovalDefinitionBindingCorrupted",
+      "ApprovalAlreadyStarted",
+      "ApprovalTaskNotOpen",
+      "ApprovalTaskNotAssignedToActor",
+      "ApprovalTaskVersionConflict",
+      "ApprovalInstanceVersionConflict",
+      "ApprovalExecutionVersionConflict",
+      "ApprovalSubjectVersionConflict",
+      "ApprovalRejectReasonRequired",
+      "ApprovalInstanceBlocked",
+      "ApprovalResumeNotAllowedForBlocker",
+      "ApprovalCurrentApproverNotRecovered",
+      "ApprovalBlockedCancelNotAllowed",
+      "ApprovalGenericWorkItemMutationForbidden",
+      "ApprovalIdempotencyPayloadConflict"
+    ],
+    "services_errors_sha256": "8e92dc123ef56bc41151a8bc67764949ef198f7f10137ddaf641492c645fa5d2",
+    "http_errors_sha256": "fb83225a116a7d54c7c86c8f82d80d5b4606290f8d5d289ef56eb823f00db5cd",
+    "note": "公开 ErrorCode 变体数与阶段 02 相等；services 增加 From<erp_workflow::Error> 映射。真实数据库运行未验证。"
   },
   "indexes": {
     "index_count": 368,
-    "note": "本阶段未改 collection/index 名称、键或唯一性"
+    "database_src_indexes": 349,
+    "erp_identity_indexes": 17,
+    "erp_audit_indexes": 2,
+    "erp_workflow_index_copies": 51,
+    "workflow_copy_names_keys_unique_equal_to_phase_02": true,
+    "note": "本阶段未改 collection/index 名称、键或唯一性；workflow 索引为同名拷贝。真实数据库运行未验证。"
   }
 }
