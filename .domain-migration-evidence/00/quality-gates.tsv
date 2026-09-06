@@ -1,9 +1,10 @@
-fmt	0
-check	0
-clippy	0
-unit-tests	0
-bpm	0
-service	0
-domain	0
-permissions	0
-git-diff-check	0
+gate	exit	log
+fmt	0	/tmp/erp-phase-00-gates/01-fmt-check.log
+check	0	/tmp/erp-phase-00-gates/02-cargo-check.log
+clippy	0	/tmp/erp-phase-00-gates/03-clippy.log
+unit-tests	0	/tmp/erp-phase-00-gates/04-cargo-test-lib.log
+bpm	0	/tmp/erp-phase-00-gates/05-check-bpm-boundaries.log
+service	0	/tmp/erp-phase-00-gates/06-check-service-boundaries.log
+domain	0	/tmp/erp-phase-00-gates/07-check-domain-boundaries.log
+permissions	0	/tmp/erp-phase-00-gates/08-check-permissions-drift.log
+git-diff-check	0	/tmp/erp-phase-00-gates/09-git-diff-check.log

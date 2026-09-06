@@ -19,10 +19,18 @@ add	backend/scripts/domain_boundaries.py	Cargo metadata + use 树解析实现
 add	backend/scripts/domain-boundary-fixtures/	每条规则正/负夹具
 add	backend/scripts/measure-incremental.py	compile-measurement.md 测量脚本
 add	backend/scripts/capture-domain-contract.py	HTTP/DTO/index/idempotency/error 黄金值采集
-add	.domain-migration-evidence/00/	阶段证据
-modify	backend/docs/superpowers/plans/domain-crate-migration/00-baseline.md	状态 执行中→本地门禁通过；任务核销
-modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 00 status
-modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 00 状态
+add	.domain-migration-evidence/00/input.json	阶段证据：输入基线
+add	.domain-migration-evidence/00/files.tsv	阶段证据：文件与符号
+add	.domain-migration-evidence/00/metadata.json	阶段证据：元数据
+add	.domain-migration-evidence/00/boundary.log	阶段证据：边界检查
+add	.domain-migration-evidence/00/unit-tests.log	阶段证据：纯内联单元测试
+add	.domain-migration-evidence/00/quality-gates.log	阶段证据：公共门禁（复跑 /tmp/erp-phase-00-gates）
+add	.domain-migration-evidence/00/contract-comparison.json	阶段证据：HTTP/DTO/index/error 黄金值
+add	.domain-migration-evidence/00/transaction-contract.json	阶段证据：事务合同；真实数据库运行未验证
+add	.domain-migration-evidence/00/compile/	Customer/Sales/Finance × check/build 各 5 有效样本原始报告
+modify	backend/docs/superpowers/plans/domain-crate-migration/00-baseline.md	状态 执行中→本地门禁通过；任务核销；禁止标记已验收
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 00 status 本地门禁通过
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 00 状态 本地门禁通过
 unchanged	backend/Cargo.toml	只记录原 workspace/profile.dev；不混入优化参数
 unchanged	backend/scripts/check-bpm-boundaries.sh	规则基线保留；权威路径仍为编制时路径
 unchanged	backend/scripts/check-service-boundaries.sh	旧 Service 检查与严格度保留

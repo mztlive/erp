@@ -10,7 +10,7 @@
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | 治理/范围核验/最终验收，不创建空业务 crate |
 | 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-00-baseline`） |
-| 输入/输出提交 | `400ab4f7855255b284fe8a8e1caffe27acc96083` / 本阶段提交（见 `.domain-migration-evidence/00/metadata.json`） |
+| 输入/输出提交 | `400ab4f7855255b284fe8a8e1caffe27acc96083` / 实现提交 `475734cc301a8d8516fd29788cfc8ce937a09cb1`（证据见 `.domain-migration-evidence/00/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -168,4 +168,4 @@ git diff --check
 | 事务合同 | Executor/NoTransaction、snapshot+majority、run_audited 写入顺序；真实数据库运行未验证 | 已采集 `transaction-contract.json` |
 | 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `quality-gates.log` |
 | 编译收益 | Customer/Sales/Finance × check/build 各 5 个有效样本；noop Fresh；中位数已记录。改善率阈值不适用，待阶段 17 | 已执行 `compile/` |
-| 阶段提交 | 本地门禁通过后的阶段提交；禁止标记已验收 | 待写入本阶段 commit |
+| 阶段提交 | 实现提交 `475734cc301a8d8516fd29788cfc8ce937a09cb1`；证据目录 `.domain-migration-evidence/00/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/00/metadata.json` |

@@ -1,8 +1,13 @@
 === bpm ===
 command: ./scripts/check-bpm-boundaries.sh
-start: 2026-09-06T05:23:06Z
+log: /tmp/erp-phase-00-gates/05-check-bpm-boundaries.log
+start: 2026-09-06T05:37:12Z
 检查 BPM crate 与成员 manifest…
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
 检查 bpm 依赖图…
+    Blocking waiting for file lock on package cache
 检查 bpm 源码边界…
 检查 ID 定义源…
 检查 id_type 过程宏定义源…
@@ -11,12 +16,14 @@ BPM 边界检查通过。
 exit: 0
 === service ===
 command: ./scripts/check-service-boundaries.sh
-start: 2026-09-06T05:23:09Z
+log: /tmp/erp-phase-00-gates/06-check-service-boundaries.log
+start: 2026-09-06T05:37:08Z
 Service 边界检查通过；当前基线共 0 个受控命中。
 exit: 0
 === domain ===
 command: ./scripts/check-domain-boundaries.sh
-start: 2026-09-06T05:23:10Z
+log: /tmp/erp-phase-00-gates/07-check-domain-boundaries.log
+start: 2026-09-06T05:37:09Z
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -24,4 +31,15 @@ start: 2026-09-06T05:23:10Z
   说明: cargo metadata 无 kind=test 集成目标
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+exit: 0
+=== cargo metadata ===
+command: cargo metadata --no-deps --format-version 1
+workspace_members: 13
+kind=test: 0
+autotests: false on all 13 member manifests
+planned domain crates: not present
+forbidden-edge contract: loaded
+instantiated domain isolation certified: false
+old-source clearance: loaded, not applied (no accepted prior phase)
+disclaimer: 真实数据库运行未验证
 exit: 0

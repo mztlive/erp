@@ -1,8 +1,14 @@
 {
   "phase": "00",
-  "recorded_at": "2026-09-06T05:00:00+00:00",
+  "recorded_at": "2026-09-06T05:43:48+00:00",
+  "evidence_dir": ".domain-migration-evidence/00",
   "input_head": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "implement_commit": "475734cc301a8d8516fd29788cfc8ce937a09cb1",
   "branch": "chore/domain-crate-00-baseline",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
   "git_at_start": {
     "status_short": "?? .grok/workflows/migrate-domain-crates.rhai",
     "diff_stat": "",
@@ -20,6 +26,7 @@
     ]
   },
   "verify_plan_sources": "passed",
+  "verify_plan_sources_at_evidence": "passed",
   "plan_manifest_inspected_head_at_planning": "b889b0a9ddca7bd42c135105fc7ab35cb382fbb0",
   "source_map_phase_00_rows": 0,
   "repository_types_owner_phase_00": 0,
@@ -32,6 +39,9 @@
   ],
   "section_6_callers_change": "none; phase 00 does not move business symbols",
   "workspace_member_count": 13,
+  "kind_test_targets": 0,
   "historical_tests_archives_byte_for_byte": true,
-  "note": "计划编制 HEAD 与源哈希不是执行基线。本阶段以当前 main HEAD 400ab4f 作为可追溯输入。"
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "note": "计划编制 HEAD 与源哈希不是执行基线。本阶段以当前 main HEAD 400ab4f 作为可追溯输入。实现提交 475734cc。证据登记公共门禁复跑（/tmp/erp-phase-00-gates）全部 exit 0。真实数据库运行未验证。"
 }

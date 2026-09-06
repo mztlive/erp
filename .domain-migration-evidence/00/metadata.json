@@ -3,20 +3,30 @@
   "status": "本地门禁通过",
   "never_mark": "已验收",
   "branch": "chore/domain-crate-00-baseline",
+  "evidence_dir": ".domain-migration-evidence/00",
   "input_head": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "implement_commit": "475734cc301a8d8516fd29788cfc8ce937a09cb1",
   "unique_integration_owner": "chore/domain-crate-00-baseline implementer",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "remaining_issues": [],
   "workspace_members": 13,
   "kind_test_targets": 0,
   "autotests": false,
+  "recorded_at": "2026-09-06T05:43:48+00:00",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
     "passed": 3262,
     "failed": 0,
     "ignored": 71,
-    "log": ".domain-migration-evidence/00/unit-tests.log"
+    "crates": 12,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "log": ".domain-migration-evidence/00/unit-tests.log",
+    "source_log": "/tmp/erp-phase-00-gates/04-cargo-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -28,7 +38,11 @@
     "domain": 0,
     "permissions": 0,
     "git-diff-check": 0,
-    "log": ".domain-migration-evidence/00/quality-gates.log"
+    "all_exit_0": true,
+    "files_changed": [],
+    "log": ".domain-migration-evidence/00/quality-gates.log",
+    "source_dir": "/tmp/erp-phase-00-gates",
+    "summary": "Phase 00 public gates all exited 0 from backend/. Domain boundary script is present and passed without certifying uninstantiated domain isolation. Workspace lib tests passed (12 crates, 0 failed). No fmt, lockfile, or business-code changes."
   },
   "contracts": {
     "admin_routes": 369,
@@ -36,10 +50,13 @@
     "indexes": 368,
     "collection_constants": 154,
     "dto_files": 32,
+    "recapture_at_evidence": "identical to implement goldens",
     "comparison": ".domain-migration-evidence/00/contract-comparison.json",
     "transaction": ".domain-migration-evidence/00/transaction-contract.json"
   },
   "compile_baseline": {
+    "applicable": true,
+    "reason": "阶段 00 已在隔离 worktree 执行 Customer/Sales/Finance × check/build 各 5 个有效样本；原始报告见 compile/。改善率阈值不适用，待阶段 17。",
     "worktree": "/private/tmp/erp-domain-crate-00-measure",
     "revision": "baseline",
     "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
@@ -66,5 +83,5 @@
     "profile": "dev",
     "codegen_backend": "cranelift (workspace packages)"
   },
-  "phase_commit": "039fa49d8f1638d632c382ee992f61164c8450c6"
+  "implement_summary": "Phase 00 governance baseline is committed on chore/domain-crate-00-baseline (475734cc). Status is 本地门禁通过, not 已验收. autotests=false removed 29 integration targets; Jenkins uses cargo test --workspace --lib and no longer runs --include-ignored. Domain boundary fixtures pass without claiming uninstantiated domain isolation. Compile baselines recorded (check ~4.0s, build ~9.2–9.5s; sample dirty=services+web-api). Unit tests 3262 passed / 0 failed / 71 ignored. 真实数据库运行未验证."
 }
