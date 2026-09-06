@@ -2,16 +2,34 @@
   "phase": "06",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "branch": "chore/domain-crate-06-catalog-warehouse-contract",
   "evidence_dir": ".domain-migration-evidence/06",
   "input_head": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+  "implement_commits": [
+    "b3f9ea487d63bc36e943c2d94a997bccf83fac59"
+  ],
+  "implement_commit": "b3f9ea487d63bc36e943c2d94a997bccf83fac59",
+  "integrator_commit": "b3f9ea487d63bc36e943c2d94a997bccf83fac59",
+  "head": "b3f9ea487d63bc36e943c2d94a997bccf83fac59",
   "unique_integration_owner": "chore/domain-crate-06-catalog-warehouse-contract integrator",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
+  "files_tsv_rows": 222,
+  "path_changes": {
+    "add": 49,
+    "delete": 1,
+    "modify": 65,
+    "rename": 91,
+    "total": 206,
+    "versus": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+    "rename_detection": true,
+    "evidence_rows": 222,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
+  },
   "owned_repositories_moved": [
     "ContractRepository",
     "ContractRevisionRepository",
@@ -40,16 +58,49 @@
   "no_type_alias": true,
   "autotests": false,
   "workspace_members": 28,
+  "workspace_member_names": [
+    "application-core",
+    "bpm",
+    "cli",
+    "config",
+    "database",
+    "entities",
+    "entity-core",
+    "entity-macros",
+    "erp-audit",
+    "erp-catalog",
+    "erp-contract",
+    "erp-core",
+    "erp-customer",
+    "erp-identity",
+    "erp-party",
+    "erp-processes",
+    "erp-read-models",
+    "erp-supplier",
+    "erp-support",
+    "erp-warehouse",
+    "erp-workflow",
+    "id-generator",
+    "permission-macros",
+    "persistence-core",
+    "services",
+    "storage",
+    "test-support",
+    "web-api"
+  ],
   "kind_test_targets": 0,
+  "recorded_at": "2026-09-06T22:42:24Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
     "passed": 3303,
     "failed": 0,
     "ignored": 68,
+    "crates": 27,
     "mongodb_started": false,
     "include_ignored": false,
-    "log": ".domain-migration-evidence/06/unit-tests.log"
+    "log": ".domain-migration-evidence/06/unit-tests.log",
+    "source_log": "backend/logs/phase-06-qg-gates/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -62,7 +113,10 @@
     "permissions": 0,
     "git-diff-check": 0,
     "all_exit_0": true,
-    "log": ".domain-migration-evidence/06/quality-gates.log"
+    "files_changed": [],
+    "log": ".domain-migration-evidence/06/quality-gates.log",
+    "source_dir": "backend/logs/phase-06-qg-gates",
+    "summary": "Phase 06 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-06-qg-gates/. Domain boundary script exists and passed. Lib unit tests passed with ERP_TEST_MONGO_URI unset; no MongoDB, crate tests, integration targets, or ignored tests were run. No fmt/lockfile/business-code changes from the quality-gate run. 3303 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
   },
   "contracts": {
     "admin_routes": 369,
@@ -79,10 +133,42 @@
     "note": "阶段 06 不执行编译收益复测；阈值在阶段 17 判定。真实数据库运行未验证。"
   },
   "toolchain": {
-    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
-    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
-    "host": "aarch64-apple-darwin",
-    "profile": "dev"
+    "quality_gate_run": {
+      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
+      "host": "aarch64-apple-darwin",
+      "profile": "dev"
+    }
   },
-  "implement_summary": "Phase 06 catalog/warehouse/contract unique-cut and integrator wiring on chore/domain-crate-06-catalog-warehouse-contract. erp-catalog/erp-warehouse/erp-contract own aggregates; product attachments and contract upload hold root txns in erp-processes. Public gates passed (3303 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+  "shards": [
+    {
+      "shard": "catalog",
+      "branch": "chore/domain-crate-05-party-customer-supplier",
+      "committed": false,
+      "commit_sha": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+      "summary": "Parallel catalog shard created backend/crates/erp-catalog (81 files) with sellable query/pagination, specification signature, 12 owned repositories, and audit/file-asset/pending ports; deleted old owns-prefix catalog modules. No commit. Integrator registered the crate, unwired old roots, deleted leftover index/extension/owned files, and retargeted callers."
+    },
+    {
+      "shard": "warehouse",
+      "branch": "chore/domain-crate-05-party-customer-supplier",
+      "committed": false,
+      "commit_sha": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+      "summary": "Created erp-warehouse (autotests=false) with moved warehouse entities/DTOs/repos/indexes/service, three owned Repository types composing persistence_core::Repository, and identity/audit/attachment fingerprint ports. Deleted owns-prefix old impls. Unique-target cargo test --lib: 39 passed. Integrator registered the crate and retargeted callers."
+    },
+    {
+      "shard": "contract",
+      "branch": "chore/domain-crate-05-party-customer-supplier",
+      "committed": false,
+      "commit_sha": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+      "summary": "erp-contract crate holds D12 entities, owned repos, indexes, ContractExt, DTOs, and ContractService with customer/identity/attachment/audit ports plus in-transaction apply/plan_upload APIs. Old owns-prefix modules were deleted with no façade. Process wiring, workspace membership, leftover indexes/extensions, and caller retargets were integrator-only."
+    },
+    {
+      "shard": "integrate",
+      "branch": "chore/domain-crate-06-catalog-warehouse-contract",
+      "committed": true,
+      "commit_sha": "b3f9ea487d63bc36e943c2d94a997bccf83fac59",
+      "summary": "Integrator registered erp-catalog/erp-warehouse/erp-contract, deleted leftover indexes/extensions/owned dual sources, wired DatabaseExt/AppState/handlers, and moved product-attachment plus contract-upload root transactions into erp-processes. Public gates passed (3303 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+    }
+  ],
+  "implement_summary": "Phase 06 catalog/warehouse/contract unique-cut and integrator wiring on chore/domain-crate-06-catalog-warehouse-contract (implement b3f9ea48). erp-catalog/erp-warehouse/erp-contract own aggregates; product attachments and contract upload hold root txns in erp-processes. Public gates passed (3303 lib tests, 0 failed, 68 ignored). review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
 }

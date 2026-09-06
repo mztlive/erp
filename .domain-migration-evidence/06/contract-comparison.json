@@ -2,7 +2,7 @@
   "phase": "06",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "versus_phase_05": {
@@ -20,7 +20,7 @@
     "error_code_count": 21,
     "index_only_old": [],
     "index_only_new": [],
-    "note": "权限生成物与阶段 05 哈希比较；HTTP 路径/方法/RBAC 未改。索引名称/键/唯一性迁入 erp-catalog/erp-warehouse/erp-contract。ErrorCode 变体不变。真实数据库运行未验证。"
+    "note": "权限生成物与阶段 05 哈希相等；HTTP 路径/方法/RBAC 未改。368 个索引名称/键/唯一性与阶段 05 相等（含迁入 erp-catalog/erp-warehouse/erp-contract 的声明）。ErrorCode 21 个变体不变。真实数据库运行未验证。"
   },
   "http": {
     "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
@@ -57,7 +57,7 @@
     "catalog_errors_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
     "warehouse_errors_sha256": "3985661b95f1adc79c2348c05f7276bb4f5e5469a31d4b2ddc59dae265a34ff8",
     "contract_errors_sha256": "a9b5de798c468cff80c4ce8dc9cae9fe921bef018002a6fba35e27cbb43660ba",
-    "note": "ErrorCode 变体与阶段 05 比较；领域错误经 From 映射到原 services/web-api 错误类。真实数据库运行未验证"
+    "note": "ErrorCode 变体与阶段 05 相等；领域错误经 From 映射到原 services/web-api 错误类。真实数据库运行未验证"
   },
   "indexes": {
     "index_count": 368,

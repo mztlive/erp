@@ -2,6 +2,7 @@
   "phase": "06",
   "status": "本地门禁通过",
   "never_mark": "已验收",
+  "review_approved": true,
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "mongodb_started": false,
@@ -9,13 +10,20 @@
   "executor": {
     "file": "crates/persistence-core/src/executor.rs",
     "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
     "nested_transactions": "forbidden",
-    "external_io_holds_session": false
+    "external_io_holds_session": false,
+    "unchanged_versus_phase_05": true
   },
   "transactional": {
     "file": "crates/persistence-core/src/transaction.rs",
     "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
-    "failed_session_reuse": "forbidden"
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden",
+    "unchanged_versus_phase_05": true
   },
   "run_audited": {
     "file": "crates/erp-processes/src/audit/transaction.rs",
@@ -24,32 +32,43 @@
       "write(db, session)",
       "audit_logs().create(&audit, session)"
     ],
-    "same_executor": true
+    "external_io_in_write": "forbidden",
+    "same_executor": true,
+    "note": "run_audited 仅在 erp-processes。catalog 字典创建与 warehouse SKU policy 根命令使用 run_audited 同一 session。真实数据库运行未验证"
   },
   "catalog_attachments": {
     "process": "crates/erp-processes/src/attachments/catalog.rs",
+    "sha256": "895f743580a81dc45e8c544c0267109a33750d1d902bc4839208bf59fe8e4312",
     "prepare": "PendingFileAssets::prepare in erp-processes",
     "pending_port": "erp_catalog::PendingAttachmentBatch via CatalogPendingAttachments adapter",
     "same_executor": true,
     "s3_outside_session": true,
-    "note": "商品品牌/商品 multipart 附件由 processes 准备；catalog 在调用方事务内 persist pending + 业务 + 审计。"
+    "no_nested_transactions": true,
+    "note": "商品品牌/商品 multipart 附件由 processes 准备；catalog 在调用方事务内 persist pending + 业务 + 审计。真实数据库运行未验证"
   },
   "catalog_dictionary_creates": {
     "process": "crates/erp-processes/src/catalog.rs",
+    "sha256": "0f3c91fa721c4d8921c55be09c42e78fdc054b38f85cc66169795507c0383e6b",
     "root_transaction": "run_audited",
     "same_executor": true,
-    "no_nested_transactions": true
+    "no_nested_transactions": true,
+    "adapters": "crates/erp-processes/src/adapters/catalog.rs"
   },
   "warehouse_sku_policy_create": {
     "process": "crates/erp-processes/src/warehouse.rs",
+    "sha256": "6a18b97d9a0bb0a3d6251a13d34da3769b94bbf8c58bf201794732becf2fcfdd",
     "root_transaction": "run_audited",
     "same_executor": true,
+    "no_nested_transactions": true,
     "sku_existence_via": "erp_catalog::CatalogExt::skus",
     "identity_port": "MongoWarehouseIdentity inbound=purchase_receipt:list/detail/update/post outbound=delivery:list/detail/update/post",
-    "fingerprint_port": "SupportFingerprint delegates to erp_support::content_fingerprint"
+    "fingerprint_port": "SupportFingerprint delegates to erp_support::content_fingerprint",
+    "adapters": "crates/erp-processes/src/adapters/warehouse.rs",
+    "note": "SKU policy create stays in erp-processes; domain exposes persist_warehouse_with_revision for root transactions. 真实数据库运行未验证"
   },
   "contract_upload": {
     "process": "crates/erp-processes/src/contract.rs",
+    "sha256": "bf187a9b3214e7d85257d233984f42d4905bf620ab2e9b7a3a861c2311fc8557",
     "order": [
       "plan_upload (no txn)",
       "file_assets().create(session)",
@@ -60,7 +79,8 @@
     "same_executor": true,
     "no_nested_transactions": true,
     "s3_outside_session": true,
-    "adapters": "crates/erp-processes/src/adapters/contract.rs"
+    "adapters": "crates/erp-processes/src/adapters/contract.rs",
+    "adapter_sha256": "b099684b785e125d3e72d4507e296cbd58ef149f5e7c022dc822e27cd3b2c9c1"
   },
   "owned_repositories_moved": {
     "count": 17,
@@ -82,7 +102,15 @@
       "WarehouseRepository",
       "WarehouseRevisionRepository",
       "WarehouseSkuPolicyRepository"
-    ]
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true,
+    "no_entity_bson": true
   },
-  "note": "跨域根事务由 erp-processes 持有；领域事务内方法接收传入 Executor。真实数据库运行未验证"
+  "source_contains_with_transaction": true,
+  "real_database_rollback_concurrency": "未验证",
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 catalog/warehouse/contract 根事务同一 Executor。真实数据库运行未验证",
+  "recorded_at": "2026-09-06T22:42:24Z"
 }

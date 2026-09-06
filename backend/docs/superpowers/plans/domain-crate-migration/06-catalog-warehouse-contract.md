@@ -9,8 +9,8 @@
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-catalog`, `erp-warehouse`, `erp-contract` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | chore/domain-crate-06-catalog-warehouse-contract integrator |
+| 输入/输出提交 | 前序 `88c386d071a72052b3c0d061de26a9c4ed5e76e9` / 实现提交 `b3f9ea487d63bc36e943c2d94a997bccf83fac59`（证据见 `.domain-migration-evidence/06/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -158,13 +158,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序本地门禁通过 `88c386d071a72052b3c0d061de26a9c4ed5e76e9`；分支 `chore/domain-crate-06-catalog-warehouse-contract`；source-map phase=06 行 75；owned types 17 | 已采集 `.domain-migration-evidence/06/input.json` |
+| 文件与符号 | 相对输入 206 路径变化（49 add / 1 delete / 65 modify / 91 rename）；17 owned EntityRepository 迁入 erp-catalog/erp-warehouse/erp-contract；商品附件与合同上传根用例迁入 erp-processes；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/06/files.tsv` |
+| 依赖 | 28 个成员；无 kind=test；erp-catalog/erp-warehouse/erp-contract 互不依赖且无旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/06/boundary.log` |
+| 旧实现清零 | unique-cut 删除旧 `entities/database/services` catalog/warehouse/contract 专属实现；领域边界旧源清零规则已加载、当前不核销（尚无已验收阶段）；历史 tests/ 档案未改 | 已采集：见 `boundary.log` / `files.tsv` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3303 passed / 0 failed / 68 ignored；exit 0 | 已执行 `.domain-migration-evidence/06/unit-tests.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 05 哈希相等 | 已采集 `.domain-migration-evidence/06/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 catalog/warehouse/contract 根事务同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/06/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0；review_approved=true；状态为本地门禁通过 | 已执行 `.domain-migration-evidence/06/quality-gates.log` |
+| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
+| 阶段提交 | 实现/集成提交 `b3f9ea487d63bc36e943c2d94a997bccf83fac59`；证据目录 `.domain-migration-evidence/06/`；review_approved=true；状态本地门禁通过；禁止标记已验收 | 已写入 `.domain-migration-evidence/06/metadata.json` |

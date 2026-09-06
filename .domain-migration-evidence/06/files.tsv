@@ -1,182 +1,223 @@
 action	path	note
-add	.domain-migration-evidence/06/	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/boundary.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/bpm.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/check.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/clippy.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/contract-comparison.json	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/files.tsv	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/fmt.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/git-diff-check.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/input.json	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/metadata.json	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/permissions.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/quality-gates.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/quality-gates.tsv	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/service.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/transaction-contract.json	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/06/unit-tests.log	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/AGENTS.md	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/Cargo.lock	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/app_state.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/errors.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/catalog/product.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/contract/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/warehouse/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-catalog/	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-contract/	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/src/adapters/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/src/attachments/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/src/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/src/lib.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-processes/src/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-read-models/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-read-models/src/customer_center/repository/related.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-read-models/src/customer_center/service.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-warehouse/	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/indexes/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/lib.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/category.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/dictionary.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/listing.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/parent_chain.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/product.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/product_pipeline.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/sellable.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/shared.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/sku.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/specification_audit.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/catalog/voucher.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/extensions/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/inventory/aggregate.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/contract.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/contract_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/owned/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product_brand.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product_category.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product_category_attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/product_revision_media.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/sku.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/sku_attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/sku_attribute_value.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/sku_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/unit_of_measure.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/voucher_category_profile_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/warehouse_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/warehouse_sku_policy.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/isolation_tests.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/list.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/query.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/procurement_responsibility/rule_list_isolation_tests.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/purchase_order/coverage.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/supplier_offering.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/database/src/repository/supplier_offering/list_filter.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/warehouse.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/06-catalog-warehouse-contract.md	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_brand.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_category.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_category_attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_kind.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/product_revision_media.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/sku.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/sku_attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/sku_attribute_value.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/sku_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/sku_revision_attribute_value.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/specification.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/status.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/unit_of_measure.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/voucher_category_profile_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/catalog/voucher_defaults.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/contract/contract_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/contract/entity.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/contract/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/contract/snapshot.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/lib.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/procurement_responsibility/catalog.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/procurement_responsibility/resolution.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/procurement_responsibility/rule.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/procurement_responsibility/rule_list.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/purchase_order/coverage.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/purchase_order/creation_basis.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/purchase_order/draft_edit.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/entities/src/purchase_order/sourcing_plan/tests.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/warehouse/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/warehouse/status.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/warehouse/warehouse_entity.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/warehouse/warehouse_revision.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/warehouse/warehouse_sku_policy.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/Cargo.toml	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/brand.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/category.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/attribute.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/brand_unit.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/category.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/common.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/product.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/dto/voucher.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/listing.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/product_query.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/product_workflow.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/sellable.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/sku_edit.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/support.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/unit.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/voucher.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/catalog/voucher_defaults.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/contract/dto.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/contract/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/contract/query.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/contract/scope.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/errors.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/fulfillment/task.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/inventory/adjustment_command.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/inventory/balance.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/lib.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/procurement_responsibility/dto.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/procurement_responsibility/resolver.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/procurement_responsibility/rule_list.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/procurement_responsibility/service.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/purchase_order/creation_basis/create.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/purchase_order/creation_basis/query.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/sales_order/command/create.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/sales_order/command/sellable.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-modify	backend/services/src/supplier_offering/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/warehouse/dto.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/warehouse/mod.rs	阶段 06 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/boundary.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/bpm.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/check.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/clippy.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/contract-comparison.json	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/files.tsv	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/fmt.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/git-diff-check.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/input.json	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/metadata.json	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/permissions.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/quality-gates.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/quality-gates.tsv	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/service.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/transaction-contract.json	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/06/unit-tests.log	阶段 06 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/dto/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/entity/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/error.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/indexes/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/ports/audit.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/ports/file_asset.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/ports/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/ports/pending.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/ports/supply.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/repository/extensions/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/repository/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/repository/owned/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-catalog/src/service/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/dto/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/entity/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/error.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/indexes/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/ports/audit.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/ports/customer.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/ports/file_asset.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/ports/identity.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/ports/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/repository/extensions/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/repository/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/repository/owned/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/service/contract/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-contract/src/service/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/catalog.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/contract.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/warehouse.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/contract.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/dto/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/entity/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/error.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/indexes/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/ports/audit.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/ports/fingerprint.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/ports/identity.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/ports/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/repository/extensions/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/repository/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/repository/owned/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-warehouse/src/service/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/contract/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/AGENTS.md	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.lock	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/app_state.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/errors.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/catalog/product.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/contract/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/warehouse/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/adapters/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/attachments/catalog.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/catalog.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/warehouse.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/src/customer_center/repository/related.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/src/customer_center/service.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/indexes/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/extensions/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/inventory/aggregate.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/owned/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/catalog.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/isolation_tests.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/list.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/query.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/procurement_responsibility/rule_list_isolation_tests.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/purchase_order/coverage.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/supplier_offering.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/supplier_offering/list_filter.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/06-catalog-warehouse-contract.md	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/procurement_responsibility/catalog.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/procurement_responsibility/resolution.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/procurement_responsibility/rule.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/procurement_responsibility/rule_list.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/coverage.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/creation_basis.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/draft_edit.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/sourcing_plan/tests.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/Cargo.toml	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/errors.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/fulfillment/task.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/inventory/adjustment_command.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/inventory/balance.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/lib.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/procurement_responsibility/dto.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/procurement_responsibility/resolver.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/procurement_responsibility/rule_list.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/procurement_responsibility/service.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/purchase_order/creation_basis/create.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/purchase_order/creation_basis/query.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/sales_order/command/create.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/sales_order/command/sellable.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier_offering/mod.rs	phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog.rs	rename from backend/services/src/catalog/dto.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/attribute.rs	rename from backend/services/src/catalog/dto/attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/brand_unit.rs	rename from backend/services/src/catalog/dto/brand_unit.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/category.rs	rename from backend/services/src/catalog/dto/category.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/common.rs	rename from backend/services/src/catalog/dto/common.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/product.rs	rename from backend/services/src/catalog/dto/product.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/dto/catalog/voucher.rs	rename from backend/services/src/catalog/dto/voucher.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/mod.rs	rename from backend/entities/src/catalog/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product.rs	rename from backend/entities/src/catalog/product.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_brand.rs	rename from backend/entities/src/catalog/product_brand.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_category.rs	rename from backend/entities/src/catalog/product_category.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_category_attribute.rs	rename from backend/entities/src/catalog/product_category_attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_kind.rs	rename from backend/entities/src/catalog/product_kind.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_revision.rs	rename from backend/entities/src/catalog/product_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/product_revision_media.rs	rename from backend/entities/src/catalog/product_revision_media.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/revision.rs	rename from backend/entities/src/catalog/revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/sku.rs	rename from backend/entities/src/catalog/sku.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/sku_attribute.rs	rename from backend/entities/src/catalog/sku_attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/sku_attribute_value.rs	rename from backend/entities/src/catalog/sku_attribute_value.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/sku_revision.rs	rename from backend/entities/src/catalog/sku_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/sku_revision_attribute_value.rs	rename from backend/entities/src/catalog/sku_revision_attribute_value.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/specification.rs	rename from backend/entities/src/catalog/specification.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/status.rs	rename from backend/entities/src/catalog/status.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/unit_of_measure.rs	rename from backend/entities/src/catalog/unit_of_measure.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/voucher_category_profile_revision.rs	rename from backend/entities/src/catalog/voucher_category_profile_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/entity/catalog/voucher_defaults.rs	rename from backend/entities/src/catalog/voucher_defaults.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/indexes/catalog.rs	rename from backend/database/src/indexes/catalog.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/attribute.rs	rename from backend/database/src/repository/catalog/attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/category.rs	rename from backend/database/src/repository/catalog/category.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/dictionary.rs	rename from backend/database/src/repository/catalog/dictionary.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/listing.rs	rename from backend/database/src/repository/catalog/listing.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/mod.rs	rename from backend/database/src/repository/catalog/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/parent_chain.rs	rename from backend/database/src/repository/catalog/parent_chain.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/product.rs	rename from backend/database/src/repository/catalog/product.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs	rename from backend/database/src/repository/catalog/product_pipeline.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/sellable.rs	rename from backend/database/src/repository/catalog/sellable.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/shared.rs	rename from backend/database/src/repository/catalog/shared.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/sku.rs	rename from backend/database/src/repository/catalog/sku.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/specification_audit.rs	rename from backend/database/src/repository/catalog/specification_audit.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/catalog/voucher.rs	rename from backend/database/src/repository/catalog/voucher.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/extensions/catalog.rs	rename from backend/database/src/repository/extensions/catalog.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product.rs	rename from backend/database/src/repository/owned/product.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product_brand.rs	rename from backend/database/src/repository/owned/product_brand.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product_category.rs	rename from backend/database/src/repository/owned/product_category.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product_category_attribute.rs	rename from backend/database/src/repository/owned/product_category_attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product_revision.rs	rename from backend/database/src/repository/owned/product_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/product_revision_media.rs	rename from backend/database/src/repository/owned/product_revision_media.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/sku.rs	rename from backend/database/src/repository/owned/sku.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/sku_attribute.rs	rename from backend/database/src/repository/owned/sku_attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/sku_attribute_value.rs	rename from backend/database/src/repository/owned/sku_attribute_value.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/sku_revision.rs	rename from backend/database/src/repository/owned/sku_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/unit_of_measure.rs	rename from backend/database/src/repository/owned/unit_of_measure.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/repository/owned/voucher_category_profile_revision.rs	rename from backend/database/src/repository/owned/voucher_category_profile_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/attribute.rs	rename from backend/services/src/catalog/attribute.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/brand.rs	rename from backend/services/src/catalog/brand.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/category.rs	rename from backend/services/src/catalog/category.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/listing.rs	rename from backend/services/src/catalog/listing.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/mod.rs	rename from backend/services/src/catalog/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/product_query.rs	rename from backend/services/src/catalog/product_query.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/product_workflow.rs	rename from backend/services/src/catalog/product_workflow.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/sellable.rs	rename from backend/services/src/catalog/sellable.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/sku_edit.rs	rename from backend/services/src/catalog/sku_edit.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/support.rs	rename from backend/services/src/catalog/support.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/unit.rs	rename from backend/services/src/catalog/unit.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/voucher.rs	rename from backend/services/src/catalog/voucher.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-catalog/src/service/catalog/voucher_defaults.rs	rename from backend/services/src/catalog/voucher_defaults.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/dto/contract.rs	rename from backend/services/src/contract/dto.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/entity/contract/contract_revision.rs	rename from backend/entities/src/contract/contract_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/entity/contract/entity.rs	rename from backend/entities/src/contract/entity.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/entity/contract/mod.rs	rename from backend/entities/src/contract/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/entity/contract/snapshot.rs	rename from backend/entities/src/contract/snapshot.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/indexes/contract.rs	rename from backend/database/src/indexes/contract.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/repository/contract.rs	rename from backend/database/src/repository/contract.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/repository/extensions/contract.rs	rename from backend/database/src/repository/extensions/contract.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/repository/owned/contract.rs	rename from backend/database/src/repository/owned/contract.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/repository/owned/contract_revision.rs	rename from backend/database/src/repository/owned/contract_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/service/contract/query.rs	rename from backend/services/src/contract/query.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-contract/src/service/contract/scope.rs	rename from backend/services/src/contract/scope.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/dto/warehouse.rs	rename from backend/services/src/warehouse/dto.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/entity/warehouse/mod.rs	rename from backend/entities/src/warehouse/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/entity/warehouse/status.rs	rename from backend/entities/src/warehouse/status.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/entity/warehouse/warehouse_entity.rs	rename from backend/entities/src/warehouse/warehouse_entity.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/entity/warehouse/warehouse_revision.rs	rename from backend/entities/src/warehouse/warehouse_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/entity/warehouse/warehouse_sku_policy.rs	rename from backend/entities/src/warehouse/warehouse_sku_policy.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/indexes/warehouse.rs	rename from backend/database/src/indexes/warehouse.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/repository/extensions/warehouse.rs	rename from backend/database/src/repository/extensions/warehouse.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/repository/owned/warehouse.rs	rename from backend/database/src/repository/owned/warehouse.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/repository/owned/warehouse_revision.rs	rename from backend/database/src/repository/owned/warehouse_revision.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/repository/owned/warehouse_sku_policy.rs	rename from backend/database/src/repository/owned/warehouse_sku_policy.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/repository/warehouse.rs	rename from backend/database/src/repository/warehouse.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-warehouse/src/service/warehouse/mod.rs	rename from backend/services/src/warehouse/mod.rs；phase 06 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
