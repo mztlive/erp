@@ -311,23 +311,6 @@ fn visibility_from_enforced_permissions(
     DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
-/// 从已认证身份、当前角色与数据范围形成阻塞审批查询边界。
-///
-/// 仅采用实际授予 `approval_instance:read` 的角色范围，并分别与用户范围
-/// 求交后再合并，禁止把另一角色的权限与组织范围交叉放大。用户未配置独立范围
-/// 时沿用角色范围；角色未配置可证明范围时失败关闭为空集合。空集合会交给
-/// Repository 直接返回空页，不会查询全量后在应用层隐藏。
-///
-/// # 错误
-/// 当前 RBAC policy 或数据范围仓储读取失败时返回服务错误。
-pub async fn approval_management_scope(
-    db: &Database,
-    rbac: &RbacService,
-    actor: &AuditActor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope(db, rbac, actor, "approval_instance:read").await
-}
-
 /// 计算指定审批单据类型的对象读取 DataScope。
 ///
 /// # 参数
@@ -497,15 +480,6 @@ pub async fn approval_recovery_authorization(
     Err(Error::Rbac(
         "审批恢复授权策略持续变化，无法形成稳定快照".to_string(),
     ))
-}
-
-async fn permission_scope(
-    db: &Database,
-    rbac: &RbacService,
-    actor: &AuditActor,
-    permission: &str,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(db, rbac, actor, permission, &mut NoTransaction).await
 }
 
 /// 使用调用方执行器计算权限与组织范围交集。

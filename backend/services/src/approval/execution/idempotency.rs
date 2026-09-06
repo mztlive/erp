@@ -157,18 +157,69 @@ pub fn start_scope_candidates(
     Ok(vec![current.as_str().to_string(), legacy])
 }
 
+/// 通用启动命令身份参数。
+///
+/// # 用途
+/// 打包 [`start_identity`] 所需的 scope/digest 字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 绑定 ID、定义版本与操作人进入 STANDARD 变体 digest。
+#[derive(Debug, Clone)]
+pub struct StartIdentityParams<'a> {
+    /// 规范化幂等键。
+    pub idempotency_key: IdempotencyKey,
+    /// 流程种类稳定码。
+    pub process_kind: &'a str,
+    /// 主体种类。
+    pub subject_kind: &'a str,
+    /// 主体主键。
+    pub subject_id: &'a str,
+    /// 冻结主体版本。
+    pub subject_version: u32,
+    /// 审批定义绑定 ID。
+    pub binding_id: &'a str,
+    /// 审批定义版本。
+    pub definition_version: u32,
+    /// 启动操作人参与者 ID。
+    pub actor_participant_id: &'a str,
+}
+
 /// 形成启动命令的当前 V3 身份与历史无前缀身份。
-#[allow(clippy::too_many_arguments)]
-pub fn start_identity(
-    idempotency_key: IdempotencyKey,
-    process_kind: &str,
-    subject_kind: &str,
-    subject_id: &str,
-    subject_version: u32,
-    binding_id: &str,
-    definition_version: u32,
-    actor_participant_id: &str,
-) -> Result<PreparedCommandIdentity> {
+///
+/// # 用途
+/// 构造通用 Start 命令的 V3 身份并登记历史 STANDARD writer 候选。
+///
+/// # 参数
+/// * `params` - 启动命令 scope/digest 字段
+///
+/// # 返回
+/// 当前 V3 身份与精确 legacy 候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
+///
+/// # 关键业务约束
+/// 专属启动命令应走 [`specialized_start_identity`]，不得复用 STANDARD digest。
+pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
+    let StartIdentityParams {
+        idempotency_key,
+        process_kind,
+        subject_kind,
+        subject_id,
+        subject_version,
+        binding_id,
+        definition_version,
+        actor_participant_id,
+    } = params;
     let current = specialized_start_identity(
         idempotency_key,
         process_kind,
@@ -199,7 +250,6 @@ pub fn start_identity(
 /// 业务域专属启动命令必须固定 `variant` 和字段顺序；本函数统一复用 Start
 /// scope 协议，避免专属 digest 破坏 receipt-first 查询。历史 writer 必须由
 /// 调用方显式追加精确成对候选。
-#[allow(clippy::too_many_arguments)]
 pub fn specialized_start_identity<'a>(
     idempotency_key: IdempotencyKey,
     process_kind: &str,
@@ -240,7 +290,6 @@ pub fn legacy_start_receipt_identity(
 }
 
 /// 为历史通用 Start writer 形成旧 scope 与旧 digest 的精确成对候选。
-#[allow(clippy::too_many_arguments)]
 pub fn legacy_standard_start_receipt_identity(
     process_kind: &str,
     subject_kind: &str,
@@ -265,7 +314,6 @@ pub fn legacy_standard_start_receipt_identity(
 }
 
 /// 形成审批决定的 V3 身份，并精确登记 V2 与无前缀历史摘要。
-#[allow(clippy::too_many_arguments)]
 pub fn decision_identity(
     idempotency_key: IdempotencyKey,
     execution_id: &str,
@@ -305,18 +353,69 @@ pub fn decision_identity(
     ))
 }
 
+/// 通用审批取消命令身份参数。
+///
+/// # 用途
+/// 打包 [`cancel_identity`] 所需的 scope/digest 字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 不含单据版本；单据撤回应走 [`document_cancel_identity`]。
+#[derive(Debug, Clone)]
+pub struct CancelIdentityParams<'a> {
+    /// 规范化幂等键。
+    pub idempotency_key: IdempotencyKey,
+    /// 审批流程实例 ID。
+    pub instance_id: &'a str,
+    /// 冻结主体版本。
+    pub subject_version: u32,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 期望任务版本；无开放任务时为 `None`。
+    pub expected_task_version: Option<u64>,
+    /// 已规范化取消原因。
+    pub reason: &'a str,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+}
+
 /// 形成通用审批取消的 V3 身份与无前缀历史身份。
-#[allow(clippy::too_many_arguments)]
-pub fn cancel_identity(
-    idempotency_key: IdempotencyKey,
-    instance_id: &str,
-    subject_version: u32,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_task_version: Option<u64>,
-    reason: &str,
-    actor_id: &str,
-) -> Result<PreparedCommandIdentity> {
+///
+/// # 用途
+/// 构造通用 Cancel 命令的 V3 身份并登记无前缀历史候选。
+///
+/// # 参数
+/// * `params` - 取消命令 scope/digest 字段
+///
+/// # 返回
+/// 当前 V3 身份与精确 legacy 候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
+///
+/// # 关键业务约束
+/// 受阻取消与单据撤回不得复用本身份。
+pub fn cancel_identity(params: CancelIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
+    let CancelIdentityParams {
+        idempotency_key,
+        instance_id,
+        subject_version,
+        expected_instance_version,
+        expected_execution_version,
+        expected_task_version,
+        reason,
+        actor_id,
+    } = params;
     let current = current_identity(
         ApprovalCommandKind::CancelApproval,
         CANCEL_DOMAIN,
@@ -347,19 +446,72 @@ pub fn cancel_identity(
     ))
 }
 
+/// 业务单据普通撤回命令身份参数。
+///
+/// # 用途
+/// 打包 [`document_cancel_identity`] 所需的 scope/digest 字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// digest 必须同时绑定单据版本与运行实例版本。
+#[derive(Debug, Clone)]
+pub struct DocumentCancelIdentityParams<'a> {
+    /// 规范化幂等键。
+    pub idempotency_key: IdempotencyKey,
+    /// 审批流程实例 ID。
+    pub instance_id: &'a str,
+    /// 冻结主体版本。
+    pub subject_version: u32,
+    /// 期望业务单据版本。
+    pub expected_document_version: u64,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 期望任务版本；无开放任务时为 `None`。
+    pub expected_task_version: Option<u64>,
+    /// 已规范化取消原因。
+    pub reason: &'a str,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+}
+
 /// 形成业务单据普通撤回的 V3 身份与已知无前缀历史身份。
-#[allow(clippy::too_many_arguments)]
-pub fn document_cancel_identity(
-    idempotency_key: IdempotencyKey,
-    instance_id: &str,
-    subject_version: u32,
-    expected_document_version: u64,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_task_version: Option<u64>,
-    reason: &str,
-    actor_id: &str,
-) -> Result<PreparedCommandIdentity> {
+///
+/// # 用途
+/// 构造单据撤回命令的 V3 身份并登记无前缀历史候选。
+///
+/// # 参数
+/// * `params` - 单据撤回 scope/digest 字段
+///
+/// # 返回
+/// 当前 V3 身份与精确 legacy 候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
+///
+/// # 关键业务约束
+/// 不得与通用取消或受阻取消共享 digest 域。
+pub fn document_cancel_identity(params: DocumentCancelIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
+    let DocumentCancelIdentityParams {
+        idempotency_key,
+        instance_id,
+        subject_version,
+        expected_document_version,
+        expected_instance_version,
+        expected_execution_version,
+        expected_task_version,
+        reason,
+        actor_id,
+    } = params;
     let digest_payload = CanonicalCommandPayload::new()
         .field(CommandPayloadField::U32(subject_version))
         .field(CommandPayloadField::U64(expected_document_version))
@@ -393,7 +545,6 @@ pub fn document_cancel_identity(
 }
 
 /// 形成原审批人恢复的 V3 身份与无前缀历史身份。
-#[allow(clippy::too_many_arguments)]
 pub fn resume_identity(
     idempotency_key: IdempotencyKey,
     instance_id: &str,
@@ -431,18 +582,69 @@ pub fn resume_identity(
     ))
 }
 
+/// 受阻取消命令身份参数。
+///
+/// # 用途
+/// 打包 [`cancel_blocked_identity`] 所需的 scope/digest 字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// digest 必须绑定 blocker 代码，不得与普通取消共享。
+#[derive(Debug, Clone)]
+pub struct CancelBlockedIdentityParams<'a> {
+    /// 规范化幂等键。
+    pub idempotency_key: IdempotencyKey,
+    /// 审批流程实例 ID。
+    pub instance_id: &'a str,
+    /// 阻塞代码稳定串。
+    pub blocker: &'a str,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 期望任务版本；无开放任务时为 `None`。
+    pub expected_task_version: Option<u64>,
+    /// 已规范化取消原因。
+    pub reason: &'a str,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+}
+
 /// 形成受阻取消的 V3 身份，并精确登记 V2 与无前缀历史摘要。
-#[allow(clippy::too_many_arguments)]
-pub fn cancel_blocked_identity(
-    idempotency_key: IdempotencyKey,
-    instance_id: &str,
-    blocker: &str,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_task_version: Option<u64>,
-    reason: &str,
-    actor_id: &str,
-) -> Result<PreparedCommandIdentity> {
+///
+/// # 用途
+/// 构造 CancelBlocked 命令的 V3 身份并登记 V2/legacy 候选。
+///
+/// # 参数
+/// * `params` - 受阻取消 scope/digest 字段
+///
+/// # 返回
+/// 当前 V3 身份与精确 legacy 候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
+///
+/// # 关键业务约束
+/// 原审批人可恢复时不得走受阻取消身份。
+pub fn cancel_blocked_identity(params: CancelBlockedIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
+    let CancelBlockedIdentityParams {
+        idempotency_key,
+        instance_id,
+        blocker,
+        expected_instance_version,
+        expected_execution_version,
+        expected_task_version,
+        reason,
+        actor_id,
+    } = params;
     let digest_payload = CanonicalCommandPayload::new()
         .field(CommandPayloadField::Text(blocker))
         .field(CommandPayloadField::U64(expected_instance_version))
@@ -491,7 +693,6 @@ pub fn cancel_blocked_identity(
 /// 升级命令在本开发期没有已发布历史 writer，不登记任何 legacy 候选。scope
 /// 精确绑定单据类型与 ID；digest 同时绑定 scope 字段、业务对象版本、绑定版本、
 /// 规范化原因和实际操作人。
-#[allow(clippy::too_many_arguments)]
 pub fn upgrade_binding_identity(
     document_type: &str,
     document_id: &str,
@@ -654,7 +855,6 @@ fn legacy_cancel_digest(
     ]))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn legacy_document_cancel_digest(
     subject_version: u32,
     expected_document_version: u64,
@@ -878,7 +1078,8 @@ mod tests {
     use super::{
         cancel_blocked_identity, cancel_identity, decision_identity, document_cancel_identity,
         normalize_idempotency_key, resume_identity, start_identity, start_scope_candidates,
-        upgrade_binding_identity, ReceiptBranch,
+        upgrade_binding_identity, CancelBlockedIdentityParams, CancelIdentityParams,
+        DocumentCancelIdentityParams, ReceiptBranch, StartIdentityParams,
     };
     use bpm::ids::ApprovalCommandReceiptId;
     use bpm::model::{ApprovalCommandReceipt, Timestamp};
@@ -1013,16 +1214,16 @@ mod tests {
 
     #[test]
     fn each_known_legacy_writer_is_read_as_an_exact_pair() {
-        let start = start_identity(
-            key(),
-            "stock_adjustment",
-            "STOCK_ADJUSTMENT",
-            "adj-1",
-            3,
-            "def-1",
-            7,
-            "u1",
-        )
+        let start = start_identity(StartIdentityParams {
+            idempotency_key: key(),
+            process_kind: "stock_adjustment",
+            subject_kind: "STOCK_ADJUSTMENT",
+            subject_id: "adj-1",
+            subject_version: 3,
+            binding_id: "def-1",
+            definition_version: 7,
+            actor_participant_id: "u1",
+        })
         .unwrap();
         assert_legacy_replay(
             &start,
@@ -1043,15 +1244,35 @@ mod tests {
             super::legacy_decision_digest("wi-1", "REJECT", Some("资料不全"), 5, "u1"),
         );
 
-        let cancel = cancel_identity(key(), "inst-1", 3, 11, 13, Some(17), "撤回", "u1").unwrap();
+        let cancel = cancel_identity(CancelIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            subject_version: 3,
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: Some(17),
+            reason: "撤回",
+            actor_id: "u1",
+        })
+        .unwrap();
         assert_legacy_replay(
             &cancel,
             "inst-1",
             super::legacy_cancel_digest(3, 11, 13, Some(17), "撤回", "u1"),
         );
 
-        let document_cancel =
-            document_cancel_identity(key(), "inst-1", 3, 7, 11, 13, Some(17), "撤回", "u1").unwrap();
+        let document_cancel = document_cancel_identity(DocumentCancelIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            subject_version: 3,
+            expected_document_version: 7,
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: Some(17),
+            reason: "撤回",
+            actor_id: "u1",
+        })
+        .unwrap();
         assert_legacy_replay(
             &document_cancel,
             "inst-1",
@@ -1065,16 +1286,16 @@ mod tests {
             super::legacy_resume_digest(11, 13, 17, Some(19), "admin"),
         );
 
-        let blocked = cancel_blocked_identity(
-            key(),
-            "inst-1",
-            "GRAPH_CORRUPTED",
-            11,
-            13,
-            None,
-            "人工终止",
-            "admin",
-        )
+        let blocked = cancel_blocked_identity(CancelBlockedIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            blocker: "GRAPH_CORRUPTED",
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: None,
+            reason: "人工终止",
+            actor_id: "admin",
+        })
         .unwrap();
         assert_legacy_replay(
             &blocked,
@@ -1090,33 +1311,53 @@ mod tests {
 
     #[test]
     fn each_execution_command_has_stable_v3_golden_identity() {
-        let start = start_identity(
-            key(),
-            "stock_adjustment",
-            "STOCK_ADJUSTMENT",
-            "adj-1",
-            3,
-            "def-1",
-            7,
-            "u1",
-        )
+        let start = start_identity(StartIdentityParams {
+            idempotency_key: key(),
+            process_kind: "stock_adjustment",
+            subject_kind: "STOCK_ADJUSTMENT",
+            subject_id: "adj-1",
+            subject_version: 3,
+            binding_id: "def-1",
+            definition_version: 7,
+            actor_participant_id: "u1",
+        })
         .unwrap();
         let decision =
             decision_identity(key(), "exec-1", "wi-1", "REJECT", Some("资料不全"), 5, "u1").unwrap();
-        let cancel = cancel_identity(key(), "inst-1", 3, 11, 13, Some(17), "撤回", "u1").unwrap();
-        let document_cancel =
-            document_cancel_identity(key(), "inst-1", 3, 7, 11, 13, Some(17), "撤回", "u1").unwrap();
+        let cancel = cancel_identity(CancelIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            subject_version: 3,
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: Some(17),
+            reason: "撤回",
+            actor_id: "u1",
+        })
+        .unwrap();
+        let document_cancel = document_cancel_identity(DocumentCancelIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            subject_version: 3,
+            expected_document_version: 7,
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: Some(17),
+            reason: "撤回",
+            actor_id: "u1",
+        })
+        .unwrap();
         let resume = resume_identity(key(), "inst-1", 11, 13, 17, Some(19), "admin").unwrap();
-        let blocked = cancel_blocked_identity(
-            key(),
-            "inst-1",
-            "GRAPH_CORRUPTED",
-            11,
-            13,
-            None,
-            "人工终止",
-            "admin",
-        )
+        let blocked = cancel_blocked_identity(CancelBlockedIdentityParams {
+            idempotency_key: key(),
+            instance_id: "inst-1",
+            blocker: "GRAPH_CORRUPTED",
+            expected_instance_version: 11,
+            expected_execution_version: 13,
+            expected_task_version: None,
+            reason: "人工终止",
+            actor_id: "admin",
+        })
         .unwrap();
 
         let golden = [

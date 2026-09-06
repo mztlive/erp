@@ -25,9 +25,11 @@ use super::super::resume::prepare_resume;
 use super::super::runtime_query::{recovery_options_for, RuntimeRecoveryAction};
 use super::super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
 use super::super::{ExecutionCommandInput, PreparedExecution, ResumeExecutionInput};
-use super::notifications::persist_resume_notifications;
+use super::notifications::{persist_resume_notifications, ResumeNotificationFacts};
 use super::query::{first_open_task, list_projection_from_writes};
-use super::read_auth::{process_required_separation_policy, revalidate_decision_approver};
+use super::read_auth::{
+    process_required_separation_policy, revalidate_decision_approver, RevalidateDecisionApproverInput,
+};
 use super::tasks::{create_open_tasks, CreateOpenTasksInput};
 use super::{
     ensure_command_actor, ensure_expected_version, find_receipt_for_identity, hidden_not_found,
@@ -102,12 +104,14 @@ impl ApprovalRuntimeService {
             return revalidate_decision_approver(
                 &self.db,
                 &self.rbac,
-                assignee_id,
-                assignee_name,
-                None,
-                snapshot,
-                spec,
-                process_required_separation_policy(snapshot.document_type)?,
+                RevalidateDecisionApproverInput {
+                    assignee_id,
+                    assignee_name,
+                    authenticated_actor: None,
+                    snapshot,
+                    spec,
+                    separation_policy: process_required_separation_policy(snapshot.document_type)?,
+                },
                 executor,
             )
             .await;
@@ -326,12 +330,16 @@ impl ApprovalRuntimeService {
                         let eligibility = revalidate_decision_approver(
                             &db,
                             &rbac,
-                            assignee_id,
-                            assignee_name,
-                            None,
-                            snapshot,
-                            spec,
-                            process_required_separation_policy(snapshot.document_type)?,
+                            RevalidateDecisionApproverInput {
+                                assignee_id,
+                                assignee_name,
+                                authenticated_actor: None,
+                                snapshot,
+                                spec,
+                                separation_policy: process_required_separation_policy(
+                                    snapshot.document_type,
+                                )?,
+                            },
                             session,
                         )
                         .await?;
@@ -655,10 +663,12 @@ async fn persist_resume_writes(
     persist_resume_notifications(
         db,
         input.writes,
-        new_execution,
-        input.submitted_by,
-        input.document_type_label,
-        input.document_no,
+        ResumeNotificationFacts {
+            new_execution,
+            submitted_by: input.submitted_by,
+            document_type_label: input.document_type_label,
+            document_no: input.document_no,
+        },
         input.now,
         session,
     )

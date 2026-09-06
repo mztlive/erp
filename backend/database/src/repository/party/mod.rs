@@ -14,31 +14,17 @@ mod address;
 mod aggregate;
 mod bank_account;
 mod contact;
-// The collection module intentionally matches the parent domain name.
-#[allow(clippy::module_inception)]
-mod party;
+mod record;
 mod revision;
 mod shared;
 mod tax_profile;
 
 pub use address::PartyAddressFilter;
-#[allow(unused_imports)]
-pub use address::PartyAddressRow;
 pub use bank_account::PartyBankAccountFilter;
-#[allow(unused_imports)]
-pub use bank_account::PartyBankAccountRow;
 pub use contact::PartyContactFilter;
-#[allow(unused_imports)]
-pub use contact::PartyContactRow;
-pub use party::PartyFilter;
-#[allow(unused_imports)]
-pub use party::PartyRow;
+pub use record::PartyFilter;
 pub use revision::PartyRevisionFilter;
-#[allow(unused_imports)]
-pub use revision::PartyRevisionRow;
 pub use tax_profile::PartyTaxProfileFilter;
-#[allow(unused_imports)]
-pub use tax_profile::PartyTaxProfileRow;
 
 use mongodb::Database;
 

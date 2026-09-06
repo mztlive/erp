@@ -20,51 +20,31 @@ pub use attribute::{
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, UpdateSkuAttributeRequest,
     UpdateSkuAttributeValueRequest,
 };
-#[allow(unused_imports)]
-pub(crate) use attribute::{
-    SkuAttributeListQuery, SkuAttributeValueListQuery, SKU_ATTRIBUTE_SORT_FIELDS,
-    SKU_ATTRIBUTE_VALUE_SORT_FIELDS,
-};
 pub use brand_unit::{
     CreateProductBrandRequest, CreateUnitOfMeasureRequest, ProductBrandListParams, ProductBrandView,
     UnitOfMeasureListParams, UnitOfMeasureView, UpdateProductBrandRequest, UpdateUnitOfMeasureRequest,
-};
-#[allow(unused_imports)]
-pub(crate) use brand_unit::{
-    ProductBrandListQuery, UnitOfMeasureListQuery, PRODUCT_BRAND_SORT_FIELDS, UNIT_OF_MEASURE_SORT_FIELDS,
 };
 pub use category::{
     CreateProductCategoryRequest, MoveProductCategoryRequest, ProductCategoryListParams,
     ProductCategoryParentChange, ProductCategoryView, UpdateProductCategoryRequest,
 };
-#[allow(unused_imports)]
-pub(crate) use category::{ProductCategoryListQuery, PRODUCT_CATEGORY_SORT_FIELDS};
-#[allow(unused_imports)]
-pub(crate) use common::normalize_sort;
 pub(crate) use common::validate_sales_price_range;
-#[allow(unused_imports)]
-pub use common::{PageParams, PageView, SortDir};
+pub use common::{PageView, SortDir};
 pub use product::{
     CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
     SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest,
 };
-#[allow(unused_imports)]
-pub(crate) use product::{
-    ProductListQuery, ProductRevisionListQuery, SkuListQuery, SkuRevisionListQuery,
-    PRODUCT_REVISION_SORT_FIELDS, PRODUCT_SORT_FIELDS, SKU_REVISION_SORT_FIELDS, SKU_SORT_FIELDS,
-};
 pub use voucher::{
     CreateVoucherCategoryRequest, NewVoucherCategoryInput, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
 };
-#[allow(unused_imports)]
-pub(crate) use voucher::{VoucherCategoryProfileListQuery, VOUCHER_PROFILE_SORT_FIELDS};
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir};
+    use super::common::normalize_sort;
+    use super::SortDir;
     use entities::catalog::{ListingStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
     use validator::Validate;
 

@@ -202,42 +202,27 @@ impl<'a> SupplierOfferingRepository<'a> {
             .into_iter()
             .map(|value| (value.supplier_offering_id.to_string(), value))
             .collect::<HashMap<_, _>>();
-        let (skus, sku_revisions, products, suppliers, parties, party_revisions) =
-            self.load_display_entities(&page.items, executor).await?;
+        let display = self.load_display_entities(&page.items, executor).await?;
         Ok(SupplierOfferingListBundle {
             page,
             revisions,
             availabilities,
-            skus,
-            sku_revisions,
-            products,
-            suppliers,
-            parties,
-            party_revisions,
+            skus: display.skus,
+            sku_revisions: display.sku_revisions,
+            products: display.products,
+            suppliers: display.suppliers,
+            parties: display.parties,
+            party_revisions: display.party_revisions,
         })
     }
 
     /// 一次装载供给列表页的全部最小展示事实（Service 直接调用入口）。
     ///
-    /// Service 不能直接构造 [`SupplierOfferingListQuery`]：`repository::supplier_offering`
-    /// 模块为私有且 `repository/mod.rs` 在冻结清单内，跨 crate 无法命名查询结构体。
-    /// 因此本 12 参数包装是 Service 唯一的规范入口；它只做一件事——把参数逐字段
-    /// 装配为查询结构体后委托 [`Self::load_offering_list_bundle`]，两者过滤、总数与
-    /// 排序语义恒等（见 `wrapper_args_map_one_to_one_onto_query`）。
+    /// 查询类型经 `SupplierOfferingExt::OfferingListQuery` 对 Service 可命名；
+    /// 本方法只委托 [`Self::load_offering_list_bundle`]，过滤、总数与排序语义恒等。
     ///
     /// # 参数
-    /// * `availability_status` - 当前可供状态；`None` 表示不过滤
-    /// * `keyword` - 已规整的关键字（供应商订货编码、公司 SKU 编号/名称）
-    /// * `product_no` - 已规整的公司商品编号
-    /// * `sku_no` - 已规整的公司 SKU 编号
-    /// * `sku_id` - 公司 SKU 精确过滤
-    /// * `supplier_id` - 供应商精确过滤
-    /// * `status` - 供给关系状态
-    /// * `source_type` - 登记来源
-    /// * `page` - 页码（从 1 起）
-    /// * `page_size` - 每页数量
-    /// * `sort_by` - 排序字段
-    /// * `sort_ascending` - 是否升序
+    /// * `query` - 高层查询条件，关键字与编号应已由 Service 规整
     /// * `executor` - 数据访问执行器，由调用方决定事务边界
     ///
     /// # 返回
@@ -249,38 +234,12 @@ impl<'a> SupplierOfferingRepository<'a> {
     /// # 约束
     /// 只沿当前修订指针读取；不返回 Service DTO、HTTP View 或授权结论；
     /// 不开启或提交事务。
-    #[allow(clippy::too_many_arguments)]
     pub async fn load_offering_list_page(
         &self,
-        availability_status: Option<AvailabilityStatus>,
-        keyword: Option<String>,
-        product_no: Option<String>,
-        sku_no: Option<String>,
-        sku_id: Option<SkuId>,
-        supplier_id: Option<SupplierAccountId>,
-        status: Option<OfferingStatus>,
-        source_type: Option<OfferingSourceType>,
-        page: u64,
-        page_size: u32,
-        sort_by: Option<String>,
-        sort_ascending: bool,
+        query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingListBundle> {
-        let query = SupplierOfferingListQuery {
-            availability_status,
-            keyword,
-            product_no,
-            sku_no,
-            sku_id,
-            supplier_id,
-            status,
-            source_type,
-            page,
-            page_size,
-            sort_by,
-            sort_ascending,
-        };
-        self.load_offering_list_bundle(&query, executor).await
+        self.load_offering_list_bundle(query, executor).await
     }
 }
 
@@ -333,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn wrapper_args_map_one_to_one_onto_query() {
+    fn list_query_fields_preserve_all_filter_scopes() {
         use entities::ids::{SkuId, SupplierAccountId};
         let query = SupplierOfferingListQuery {
             availability_status: Some(entities::supplier_offering::AvailabilityStatus::Stale),
@@ -480,24 +439,24 @@ mod isolation_tests {
                 .await
                 .expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let query = super::SupplierOfferingListQuery {
+                availability_status: None,
+                keyword: None,
+                product_no: None,
+                sku_no: None,
+                sku_id: None,
+                supplier_id: None,
+                status: None,
+                source_type: None,
+                page: 1,
+                page_size: 20,
+                sort_by: None,
+                sort_ascending: false,
+            };
             let bundle = fixture
                 .db()
                 .supplier_offering_repository()
-                .load_offering_list_page(
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    1,
-                    20,
-                    None,
-                    false,
-                    &mut NoTransaction,
-                )
+                .load_offering_list_page(&query, &mut NoTransaction)
                 .await
                 .expect("列表装载失败");
             assert_eq!(bundle.page.total, 0);
@@ -542,47 +501,47 @@ mod isolation_tests {
                 )
                 .await
                 .expect("供给写入失败");
+            let query = super::SupplierOfferingListQuery {
+                availability_status: None,
+                keyword: None,
+                product_no: None,
+                sku_no: None,
+                sku_id: None,
+                supplier_id: None,
+                status: None,
+                source_type: None,
+                page: 1,
+                page_size: 20,
+                sort_by: None,
+                sort_ascending: false,
+            };
             let bundle = fixture
                 .db()
                 .supplier_offering_repository()
-                .load_offering_list_page(
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    1,
-                    20,
-                    None,
-                    false,
-                    &mut NoTransaction,
-                )
+                .load_offering_list_page(&query, &mut NoTransaction)
                 .await
                 .expect("列表装载失败");
             assert_eq!(bundle.page.total, 1);
             assert!(bundle.revisions.contains_key("offering-1"));
             assert!(bundle.availabilities.contains_key("offering-1"));
+            let filtered_query = super::SupplierOfferingListQuery {
+                availability_status: Some(AvailabilityStatus::Stale),
+                keyword: None,
+                product_no: None,
+                sku_no: None,
+                sku_id: None,
+                supplier_id: None,
+                status: None,
+                source_type: None,
+                page: 1,
+                page_size: 20,
+                sort_by: None,
+                sort_ascending: false,
+            };
             let filtered = fixture
                 .db()
                 .supplier_offering_repository()
-                .load_offering_list_page(
-                    Some(AvailabilityStatus::Stale),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    1,
-                    20,
-                    None,
-                    false,
-                    &mut NoTransaction,
-                )
+                .load_offering_list_page(&filtered_query, &mut NoTransaction)
                 .await
                 .expect("过滤装载失败");
             assert_eq!(filtered.page.total, 0, "不匹配的可供状态不得命中分页");
@@ -627,11 +586,23 @@ mod isolation_tests {
                                 session,
                             )
                             .await?;
+                        let query = super::SupplierOfferingListQuery {
+                            availability_status: None,
+                            keyword: None,
+                            product_no: None,
+                            sku_no: None,
+                            sku_id: None,
+                            supplier_id: None,
+                            status: None,
+                            source_type: None,
+                            page: 1,
+                            page_size: 20,
+                            sort_by: None,
+                            sort_ascending: false,
+                        };
                         let bundle = db
                             .supplier_offering_repository()
-                            .load_offering_list_page(
-                                None, None, None, None, None, None, None, None, 1, 20, None, false, session,
-                            )
+                            .load_offering_list_page(&query, session)
                             .await?;
                         assert_eq!(bundle.page.total, 1, "事务内应能 read-your-writes");
                         Ok(())

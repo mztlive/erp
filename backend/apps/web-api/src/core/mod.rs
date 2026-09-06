@@ -8,3 +8,5 @@ mod response;
 pub mod routes;
 pub mod tracing;
 pub(crate) mod upload;
+
+pub use rate_limit::Error as RateLimitError;

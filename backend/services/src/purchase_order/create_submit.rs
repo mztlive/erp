@@ -341,12 +341,14 @@ async fn persist_created_order_start(
     .await?;
     persist_frozen_created_order_start(
         db,
-        frozen,
-        prepared,
-        snapshot,
-        organization_id,
-        actor,
-        now,
+        PersistFrozenCreatedOrderStartInput {
+            frozen,
+            prepared,
+            snapshot,
+            organization_id,
+            actor,
+            now,
+        },
         session,
     )
     .await
@@ -404,16 +406,27 @@ async fn prepare_created_order_start(
     prepare_start(start_input)
 }
 
+/// 冻结创建单启动持久化入参。
+struct PersistFrozenCreatedOrderStartInput<'a> {
+    /// 已冻结的采购提交。
+    frozen: FrozenCreatedDraft,
+    /// 启动计划。
+    prepared: crate::approval::execution::PreparedExecution,
+    /// 不可变快照载荷。
+    snapshot: entities::approval_integration::ApprovalSubjectSnapshotPayload,
+    /// 单据责任组织。
+    organization_id: String,
+    /// 提交人。
+    actor: &'a AuditActor,
+    /// 调用方时间。
+    now: Instant,
+}
+
 /// 写入冻结提交、运行事实，并回读提交后的采购单。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `frozen` - 已冻结的采购提交
-/// * `prepared` - 启动计划
-/// * `snapshot` - 不可变快照载荷
-/// * `organization_id` - 单据责任组织
-/// * `actor` - 提交人
-/// * `now` - 调用方时间
+/// * `input` - 冻结提交、启动计划与责任组织上下文
 /// * `session` - 建单事务会话
 ///
 /// # 返回
@@ -424,33 +437,27 @@ async fn prepare_created_order_start(
 ///
 /// # 关键业务约束
 /// 提交审计与建单收据分开展示，互不覆盖幂等键。
-#[allow(clippy::too_many_arguments)]
 async fn persist_frozen_created_order_start(
     db: &Database,
-    frozen: FrozenCreatedDraft,
-    prepared: crate::approval::execution::PreparedExecution,
-    snapshot: entities::approval_integration::ApprovalSubjectSnapshotPayload,
-    organization_id: String,
-    actor: &AuditActor,
-    now: Instant,
+    input: PersistFrozenCreatedOrderStartInput<'_>,
     session: &mut ClientSession,
 ) -> Result<SubmittedCreatedOrder> {
-    let order_id = frozen.order.base.id.clone();
-    let audit = create_submit_audit(actor, &frozen.order)?;
+    let order_id = input.frozen.order.base.id.clone();
+    let audit = create_submit_audit(input.actor, &input.frozen.order)?;
     persist_purchase_order_start_with_session(
         db,
         PurchaseOrderStartPersistInput {
-            order: frozen.order,
-            document: frozen.document,
-            superseded_draft: frozen.superseded_draft,
-            submission: frozen.submission,
-            submission_lines: frozen.submission_lines,
+            order: input.frozen.order,
+            document: input.frozen.document,
+            superseded_draft: input.frozen.superseded_draft,
+            submission: input.frozen.submission,
+            submission_lines: input.frozen.submission_lines,
             procurement_guard: None,
-            snapshot_payload: snapshot,
-            prepared,
+            snapshot_payload: input.snapshot,
+            prepared: input.prepared,
             owner_role: purchase_order_adapter()?.owner_role,
-            organization_id,
-            now,
+            organization_id: input.organization_id,
+            now: input.now,
             audit,
             receipt: None,
         },

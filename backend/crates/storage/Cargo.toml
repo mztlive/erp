@@ -6,11 +6,8 @@ edition = "2021"
 [dependencies]
 aws-sdk-s3 = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util"] }
 url = { workspace = true }
-uuid = { workspace = true }
 
 [dev-dependencies]
 aws-smithy-http-client = { workspace = true, features = ["test-util"] }
-tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

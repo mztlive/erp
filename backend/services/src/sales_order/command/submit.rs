@@ -23,8 +23,8 @@ use super::super::mapper::{
 };
 use super::super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_order_start, replay_sales_order_start_with_executor, SalesOrderStartInput,
-    SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
+    persist_sales_order_start, replay_sales_order_start_with_executor, ReplaySalesOrderStartInput,
+    SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
 };
 use super::super::SalesOrderService;
 use super::identity::{sales_submission_audit_id, sales_submission_fingerprint};
@@ -32,6 +32,26 @@ use crate::approval::execution::{command_may_have_committed, command_recovery_de
 use crate::audit::AuditActor;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
+
+/// 销售提交启动恢复入参。
+struct RecoverSalesSubmissionStartInput<'a> {
+    /// 销售单主键。
+    sales_order_id: &'a str,
+    /// 提交时冻结的单据类型。
+    document_type: entities::document_registry::DocumentType,
+    /// 提交时冻结的审批主题版本。
+    subject_version: u32,
+    /// 提交幂等键。
+    idempotency_key: &'a str,
+    /// 提交人。
+    actor: &'a AuditActor,
+    /// 提交审计收据 ID。
+    audit_id: &'a str,
+    /// 命令载荷指纹。
+    fingerprint: &'a str,
+    /// 触发恢复的原始错误。
+    original_error: Error,
+}
 
 /// 销售单提交并启动审批所需的单据集合。
 ///
@@ -395,16 +415,16 @@ impl SalesOrderService {
         match persisted {
             Ok(view) => Ok(view),
             Err(error) if command_may_have_committed(&error) => {
-                self.recover_sales_submission_start(
-                    id,
-                    ports.document_type,
-                    recovery_subject_version,
+                self.recover_sales_submission_start(RecoverSalesSubmissionStartInput {
+                    sales_order_id: id,
+                    document_type: ports.document_type,
+                    subject_version: recovery_subject_version,
                     idempotency_key,
                     actor,
-                    &audit_id,
-                    &fingerprint,
-                    error,
-                )
+                    audit_id: &audit_id,
+                    fingerprint: &fingerprint,
+                    original_error: error,
+                })
                 .await
             }
             Err(error) => Err(error),
@@ -453,24 +473,30 @@ impl SalesOrderService {
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 参数
+    /// * `input` - 销售提交恢复所需的单据类型、主题版本与审计身份
+    ///
+    /// # 返回
+    /// 回读到已提交结果时返回提交视图；否则返回原始错误。
+    ///
+    /// # 错误
+    /// 有界回读仍无法确认提交结果时返回原始错误，或传播不可恢复的冲突。
+    ///
+    /// # 关键业务约束
+    /// 仅在 `command_may_have_committed` 场景进入；不得在确认未提交时吞掉错误。
     async fn recover_sales_submission_start(
         &self,
-        sales_order_id: &str,
-        document_type: entities::document_registry::DocumentType,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-        audit_id: &str,
-        fingerprint: &str,
-        original_error: Error,
+        input: RecoverSalesSubmissionStartInput<'_>,
     ) -> Result<SubmissionView> {
         const RECOVERY_ATTEMPTS: usize = 8;
         for attempt in 0..RECOVERY_ATTEMPTS {
             let db = self.db.clone();
-            let sales_order_id_owned = sales_order_id.to_string();
-            let idempotency_key_owned = idempotency_key.to_string();
-            let actor_id = actor.id().to_string();
+            let sales_order_id_owned = input.sales_order_id.to_string();
+            let idempotency_key_owned = input.idempotency_key.to_string();
+            let actor_id = input.actor.id().to_string();
+            let document_type = input.document_type;
+            let subject_version = input.subject_version;
             let recovered = self
                 .db
                 .client()
@@ -498,12 +524,14 @@ impl SalesOrderService {
                         .map_err(|error| Error::ValidationError(error.to_string()))?;
                         replay_sales_order_start_with_executor(
                             &db,
-                            document_type,
-                            &subject,
-                            subject_version,
-                            &idempotency_key_owned,
-                            binding,
-                            &actor_id,
+                            ReplaySalesOrderStartInput {
+                                document_type,
+                                subject: &subject,
+                                subject_version,
+                                idempotency_key: &idempotency_key_owned,
+                                binding,
+                                actor_id: &actor_id,
+                            },
                             session,
                         )
                         .await
@@ -513,7 +541,12 @@ impl SalesOrderService {
             match recovered {
                 Ok(Some(_)) => {
                     if let Some(view) = self
-                        .replay_sales_submission(audit_id, fingerprint, sales_order_id, actor.id())
+                        .replay_sales_submission(
+                            input.audit_id,
+                            input.fingerprint,
+                            input.sales_order_id,
+                            input.actor.id(),
+                        )
                         .await?
                     {
                         return Ok(view);
@@ -527,6 +560,6 @@ impl SalesOrderService {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
-        Err(original_error)
+        Err(input.original_error)
     }
 }

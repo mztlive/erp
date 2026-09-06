@@ -15,9 +15,6 @@ mod integration_task_binding;
 mod mapping_task;
 mod query;
 
-#[allow(unused_imports)]
-pub use approval::{DocumentApprovalWorkItemIntegrityConflict, DocumentApprovalWorkItemPage};
-
 /// 队列列表的最小任务事实投影。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkItemRow {

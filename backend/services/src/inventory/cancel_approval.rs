@@ -33,8 +33,8 @@ use super::start_approval::load_bound_definition_graph;
 use super::InventoryService;
 use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
 use crate::approval::execution::idempotency::{
-    document_cancel_identity, normalize_idempotency_key, payload_conflict_error, PreparedCommandIdentity,
-    ReceiptBranch,
+    document_cancel_identity, normalize_idempotency_key, payload_conflict_error,
+    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
 };
 use crate::approval::execution::{
     map_receipt_first_write_error, prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput,
@@ -264,17 +264,17 @@ async fn committed_cancel_replay(
     let id = id.to_string();
     let req = req.clone();
     let reason = reason.to_string();
-    let identity = document_cancel_identity(
-        idempotency_key.clone(),
-        &req.approval_process_instance_id,
-        req.expected_subject_version,
-        req.expected_version,
-        req.expected_instance_version,
-        req.expected_execution_version,
-        req.expected_task_version,
-        &reason,
-        actor.id(),
-    )?;
+    let identity = document_cancel_identity(DocumentCancelIdentityParams {
+        idempotency_key: idempotency_key.clone(),
+        instance_id: &req.approval_process_instance_id,
+        subject_version: req.expected_subject_version,
+        expected_document_version: req.expected_version,
+        expected_instance_version: req.expected_instance_version,
+        expected_execution_version: req.expected_execution_version,
+        expected_task_version: req.expected_task_version,
+        reason: &reason,
+        actor_id: actor.id(),
+    })?;
     let actor = actor.clone();
     let client = db.client().clone();
     client
@@ -831,13 +831,15 @@ async fn persist_stock_adjustment_cancel(
                     .await?;
                 persist_stock_adjustment_cancel_notifications(
                     &db,
-                    &writes,
-                    &authorization,
-                    actor.id(),
-                    &current_approver_id,
-                    &current_approver_name,
-                    &document_no,
-                    now,
+                    StockAdjustmentCancelNotificationInput {
+                        writes: &writes,
+                        authorization: &authorization,
+                        actor_id: actor.id(),
+                        current_approver_id: &current_approver_id,
+                        current_approver_name: &current_approver_name,
+                        document_no: &document_no,
+                        now,
+                    },
                     session,
                 )
                 .await?;
@@ -908,36 +910,61 @@ async fn revalidate_cancel_open_tasks(
     Ok(tasks)
 }
 
+/// 库存调整普通撤回通知持久化入参。
+struct StockAdjustmentCancelNotificationInput<'a> {
+    /// 取消编排写出的计划写入集。
+    writes: &'a PlannedWrites,
+    /// 事务外冻结的撤回授权快照。
+    authorization: &'a CancelAuthorization,
+    /// 撤回操作人账号 ID。
+    actor_id: &'a str,
+    /// 当前节点审批人账号 ID。
+    current_approver_id: &'a str,
+    /// 当前节点审批人展示名。
+    current_approver_name: &'a str,
+    /// 调整单单据号。
+    document_no: &'a str,
+    /// 入队时间。
+    now: Instant,
+}
+
 /// 在普通撤回事务内追加唯一通知 outbox。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `input` - 取消通知意图、授权与收件人上下文
+/// * `session` - 调用方事务会话
+///
+/// # 返回
+/// 唯一取消通知写入 outbox 时返回 `Ok(())`。
+///
+/// # 错误
+/// 通知意图不唯一或与持久化合同不一致，或仓储写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 普通撤回必须产生唯一 `Cancelled` 通知；运行时管理员撤回时操作人也在收件人内。
 async fn persist_stock_adjustment_cancel_notifications(
     db: &Database,
-    writes: &PlannedWrites,
-    authorization: &CancelAuthorization,
-    actor_id: &str,
-    current_approver_id: &str,
-    current_approver_name: &str,
-    document_no: &str,
-    now: Instant,
+    input: StockAdjustmentCancelNotificationInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let [intent] = writes.notifications.as_slice() else {
+    let [intent] = input.writes.notifications.as_slice() else {
         return Err(Error::Internal(
             "库存调整普通撤回必须产生唯一取消通知意图".to_string(),
         ));
     };
     let mut recipients = vec![
-        current_approver_id.to_string(),
-        authorization.submitted_by.clone(),
+        input.current_approver_id.to_string(),
+        input.authorization.submitted_by.clone(),
     ];
-    if authorization.authority == CancelAuthority::RuntimeAdmin {
-        recipients.push(actor_id.to_string());
+    if input.authorization.authority == CancelAuthority::RuntimeAdmin {
+        recipients.push(input.actor_id.to_string());
     }
     recipients.sort();
     recipients.dedup();
     let expected_dedup_key = format!(
         "cancelled:{}:{}",
-        writes.instance.base.id, writes.instance.current_round_no
+        input.writes.instance.base.id, input.writes.instance.current_round_no
     );
     if intent.event_kind != ApprovalNotificationEventKind::Cancelled || intent.dedup_key != expected_dedup_key
     {
@@ -952,17 +979,18 @@ async fn persist_stock_adjustment_cancel_notifications(
         recipients,
         ApprovalNotificationTemplateParams {
             document_type_label: DocumentType::StockAdjustment.label().to_string(),
-            document_no: document_no.to_string(),
-            current_node_name: writes
+            document_no: input.document_no.to_string(),
+            current_node_name: input
+                .writes
                 .updated_executions
                 .first()
                 .map(|execution| execution.node_name.clone())
                 .unwrap_or_default(),
-            current_approver_display_name: current_approver_name.to_string(),
-            round_no: writes.instance.current_round_no,
+            current_approver_display_name: input.current_approver_name.to_string(),
+            round_no: input.writes.instance.current_round_no,
             reject_reason_summary: None,
         },
-        now,
+        input.now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
     db.approval_notification_outbox().create(&record, session).await?;

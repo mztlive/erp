@@ -8,6 +8,7 @@ use mongodb::Database;
 
 use crate::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+    StartIdentityParams,
 };
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{
@@ -146,30 +147,54 @@ pub async fn load_start_receipt_for_document_type(
     Ok(None)
 }
 
+/// 退款/冲正启动收据回放入参。
+pub struct ReplayReturnStartInput<'a> {
+    /// 退款或冲正单据类型。
+    pub document_type: DocumentType,
+    /// 审批主题引用。
+    pub subject: &'a SubjectRef,
+    /// 主题版本。
+    pub subject_version: u32,
+    /// 启动幂等键。
+    pub idempotency_key: &'a str,
+    /// 冻结的审批定义绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 启动人账号 ID。
+    pub actor_id: &'a str,
+}
+
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的退款/冲正启动结果。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `input` - 单据类型、主题、绑定与启动人
+/// * `executor` - 当前事务执行器
+///
+/// # 返回
+/// 命中同载荷收据时返回实例 ID；无收据时返回 `None`。
+///
+/// # 错误
+/// 载荷冲突或收据与冻结运行事实不一致时返回冲突错误。
+///
+/// # 关键业务约束
+/// 必须按完整 V3/legacy 身份候选范围回读，禁止只认单一 scope。
 pub async fn replay_return_start_with_executor(
     db: &Database,
-    document_type: DocumentType,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-    binding: &ApprovalDefinitionBinding,
-    actor_id: &str,
+    input: ReplayReturnStartInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(document_type);
-    let identity = start_identity(
-        key,
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
-        subject_version,
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-        actor_id,
-    )?;
+    let key = normalize_idempotency_key(input.idempotency_key)?;
+    let process_kind = process_kind_of(input.document_type);
+    let identity = start_identity(StartIdentityParams {
+        idempotency_key: key,
+        process_kind: process_kind.as_str(),
+        subject_kind: input.subject.subject_kind(),
+        subject_id: input.subject.subject_id(),
+        subject_version: input.subject_version,
+        binding_id: input.binding.approval_process_definition_id.as_ref(),
+        definition_version: input.binding.approval_definition_version,
+        actor_participant_id: input.actor_id,
+    })?;
     let mut receipt = None;
     for scope in identity.scope_candidates() {
         receipt = db
@@ -197,12 +222,12 @@ pub async fn replay_return_start_with_executor(
         .ok_or_else(|| Error::ConflictError("退款/冲正启动收据引用的审批实例不存在".to_string()))?;
     if instance.base.id != receipt.result_ref
         || instance.process_kind != process_kind
-        || instance.subject.subject_kind() != subject.subject_kind()
-        || instance.subject.subject_id() != subject.subject_id()
-        || instance.subject_version != subject_version
-        || instance.started_by.as_str() != actor_id
-        || instance.process_definition_id != binding.approval_process_definition_id
-        || instance.definition_version != binding.approval_definition_version
+        || instance.subject.subject_kind() != input.subject.subject_kind()
+        || instance.subject.subject_id() != input.subject.subject_id()
+        || instance.subject_version != input.subject_version
+        || instance.started_by.as_str() != input.actor_id
+        || instance.process_definition_id != input.binding.approval_process_definition_id
+        || instance.definition_version != input.binding.approval_definition_version
     {
         return Err(Error::ConflictError(
             "退款/冲正启动收据与冻结运行事实不一致".to_string(),

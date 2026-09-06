@@ -82,18 +82,6 @@ impl S3Storage {
         })
     }
 
-    /// 将文件保存到 S3 对象键。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `content` - 对象内容。
-    ///
-    /// # 错误
-    /// 路径无效或 S3 `PutObject` 失败时返回错误。
-    pub async fn save<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> Result<()> {
-        self.save_with_content_type(path, content, None).await
-    }
-
     /// 将文件与已校验的 MIME 类型保存到 S3 对象键。
     ///
     /// # 参数
@@ -126,7 +114,7 @@ impl S3Storage {
     /// 生成与实际 bucket 及键前缀一致的公开访问 URL。
     ///
     /// # 参数
-    /// * `path` - 传入 `save` 的相对存储路径。
+    /// * `path` - 传入 `save_with_content_type` 的相对存储路径。
     ///
     /// # 返回
     /// 返回 `public_base_url` 与完整对象键拼接后的 URL。
@@ -192,22 +180,6 @@ impl S3Storage {
             .await
             .map_err(s3_error)?;
         Ok(())
-    }
-
-    /// 检查 S3 对象是否存在。
-    ///
-    /// 路径无效、鉴权失败或 S3 不可用时均返回 `false`，与现有本地存储合同一致。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    ///
-    /// # 返回
-    /// 仅当 `HeadObject` 成功时返回 `true`。
-    pub async fn exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        let Ok(key) = self.object_key(path.as_ref()) else {
-            return false;
-        };
-        self.object_exists(&key).await.unwrap_or(false)
     }
 
     /// 返回加上可选前缀的规范 S3 对象键。
@@ -482,7 +454,9 @@ mod tests {
             "https://cdn.example.com",
         )?;
 
-        let result = storage.save("../escaped.txt", b"escaped").await;
+        let result = storage
+            .save_with_content_type("../escaped.txt", b"escaped", None)
+            .await;
 
         assert!(matches!(result, Err(Error::PathError(_))));
         Ok(())

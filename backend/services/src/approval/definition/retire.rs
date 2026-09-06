@@ -86,10 +86,12 @@ impl ApprovalDefinitionService {
                     &db,
                     &rbac,
                     graph,
-                    transaction_policy,
-                    request,
-                    &transaction_actor,
-                    &transaction_identity,
+                    RetireTxInput {
+                        policy: transaction_policy,
+                        request,
+                        actor: &transaction_actor,
+                        identity: &transaction_identity,
+                    },
                     session,
                 )
                 .await
@@ -100,18 +102,66 @@ impl ApprovalDefinitionService {
     }
 }
 
+/// 退役事务的政策、请求、命令身份与操作人。
+///
+/// # 用途
+/// 打包 [`retire_tx`] 的非基础设施参数。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 只能退役当前已发布定义。
+struct RetireTxInput<'a> {
+    /// 单据审批政策。
+    policy: ProcessRequiredApprovalPolicy,
+    /// 退役请求。
+    request: RetireDefinitionRequest,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+    /// 已规范化的当前命令身份及精确旧格式候选。
+    identity: &'a PreparedDefinitionIdentity,
+}
+
 /// 事务内退役当前发布版本。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 回放收据或退役当前已发布定义并写入审计。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `graph` - 当前定义图
+/// * `input` - 政策、请求、摘要与操作人
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 返回退役后的定义详情。
+///
+/// # 错误
+/// 目标不是当前发布版本或写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 已有收据必须原样回放，不得重复 persist。
 async fn retire_tx(
     db: &Database,
     rbac: &SharedRbacService,
     graph: DefinitionGraph,
-    policy: ProcessRequiredApprovalPolicy,
-    request: RetireDefinitionRequest,
-    actor: &AuditActor,
-    identity: &PreparedDefinitionIdentity,
+    input: RetireTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
+    let RetireTxInput {
+        policy,
+        request,
+        actor,
+        identity,
+    } = input;
     ensure_definition_admin_permission(db, rbac, actor, &policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,

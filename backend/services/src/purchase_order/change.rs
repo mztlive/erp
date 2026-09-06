@@ -5,7 +5,6 @@ mod mapping;
 mod query;
 mod submit;
 
-#[allow(unused_imports)]
 pub(super) use super::{change_adapter, dto};
 
 #[cfg(test)]

@@ -23,7 +23,6 @@ pub use start::{start, StartAssigneeBinding, StartCommand};
 pub use start_plan::{plan_start, StartBindingInput, StartPlan, StartPlanInput};
 pub use transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 
-use crate::error::{Error, Result};
 use crate::model::types::{ApprovalBlockerCode, ModelError};
 use crate::model::{ApprovalNodeDefinition, ParticipantId};
 
@@ -132,23 +131,14 @@ impl DefinitionGraph {
     }
 }
 
-/// 拒绝调用尚未接线的引擎入口。
-///
-/// # 错误
-/// 始终返回 [`Error::NotWired`]，不得产生迁移计划或领域事件。
-pub fn refuse_unwired() -> Result<TransitionPlan> {
-    Err(Error::NotWired)
-}
-
 #[cfg(test)]
 mod tests {
     use super::enter_node::{plan_enter_node, EnterNodeInput};
     use super::{
-        block_current, cancel, decide, refuse_unwired, resume, start, CancelCommand, CommitRequired,
-        DecideCommand, DefinitionGraph, Eligibility, EngineError, ResumeCommand, StartAssigneeBinding,
-        StartCommand, TaskCloseReason, TaskIntent,
+        block_current, cancel, decide, resume, start, CancelCommand, CommitRequired, DecideCommand,
+        DefinitionGraph, Eligibility, EngineError, ResumeCommand, StartAssigneeBinding, StartCommand,
+        TaskCloseReason, TaskIntent,
     };
-    use crate::error::Error;
     use crate::ids::{
         ApprovalInstanceAssigneeId, ApprovalNodeDefinitionId, ApprovalNodeExecutionId,
         ApprovalProcessDefinitionId, ApprovalProcessInstanceId, ApprovalTransitionDefinitionId,
@@ -161,12 +151,6 @@ mod tests {
         ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalProcessInstance,
         ApprovalTransitionDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
-
-    /// 引擎占位必须失败关闭。
-    #[test]
-    fn engine_placeholder_fails_closed() {
-        assert_eq!(refuse_unwired(), Err(Error::NotWired));
-    }
 
     /// 相同启动输入产生相同计划语义。
     #[test]

@@ -72,9 +72,6 @@ pub enum Error {
     RateLimited(#[from] crate::core::rate_limit::Error),
 
     #[error(transparent)]
-    Repository(database::Error),
-
-    #[error(transparent)]
     Logic(#[from] entities::Error),
 
     #[error(transparent)]
@@ -205,9 +202,7 @@ impl Error {
     /// 返回与错误分类对应的协议状态码。
     pub(crate) fn http_status(&self) -> StatusCode {
         match self {
-            Error::Internal(_) | Error::Repository(_) | Error::OutcomeUnknown(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
+            Error::Internal(_) | Error::OutcomeUnknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::BadRequest(_) | Error::Validation(_) => StatusCode::BAD_REQUEST,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
@@ -228,7 +223,7 @@ impl Error {
     /// 返回稳定的外部错误码；不得依赖可变的用户提示文案判断错误类型。
     pub(crate) fn error_code(&self) -> &'static str {
         match self {
-            Error::Internal(_) | Error::Repository(_) => "INTERNAL_ERROR",
+            Error::Internal(_) => "INTERNAL_ERROR",
             Error::BadRequest(_) | Error::Validation(_) => "INVALID_REQUEST",
             Error::NotFound(_) => "NOT_FOUND",
             Error::Conflict(_) => "CONFLICT",
@@ -250,9 +245,7 @@ impl Error {
     /// 返回不包含底层实现细节的中文错误说明。
     pub(crate) fn user_message(&self) -> String {
         match self {
-            Error::Internal(_) | Error::Repository(_) => {
-                "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
-            }
+            Error::Internal(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::OutcomeUnknown(_) => {
                 "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试".to_string()
             }
@@ -334,10 +327,8 @@ impl Error {
     /// 仅网络外的临时系统失败和限流允许直接重试；业务冲突与结果未知
     /// 必须先核对当前状态。
     pub(crate) fn retryable(&self) -> bool {
-        matches!(
-            self,
-            Error::Internal(_) | Error::Repository(_) | Error::RateLimited(_)
-        ) || matches!(self, Error::Coded(code) if code.retryable())
+        matches!(self, Error::Internal(_) | Error::RateLimited(_))
+            || matches!(self, Error::Coded(code) if code.retryable())
     }
 }
 

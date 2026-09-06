@@ -9,7 +9,7 @@ use entities::common::time::Instant;
 use entities::file_asset::FileAsset;
 use entities::receivable::{
     EntityCardFundsReviewConclusion, EntityCardFundsReviewResult, EntityCardFundsReviewType,
-    ValidatedCardFundsReviewDecision,
+    ValidatedCardFundsReviewDecision, ValidatedCardFundsReviewDecisionParams,
 };
 
 use super::dto::{
@@ -81,17 +81,17 @@ fn map_conclusion(value: CardFundsReviewConclusion) -> EntityCardFundsReviewConc
 /// # 约束
 /// 纯内存转换；不执行 I/O、时钟或加密；错误文案与原 `validate_card_funds_decision` 保持一致。
 pub fn validated_from_dto(decision: &CardFundsReviewDecision) -> Result<ValidatedCardFundsReviewDecision> {
-    ValidatedCardFundsReviewDecision::try_new(
-        decision.receivable_account_id.as_ref(),
-        decision.expected_review_chain_tail_id.as_deref(),
-        map_review_type(decision.review_type),
-        map_review_result(decision.review_result),
-        map_conclusion(decision.conclusion),
-        &decision.evidence_document_ids,
-        &decision.evidence_references,
-        decision.reason_code.as_deref(),
-        decision.comment.as_deref(),
-    )
+    ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+        receivable_account_id: decision.receivable_account_id.as_ref(),
+        expected_review_chain_tail_id: decision.expected_review_chain_tail_id.as_deref(),
+        review_type: map_review_type(decision.review_type),
+        review_result: map_review_result(decision.review_result),
+        conclusion: map_conclusion(decision.conclusion),
+        evidence_document_ids: &decision.evidence_document_ids,
+        evidence_references: &decision.evidence_references,
+        reason_code: decision.reason_code.as_deref(),
+        comment: decision.comment.as_deref(),
+    })
     .map_err(|err| Error::ValidationError(err.to_string()))
 }
 

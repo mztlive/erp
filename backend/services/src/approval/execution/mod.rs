@@ -10,7 +10,6 @@ pub mod decision;
 pub mod idempotency;
 pub mod notification_outbox;
 pub mod notification_worker;
-pub mod observability;
 pub mod resume;
 pub mod runtime_history;
 #[cfg(test)]
@@ -24,8 +23,6 @@ pub mod view;
 
 use bpm::engine::{DefinitionGraph, Eligibility};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
-
-use crate::errors::{Error, Result};
 
 pub use apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
 pub use authorization::{converge_eligibility, AuthorizationFailure};
@@ -89,26 +86,15 @@ pub enum PreparedExecution {
     },
 }
 
-/// 拒绝尚未接线的运行编排调用。
-///
-/// # 错误
-/// 始终返回业务逻辑错误。
-pub fn refuse_unwired() -> Result<()> {
-    Err(Error::BusinessLogicError(
-        "审批运行编排尚未接入，已按安全策略拒绝".to_string(),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         prepare_cancel, prepare_decision, prepare_document_cancel, prepare_resume, prepare_start,
-        refuse_unwired, CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput,
-        PreparedExecution, ResumeExecutionInput, StartExecutionInput,
+        CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput, PreparedExecution,
+        ResumeExecutionInput, StartExecutionInput,
     };
     use crate::approval::execution::decision::decision_commits_blocked;
     use crate::approval::execution::idempotency::normalize_idempotency_key;
-    use crate::errors::Error;
     use bpm::engine::{
         BpmEventKind, CommitRequired, DefinitionGraph, Eligibility, StartAssigneeBinding, TaskCloseReason,
     };
@@ -135,15 +121,6 @@ mod tests {
         let store_use = source.find("pub use store::").expect("store 重导出");
         assert!(source[..store_mod].contains("#[cfg(test)]"));
         assert!(source[..store_use].contains("#[cfg(test)]"));
-    }
-
-    /// 运行编排占位必须失败关闭，并钉死稳定文案。
-    #[test]
-    fn execution_placeholder_fails_closed() {
-        let Err(Error::BusinessLogicError(message)) = refuse_unwired() else {
-            panic!("运行编排占位必须返回 BusinessLogicError");
-        };
-        assert_eq!(message, "审批运行编排尚未接入，已按安全策略拒绝");
     }
 
     /// 启动、通过、驳回、取消和恢复均为单次编排计划。

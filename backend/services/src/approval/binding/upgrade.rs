@@ -84,12 +84,14 @@ pub async fn upgrade_unsubmitted_document_definition(
     apply_fresh_upgrade(
         db,
         rbac,
-        command,
-        actor,
-        reason,
-        &authorized.facts,
-        &authorized.policy,
-        &authorized.actor_role,
+        ApplyFreshUpgradeInput {
+            command,
+            actor,
+            reason,
+            facts: &authorized.facts,
+            policy: &authorized.policy,
+            actor_role: &authorized.actor_role,
+        },
         executor,
     )
     .await
@@ -252,19 +254,70 @@ async fn replay_upgrade_result(
     )
 }
 
+/// Fresh 升级写库所需的命令、授权事实与操作人。
+///
+/// # 用途
+/// 打包 [`apply_fresh_upgrade`] 的非基础设施参数。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 调用方须已完成收据分支判定与业务对象版本门禁。
+struct ApplyFreshUpgradeInput<'a> {
+    /// 已规范化的升级命令。
+    command: &'a UpgradeUnsubmittedDefinitionCommand,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+    /// 已规范化升级原因。
+    reason: &'a str,
+    /// 升级主体强业务事实。
+    facts: &'a ApprovalUpgradeSubjectFacts,
+    /// 单据审批政策。
+    policy: &'a ProcessRequiredApprovalPolicy,
+    /// 操作人角色快照。
+    actor_role: &'a str,
+}
+
 /// Fresh 分支完成全部读取与预构造后，以收据作为第一物理写。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 在唯一事务内校验并写入绑定升级收据、单据、动作与审计。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `input` - 命令、主体事实与操作人
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 升级成功后的绑定结果视图。
+///
+/// # 错误
+/// 主体不匹配、定义未变更、CAS 冲突或写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 收据必须作为第一物理写；后续失败随事务整体回滚。
 async fn apply_fresh_upgrade(
     db: &Database,
     rbac: &SharedRbacService,
-    command: &UpgradeUnsubmittedDefinitionCommand,
-    actor: &AuditActor,
-    reason: &str,
-    facts: &ApprovalUpgradeSubjectFacts,
-    policy: &ProcessRequiredApprovalPolicy,
-    actor_role: &str,
+    input: ApplyFreshUpgradeInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<UpgradeBindingResultView> {
+    let ApplyFreshUpgradeInput {
+        command,
+        actor,
+        reason,
+        facts,
+        policy,
+        actor_role,
+    } = input;
     let mut document = load_registered_document(db, &command.document_id, executor).await?;
     ensure_registered_upgrade_subject(&document, facts)?;
     document

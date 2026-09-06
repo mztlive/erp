@@ -931,12 +931,14 @@ impl WorkItemService {
                     current = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
                         reassign_purchase_order_fulfillment_responsibility(
                             &db,
-                            &validation_rbac,
-                            current,
-                            purchase_order_id,
-                            &target_user_id,
-                            &actor_id,
-                            &authorization,
+                            ReassignPurchaseOrderFulfillmentInput {
+                                rbac: &validation_rbac,
+                                selected: current,
+                                purchase_order_id,
+                                target_user_id: &target_user_id,
+                                actor_id: &actor_id,
+                                authorization: &authorization,
+                            },
                             session,
                         )
                         .await?
@@ -1099,16 +1101,27 @@ pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> R
     })
 }
 
+/// 采购单履约责任转交入参。
+struct ReassignPurchaseOrderFulfillmentInput<'a> {
+    /// 授权服务。
+    rbac: &'a SharedRbacService,
+    /// 管理员本次选中的开放任务。
+    selected: WorkItem,
+    /// 责任键解析出的采购单 ID。
+    purchase_order_id: &'a str,
+    /// 新采购责任人。
+    target_user_id: &'a str,
+    /// 管理员账号 ID。
+    actor_id: &'a str,
+    /// 事务外冻结的授权快照。
+    authorization: &'a AssignmentAuthorizationSnapshot,
+}
+
 /// 原子变更采购单当前责任人与其全部开放采购履约任务。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `rbac` - 授权服务
-/// * `selected` - 管理员本次选中的开放任务
-/// * `purchase_order_id` - 责任键解析出的采购单 ID
-/// * `target_user_id` - 新采购责任人
-/// * `actor_id` - 管理员账号 ID
-/// * `authorization` - 事务外冻结的授权快照
+/// * `input` - 选中任务、目标责任人与授权快照
 /// * `executor` - 当前事务执行器
 ///
 /// # 返回
@@ -1119,24 +1132,18 @@ pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> R
 ///
 /// # 关键业务约束
 /// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
-#[allow(clippy::too_many_arguments)]
 async fn reassign_purchase_order_fulfillment_responsibility(
     db: &Database,
-    rbac: &SharedRbacService,
-    selected: WorkItem,
-    purchase_order_id: &str,
-    target_user_id: &str,
-    actor_id: &str,
-    authorization: &AssignmentAuthorizationSnapshot,
+    input: ReassignPurchaseOrderFulfillmentInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let (mut order, mut tasks) =
-        load_purchase_order_fulfillment_scope(db, &selected, purchase_order_id, executor).await?;
+        load_purchase_order_fulfillment_scope(db, &input.selected, input.purchase_order_id, executor).await?;
     ensure_fulfillment_tasks_candidate(
-        &WorkItemService::new(db.clone(), rbac.clone()),
+        &WorkItemService::new(db.clone(), input.rbac.clone()),
         &tasks,
-        target_user_id,
-        &authorization.assignee_permissions,
+        input.target_user_id,
+        &input.authorization.assignee_permissions,
         executor,
     )
     .await
@@ -1144,7 +1151,7 @@ async fn reassign_purchase_order_fulfillment_responsibility(
         Error::Forbidden("目标账号缺少一个或多个开放履约任务所需权限，采购单责任未变更".to_string())
     })?;
 
-    order.reassign_owner(target_user_id.to_string(), actor_id.to_string())?;
+    order.reassign_owner(input.target_user_id.to_string(), input.actor_id.to_string())?;
     db.purchase_orders()
         .update(&mut order, executor)
         .await
@@ -1158,7 +1165,7 @@ async fn reassign_purchase_order_fulfillment_responsibility(
     let reassigned_at = Instant::now();
     let mut selected_after = None;
     for task in &mut tasks {
-        task.reassign(target_user_id.to_string(), reassigned_at)?;
+        task.reassign(input.target_user_id.to_string(), reassigned_at)?;
         db.work_items()
             .update(task, executor)
             .await
@@ -1168,7 +1175,7 @@ async fn reassign_purchase_order_fulfillment_responsibility(
                 }
                 error => Error::from(error),
             })?;
-        if task.base.id == selected.base.id {
+        if task.base.id == input.selected.base.id {
             selected_after = Some(task.clone());
         }
     }

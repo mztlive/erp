@@ -370,14 +370,7 @@ impl DefinitionGraph {
     /// 由已复制节点构造新的非空草稿图。
     ///
     /// # 参数
-    /// * `definition_id` - 新定义 ID
-    /// * `process_kind` - 流程种类
-    /// * `definition_version` - 同流程种类内的新业务版本
-    /// * `name` - 草稿名称
-    /// * `created_by` - 草稿创建人
-    /// * `nodes` - 已归属新定义的节点
-    /// * `transition_ids` - 调用方为每条线性连线提供的 ID
-    /// * `at` - 调用方提供的创建时间
+    /// * `params` - 定义身份、节点与连线 ID
     ///
     /// # 返回
     /// 返回入口和线性连线完整的新草稿图。
@@ -387,17 +380,17 @@ impl DefinitionGraph {
     ///
     /// # 关键业务约束
     /// 本入口只用于至少一个节点的复制草稿；空草稿由定义实体单独创建。
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_populated_draft(
-        definition_id: ApprovalProcessDefinitionId,
-        process_kind: ProcessKind,
-        definition_version: u32,
-        name: impl Into<String>,
-        created_by: ParticipantId,
-        nodes: Vec<ApprovalNodeDefinition>,
-        transition_ids: Vec<ApprovalTransitionDefinitionId>,
-        at: Timestamp,
-    ) -> ModelResult<Self> {
+    pub fn new_populated_draft(params: NewPopulatedDraftParams) -> ModelResult<Self> {
+        let NewPopulatedDraftParams {
+            definition_id,
+            process_kind,
+            definition_version,
+            name,
+            created_by,
+            nodes,
+            transition_ids,
+            at,
+        } = params;
         let ordered = ordered_nodes(&nodes)?;
         ensure_nodes_belong_to_definition(&nodes, definition_id.as_ref())?;
         let definition = ApprovalProcessDefinition::new_draft(
@@ -411,6 +404,27 @@ impl DefinitionGraph {
         )?;
         Self::rebuild_draft(&definition, nodes, transition_ids, at)
     }
+}
+
+/// 构造非空草稿定义图的输入参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewPopulatedDraftParams {
+    /// 新定义 ID。
+    pub definition_id: ApprovalProcessDefinitionId,
+    /// 流程种类。
+    pub process_kind: ProcessKind,
+    /// 同流程种类内的新业务版本。
+    pub definition_version: u32,
+    /// 草稿名称。
+    pub name: String,
+    /// 草稿创建人。
+    pub created_by: ParticipantId,
+    /// 已归属新定义的节点。
+    pub nodes: Vec<ApprovalNodeDefinition>,
+    /// 调用方为每条线性连线提供的 ID。
+    pub transition_ids: Vec<ApprovalTransitionDefinitionId>,
+    /// 调用方提供的创建时间。
+    pub at: Timestamp,
 }
 
 /// 提取节点集合中确定性的审批人 ID。
@@ -594,7 +608,10 @@ fn ensure_nodes_belong_to_definition(
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NodeReplacementDraft};
+    use super::{
+        copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams,
+        NodeReplacementDraft,
+    };
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
     use crate::model::types::ApprovalDecision;
     use crate::model::{
@@ -795,18 +812,18 @@ mod tests {
         assert_eq!(copied[0].node_name, "节点1");
         assert!(copied.iter().all(|item| item.node_purpose.is_none()));
 
-        let graph = DefinitionGraph::new_populated_draft(
-            new_definition_id,
-            ProcessKind::StockAdjustment,
-            2,
-            "复制草稿",
-            ParticipantId::new("admin").unwrap(),
-            copied,
-            (1..=4)
+        let graph = DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
+            definition_id: new_definition_id,
+            process_kind: ProcessKind::StockAdjustment,
+            definition_version: 2,
+            name: "复制草稿".into(),
+            created_by: ParticipantId::new("admin").unwrap(),
+            nodes: copied,
+            transition_ids: (1..=4)
                 .map(|index| ApprovalTransitionDefinitionId::new(format!("t{index}")))
                 .collect(),
-            Timestamp::from_unix_secs(2).unwrap(),
-        )
+            at: Timestamp::from_unix_secs(2).unwrap(),
+        })
         .unwrap();
         graph.validate_linear().unwrap();
         assert_eq!(graph.definition.entry_node_key, "new-n1");
@@ -831,18 +848,18 @@ mod tests {
     /// 只有已发布且线性完整的图可通过绑定校验；草稿、退役和损坏发布图失败关闭。
     #[test]
     fn published_linear_validation_rejects_draft_retired_and_corrupt_graphs() {
-        let mut graph = DefinitionGraph::new_populated_draft(
-            ApprovalProcessDefinitionId::new("def"),
-            ProcessKind::StockAdjustment,
-            1,
-            "库存调整",
-            ParticipantId::new("admin").unwrap(),
-            vec![node("id1", "n1", 1, None)],
-            (1..=2)
+        let mut graph = DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
+            definition_id: ApprovalProcessDefinitionId::new("def"),
+            process_kind: ProcessKind::StockAdjustment,
+            definition_version: 1,
+            name: "库存调整".into(),
+            created_by: ParticipantId::new("admin").unwrap(),
+            nodes: vec![node("id1", "n1", 1, None)],
+            transition_ids: (1..=2)
                 .map(|index| ApprovalTransitionDefinitionId::new(format!("t{index}")))
                 .collect(),
-            Timestamp::from_unix_secs(1).unwrap(),
-        )
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
         .unwrap();
         graph.validate_linear().unwrap();
         assert!(graph.validate_published_linear().is_err());

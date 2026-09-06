@@ -175,12 +175,14 @@ impl ReceivableService {
                     db.customer_receipts().create(&receipt, session).await?;
                     persist_card_funds_receipt_plan(
                         &db,
-                        &account,
-                        &snapshot,
-                        &receipt,
-                        &allocation_plan,
-                        &actor_id,
-                        "子账剩余开放余额不足，历史回款登记被拒绝",
+                        PersistCardFundsReceiptPlanInput {
+                            account: &account,
+                            snapshot: &snapshot,
+                            receipt: &receipt,
+                            plan: &allocation_plan,
+                            actor_id: &actor_id,
+                            insufficient_message: "子账剩余开放余额不足，历史回款登记被拒绝",
+                        },
                         session,
                     )
                     .await?;
@@ -569,16 +571,27 @@ fn card_funds_registration_allocations(
         })
 }
 
+/// 历史回款计划持久化入参。
+struct PersistCardFundsReceiptPlanInput<'a> {
+    /// 当前任务账户。
+    account: &'a ReceivableAccount,
+    /// 事务内票款快照。
+    snapshot: &'a CardFundsSnapshot,
+    /// 已插入的历史回款。
+    receipt: &'a CustomerReceipt,
+    /// 领域核销计划。
+    plan: &'a [(ReceivableEntryId, Amount)],
+    /// 更新人。
+    actor_id: &'a str,
+    /// 子账余额不足时的既有文案。
+    insufficient_message: &'a str,
+}
+
 /// 将历史回款计划经账本批量核销并写入分配。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `account` - 当前任务账户
-/// * `snapshot` - 事务内票款快照
-/// * `receipt` - 已插入的历史回款
-/// * `plan` - 领域计划
-/// * `actor_id` - 更新人
-/// * `insufficient_message` - 子账余额不足时的既有文案
+/// * `input` - 账户、快照、回款与核销计划
 /// * `session` - 调用方事务
 ///
 /// # 返回
@@ -589,21 +602,15 @@ fn card_funds_registration_allocations(
 ///
 /// # 约束
 /// 与审批过账共享 `ReceivableFundsLedger` 与仓储批量数据面。
-#[allow(clippy::too_many_arguments)]
 async fn persist_card_funds_receipt_plan(
     db: &Database,
-    account: &ReceivableAccount,
-    snapshot: &CardFundsSnapshot,
-    receipt: &CustomerReceipt,
-    plan: &[(ReceivableEntryId, Amount)],
-    actor_id: &str,
-    insufficient_message: &str,
+    input: PersistCardFundsReceiptPlanInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     let mut ledger = ReceivableFundsLedger::from_historical_plan(
-        CustomerReceiptId::new(receipt.base.id.clone()),
-        receipt.amount,
-        plan,
+        CustomerReceiptId::new(input.receipt.base.id.clone()),
+        input.receipt.amount,
+        input.plan,
     )
     .map_err(map_ledger_error)?;
     let pending = ledger.pending().to_vec();
@@ -611,7 +618,8 @@ async fn persist_card_funds_receipt_plan(
         .map(|_| ReceiptAllocationId::new(next_id()))
         .collect();
     let allocated_at = Instant::now();
-    let entries_by_id: HashMap<&str, &ReceivableEntry> = snapshot
+    let entries_by_id: HashMap<&str, &ReceivableEntry> = input
+        .snapshot
         .entries
         .iter()
         .map(|entry| (entry.base.id.as_str(), entry))
@@ -620,7 +628,7 @@ async fn persist_card_funds_receipt_plan(
         let entry = entries_by_id
             .get(line.receivable_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        if entry.receivable_account_id.as_ref() != account.base.id.as_str() {
+        if entry.receivable_account_id.as_ref() != input.account.base.id.as_str() {
             return Err(Error::BusinessLogicError("禁止跨往来主体核销".to_string()));
         }
         ledger
@@ -630,10 +638,10 @@ async fn persist_card_funds_receipt_plan(
     let settlement_deltas = ledger.account_settlement_deltas();
     let settlement = db
         .receivable_accounts()
-        .apply_settlements_many(&settlement_deltas, actor_id, session)
+        .apply_settlements_many(&settlement_deltas, input.actor_id, session)
         .await?;
     if !settlement.rejected.is_empty() {
-        return Err(Error::BusinessLogicError(insufficient_message.to_string()));
+        return Err(Error::BusinessLogicError(input.insufficient_message.to_string()));
     }
     db.receivable()
         .create_receipt_allocations_many(ledger.new_allocations(), session)

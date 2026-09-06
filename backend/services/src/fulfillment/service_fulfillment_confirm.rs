@@ -6,6 +6,7 @@ use database::{AccessControlExt, FileAssetExt, FulfillmentExt, PurchaseOrderExt,
 use entities::common::time::Instant;
 use entities::fulfillment::{
     ActualServiceLocation, ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
+    ServiceFulfillmentConfirmationParams,
 };
 use entities::ids::{FileAssetId, ServiceFulfillmentId};
 use mongodb::{ClientSession, Database};
@@ -128,14 +129,19 @@ fn service_confirmation_from_request(
     let service_location = ActualServiceLocation::parse(&req.service_location)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(ServiceFulfillmentConfirmation::new(
-        req.result,
-        req.completion_note.clone(),
-        evidence_attachment_id,
-        sensitive_data.encrypt(service_location.as_str())?,
-        ServiceFulfillment::service_location_fingerprint(service_location.as_str(), fingerprint_key),
-        Instant::from_unix_secs(req.service_started_at),
-        Instant::from_unix_secs(req.service_ended_at),
-        req.quantity,
+        ServiceFulfillmentConfirmationParams {
+            result: req.result,
+            completion_note: req.completion_note.clone(),
+            evidence_attachment_id,
+            service_location_encrypted: sensitive_data.encrypt(service_location.as_str())?,
+            service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
+                service_location.as_str(),
+                fingerprint_key,
+            ),
+            service_started_at: Instant::from_unix_secs(req.service_started_at),
+            service_ended_at: Instant::from_unix_secs(req.service_ended_at),
+            quantity: req.quantity,
+        },
     )?)
 }
 

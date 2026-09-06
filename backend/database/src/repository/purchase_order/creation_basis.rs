@@ -176,9 +176,9 @@ mod isolation_tests {
         SupplierAccountStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
     };
     use entities::supplier_offering::{
-        AvailabilityStatus, OfferingSourceType, OfferingStatus, PrefillSourceRefs, SupplierOffering,
-        SupplierOfferingAvailability, SupplierOfferingAvailabilityData, SupplierOfferingData,
-        SupplierOfferingRevision, SupplierOfferingRevisionData,
+        AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
+        SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
+        SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
     use test_support::{require_mongo, TestDb};
 
@@ -209,28 +209,28 @@ mod isolation_tests {
     fn offering_revision(id: &str, offering_id: &str) -> SupplierOfferingRevision {
         SupplierOfferingRevision::new(
             SupplierOfferingRevisionId::new(id),
-            SupplierOfferingRevisionData::from_gross_prices(
-                SupplierOfferingId::new(offering_id),
-                1,
-                UnitPrice::from_str("6").unwrap(),
-                UnitPrice::from_str("5").unwrap(),
-                Rate::from_str("0.13").unwrap(),
-                None,
-                None,
-                None,
-                Quantity::from_str("1").unwrap(),
-                vec!["全国".to_string()],
-                Vec::new(),
-                entities::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
-                None,
-                PrefillSourceRefs {
+            SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+                supplier_offering_id: SupplierOfferingId::new(offering_id),
+                revision_no: 1,
+                dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
+                bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
+                input_tax_rate: Rate::from_str("0.13").unwrap(),
+                dropship_express: None,
+                freight_amount: None,
+                service_fee_amount: None,
+                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+                supply_region: vec!["全国".to_string()],
+                product_capabilities: Vec::new(),
+                valid_from: entities::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
+                valid_to: None,
+                prefill_source_refs: PrefillSourceRefs {
                     input_tax_rate: None,
                     supply_region: None,
                     valid_from_date: None,
                     valid_from_timezone: None,
                     valid_from_calendar_version: None,
                 },
-            ),
+            }),
         )
         .unwrap()
     }

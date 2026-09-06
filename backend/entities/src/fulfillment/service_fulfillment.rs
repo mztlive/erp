@@ -196,18 +196,32 @@ pub struct ServiceFulfillmentConfirmation {
     pub quantity: Quantity,
 }
 
+/// 构造 [`ServiceFulfillmentConfirmation`] 的输入参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceFulfillmentConfirmationParams {
+    /// 履约结果。
+    pub result: FulfillmentResult,
+    /// 完成说明。
+    pub completion_note: String,
+    /// 现场图片凭证。
+    pub evidence_attachment_id: FileAssetId,
+    /// 服务地点加密/不透明值。
+    pub service_location_encrypted: String,
+    /// 服务地点查询指纹。
+    pub service_location_fingerprint: String,
+    /// 服务开始时间。
+    pub service_started_at: Instant,
+    /// 服务结束时间。
+    pub service_ended_at: Instant,
+    /// 本次完成数量。
+    pub quantity: Quantity,
+}
+
 impl ServiceFulfillmentConfirmation {
     /// 规范化并校验确认现场事实。
     ///
     /// # 参数
-    /// * `result` - 履约结果
-    /// * `completion_note` - 完成说明
-    /// * `evidence_attachment_id` - 现场图片凭证
-    /// * `service_location_encrypted` - 服务地点加密/不透明值
-    /// * `service_location_fingerprint` - 服务地点查询指纹
-    /// * `service_started_at` - 服务开始时间
-    /// * `service_ended_at` - 服务结束时间
-    /// * `quantity` - 本次完成数量
+    /// * `params` - 确认现场事实的全部输入
     ///
     /// # 返回
     /// 返回可写入草稿的确认事实。
@@ -215,49 +229,42 @@ impl ServiceFulfillmentConfirmation {
     /// # 错误
     /// 结果为部分成功、说明/地点/指纹为空或超长、指纹格式非法、数量非正、
     /// 结束早于开始或凭证主键为空时返回错误。
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        result: FulfillmentResult,
-        completion_note: String,
-        evidence_attachment_id: FileAssetId,
-        service_location_encrypted: String,
-        service_location_fingerprint: String,
-        service_started_at: Instant,
-        service_ended_at: Instant,
-        quantity: Quantity,
-    ) -> Result<Self> {
-        let result = ensure_binary_service_result(result)?;
+    ///
+    /// # 约束
+    /// 无。
+    pub fn new(params: ServiceFulfillmentConfirmationParams) -> Result<Self> {
+        let result = ensure_binary_service_result(params.result)?;
         let completion_note = normalize_required_text(
-            completion_note,
+            params.completion_note,
             "完成说明不能为空",
             COMPLETION_NOTE_MAX_LEN,
             "完成说明过长",
         )?;
-        let evidence_attachment_id = require_evidence_attachment_id(evidence_attachment_id)?;
+        let evidence_attachment_id = require_evidence_attachment_id(params.evidence_attachment_id)?;
         let service_location_encrypted = normalize_required_text(
-            service_location_encrypted,
+            params.service_location_encrypted,
             "服务地点加密值不能为空",
             SERVICE_LOCATION_ENCRYPTED_MAX_LEN,
             "服务地点加密值过长",
         )?;
         let service_location_fingerprint = normalize_required_text(
-            service_location_fingerprint,
+            params.service_location_fingerprint,
             "服务地点查询指纹不能为空",
             FINGERPRINT_HEX_LEN,
             "服务地点查询指纹过长",
         )?;
         validate_fingerprint(&service_location_fingerprint)?;
-        ensure_positive_quantity(&quantity)?;
-        ensure_service_window(service_started_at, service_ended_at)?;
+        ensure_positive_quantity(&params.quantity)?;
+        ensure_service_window(params.service_started_at, params.service_ended_at)?;
         Ok(Self {
             result,
             completion_note,
             evidence_attachment_id,
             service_location_encrypted,
             service_location_fingerprint,
-            service_started_at,
-            service_ended_at,
-            quantity,
+            service_started_at: params.service_started_at,
+            service_ended_at: params.service_ended_at,
+            quantity: params.quantity,
         })
     }
 }
@@ -926,16 +933,19 @@ mod tests {
         assert!(missing_evidence.ensure_evidence_present().is_err());
         assert!(missing_evidence.confirm().is_err());
 
-        let confirmation = ServiceFulfillmentConfirmation::new(
-            FulfillmentResult::Success,
-            "上门安装调试完成".to_string(),
-            FileAssetId::new("file-confirm"),
-            "ciphertext-location-confirmed".to_string(),
-            ServiceFulfillment::service_location_fingerprint(PLAINTEXT_LOCATION, FINGERPRINT_KEY),
-            Instant::from_unix_secs(1_700_000_000),
-            Instant::from_unix_secs(1_700_003_600),
-            Quantity::from_str("1").unwrap(),
-        )
+        let confirmation = ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+            result: FulfillmentResult::Success,
+            completion_note: "上门安装调试完成".to_string(),
+            evidence_attachment_id: FileAssetId::new("file-confirm"),
+            service_location_encrypted: "ciphertext-location-confirmed".to_string(),
+            service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
+                PLAINTEXT_LOCATION,
+                FINGERPRINT_KEY,
+            ),
+            service_started_at: Instant::from_unix_secs(1_700_000_000),
+            service_ended_at: Instant::from_unix_secs(1_700_003_600),
+            quantity: Quantity::from_str("1").unwrap(),
+        })
         .unwrap();
         missing_evidence.apply_confirmation(confirmation).unwrap();
         assert_eq!(
@@ -958,16 +968,16 @@ mod tests {
         for quantity in ["0.5", "100"] {
             let mut fulfillment =
                 ServiceFulfillment::new(ServiceFulfillmentId::new(format!("sf-{quantity}")), data()).unwrap();
-            let confirmation = ServiceFulfillmentConfirmation::new(
-                FulfillmentResult::Success,
-                "上门安装调试完成".to_string(),
-                FileAssetId::new("file-confirm"),
-                "ciphertext-location-confirmed".to_string(),
-                fingerprint.clone(),
-                Instant::from_unix_secs(1_700_000_000),
-                Instant::from_unix_secs(1_700_003_600),
-                Quantity::from_str(quantity).unwrap(),
-            )
+            let confirmation = ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+                result: FulfillmentResult::Success,
+                completion_note: "上门安装调试完成".to_string(),
+                evidence_attachment_id: FileAssetId::new("file-confirm"),
+                service_location_encrypted: "ciphertext-location-confirmed".to_string(),
+                service_location_fingerprint: fingerprint.clone(),
+                service_started_at: Instant::from_unix_secs(1_700_000_000),
+                service_ended_at: Instant::from_unix_secs(1_700_003_600),
+                quantity: Quantity::from_str(quantity).unwrap(),
+            })
             .unwrap();
 
             assert!(fulfillment.apply_confirmation(confirmation).is_err());
@@ -981,39 +991,45 @@ mod tests {
     fn confirmation_facts_reject_invalid_inputs() {
         let fingerprint =
             ServiceFulfillment::service_location_fingerprint(PLAINTEXT_LOCATION, FINGERPRINT_KEY);
-        assert!(ServiceFulfillmentConfirmation::new(
-            FulfillmentResult::Success,
-            "上门安装调试完成".to_string(),
-            FileAssetId::new("   "),
-            "ciphertext-location".to_string(),
-            fingerprint.clone(),
-            Instant::from_unix_secs(1_700_000_000),
-            Instant::from_unix_secs(1_700_003_600),
-            Quantity::from_str("1").unwrap(),
-        )
-        .is_err());
-        assert!(ServiceFulfillmentConfirmation::new(
-            FulfillmentResult::Success,
-            "上门安装调试完成".to_string(),
-            FileAssetId::new("file-1"),
-            "ciphertext-location".to_string(),
-            fingerprint.clone(),
-            Instant::from_unix_secs(1_700_003_600),
-            Instant::from_unix_secs(1_700_000_000),
-            Quantity::from_str("1").unwrap(),
-        )
-        .is_err());
-        assert!(ServiceFulfillmentConfirmation::new(
-            FulfillmentResult::PartialSuccess,
-            "上门安装调试完成".to_string(),
-            FileAssetId::new("file-1"),
-            "ciphertext-location".to_string(),
-            fingerprint,
-            Instant::from_unix_secs(1_700_000_000),
-            Instant::from_unix_secs(1_700_003_600),
-            Quantity::from_str("1").unwrap(),
-        )
-        .is_err());
+        assert!(
+            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+                result: FulfillmentResult::Success,
+                completion_note: "上门安装调试完成".to_string(),
+                evidence_attachment_id: FileAssetId::new("   "),
+                service_location_encrypted: "ciphertext-location".to_string(),
+                service_location_fingerprint: fingerprint.clone(),
+                service_started_at: Instant::from_unix_secs(1_700_000_000),
+                service_ended_at: Instant::from_unix_secs(1_700_003_600),
+                quantity: Quantity::from_str("1").unwrap(),
+            })
+            .is_err()
+        );
+        assert!(
+            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+                result: FulfillmentResult::Success,
+                completion_note: "上门安装调试完成".to_string(),
+                evidence_attachment_id: FileAssetId::new("file-1"),
+                service_location_encrypted: "ciphertext-location".to_string(),
+                service_location_fingerprint: fingerprint.clone(),
+                service_started_at: Instant::from_unix_secs(1_700_003_600),
+                service_ended_at: Instant::from_unix_secs(1_700_000_000),
+                quantity: Quantity::from_str("1").unwrap(),
+            })
+            .is_err()
+        );
+        assert!(
+            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+                result: FulfillmentResult::PartialSuccess,
+                completion_note: "上门安装调试完成".to_string(),
+                evidence_attachment_id: FileAssetId::new("file-1"),
+                service_location_encrypted: "ciphertext-location".to_string(),
+                service_location_fingerprint: fingerprint,
+                service_started_at: Instant::from_unix_secs(1_700_000_000),
+                service_ended_at: Instant::from_unix_secs(1_700_003_600),
+                quantity: Quantity::from_str("1").unwrap(),
+            })
+            .is_err()
+        );
     }
 
     /// 确认与验收资格由实体状态及销售明细关联共同决定。

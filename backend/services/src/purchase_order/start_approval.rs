@@ -29,6 +29,7 @@ use super::dto::SavePurchaseOrderLine;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use crate::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+    StartIdentityParams,
 };
 use crate::approval::execution::start::map_engine_error;
 use crate::approval::execution::{
@@ -154,16 +155,16 @@ pub(super) async fn replay_purchase_order_start_with_executor(
 ) -> Result<Option<String>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::PurchaseOrder);
-    let identity = start_identity(
-        key,
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    let identity = start_identity(StartIdentityParams {
+        idempotency_key: key,
+        process_kind: process_kind.as_str(),
+        subject_kind: subject.subject_kind(),
+        subject_id: subject.subject_id(),
         subject_version,
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-        actor_id,
-    )?;
+        binding_id: binding.approval_process_definition_id.as_ref(),
+        definition_version: binding.approval_definition_version,
+        actor_participant_id: actor_id,
+    })?;
     let mut receipt = None;
     for scope in identity.scope_candidates() {
         receipt = db
@@ -649,7 +650,7 @@ pub(crate) mod tests {
     use entities::ids::WorkItemId;
     use entities::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 
-    use crate::approval::execution::idempotency::start_identity;
+    use crate::approval::execution::idempotency::{start_identity, StartIdentityParams};
     use crate::approval::execution::{prepare_start, PreparedExecution};
     use crate::approval::process_kind::process_kind_of;
     use crate::errors::Error;
@@ -826,16 +827,16 @@ pub(crate) mod tests {
     /// 同键同载荷启动收据必须重放，不重复规划写入。
     #[test]
     fn purchase_order_start_replays_matching_receipt() {
-        let identity = start_identity(
-            bpm::model::IdempotencyKey::parse("key-1").unwrap(),
-            process_kind_of(DocumentType::PurchaseOrder).as_str(),
-            "purchase_order",
-            "po-1",
-            1,
-            "def",
-            1,
-            "starter",
-        )
+        let identity = start_identity(StartIdentityParams {
+            idempotency_key: bpm::model::IdempotencyKey::parse("key-1").unwrap(),
+            process_kind: process_kind_of(DocumentType::PurchaseOrder).as_str(),
+            subject_kind: "purchase_order",
+            subject_id: "po-1",
+            subject_version: 1,
+            binding_id: "def",
+            definition_version: 1,
+            actor_participant_id: "starter",
+        })
         .unwrap();
         let receipt = bpm::model::ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("r1"),

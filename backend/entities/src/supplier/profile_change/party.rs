@@ -12,17 +12,31 @@ use crate::supplier::{
 
 use super::types::option_as_authoritative_update;
 
+/// 创建主体名称新修订的输入参数。
+#[derive(Debug)]
+pub struct PlanPartyRevisionParams<'a> {
+    /// 待修订的主体实体，已通过版本与启停门禁；方法内原地更新 `unified_credit_code` 并推进 `current_revision_id`。
+    pub party: &'a mut Party,
+    /// 统一社会信用代码输入，`Some` 表示设置、`None` 表示清空。
+    pub unified_credit_code: Option<String>,
+    /// 法定名称。
+    pub legal_name: String,
+    /// 简称。
+    pub short_name: Option<String>,
+    /// 修订原因。
+    pub change_reason: String,
+    /// 新修订主键，由 Service 分配。
+    pub revision_id: PartyRevisionId,
+    /// 新修订序号，由 Service 查询得出。
+    pub revision_no: u32,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+}
+
 /// 创建主体名称新修订并更新统一社会信用代码。
 ///
 /// # 参数
-/// * `party` - 待修订的主体实体，已通过版本与启停门禁；方法内原地更新 `unified_credit_code` 并推进 `current_revision_id`
-/// * `unified_credit_code` - 统一社会信用代码输入，`Some` 表示设置、`None` 表示清空
-/// * `legal_name` - 法定名称
-/// * `short_name` - 简称
-/// * `change_reason` - 修订原因
-/// * `revision_id` - 新修订主键，由 Service 分配
-/// * `revision_no` - 新修订序号，由 Service 查询得出
-/// * `actor_id` - 操作人 ID
+/// * `params` - 主体、信用代码、名称与修订身份
 ///
 /// # 返回
 /// 返回新建的 `PartyRevision`，并已推进 `party.current_revision_id`。
@@ -32,17 +46,17 @@ use super::types::option_as_authoritative_update;
 ///
 /// # 约束
 /// 纯内存操作，不触及 MongoDB、全局 ID 或加密；`party_no` 与 `party_kind` 不在此修改。
-#[allow(clippy::too_many_arguments)]
-pub fn plan_party_revision(
-    party: &mut Party,
-    unified_credit_code: Option<String>,
-    legal_name: String,
-    short_name: Option<String>,
-    change_reason: String,
-    revision_id: PartyRevisionId,
-    revision_no: u32,
-    actor_id: &str,
-) -> crate::Result<PartyRevision> {
+pub fn plan_party_revision(params: PlanPartyRevisionParams<'_>) -> crate::Result<PartyRevision> {
+    let PlanPartyRevisionParams {
+        party,
+        unified_credit_code,
+        legal_name,
+        short_name,
+        change_reason,
+        revision_id,
+        revision_no,
+        actor_id,
+    } = params;
     party.update(
         PartyUpdate {
             unified_credit_code: option_as_authoritative_update(unified_credit_code),
@@ -63,22 +77,41 @@ pub fn plan_party_revision(
     )
 }
 
+/// 创建商务资料新修订的输入参数。
+#[derive(Debug)]
+pub struct PlanCommercialProfileRevisionParams<'a> {
+    /// 待修订的供应商实体，已通过版本门禁；原地推进 `current_commercial_profile_revision_id`。
+    pub supplier: &'a mut SupplierAccount,
+    /// 结算方式。
+    pub settlement_mode: SettlementMode,
+    /// 对账周期。
+    pub reconciliation_cycle: ReconciliationCycle,
+    /// 付款条件快照。
+    pub payment_term_snapshot: String,
+    /// 经营类目。
+    pub business_category: Option<String>,
+    /// 发票类型。
+    pub invoice_type: InvoiceType,
+    /// 发票税点。
+    pub invoice_tax_rate: crate::money::Rate,
+    /// 签约主体。
+    pub signing_entity_party_id: PartyId,
+    /// 付款主体。
+    pub payment_entity_party_id: PartyId,
+    /// 变更原因。
+    pub change_reason: String,
+    /// 新修订主键。
+    pub revision_id: SupplierCommercialProfileRevisionId,
+    /// 新修订序号。
+    pub revision_no: u32,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+}
+
 /// 创建商务资料新修订并推进供应商当前指针。
 ///
 /// # 参数
-/// * `supplier` - 待修订的供应商实体，已通过版本门禁；原地推进 `current_commercial_profile_revision_id`
-/// * `settlement_mode` - 结算方式
-/// * `reconciliation_cycle` - 对账周期
-/// * `payment_term_snapshot` - 付款条件快照
-/// * `business_category` - 经营类目
-/// * `invoice_type` - 发票类型
-/// * `invoice_tax_rate` - 发票税点
-/// * `signing_entity_party_id` - 签约主体
-/// * `payment_entity_party_id` - 付款主体
-/// * `change_reason` - 变更原因
-/// * `revision_id` - 新修订主键
-/// * `revision_no` - 新修订序号
-/// * `actor_id` - 操作人 ID
+/// * `params` - 供应商、商务条款与修订身份
 ///
 /// # 返回
 /// 返回新建的商务资料修订，并已推进 `supplier` 指针。
@@ -88,22 +121,24 @@ pub fn plan_party_revision(
 ///
 /// # 约束
 /// 纯内存，不触及外部 I/O；不分配新 ID，需 Service 注入。
-#[allow(clippy::too_many_arguments)]
 pub fn plan_commercial_profile_revision(
-    supplier: &mut SupplierAccount,
-    settlement_mode: SettlementMode,
-    reconciliation_cycle: ReconciliationCycle,
-    payment_term_snapshot: String,
-    business_category: Option<String>,
-    invoice_type: InvoiceType,
-    invoice_tax_rate: crate::money::Rate,
-    signing_entity_party_id: PartyId,
-    payment_entity_party_id: PartyId,
-    change_reason: String,
-    revision_id: SupplierCommercialProfileRevisionId,
-    revision_no: u32,
-    actor_id: &str,
+    params: PlanCommercialProfileRevisionParams<'_>,
 ) -> crate::Result<SupplierCommercialProfileRevision> {
+    let PlanCommercialProfileRevisionParams {
+        supplier,
+        settlement_mode,
+        reconciliation_cycle,
+        payment_term_snapshot,
+        business_category,
+        invoice_type,
+        invoice_tax_rate,
+        signing_entity_party_id,
+        payment_entity_party_id,
+        change_reason,
+        revision_id,
+        revision_no,
+        actor_id,
+    } = params;
     let revision = SupplierCommercialProfileRevision::new(
         revision_id.clone(),
         SupplierCommercialProfileRevisionData {

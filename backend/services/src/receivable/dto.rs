@@ -30,13 +30,11 @@ pub use self::invoice::{
     CommitInvoiceRequest, CommitRedInvoiceRequest, CreateInvoiceRequest, PostInvoiceRequest,
     SalesInvoiceAllocationLineRequest,
 };
-#[allow(unused_imports)]
 pub use self::query::{
     CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalDefinitionView,
-    DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalNodeView, DocumentApprovalView, FundsReviewView, InvoiceListParams, InvoiceView,
-    PageParams, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountSummaryView,
-    ReceivableAccountView, ReceivableEntryView, SalesInvoiceAllocationView,
+    DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView, FundsReviewView,
+    InvoiceListParams, InvoiceView, ReceiptAllocationView, ReceivableAccountListParams,
+    ReceivableAccountSummaryView, ReceivableAccountView, ReceivableEntryView, SalesInvoiceAllocationView,
 };
 
 /// 排序方向。

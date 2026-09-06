@@ -21,7 +21,7 @@ use super::start_approval::{
     ensure_return_start_replay_authorized, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
     persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
-    CustomerRefundStartInput, CustomerRefundStartPersistInput,
+    CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
 };
 use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
@@ -525,12 +525,14 @@ impl ReturnsService {
                         let subject = customer_refund_subject_ref(&refund_id)?;
                         replay_return_start_with_executor(
                             &db,
-                            DocumentType::CustomerRefund,
-                            &subject,
-                            subject_version,
-                            &idempotency_key,
-                            binding,
-                            actor.id(),
+                            ReplayReturnStartInput {
+                                document_type: DocumentType::CustomerRefund,
+                                subject: &subject,
+                                subject_version,
+                                idempotency_key: &idempotency_key,
+                                binding,
+                                actor_id: actor.id(),
+                            },
                             session,
                         )
                         .await
@@ -594,12 +596,14 @@ impl ReturnsService {
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
                         if let Some(instance_id) = replay_return_start_with_executor(
                             &db,
-                            DocumentType::CustomerRefund,
-                            &subject,
-                            subject_version,
-                            &idempotency_key,
-                            binding,
-                            actor.id(),
+                            ReplayReturnStartInput {
+                                document_type: DocumentType::CustomerRefund,
+                                subject: &subject,
+                                subject_version,
+                                idempotency_key: &idempotency_key,
+                                binding,
+                                actor_id: actor.id(),
+                            },
                             session,
                         )
                         .await?

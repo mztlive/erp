@@ -1,25 +1,15 @@
 # Storage Crate
 
-`storage` 负责本地文件与 S3 对象的存储操作，不包含 HTTP 或 Multipart 协议类型。
+`storage` 负责 S3 对象存储，不包含 HTTP 或 Multipart 协议类型。
 
 ## 能力
 
-- `LocalStorage` 保存、读取、删除和检查本地文件。
-- `S3Storage` 通过 AWS SDK 保存、读取、删除和检查 S3 对象。
-- S3 支持自定义 endpoint、session token、对象键前缀和 path-style URL，可连接 MinIO 等 S3-compatible 服务。
-- `LocalStorage` 自动创建基础目录和文件父目录。
-- `LocalStorage` 保存时先写入并同步同目录随机临时文件，再原子重命名；失败或任务取消时尽力清理临时文件。
-- 两种实现都拒绝绝对路径、父目录、根目录、Windows Prefix 和空文件路径。
+- `S3Storage` 通过 AWS SDK 保存、读取和删除 S3 对象。
+- 支持自定义 endpoint、session token、对象键前缀和 path-style URL，可连接 MinIO 等 S3-compatible 服务。
+- 拒绝绝对路径、父目录、根目录、Windows Prefix 和空文件路径。
 
 Multipart 解析、文件大小、扩展名、声明 MIME 与文件头真实类型校验位于
 `apps/web-api/src/core/upload.rs`。
-
-```rust
-let storage = storage::LocalStorage::new("./uploads").await?;
-storage.save("images/example.png", image_bytes).await?;
-let content = storage.read("images/example.png").await?;
-# Ok::<(), storage::Error>(())
-```
 
 S3 调用方必须从运行配置构造并复用单个客户端；不得在每次请求中重建客户端：
 
@@ -45,4 +35,4 @@ let public_url = storage.public_url("images/example.png")?;
 ```
 
 `read` 会将 S3 `NoSuchKey` 转换为 `storage::Error::NotFound`。`delete` 先通过
-`HeadObject` 确认对象存在，以保持与本地存储一致的不存在错误语义。
+`HeadObject` 确认对象存在，对象不存在时返回同样的 `NotFound`。

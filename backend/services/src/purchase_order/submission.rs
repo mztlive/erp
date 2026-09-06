@@ -36,6 +36,24 @@ use crate::errors::{Error, Result};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 
+/// 采购提交启动恢复入参。
+struct RecoverPurchaseSubmitStartInput<'a> {
+    /// 采购单主键。
+    purchase_order_id: &'a str,
+    /// 提交时冻结的审批主题版本。
+    subject_version: u32,
+    /// 提交幂等键。
+    idempotency_key: &'a str,
+    /// 提交人。
+    actor: &'a AuditActor,
+    /// 命令收据身份。
+    identity: &'a PurchaseCommandReceiptIdentity,
+    /// 命令载荷指纹。
+    fingerprint: &'a str,
+    /// 触发恢复的原始错误。
+    original_error: Error,
+}
+
 impl PurchaseOrderService {
     /// 提交采购单并调用统一 `start_approval`。
     ///
@@ -236,15 +254,15 @@ impl PurchaseOrderService {
             Ok(task) => task,
             Err(error) if command_may_have_committed(&error) => {
                 return self
-                    .recover_purchase_submit_start(
-                        id,
-                        order.approval_subject_version,
-                        &req.idempotency_key,
+                    .recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
+                        purchase_order_id: id,
+                        subject_version: order.approval_subject_version,
+                        idempotency_key: &req.idempotency_key,
                         actor,
-                        &receipt_identity,
-                        &fingerprint,
-                        error,
-                    )
+                        identity: &receipt_identity,
+                        fingerprint: &fingerprint,
+                        original_error: error,
+                    })
                     .await;
             }
             Err(error) => return Err(error),
@@ -325,23 +343,29 @@ impl PurchaseOrderService {
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 参数
+    /// * `input` - 采购提交恢复所需的主题版本、幂等键与收据身份
+    ///
+    /// # 返回
+    /// 回读到已提交结果时返回提交视图；否则返回原始错误。
+    ///
+    /// # 错误
+    /// 有界回读仍无法确认提交结果时返回原始错误，或传播不可恢复的冲突。
+    ///
+    /// # 关键业务约束
+    /// 仅在 `command_may_have_committed` 场景进入；不得在确认未提交时吞掉错误。
     async fn recover_purchase_submit_start(
         &self,
-        purchase_order_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-        identity: &PurchaseCommandReceiptIdentity,
-        fingerprint: &str,
-        original_error: Error,
+        input: RecoverPurchaseSubmitStartInput<'_>,
     ) -> Result<SubmitPurchaseOrderResult> {
         const RECOVERY_ATTEMPTS: usize = 8;
         for attempt in 0..RECOVERY_ATTEMPTS {
             let db = self.db.clone();
-            let purchase_order_id_owned = purchase_order_id.to_string();
-            let idempotency_key_owned = idempotency_key.to_string();
-            let actor_id = actor.id().to_string();
+            let purchase_order_id_owned = input.purchase_order_id.to_string();
+            let idempotency_key_owned = input.idempotency_key.to_string();
+            let actor_id = input.actor.id().to_string();
+            let subject_version = input.subject_version;
             let recovered = self
                 .db
                 .client()
@@ -378,7 +402,12 @@ impl PurchaseOrderService {
             match recovered {
                 Ok(Some(_)) => {
                     if let Some(result) = self
-                        .replay_purchase_submit(identity, fingerprint, purchase_order_id, actor)
+                        .replay_purchase_submit(
+                            input.identity,
+                            input.fingerprint,
+                            input.purchase_order_id,
+                            input.actor,
+                        )
                         .await?
                     {
                         return Ok(result);
@@ -392,7 +421,7 @@ impl PurchaseOrderService {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
-        Err(original_error)
+        Err(input.original_error)
     }
 
     /// 冻结草稿为正式提交（复制明细并重指向正式提交、推进主表指针）。

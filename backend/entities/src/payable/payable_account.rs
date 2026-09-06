@@ -107,10 +107,6 @@ pub struct PayableAccountData {
     pub invoiced_total: Amount,
 }
 
-/// 应付往来子账更新数据（当前仅占位，保持接口一致）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct PayableAccountUpdate {}
-
 /// 应付往来子账实体（稳定主表，数据模型 §6.9）。
 ///
 /// `(source_type, source_document_id)` 唯一；`open_total` / `open_invoiceable_total`
@@ -213,23 +209,6 @@ impl PayableAccount {
             invoiced_total: data.invoiced_total,
             open_invoiceable_total: open_invoiceable,
         })
-    }
-
-    /// 更新应付往来子账。
-    ///
-    /// 子账的业务字段（来源单据、供应商、来源类型）是固定字段不允许修改；
-    /// 汇总由过账事务维护。当前更新无可用字段，保留接口以保持一致性。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    pub fn update(&mut self, update: PayableAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
-        let _ = update;
-        self.stable.touch(updated_by);
-        Ok(())
     }
 
     /// 过账后同步汇总并派生状态。
@@ -422,15 +401,6 @@ mod tests {
                 "system",
             )
             .is_err());
-    }
-
-    #[test]
-    fn update_touches_auditor_without_changing_keys() {
-        let mut account = PayableAccount::new(PayableAccountId::new("pa-1"), data(), "admin-1").unwrap();
-        account.update(PayableAccountUpdate {}, "admin-2").unwrap();
-        assert_eq!(account.stable.updated_by, "admin-2");
-        assert_eq!(account.source_document_id, "PO-2026-001");
-        assert_eq!(account.supplier_id, SupplierAccountId::new("sup-1"));
     }
 
     #[test]

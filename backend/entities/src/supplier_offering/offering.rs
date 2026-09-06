@@ -249,6 +249,39 @@ pub struct SupplierOfferingRevisionData {
     pub prefill_source_refs: PrefillSourceRefs,
 }
 
+/// 由含税价格构造供给修订数据的输入参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FromGrossPricesParams {
+    /// 所属供给。
+    pub supplier_offering_id: SupplierOfferingId,
+    /// 修订号。
+    pub revision_no: u32,
+    /// 一件代发含税价。
+    pub dropship_supply_price_gross: UnitPrice,
+    /// 集采含税价。
+    pub bulk_supply_price_gross: UnitPrice,
+    /// 进项税率。
+    pub input_tax_rate: Rate,
+    /// 一件代发快递说明。
+    pub dropship_express: Option<String>,
+    /// 运费。
+    pub freight_amount: Option<Amount>,
+    /// 服务费。
+    pub service_fee_amount: Option<Amount>,
+    /// 集采起订量。
+    pub bulk_minimum_order_quantity: Quantity,
+    /// 可供区域。
+    pub supply_region: Vec<String>,
+    /// 商品级能力。
+    pub product_capabilities: Vec<String>,
+    /// 生效日期。
+    pub valid_from: BusinessDate,
+    /// 失效日期。
+    pub valid_to: Option<BusinessDate>,
+    /// 预填依据。
+    pub prefill_source_refs: PrefillSourceRefs,
+}
+
 impl SupplierOfferingRevisionData {
     /// 由含税价格和税率构造完整商业条款数据。
     ///
@@ -256,57 +289,34 @@ impl SupplierOfferingRevisionData {
     /// 实现价格换算。
     ///
     /// # 参数
-    /// * `supplier_offering_id` - 所属供给
-    /// * `revision_no` - 修订号
-    /// * `dropship_supply_price_gross` - 一件代发含税价
-    /// * `bulk_supply_price_gross` - 集采含税价
-    /// * `input_tax_rate` - 进项税率
-    /// * `dropship_express` - 一件代发快递说明
-    /// * `freight_amount` - 运费
-    /// * `service_fee_amount` - 服务费
-    /// * `bulk_minimum_order_quantity` - 集采起订量
-    /// * `supply_region` - 可供区域
-    /// * `product_capabilities` - 商品级能力
-    /// * `valid_from` - 生效日期
-    /// * `valid_to` - 失效日期
-    /// * `prefill_source_refs` - 预填依据
+    /// * `params` - 含税价格、税率与商业条款字段
     ///
     /// # 返回
     /// 返回已派生两组不含税价格的商业条款数据。
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_gross_prices(
-        supplier_offering_id: SupplierOfferingId,
-        revision_no: u32,
-        dropship_supply_price_gross: UnitPrice,
-        bulk_supply_price_gross: UnitPrice,
-        input_tax_rate: Rate,
-        dropship_express: Option<String>,
-        freight_amount: Option<Amount>,
-        service_fee_amount: Option<Amount>,
-        bulk_minimum_order_quantity: Quantity,
-        supply_region: Vec<String>,
-        product_capabilities: Vec<String>,
-        valid_from: BusinessDate,
-        valid_to: Option<BusinessDate>,
-        prefill_source_refs: PrefillSourceRefs,
-    ) -> Self {
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 约束
+    /// 不含税价由本方法唯一派生，调用方不得自行换算后覆盖。
+    pub fn from_gross_prices(params: FromGrossPricesParams) -> Self {
         Self {
-            supplier_offering_id,
-            revision_no,
-            dropship_supply_price_gross,
-            dropship_supply_price_net: net_price(dropship_supply_price_gross, input_tax_rate),
-            bulk_supply_price_gross,
-            bulk_supply_price_net: net_price(bulk_supply_price_gross, input_tax_rate),
-            input_tax_rate,
-            dropship_express,
-            freight_amount,
-            service_fee_amount,
-            bulk_minimum_order_quantity,
-            supply_region,
-            product_capabilities,
-            valid_from,
-            valid_to,
-            prefill_source_refs,
+            supplier_offering_id: params.supplier_offering_id,
+            revision_no: params.revision_no,
+            dropship_supply_price_gross: params.dropship_supply_price_gross,
+            dropship_supply_price_net: net_price(params.dropship_supply_price_gross, params.input_tax_rate),
+            bulk_supply_price_gross: params.bulk_supply_price_gross,
+            bulk_supply_price_net: net_price(params.bulk_supply_price_gross, params.input_tax_rate),
+            input_tax_rate: params.input_tax_rate,
+            dropship_express: params.dropship_express,
+            freight_amount: params.freight_amount,
+            service_fee_amount: params.service_fee_amount,
+            bulk_minimum_order_quantity: params.bulk_minimum_order_quantity,
+            supply_region: params.supply_region,
+            product_capabilities: params.product_capabilities,
+            valid_from: params.valid_from,
+            valid_to: params.valid_to,
+            prefill_source_refs: params.prefill_source_refs,
         }
     }
 }
@@ -566,8 +576,8 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        PrefillSourceRefs, SupplierOffering, SupplierOfferingData, SupplierOfferingRevision,
-        SupplierOfferingRevisionData,
+        FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
+        SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
     use crate::common::time::BusinessDate;
     use crate::ids::{
@@ -664,22 +674,22 @@ mod tests {
 
     #[test]
     fn gross_price_factory_and_revision_impact_are_domain_rules() {
-        let data = SupplierOfferingRevisionData::from_gross_prices(
-            SupplierOfferingId::new("offering-1"),
-            1,
-            UnitPrice::from_str("11.30").unwrap(),
-            UnitPrice::from_str("9.04").unwrap(),
-            Rate::from_str("0.13").unwrap(),
-            None,
-            None,
-            None,
-            Quantity::from_str("10").unwrap(),
-            vec!["CN".to_string()],
-            vec!["REFUND".to_string()],
-            BusinessDate::from_str("2026-08-08").unwrap(),
-            None,
-            PrefillSourceRefs::default(),
-        );
+        let data = SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+            supplier_offering_id: SupplierOfferingId::new("offering-1"),
+            revision_no: 1,
+            dropship_supply_price_gross: UnitPrice::from_str("11.30").unwrap(),
+            bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
+            input_tax_rate: Rate::from_str("0.13").unwrap(),
+            dropship_express: None,
+            freight_amount: None,
+            service_fee_amount: None,
+            bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
+            supply_region: vec!["CN".to_string()],
+            product_capabilities: vec!["REFUND".to_string()],
+            valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
+            valid_to: None,
+            prefill_source_refs: PrefillSourceRefs::default(),
+        });
         assert_eq!(data.dropship_supply_price_net.to_string(), "9.83");
         let prior =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), data.clone())
@@ -687,22 +697,22 @@ mod tests {
 
         let cost = SupplierOfferingRevision::new(
             SupplierOfferingRevisionId::new("revision-2"),
-            SupplierOfferingRevisionData::from_gross_prices(
-                SupplierOfferingId::new("offering-1"),
-                2,
-                UnitPrice::from_str("12.00").unwrap(),
-                data.bulk_supply_price_gross,
-                data.input_tax_rate,
-                None,
-                None,
-                None,
-                data.bulk_minimum_order_quantity,
-                data.supply_region.clone(),
-                data.product_capabilities.clone(),
-                data.valid_from,
-                data.valid_to,
-                PrefillSourceRefs::default(),
-            ),
+            SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+                supplier_offering_id: SupplierOfferingId::new("offering-1"),
+                revision_no: 2,
+                dropship_supply_price_gross: UnitPrice::from_str("12.00").unwrap(),
+                bulk_supply_price_gross: data.bulk_supply_price_gross,
+                input_tax_rate: data.input_tax_rate,
+                dropship_express: None,
+                freight_amount: None,
+                service_fee_amount: None,
+                bulk_minimum_order_quantity: data.bulk_minimum_order_quantity,
+                supply_region: data.supply_region.clone(),
+                product_capabilities: data.product_capabilities.clone(),
+                valid_from: data.valid_from,
+                valid_to: data.valid_to,
+                prefill_source_refs: PrefillSourceRefs::default(),
+            }),
         )
         .unwrap();
         assert_eq!(cost.impact_from(&prior), OfferingRevisionImpact::CostChanged);

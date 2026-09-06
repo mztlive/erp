@@ -19,6 +19,7 @@ pub(super) use payment_reversal::{
 pub(super) use prepare::{
     ensure_return_start_actor_active, ensure_return_start_replay_authorized, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, replay_return_start_with_executor, replay_subject_versions,
+    ReplayReturnStartInput,
 };
 pub(super) use receipt_reversal::{
     build_receipt_reversal_start_input, load_receipt_reversal_start_receipt,

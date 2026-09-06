@@ -29,17 +29,55 @@ pub(super) struct DecisionNotificationFacts<'a> {
     pub(super) runtime_admin_ids: &'a [String],
 }
 
+/// 受阻取消通知所需的模板与收件人事实。
+///
+/// # 用途
+/// 打包 [`persist_cancel_notifications`] 的通知上下文。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 收件人固定为提交人与实际取消的运行管理员。
+pub(super) struct CancelNotificationFacts<'a> {
+    pub(super) submitted_by: &'a str,
+    pub(super) actor_id: &'a str,
+    pub(super) document_type_label: &'a str,
+    pub(super) document_no: &'a str,
+    pub(super) current_node_name: &'a str,
+    pub(super) current_approver_display_name: &'a str,
+}
+
 /// 在受阻取消事务内追加通知 outbox。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 校验受阻取消计划仅含一条 BlockedCancelled 意图并写入 outbox。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `writes` - 受阻取消计划
+/// * `facts` - 模板与收件人事实
+/// * `now` - 入队时间
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 计划含任务变更、通知意图不匹配或入队失败时返回错误。
+///
+/// # 关键业务约束
+/// 受阻取消不得创建、完成或关闭审批任务。
 pub(super) async fn persist_cancel_notifications(
     db: &Database,
     writes: &PlannedWrites,
-    submitted_by: &str,
-    actor_id: &str,
-    document_type_label: &str,
-    document_no: &str,
-    current_node_name: &str,
-    current_approver_display_name: &str,
+    facts: CancelNotificationFacts<'_>,
     now: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -62,12 +100,12 @@ pub(super) async fn persist_cancel_notifications(
         entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
         intent.dedup_key.clone(),
         intent.event_kind,
-        blocked_cancel_notification_recipients(submitted_by, actor_id),
+        blocked_cancel_notification_recipients(facts.submitted_by, facts.actor_id),
         entities::approval_integration::ApprovalNotificationTemplateParams {
-            document_type_label: document_type_label.to_string(),
-            document_no: document_no.to_string(),
-            current_node_name: current_node_name.to_string(),
-            current_approver_display_name: current_approver_display_name.to_string(),
+            document_type_label: facts.document_type_label.to_string(),
+            document_no: facts.document_no.to_string(),
+            current_node_name: facts.current_node_name.to_string(),
+            current_approver_display_name: facts.current_approver_display_name.to_string(),
             round_no: writes.instance.current_round_no,
             reject_reason_summary: None,
         },
@@ -222,15 +260,53 @@ pub(super) fn notification_recipients<'a>(
     recipients
 }
 
+/// 原审批人恢复通知所需的执行与模板事实。
+///
+/// # 用途
+/// 打包 [`persist_resume_notifications`] 的通知上下文。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 必须同时产生 Entered 与 Resumed 两条意图。
+pub(super) struct ResumeNotificationFacts<'a> {
+    pub(super) new_execution: &'a ApprovalNodeExecution,
+    pub(super) submitted_by: &'a str,
+    pub(super) document_type_label: &'a str,
+    pub(super) document_no: &'a str,
+}
+
 /// 在恢复事务内按新执行事实追加进入节点与原审批人恢复通知。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 校验恢复计划通知意图并写入同一事务 outbox。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `writes` - 恢复计划
+/// * `facts` - 新执行与模板事实
+/// * `now` - 入队时间
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 意图数量/类型不匹配、去重键错误或入队失败时返回错误。
+///
+/// # 关键业务约束
+/// 恢复必须且只能产生 Entered 与 Resumed 两条通知。
 pub(super) async fn persist_resume_notifications(
     db: &Database,
     writes: &PlannedWrites,
-    new_execution: &ApprovalNodeExecution,
-    submitted_by: &str,
-    document_type_label: &str,
-    document_no: &str,
+    facts: ResumeNotificationFacts<'_>,
     now: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -247,8 +323,8 @@ pub(super) async fn persist_resume_notifications(
             return Err(Error::Internal("原审批人恢复包含重复通知意图".to_string()));
         }
         let expected_dedup = match intent.event_kind {
-            EventKind::Entered => format!("entered:{}", new_execution.base.id),
-            EventKind::Resumed => format!("resumed:{}", new_execution.base.id),
+            EventKind::Entered => format!("entered:{}", facts.new_execution.base.id),
+            EventKind::Resumed => format!("resumed:{}", facts.new_execution.base.id),
             _ => {
                 return Err(Error::Internal(
                     "原审批人恢复包含非进入节点或恢复通知".to_string(),
@@ -258,10 +334,10 @@ pub(super) async fn persist_resume_notifications(
         if intent.dedup_key != expected_dedup {
             return Err(Error::Internal("原审批人恢复通知去重键不匹配".to_string()));
         }
-        let primary = new_execution.assignee_participant_id.as_str();
+        let primary = facts.new_execution.assignee_participant_id.as_str();
         let recipients = match intent.event_kind {
             EventKind::Entered => vec![primary.to_string()],
-            EventKind::Resumed => notification_recipients(primary, [submitted_by]),
+            EventKind::Resumed => notification_recipients(primary, [facts.submitted_by]),
             _ => unreachable!("unsupported resume event was rejected above"),
         };
         let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
@@ -270,11 +346,11 @@ pub(super) async fn persist_resume_notifications(
             intent.event_kind,
             recipients,
             entities::approval_integration::ApprovalNotificationTemplateParams {
-                document_type_label: document_type_label.to_string(),
-                document_no: document_no.to_string(),
-                current_node_name: new_execution.node_name.clone(),
-                current_approver_display_name: new_execution.assignee_name_snapshot.clone(),
-                round_no: new_execution.round_no,
+                document_type_label: facts.document_type_label.to_string(),
+                document_no: facts.document_no.to_string(),
+                current_node_name: facts.new_execution.node_name.clone(),
+                current_approver_display_name: facts.new_execution.assignee_name_snapshot.clone(),
+                round_no: facts.new_execution.round_no,
                 reject_reason_summary: None,
             },
             now,

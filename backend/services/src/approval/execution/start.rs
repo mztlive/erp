@@ -5,7 +5,9 @@ use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProces
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
 use super::apply_plan::{apply_plan, DomainActionKind};
-use super::idempotency::{start_identity, start_scope_candidates, PreparedCommandIdentity, ReceiptBranch};
+use super::idempotency::{
+    start_identity, start_scope_candidates, PreparedCommandIdentity, ReceiptBranch, StartIdentityParams,
+};
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, ErrorCode, Result};
 
@@ -44,16 +46,16 @@ pub struct StartExecutionInput {
 /// # 错误
 /// 异载荷冲突或引擎失败时返回错误。
 pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
-    let identity = start_identity(
-        input.command.idempotency_key.clone(),
-        input.process_kind.as_str(),
-        input.subject.subject_kind(),
-        input.subject.subject_id(),
-        input.subject_version,
-        &input.binding_id,
-        input.definition_version,
-        input.actor.as_str(),
-    )?;
+    let identity = start_identity(StartIdentityParams {
+        idempotency_key: input.command.idempotency_key.clone(),
+        process_kind: input.process_kind.as_str(),
+        subject_kind: input.subject.subject_kind(),
+        subject_id: input.subject.subject_id(),
+        subject_version: input.subject_version,
+        binding_id: &input.binding_id,
+        definition_version: input.definition_version,
+        actor_participant_id: input.actor.as_str(),
+    })?;
     prepare_start_with_identity(input, identity)
 }
 

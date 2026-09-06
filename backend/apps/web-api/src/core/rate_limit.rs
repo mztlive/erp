@@ -187,7 +187,7 @@ impl RateLimiter {
 
 /// 请求未获得限流准入的原因。
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub(crate) enum Error {
+pub enum Error {
     /// 单个 key 已用完当前滑动窗口配额。
     #[error("key rate limit exceeded")]
     KeyExceeded { retry_after_secs: u64 },

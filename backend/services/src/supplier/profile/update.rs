@@ -127,31 +127,33 @@ impl SupplierProfileService {
         let profile_revision_no = self.next_profile_revision_no(&supplier_id).await?;
         let party_revision_id = PartyRevisionId::new(next_id());
         let commercial_profile_id = SupplierCommercialProfileRevisionId::new(next_id());
-        let party_revision = profile_change::plan_party_revision(
-            &mut party,
-            req.unified_credit_code.clone(),
-            req.legal_name.clone(),
-            req.short_name.clone(),
-            req.change_reason.clone(),
-            party_revision_id,
-            party_revision_no,
-            actor.id(),
-        )
+        let party_revision = profile_change::plan_party_revision(profile_change::PlanPartyRevisionParams {
+            party: &mut party,
+            unified_credit_code: req.unified_credit_code.clone(),
+            legal_name: req.legal_name.clone(),
+            short_name: req.short_name.clone(),
+            change_reason: req.change_reason.clone(),
+            revision_id: party_revision_id,
+            revision_no: party_revision_no,
+            actor_id: actor.id(),
+        })
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
         let commercial_profile = profile_change::plan_commercial_profile_revision(
-            &mut supplier,
-            req.settlement_mode,
-            req.reconciliation_cycle,
-            req.payment_term_snapshot.clone(),
-            req.business_category.clone(),
-            req.invoice_type,
-            req.invoice_tax_rate,
-            req.signing_entity_party_id.clone(),
-            req.payment_entity_party_id.clone(),
-            req.change_reason.clone(),
-            commercial_profile_id,
-            profile_revision_no,
-            actor.id(),
+            profile_change::PlanCommercialProfileRevisionParams {
+                supplier: &mut supplier,
+                settlement_mode: req.settlement_mode,
+                reconciliation_cycle: req.reconciliation_cycle,
+                payment_term_snapshot: req.payment_term_snapshot.clone(),
+                business_category: req.business_category.clone(),
+                invoice_type: req.invoice_type,
+                invoice_tax_rate: req.invoice_tax_rate,
+                signing_entity_party_id: req.signing_entity_party_id.clone(),
+                payment_entity_party_id: req.payment_entity_party_id.clone(),
+                change_reason: req.change_reason.clone(),
+                revision_id: commercial_profile_id,
+                revision_no: profile_revision_no,
+                actor_id: actor.id(),
+            },
         )
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
         let facts = self.prepare_party_facts(&party_id, &req, actor.id()).await?;
@@ -617,22 +619,23 @@ impl SupplierProfileService {
                 .iter()
                 .map(|_| SupplierQualificationCapabilityId::new(next_id()))
                 .collect();
-            let (qualification, revision, links) = profile_change::new_qualification(
-                supplier_id,
-                input.qualification_type,
-                input.certificate_no.clone(),
-                input.issuer.clone(),
-                input.valid_from,
-                input.valid_to,
-                input.attachment_id.clone(),
-                &input.capability_codes,
-                capability_ids,
-                actor_id,
-                qualification_id.clone(),
-                revision_id,
-                link_ids,
-            )
-            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+            let (qualification, revision, links) =
+                profile_change::new_qualification(profile_change::NewQualificationParams {
+                    supplier_id,
+                    qualification_type: input.qualification_type,
+                    certificate_no: input.certificate_no.clone(),
+                    issuer: input.issuer.clone(),
+                    valid_from: input.valid_from,
+                    valid_to: input.valid_to,
+                    attachment_id: input.attachment_id.clone(),
+                    capability_codes: &input.capability_codes,
+                    capability_ids,
+                    actor_id,
+                    qualification_id: qualification_id.clone(),
+                    revision_id,
+                    link_ids,
+                })
+                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes
                 .replacements
                 .push((SupplierQualificationId::new(&qualification.base.id), links));

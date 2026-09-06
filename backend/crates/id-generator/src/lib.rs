@@ -8,9 +8,7 @@
 mod document_number;
 
 pub use database::{Executor, NoTransaction};
-pub use document_number::{
-    format_number, DocumentNumberGenerator, DocumentNumberKind, Error, NumberPhase, Result,
-};
+pub use document_number::{format_number, DocumentNumberGenerator, DocumentNumberKind, Error, Result};
 
 use uuid::Uuid;
 

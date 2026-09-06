@@ -13,8 +13,8 @@ pub mod write_data;
 pub use availability::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
 pub use command::{SupplierOfferingCommand, SupplierOfferingCommandData};
 pub use offering::{
-    PrefillSourceRefs, SupplierOffering, SupplierOfferingData, SupplierOfferingRevision,
-    SupplierOfferingRevisionData,
+    FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
+    SupplierOfferingRevision, SupplierOfferingRevisionData,
 };
 pub use types::{
     AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingSourceType,

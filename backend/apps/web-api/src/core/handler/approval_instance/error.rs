@@ -132,18 +132,6 @@ impl ApprovalHttpError {
         Self::from_http(HttpError::BadRequest(message.into()), correlation_id(headers))
     }
 
-    /// 将 `DecisionOutcome::Blocked` 映射为 409。
-    ///
-    /// # 参数
-    /// * `correlation_id` - 请求关联 ID
-    /// * `data` - 调用者有权查看的最新摘要
-    ///
-    /// # 返回
-    /// 返回 `APPROVAL_INSTANCE_BLOCKED`。
-    pub fn blocked(correlation_id: String, data: Option<Value>) -> Self {
-        Self::coded(ErrorCode::ApprovalInstanceBlocked, correlation_id, data)
-    }
-
     /// 返回稳定错误码。
     ///
     /// # 返回

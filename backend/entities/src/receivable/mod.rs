@@ -39,7 +39,7 @@ pub use card_funds_receipt::{
 pub use card_funds_review_decision::{
     CardFundsReviewConclusion as EntityCardFundsReviewConclusion, CardFundsReviewEvidence,
     CardFundsReviewResult as EntityCardFundsReviewResult, CardFundsReviewType as EntityCardFundsReviewType,
-    ValidatedCardFundsReviewDecision,
+    ValidatedCardFundsReviewDecision, ValidatedCardFundsReviewDecisionParams,
 };
 pub use customer_receipt::*;
 pub use funds_ledger::ReceivableFundsLedger;

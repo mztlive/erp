@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use super::{
-    order_scope_filter, sort_doc, supplier_settlement_statement_projection, QueryFilter,
-    SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter,
-};
+use super::projection::{sort_doc, supplier_settlement_statement_projection};
+use super::source_scope::order_scope_filter;
+use super::{SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter};
+use crate::repository::QueryFilter;
 use entities::ids::SupplierSettlementItemId;
 use entities::supplier_settlement::{SettlementDifferenceStatus, SettlementPeriod, SettlementStatus};
 use mongodb::bson::doc;
@@ -150,7 +150,7 @@ fn settlement_scope_filters_cover_supplier_period_and_requested_ids() {
     use entities::ids::{SupplierAccountId, SupplierFulfillmentItemId};
     use std::collections::BTreeSet;
 
-    use super::{item_scope_filter, refund_fact_scope_filter};
+    use super::source_scope::{item_scope_filter, refund_fact_scope_filter};
 
     let supplier = SupplierAccountId::new("supplier-1");
     let facts = refund_fact_scope_filter(&supplier, 100, 200);

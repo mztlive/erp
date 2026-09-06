@@ -1,4 +1,6 @@
-use bpm::graph::{assignee_ids, copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph};
+use bpm::graph::{
+    assignee_ids, copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams,
+};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use bpm::model::ApprovalProcessDefinition;
 use database::{BpmExt, Executor, Transactional};
@@ -289,16 +291,16 @@ async fn copy_published_draft(
         .map_err(map_model_error)?;
     validate_assignees(db, rbac, policy, &assignee_ids(&nodes), session).await?;
     let transition_ids = next_transition_ids(nodes.len());
-    DefinitionGraph::new_populated_draft(
+    DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
         definition_id,
-        policy.process_kind,
-        version,
-        name,
-        participant(actor)?,
+        process_kind: policy.process_kind,
+        definition_version: version,
+        name: name.into(),
+        created_by: participant(actor)?,
         nodes,
         transition_ids,
         at,
-    )
+    })
     .map_err(map_model_error)
 }
 

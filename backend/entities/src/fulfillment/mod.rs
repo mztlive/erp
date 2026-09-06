@@ -65,8 +65,8 @@ pub use purchase_receipt::{
 pub use purchase_receipt_line_batch::{PurchaseReceiptLineBatch, PurchaseReceiptLineSpec};
 pub use service_evidence::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
 pub use service_fulfillment::{
-    ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentData, ServiceFulfillmentState,
-    ServiceFulfillmentUpdate,
+    ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentConfirmationParams,
+    ServiceFulfillmentData, ServiceFulfillmentState, ServiceFulfillmentUpdate,
 };
 pub use service_fulfillment_draft::{
     ServiceFulfillmentDraft, ServiceFulfillmentDraftData, ServiceLocationFingerprint,

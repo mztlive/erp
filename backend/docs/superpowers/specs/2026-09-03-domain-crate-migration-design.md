@@ -6,6 +6,7 @@
 | --- | --- |
 | 状态 | 已批准 |
 | 生效日期 | 2026-09-03 |
+| 执行口径修订 | 2026-09-06；以当前源码、`backend/AGENTS.md` 和配套执行计划为准 |
 | 适用范围 | `backend` Rust workspace |
 | 迁移模式 | 上线前硬切迁移 |
 | 业务行为 | 必须保持不变 |
@@ -30,7 +31,7 @@
 2. 领域事实、业务规则和持久化能力具有唯一归属。
 3. 跨领域写入由显式流程组合层持有事务并编排。
 4. 跨领域查询由显式读模型组合层组装。
-5. `entities`、`database`、`services` 三个旧业务 crate 从 workspace 和文件系统中删除。
+5. `entities`、`database`、`services` 三个旧业务 crate 从 workspace 移除，删除其生产源码和 manifest；既有 `tests/` 档案按仓库禁改规则留在原路径，不再作为 Cargo target。
 6. HTTP、DTO、错误、MongoDB、权限、幂等、事务和业务结果与迁移前保持一致。
 
 ## 3. 不在本次迁移范围内的事项
@@ -82,11 +83,15 @@ foundations -------> entity-core / entity-macros（按需）
 
 | Crate | 唯一职责 | 禁止内容 |
 | --- | --- | --- |
-| `erp-core` | 金额、数量、比率、业务时间、稳定共享 ID、最小通用校验原语 | 具体业务流程、Repository、HTTP、MongoDB |
+| `erp-core` | 金额、数量、比率、业务时间、稳定共享 ID、最小通用校验原语；保留现有金额 serde 编码 | 具体业务流程、Repository、HTTP、MongoDB 驱动及连接 |
 | `application-core` | 分页、查询合同、应用错误分类、调用上下文和用例支撑 | 领域规则、数据库实现、HTTP Handler |
 | `persistence-core` | MongoDB 连接、`Executor`、`NoTransaction`、`Transactional`、通用 Repository 和 Mongo 操作 | 领域事实、业务授权、跨域编排 |
 
 `id-generator` 必须改为依赖 `persistence-core`，不得继续依赖旧 `database`。
+
+金额值对象的现有 JSON 字符串与 BSON Decimal128 双形态必须原样保留。`erp-core/src/money.rs` 允许仅使用现有 `bson::Decimal128` 序列化编解码；不得引入 MongoDB 驱动、查询、collection 或 session。其他业务实体不得直接引用 BSON。不得为满足目录纯度而修改金额存储形态或在外部 crate 为金额类型补写外部 serde Trait 实现。
+
+`Repository<T>` 跨 crate 移动前，必须把领域专用固有实现改为领域拥有的仓储类型。禁止对外部 crate 定义的 `Repository<T>` 新增固有 `impl`，禁止使用 type alias 绕过该限制。具体类型与调用方改造由阶段 01 的仓储类型清单约束。
 
 只有满足以下全部条件的类型才允许进入 `erp-core`：
 
@@ -117,8 +122,10 @@ foundations -------> entity-core / entity-macros（按需）
 | `erp-returns` | D21 Returns |
 | `erp-import` | D22 Import |
 | `erp-integration` | D23 Mall Sync、D27 Projection、D34 Integration Operations |
-| `erp-commerce` | D28 Card Instance、D29 Mall Order、D30 Mall After Sales、D31 Mall Backfill |
+| `erp-commerce` | 仅在阶段 15 核验到已有 D28–D31 生产实现时迁移；当前源码无对应实现，不创建空 crate |
 | `erp-supply` | D24 Supplier Offering、D25 Supplier API、D26 Publication、D32 Supplier Fulfillment、D33 Supplier Settlement |
+
+当前执行基线包含 19 个有生产源码的目标领域 crate。D23/D26/D27/D28–D31 等历史领域编号不构成新建功能的授权；仅迁移实际存在的实现。`erp-commerce` 的未实例化不影响本基线验收，阶段 15 必须保留范围核验证据。
 
 ### 4.4 组合 crate
 
@@ -229,6 +236,8 @@ DTO 不得成为第二套持久化模型。HTTP 形态确实不同的薄包装�
 - `erp-read-models` 可以依赖多个领域公开查询合同和读模型 Repository。
 - `web-api`、`cli` 可以依赖单领域公开 API、`erp-processes` 和 `erp-read-models`。
 - `web-api` 和 `cli` 之间禁止互相依赖。
+
+身份、审计、工作流和文件支撑仍适用业务领域之间的依赖限制。共享操作人数据进入 `application-core`，具体授权、审计写入、审批和附件能力通过消费方 Port 注入；实现放在组合层。不得把 `SharedRbacService`、`AuditLog` 或其他领域实体塞入公共上下文。消费方 Port 的实现不得放在会被消费方反向依赖的 crate。
 
 ### 6.3 迁移期依赖
 
@@ -390,7 +399,7 @@ WorkItem 实体、Repository、状态转换和单域写入属于 `erp-workflow`�
 | 12 | 履约 | `erp-fulfillment` | 极高 |
 | 13 | 退货与逆向流程 | `erp-returns` | 极高 |
 | 14 | 外部集成与投影 | `erp-integration` | 高 |
-| 15 | 商城业务 | `erp-commerce` | 高 |
+| 15 | 商城范围核验 | 核验当前无实现范围；仅迁移重新核验到的既有实现，不创建空 crate | 低 |
 | 16 | 供应链协同 | `erp-supply` | 极高 |
 | 17 | 最终切换 | 删除旧三层 crate，完成全量与编译收益验收 | 高 |
 
@@ -431,7 +440,7 @@ backend/docs/superpowers/plans/domain-crate-migration/
 8. 按顺序执行的任务清单。
 9. 阶段内编译中断规则。
 10. 测试和质量门禁。
-11. MongoDB 副本集验收。
+11. 事务与持久化验收边界。
 12. 暂停条件。
 13. 回退步骤。
 14. 完成判据。
@@ -447,7 +456,6 @@ backend/docs/superpowers/plans/domain-crate-migration/
 未开始
 执行中
 本地门禁通过
-等待副本集验收
 已验收
 阻塞
 ```
@@ -505,7 +513,7 @@ backend/docs/superpowers/plans/domain-crate-migration/
 cargo fmt --all -- --check
 cargo check --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace
+env -u ERP_TEST_MONGO_URI cargo test --workspace --lib
 ./scripts/check-bpm-boundaries.sh
 ./scripts/check-service-boundaries.sh
 ./scripts/check-domain-boundaries.sh
@@ -516,26 +524,15 @@ cargo test --workspace
 
 阶段内允许先执行目标 crate 和直接调用方的窄检查，但窄检查不得替代阶段结束门禁。未执行的命令不得记录为通过，已知失败不得通过文档豁免。
 
-### 13.2 MongoDB 副本集门禁
+### 13.2 事务与持久化验收边界
 
-涉及以下任一事项的阶段必须执行副本集测试：
+当前 `backend/AGENTS.md` 禁止新增、修改和运行集成测试，禁止为本次验收启动真实 MongoDB。所有阶段必须执行内联单元测试，不执行 `tests/`、独立 `--test` target、`--include-ignored` 或真实外部服务测试。
 
-- Repository 迁移。
-- 事务调用方迁移。
-- 跨集合写入。
-- 幂等回执。
-- WorkItem 或 Approval 推进。
-- 唯一索引或并发控制。
-- 财务、库存、履约、退货或结算。
+阶段 00 必须使 Cargo target 发现规则与该要求一致：关闭既有集成测试自动发现，移除显式集成 target 注册，保留测试源码原样；不得借此禁用库目标、内联纯单元测试或业务代码检查。CI 使用相同命令。
 
-执行合同：
+事务迁移必须通过内联纯单元测试、消费方 Port 替身、调用轨迹与源码检查，验证执行器传递、写入顺序、错误传播、幂等判断和外部 I/O 分离。持久化格式通过内存内 JSON/BSON 编解码与索引定义对比验证。已有真实数据库测试仅保留，不运行。
 
-```bash
-export ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0'
-cargo test --workspace -- --include-ignored
-```
-
-没有可用副本集环境时，阶段最多进入“等待副本集验收”，不得标记为“已验收”。
+证据必须区分“事务编排合同已验证”和“真实数据库运行未验证”；不得把单元测试表述为真实 MongoDB 回滚、并发或部署验收。该测试范围是本迁移的验收边界，不设置等待副本集的阶段状态。
 
 ### 13.3 行为验收
 
@@ -589,9 +586,9 @@ cargo test --workspace -- --include-ignored
 | 旧引用清零 | `rg` 命令与结果 |
 | Cargo 依赖 | `cargo tree` 或 metadata 结果 |
 | 边界检查 | 命令与退出状态 |
-| 单元和集成测试 | 命令与通过结果 |
+| 内联单元测试 | 命令、通过/失败/忽略数量与结果 |
 | Workspace 门禁 | 每条命令与退出状态 |
-| 副本集测试 | 脱敏环境说明、命令与结果 |
+| 事务与持久化边界 | 执行器/调用轨迹、JSON/BSON/索引对比；真实数据库运行未验证 |
 | API 契约 | 路由、DTO、错误和权限结果 |
 | 数据契约 | collection、字段和索引对比结果 |
 | 阶段提交 | commit hash 和提交标题 |
@@ -611,6 +608,7 @@ cargo test --workspace -- --include-ignored
 必须记录：
 
 - `cargo check -p web-api` 总耗时。
+- `cargo build -p web-api --bin web-api` 增量总耗时与 `--timings` 报告。
 - 实际发生 rustc 编译的 crate 清单。
 - 被判定为 Fresh 的 crate 清单。
 - 修改前后的反向依赖闭包。
@@ -623,6 +621,7 @@ cargo test --workspace -- --include-ignored
 - Finance 修改不重新编译 Sales。
 - 三个场景中至少两个的增量 `cargo check` 中位耗时降低不低于 30%。
 - 任一场景不得回退超过 10%。
+- 增量 build 同样要求至少两个场景中位耗时降低不低于 30%，任一场景不得回退超过 10%；check 和 build 分开预热、分开记录。
 - 公共基础 crate 变更导致的大范围重编译不作为领域隔离失败。
 
 结构隔离通过但耗时指标未通过时，阶段 17 不得完成。必须继续检查过程宏展开、泛型单态化、Build Script、Feature 传播和应用入口依赖。
@@ -631,15 +630,15 @@ cargo test --workspace -- --include-ignored
 
 只有同时满足以下条件，本次迁移才允许标记完成：
 
-1. 20 个目标领域 crate、3 个基础 crate、2 个组合 crate 均按合同存在。
-2. `entities`、`database`、`services` 已从 workspace 和文件系统删除。
-3. Cargo metadata、源码、脚本、CI 和文档中不存在有效旧 crate 引用。
+1. 当前源码对应的 19 个目标领域 crate、3 个基础 crate、2 个组合 crate 均按合同存在；阶段 15 的无实现范围核验通过。
+2. `entities`、`database`、`services` 已从 workspace 移除，其生产源码和 manifest 已删除；既有历史测试档案留在原路径，不是 Cargo target。
+3. Cargo metadata、生产源码、活动脚本、CI 和有效运行说明中不存在旧 crate 依赖；迁移清单、历史测试档案与历史设计中的源路径不作为活动依赖。
 4. 普通业务领域 crate 之间不存在直接依赖。
 5. 跨领域命令全部由 `erp-processes` 编排。
 6. 跨领域查询全部由 `erp-read-models` 组装。
 7. HTTP、DTO、错误、MongoDB、权限、幂等和事务合同保持不变。
 8. 全部本地质量门禁通过。
-9. 全部副本集集成测试通过。
+9. 内联单元测试与事务/持久化合同验证通过，证据如实记录真实数据库运行未验证。
 10. 增量编译结构和量化指标通过。
 11. 18 份阶段文档均包含完整验收证据和阶段提交。
 

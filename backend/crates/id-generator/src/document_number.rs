@@ -42,21 +42,11 @@ impl From<mongodb::error::Error> for Error {
 /// 编号生成结果类型。
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// 单据编号所属建设阶段。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NumberPhase {
-    /// 一期启用。
-    PhaseOne,
-
-    /// 二期预声明，暂未启用。
-    PhaseTwo,
-}
-
 /// 可展示业务编号（`*_no`）的单据种类。
 ///
-/// 每个变体包含前缀与中文名（见 `prefix`/`label`），serde 序列化为
-/// snake_case 字符串（如 `sales_order`），同时作为计数器集合
-/// [`COUNTER_COLLECTION`] 的 `_id`，保证持久化标识与应用层一致。
+/// 每个变体包含业务前缀（见 `prefix`），serde 序列化为 snake_case 字符串
+/// （如 `sales_order`），同时作为计数器集合 [`COUNTER_COLLECTION`] 的 `_id`，
+/// 保证持久化标识与应用层一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentNumberKind {
@@ -103,8 +93,6 @@ pub enum DocumentNumberKind {
 /// 单据种类的静态元数据。
 struct KindInfo {
     prefix: &'static str,
-    label: &'static str,
-    phase: NumberPhase,
 }
 
 impl DocumentNumberKind {
@@ -114,22 +102,6 @@ impl DocumentNumberKind {
     /// 前缀为固定大写业务缩写（如 `SO`），编号格式串的一部分，一经启用不得变更。
     pub fn prefix(self) -> &'static str {
         self.info().prefix
-    }
-
-    /// 返回单据种类的中文名称。
-    ///
-    /// # 返回值
-    /// 用于界面展示与日志上下文的中文标签。
-    pub fn label(self) -> &'static str {
-        self.info().label
-    }
-
-    /// 返回编号所属建设阶段。
-    ///
-    /// # 返回值
-    /// 一期种类返回 `PhaseOne`；仅预声明的二期种类返回 `PhaseTwo`。
-    pub fn phase(self) -> NumberPhase {
-        self.info().phase
     }
 
     /// 返回计数器文档 `_id`（即 serde snake_case 序列化名）。
@@ -145,71 +117,19 @@ impl DocumentNumberKind {
     /// 前缀由数据模型 4.1 一期单据种类按业务缩写设计，完整清单见 crate README。
     fn info(self) -> KindInfo {
         match self {
-            Self::SalesOrder => KindInfo {
-                prefix: "SO",
-                label: "销售单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::PurchaseOrder => KindInfo {
-                prefix: "PO",
-                label: "采购单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::PurchaseReceipt => KindInfo {
-                prefix: "GRN",
-                label: "采购入库单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::Delivery => KindInfo {
-                prefix: "DN",
-                label: "履约发货单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::CustomerAcceptance => KindInfo {
-                prefix: "CA",
-                label: "客户验收单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::StockAdjustment => KindInfo {
-                prefix: "SA",
-                label: "库存调整单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::CustomerReceipt => KindInfo {
-                prefix: "CR",
-                label: "客户回款单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::SupplierPayment => KindInfo {
-                prefix: "PM",
-                label: "供应商付款单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::Invoice => KindInfo {
-                prefix: "INV",
-                label: "发票",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::SalesReturn => KindInfo {
-                prefix: "SR",
-                label: "销售退货单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::PurchaseReturn => KindInfo {
-                prefix: "PR",
-                label: "采购退货单",
-                phase: NumberPhase::PhaseOne,
-            },
-            Self::SupplierFulfillment => KindInfo {
-                prefix: "SF",
-                label: "供应商履约单",
-                phase: NumberPhase::PhaseTwo,
-            },
-            Self::SupplierSettlement => KindInfo {
-                prefix: "SS",
-                label: "供应商结算单",
-                phase: NumberPhase::PhaseTwo,
-            },
+            Self::SalesOrder => KindInfo { prefix: "SO" },
+            Self::PurchaseOrder => KindInfo { prefix: "PO" },
+            Self::PurchaseReceipt => KindInfo { prefix: "GRN" },
+            Self::Delivery => KindInfo { prefix: "DN" },
+            Self::CustomerAcceptance => KindInfo { prefix: "CA" },
+            Self::StockAdjustment => KindInfo { prefix: "SA" },
+            Self::CustomerReceipt => KindInfo { prefix: "CR" },
+            Self::SupplierPayment => KindInfo { prefix: "PM" },
+            Self::Invoice => KindInfo { prefix: "INV" },
+            Self::SalesReturn => KindInfo { prefix: "SR" },
+            Self::PurchaseReturn => KindInfo { prefix: "PR" },
+            Self::SupplierFulfillment => KindInfo { prefix: "SF" },
+            Self::SupplierSettlement => KindInfo { prefix: "SS" },
         }
     }
 }
@@ -338,92 +258,30 @@ impl DocumentNumberGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_number, DocumentNumberKind, NumberPhase, COUNTER_COLLECTION, SEQ_WIDTH};
+    use super::{format_number, DocumentNumberKind, COUNTER_COLLECTION, SEQ_WIDTH};
     use chrono::NaiveDate;
     use mongodb::bson::{deserialize_from_bson, serialize_to_bson, Bson};
 
-    const KIND_TABLE: [(DocumentNumberKind, &str, &str, NumberPhase); 13] = [
-        (
-            DocumentNumberKind::SalesOrder,
-            "SO",
-            "销售单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::PurchaseOrder,
-            "PO",
-            "采购单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::PurchaseReceipt,
-            "GRN",
-            "采购入库单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::Delivery,
-            "DN",
-            "履约发货单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::CustomerAcceptance,
-            "CA",
-            "客户验收单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::StockAdjustment,
-            "SA",
-            "库存调整单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::CustomerReceipt,
-            "CR",
-            "客户回款单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::SupplierPayment,
-            "PM",
-            "供应商付款单",
-            NumberPhase::PhaseOne,
-        ),
-        (DocumentNumberKind::Invoice, "INV", "发票", NumberPhase::PhaseOne),
-        (
-            DocumentNumberKind::SalesReturn,
-            "SR",
-            "销售退货单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::PurchaseReturn,
-            "PR",
-            "采购退货单",
-            NumberPhase::PhaseOne,
-        ),
-        (
-            DocumentNumberKind::SupplierFulfillment,
-            "SF",
-            "供应商履约单",
-            NumberPhase::PhaseTwo,
-        ),
-        (
-            DocumentNumberKind::SupplierSettlement,
-            "SS",
-            "供应商结算单",
-            NumberPhase::PhaseTwo,
-        ),
+    const KIND_TABLE: [(DocumentNumberKind, &str); 13] = [
+        (DocumentNumberKind::SalesOrder, "SO"),
+        (DocumentNumberKind::PurchaseOrder, "PO"),
+        (DocumentNumberKind::PurchaseReceipt, "GRN"),
+        (DocumentNumberKind::Delivery, "DN"),
+        (DocumentNumberKind::CustomerAcceptance, "CA"),
+        (DocumentNumberKind::StockAdjustment, "SA"),
+        (DocumentNumberKind::CustomerReceipt, "CR"),
+        (DocumentNumberKind::SupplierPayment, "PM"),
+        (DocumentNumberKind::Invoice, "INV"),
+        (DocumentNumberKind::SalesReturn, "SR"),
+        (DocumentNumberKind::PurchaseReturn, "PR"),
+        (DocumentNumberKind::SupplierFulfillment, "SF"),
+        (DocumentNumberKind::SupplierSettlement, "SS"),
     ];
 
     #[test]
     fn kind_metadata_matches_design_table() {
-        for (kind, prefix, label, phase) in KIND_TABLE {
+        for (kind, prefix) in KIND_TABLE {
             assert_eq!(kind.prefix(), prefix);
-            assert_eq!(kind.label(), label);
-            assert_eq!(kind.phase(), phase);
         }
     }
 
@@ -446,7 +304,7 @@ mod tests {
 
     #[test]
     fn counter_id_matches_serialized_kind_name() {
-        for (kind, _, _, _) in KIND_TABLE {
+        for (kind, _) in KIND_TABLE {
             let Bson::String(name) = serialize_to_bson(&kind).expect("kind should serialize") else {
                 panic!("kind must serialize to a string");
             };

@@ -4,7 +4,6 @@
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
 use bpm::ProcessKind;
-use database::repository::bpm::DefinitionGraph;
 use entities::access_control::{DataScope, DataScopeType};
 use entities::document_registry::DocumentType;
 
@@ -362,24 +361,6 @@ pub fn revalidate_assignee_binding_access(
     }
     let can_read = require_wired_object_read(adapter_object_read_decision(spec, context, assignee_user_id)?)?;
     ensure_binding_scope(spec, user_scopes, role_scopes, &context.organization_id, can_read)
-}
-
-/// 从定义图提取去重后的指定审批人。
-///
-/// # 参数
-/// * `graph` - 已加载定义图
-///
-/// # 返回
-/// 返回排序去重后的参与人 ID。
-pub fn assignee_ids_of(graph: &DefinitionGraph) -> Vec<String> {
-    let mut ids = graph
-        .nodes
-        .iter()
-        .map(|node| node.assignee_participant_id.as_str().to_string())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 #[cfg(test)]

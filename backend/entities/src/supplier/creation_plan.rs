@@ -289,21 +289,22 @@ pub fn plan_supplier_creation(
     let mut qualification_revisions = Vec::with_capacity(inputs.qualifications.len());
     let mut qualification_links = Vec::new();
     for (input, allocated) in inputs.qualifications.into_iter().zip(ids.qualification_ids) {
-        let (qualification, revision, links) = profile_change::new_qualification(
-            &ids.supplier_id,
-            input.qualification_type,
-            input.certificate_no,
-            input.issuer,
-            input.valid_from,
-            input.valid_to,
-            input.attachment_id,
-            &input.capability_codes,
-            &capability_ids,
-            &inputs.actor_id,
-            allocated.qualification_id,
-            allocated.revision_id,
-            allocated.link_ids,
-        )?;
+        let (qualification, revision, links) =
+            profile_change::new_qualification(profile_change::NewQualificationParams {
+                supplier_id: &ids.supplier_id,
+                qualification_type: input.qualification_type,
+                certificate_no: input.certificate_no,
+                issuer: input.issuer,
+                valid_from: input.valid_from,
+                valid_to: input.valid_to,
+                attachment_id: input.attachment_id,
+                capability_codes: &input.capability_codes,
+                capability_ids: &capability_ids,
+                actor_id: &inputs.actor_id,
+                qualification_id: allocated.qualification_id,
+                revision_id: allocated.revision_id,
+                link_ids: allocated.link_ids,
+            })?;
         qualifications.push(qualification);
         qualification_revisions.push(revision);
         qualification_links.extend(links);

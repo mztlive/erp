@@ -7,9 +7,7 @@
 //! 审批 Repository 提供，本模块不读取审批定义、实例与历史，不做任何审批
 //! 政策判断。
 
-use entities::ids::{
-    PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId,
-};
+use entities::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use entities::payable::PayableAccount;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder, PurchaseOrderRevision,
@@ -230,10 +228,6 @@ async fn load_allocations(
         .find_by_purchase_revision_line_ids(&line_ids, executor)
         .await
 }
-
-#[allow(dead_code)]
-/// 保持类型引用稳定。
-fn _keep_ids(_sales: Option<SalesOrderId>, _supplier: Option<SupplierAccountId>) {}
 
 #[cfg(test)]
 mod tests {

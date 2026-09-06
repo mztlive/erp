@@ -10,7 +10,6 @@ use std::collections::{HashMap, HashSet};
 
 use entities::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
 use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
-use entities::sales_order::SalesOrder;
 use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
@@ -228,11 +227,6 @@ fn split_pointer_ids(page: &PageResult<super::order::PurchaseOrderRow>) -> (Vec<
         }
     }
     (submissions, revisions)
-}
-
-#[allow(dead_code)]
-/// 保持类型引用稳定。
-fn _keep_ids(_sales: Option<SalesOrderId>, _supplier: Option<SupplierAccountId>, _order: Option<SalesOrder>) {
 }
 
 #[cfg(test)]

@@ -13,8 +13,6 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use super::extensions::{SupplierFulfillmentExt, SupplierSettlementExt};
-#[allow(unused_imports)]
-use super::Repository;
 
 pub mod detail_snapshot;
 
@@ -30,16 +28,8 @@ mod tests;
 
 pub use command::SupplierSettlementRepository;
 pub use difference::SupplierSettlementDifferenceFilter;
-#[allow(unused_imports)]
-pub use difference::SupplierSettlementDifferenceRow;
 pub use item::SupplierSettlementItemFilter;
-#[allow(unused_imports)]
-pub use item::SupplierSettlementItemRow;
-#[allow(unused_imports)]
-pub use source_scope::SupplierSettlementSourceScope;
 pub use statement::SupplierSettlementStatementFilter;
-#[allow(unused_imports)]
-pub use statement::{SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow};
 
 /// `supplier_settlement_statement` 集合名（单一来源：`SupplierSettlementExt` 关联常量）。
 const SUPPLIER_SETTLEMENT_STATEMENTS: &str =
@@ -69,13 +59,3 @@ const STATEMENT_SORT_FIELDS: &[&str] = &["created_at", "period_start", "period_e
 const ITEM_SORT_FIELDS: &[&str] = &["created_at", "erp_calculated_amount", "supplier_billed_amount"];
 /// 结算差异列表排序白名单（白名单外一律回退 `created_at`）。
 const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at", "difference_amount", "resolved_at"];
-
-#[cfg(test)]
-#[allow(unused_imports)]
-use super::QueryFilter;
-#[cfg(test)]
-#[allow(unused_imports)]
-use projection::{sort_doc, supplier_settlement_statement_projection};
-#[cfg(test)]
-#[allow(unused_imports)]
-use source_scope::{item_scope_filter, order_scope_filter, refund_fact_scope_filter};

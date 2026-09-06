@@ -45,8 +45,6 @@ pub use self::query::{
     PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView, PurchaseOrderListParams,
     PurchaseOrderPayableSummaryView, PurchaseSalesAllocationView, TotalsView,
 };
-#[allow(unused_imports)]
-pub(crate) use self::query::{PurchaseOrderListQuery, PURCHASE_ORDER_SORT_FIELDS};
 
 #[cfg(test)]
 mod tests {

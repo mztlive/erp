@@ -11,10 +11,13 @@ mod types;
 
 pub use party::{
     disable_addresses, disable_bank_accounts, disable_contacts, disable_tax_profiles,
-    plan_commercial_profile_revision, plan_party_revision,
+    plan_commercial_profile_revision, plan_party_revision, PlanCommercialProfileRevisionParams,
+    PlanPartyRevisionParams,
 };
 pub use plan::{CapabilityToggle, PlannedQualificationInput, SupplierProfileChangePlan};
-pub use qualification::{apply_qualification_input, new_capability, new_qualification};
+pub use qualification::{
+    apply_qualification_input, new_capability, new_qualification, NewQualificationParams,
+};
 
 #[cfg(test)]
 mod tests;

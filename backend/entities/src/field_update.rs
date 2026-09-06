@@ -24,17 +24,6 @@ impl<T> FieldUpdate<T> {
         matches!(self, Self::Unchanged)
     }
 
-    /// 借用待设置的具体值。
-    ///
-    /// # 返回值
-    /// `Set` 返回值引用，`Unchanged` 与 `Clear` 返回 `None`。
-    pub fn as_set(&self) -> Option<&T> {
-        match self {
-            Self::Set(value) => Some(value),
-            Self::Unchanged | Self::Clear => None,
-        }
-    }
-
     /// 将更新意图转换为创建可空字段时使用的值。
     ///
     /// # 返回值
@@ -149,18 +138,6 @@ mod tests {
 
         FieldUpdate::Set("new".to_string()).apply_to(&mut target);
         assert_eq!(target.as_deref(), Some("new"));
-    }
-
-    #[test]
-    fn as_set_only_borrows_concrete_value() {
-        assert_eq!(FieldUpdate::<String>::Unchanged.as_set(), None);
-        assert_eq!(FieldUpdate::<String>::Clear.as_set(), None);
-        assert_eq!(
-            FieldUpdate::Set("item-1".to_string())
-                .as_set()
-                .map(String::as_str),
-            Some("item-1")
-        );
     }
 
     #[test]

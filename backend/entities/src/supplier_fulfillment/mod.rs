@@ -36,4 +36,6 @@ pub use refund::{
     SupplierRefundFactData,
 };
 pub use status::{CancelStatus, FulfillmentStatus, RefundStatus, VerifiedSupplierOrderResolution};
-pub use status_history::{SupplierOrderStatusHistory, SupplierOrderStatusHistoryData};
+pub use status_history::{
+    SupplierCallbackParams, SupplierOrderStatusHistory, SupplierOrderStatusHistoryData,
+};

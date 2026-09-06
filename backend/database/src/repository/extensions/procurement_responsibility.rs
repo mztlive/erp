@@ -1,5 +1,7 @@
 //! 采购责任规则仓储访问器。
 
+use std::future::Future;
+
 use entities::ids::SkuId;
 use entities::procurement_responsibility::{
     ProcurementCatalogBundle, ProcurementResponsibilityRule, ProcurementRuleListDisplayFacts,
@@ -13,7 +15,6 @@ use crate::Repository;
 use crate::Result;
 
 /// 采购责任规则仓储访问入口。
-#[allow(async_fn_in_trait)]
 pub trait ProcurementResponsibilityExt {
     /// 采购责任规则集合名。
     const PROCUREMENT_RESPONSIBILITY_RULES: &'static str = "procurement_responsibility_rules";
@@ -41,11 +42,11 @@ pub trait ProcurementResponsibilityExt {
     ///
     /// # 约束
     /// 查询次数与输入规模无关：SKU、商品、修订各一次批量读取，分类按深度分层批量读取；不得出现逐 SKU N+1。
-    async fn load_procurement_catalog_bundle(
+    fn load_procurement_catalog_bundle(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
-    ) -> Result<ProcurementCatalogBundle>;
+    ) -> impl Future<Output = Result<ProcurementCatalogBundle>> + Send;
 
     /// 分页查询规则行并批量返回管理列表展示事实。
     ///
@@ -61,11 +62,11 @@ pub trait ProcurementResponsibilityExt {
     ///
     /// # 约束
     /// 分页后关联查询固定 4 次，与页大小无关；不得读取分页外规则。
-    async fn load_procurement_rule_list_page(
+    fn load_procurement_rule_list_page(
         &self,
         filter: &ProcurementResponsibilityRuleFilter,
         executor: &mut dyn Executor,
-    ) -> Result<ProcurementRuleListPage>;
+    ) -> impl Future<Output = Result<ProcurementRuleListPage>> + Send;
 
     /// 批量加载指定规则行的管理列表展示事实。
     ///
@@ -81,11 +82,11 @@ pub trait ProcurementResponsibilityExt {
     ///
     /// # 约束
     /// 查询次数固定为 4 次，与输入规模无关；空输入零查询。
-    async fn load_procurement_rule_list_facts(
+    fn load_procurement_rule_list_facts(
         &self,
         rules: &[ProcurementResponsibilityRule],
         executor: &mut dyn Executor,
-    ) -> Result<ProcurementRuleListDisplayFacts>;
+    ) -> impl Future<Output = Result<ProcurementRuleListDisplayFacts>> + Send;
 }
 
 impl ProcurementResponsibilityExt for Database {

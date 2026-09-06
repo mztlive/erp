@@ -5,6 +5,8 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS` 等值。
 
+use std::future::Future;
+
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
 use entities::purchase_order::{CreationBasisFacts, ProcurementCoverageFacts};
 use entities::purchase_order::{
@@ -22,7 +24,6 @@ use crate::Repository;
 use crate::Result;
 
 /// 域 D15 仓储访问器。
-#[allow(async_fn_in_trait)]
 pub trait PurchaseOrderExt: Sized {
     /// `purchase_order` 集合名。
     const PURCHASE_ORDERS: &'static str = "purchase_orders";
@@ -128,12 +129,12 @@ pub trait PurchaseOrderExt: Sized {
     /// 查询次数与输入规模无关：销售版本行、商品子类型行、SKU、商品、覆盖采购单、
     /// 当前提交行、当前版本行、正式分配与现有库存预占各一次批量读取，不得出现
     /// 逐行 N+1。草稿类状态只沿当前提交指针、正式状态只沿当前版本指针读取。
-    async fn load_procurement_coverage_facts(
+    fn load_procurement_coverage_facts(
         &self,
         revision_id: &SalesOrderRevisionId,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<ProcurementCoverageFacts>;
+    ) -> impl Future<Output = Result<ProcurementCoverageFacts>> + Send;
 
     /// 批量加载采购创建依据计算所需的最小持久化事实。
     ///
@@ -153,11 +154,11 @@ pub trait PurchaseOrderExt: Sized {
     /// 查询次数与输入规模无关：供给、修订、可供投影、供应商、商务资料修订与
     /// 法定名称各一次批量读取，不得出现逐行 N+1；供给只读取 ACTIVE 且未删除行，
     /// 并按 SKU、供应商与供给 ID 稳定排序。
-    async fn load_creation_basis_facts(
+    fn load_creation_basis_facts(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
-    ) -> Result<CreationBasisFacts>;
+    ) -> impl Future<Output = Result<CreationBasisFacts>> + Send;
 
     /// 批量加载采购单列表页与关联事实。
     ///
@@ -175,14 +176,16 @@ pub trait PurchaseOrderExt: Sized {
     /// # 约束
     /// 查询次数与页大小无关：列表分页、供应商名称、销售单、负责人、当前提交
     /// 与当前版本各一次批量读取，不得出现逐行 N+1。只沿当前指针读取表头。
-    async fn load_purchase_order_list_page(
+    fn load_purchase_order_list_page(
         &self,
         filter: &PurchaseOrderFilter,
         executor: &mut dyn Executor,
-    ) -> Result<(
-        crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
-        super::super::purchase_order::PurchaseOrderListFacts,
-    )>;
+    ) -> impl Future<
+        Output = Result<(
+            crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
+            super::super::purchase_order::PurchaseOrderListFacts,
+        )>,
+    > + Send;
 
     /// 批量加载采购单对象中心事实。
     ///
@@ -200,11 +203,11 @@ pub trait PurchaseOrderExt: Sized {
     /// # 约束
     /// 查询次数固定有界，不随行数增长；只沿当前提交或当前版本指针读取，不读
     /// 历史提交与历史版本；不读取审批运行时，不做事务或审批政策判断。
-    async fn load_purchase_order_center_facts(
+    fn load_purchase_order_center_facts(
         &self,
         order_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<super::super::purchase_order::PurchaseOrderCenterFacts>;
+    ) -> impl Future<Output = Result<super::super::purchase_order::PurchaseOrderCenterFacts>> + Send;
 }
 
 impl PurchaseOrderExt for Database {

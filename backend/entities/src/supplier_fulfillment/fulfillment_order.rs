@@ -78,7 +78,12 @@ impl SupplierFulfillmentOrderData {
     ///
     /// # 返回
     /// 返回主线为提交中、取消与退款均为无的创建数据。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 约束
+    /// 无。
     pub fn submitting(
         fulfillment_order_no: impl Into<String>,
         supplier_id: SupplierAccountId,

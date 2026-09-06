@@ -46,7 +46,7 @@ use mongodb::bson::{doc, Document};
 use mongodb::Database;
 use services::approval::execution::idempotency::{
     cancel_blocked_identity, decision_identity, normalize_idempotency_key, resume_identity, start_identity,
-    PreparedCommandIdentity,
+    CancelBlockedIdentityParams, PreparedCommandIdentity, StartIdentityParams,
 };
 use services::approval::execution::{ApprovalCommandOutcome, ApprovalRuntimeService};
 use services::approval::policy::ApprovalDomainAction;
@@ -448,16 +448,17 @@ async fn seed_runtime(db: &Database, graph: &DefinitionGraph, name: &str) {
     )
     .expect("启动运行计划");
     let current = plan.created_executions.first().expect("启动计划必须创建当前执行");
-    let start_identity = start_identity(
-        normalize_idempotency_key(&format!("decision-start-key-{name}")).expect("规范启动幂等键"),
-        ProcessKind::StockAdjustment.as_str(),
-        DocumentType::StockAdjustment.as_str(),
-        &object,
-        1,
-        DEFINITION_ID,
-        1,
-        SUBMITTER,
-    )
+    let start_identity = start_identity(StartIdentityParams {
+        idempotency_key: normalize_idempotency_key(&format!("decision-start-key-{name}"))
+            .expect("规范启动幂等键"),
+        process_kind: ProcessKind::StockAdjustment.as_str(),
+        subject_kind: DocumentType::StockAdjustment.as_str(),
+        subject_id: &object,
+        subject_version: 1,
+        binding_id: DEFINITION_ID,
+        definition_version: 1,
+        actor_participant_id: SUBMITTER,
+    })
     .expect("形成 V3 启动身份");
     let start_receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(format!("decision-start-receipt-{name}")),
@@ -569,16 +570,17 @@ async fn seed_blocked_runtime(db: &Database, graph: &DefinitionGraph, name: &str
     runtime_instance
         .enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(11))
         .expect("阻塞实例");
-    let start_identity = start_identity(
-        normalize_idempotency_key(&format!("decision-start-key-{name}")).expect("规范启动幂等键"),
-        ProcessKind::StockAdjustment.as_str(),
-        DocumentType::StockAdjustment.as_str(),
-        &object,
-        1,
-        DEFINITION_ID,
-        1,
-        SUBMITTER,
-    )
+    let start_identity = start_identity(StartIdentityParams {
+        idempotency_key: normalize_idempotency_key(&format!("decision-start-key-{name}"))
+            .expect("规范启动幂等键"),
+        process_kind: ProcessKind::StockAdjustment.as_str(),
+        subject_kind: DocumentType::StockAdjustment.as_str(),
+        subject_id: &object,
+        subject_version: 1,
+        binding_id: DEFINITION_ID,
+        definition_version: 1,
+        actor_participant_id: SUBMITTER,
+    })
     .expect("形成受阻 fixture V3 启动身份");
     let start_receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(format!("decision-start-receipt-{name}")),
@@ -1990,16 +1992,16 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
             applied.instance_status,
             ApprovalProcessInstanceStatus::Cancelled.as_str()
         );
-        let current_identity = cancel_blocked_identity(
-            normalize_idempotency_key(&command.idempotency_key).expect("规范受阻取消幂等键"),
-            &command.approval_process_instance_id,
-            ApprovalBlockerCode::DefinitionGraphCorrupted.as_str(),
-            command.expected_instance_version,
-            command.expected_execution_version,
-            command.expected_task_version,
-            &command.reason,
-            RUNTIME_ADMIN,
-        )
+        let current_identity = cancel_blocked_identity(CancelBlockedIdentityParams {
+            idempotency_key: normalize_idempotency_key(&command.idempotency_key).expect("规范受阻取消幂等键"),
+            instance_id: &command.approval_process_instance_id,
+            blocker: ApprovalBlockerCode::DefinitionGraphCorrupted.as_str(),
+            expected_instance_version: command.expected_instance_version,
+            expected_execution_version: command.expected_execution_version,
+            expected_task_version: command.expected_task_version,
+            reason: &command.reason,
+            actor_id: RUNTIME_ADMIN,
+        })
         .expect("形成 V3 受阻取消身份");
         assert_current_receipt_identity(&fixture.db, &instance_id("cancel-success"), &current_identity).await;
         let replay = fixture

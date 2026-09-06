@@ -22,7 +22,7 @@ use super::mapping::{
 use crate::approval::business_adapter::ensure_separation_of_duties;
 use crate::approval::execution::authorization::converge_eligibility;
 use crate::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, ReceiptBranch,
+    normalize_idempotency_key, payload_conflict_error, start_identity, ReceiptBranch, StartIdentityParams,
 };
 use crate::approval::execution::{
     prepare_start_with_identity, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
@@ -208,16 +208,16 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error());
     }
-    let legacy_standard_identity = start_identity(
-        key.clone(),
-        process_kind_of(DocumentType::StockAdjustment).as_str(),
-        DocumentType::StockAdjustment.as_str(),
-        adjustment_id,
-        req.expected_subject_version,
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-        actor.id(),
-    )?;
+    let legacy_standard_identity = start_identity(StartIdentityParams {
+        idempotency_key: key.clone(),
+        process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
+        subject_kind: DocumentType::StockAdjustment.as_str(),
+        subject_id: adjustment_id,
+        subject_version: req.expected_subject_version,
+        binding_id: binding.approval_process_definition_id.as_ref(),
+        definition_version: binding.approval_definition_version,
+        actor_participant_id: actor.id(),
+    })?;
     let weak_legacy_receipt = matches!(
         legacy_standard_identity.classify(Some(&receipt)),
         ReceiptBranch::SamePayload(_)

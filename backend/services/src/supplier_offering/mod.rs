@@ -47,6 +47,9 @@ use self::dto::{
 
 const SUPPLY_EXCEPTION_COMPLETE_ACTION: &str = "supplier_offering.supply_exception.complete";
 
+/// 供给列表高层查询条件（经 `SupplierOfferingExt` 关联类型跨 crate 可达）。
+type OfferingListQuery = <mongodb::Database as SupplierOfferingExt>::OfferingListQuery;
+
 /// 供应商供给服务。
 pub struct SupplierOfferingService {
     db: Database,
@@ -91,24 +94,24 @@ impl SupplierOfferingService {
         let keyword = normalized_text(params.q.as_deref());
         let product_no = normalized_text(params.product_no.as_deref());
         let sku_no = normalized_text(params.sku_no.as_deref());
+        let query = OfferingListQuery {
+            availability_status: params.availability_status,
+            keyword,
+            product_no,
+            sku_no,
+            sku_id: params.typed_sku_id(),
+            supplier_id: params.typed_supplier_id(),
+            status: params.status,
+            source_type: params.source_type,
+            page: page_or_default(params.page),
+            page_size: page_size_or_default(params.page_size),
+            sort_by: Some(sort_by.to_string()),
+            sort_ascending: sort_dir == SortDir::Asc,
+        };
         let bundle = self
             .db
             .supplier_offering_repository()
-            .load_offering_list_page(
-                params.availability_status,
-                keyword.clone(),
-                product_no,
-                sku_no,
-                params.typed_sku_id(),
-                params.typed_supplier_id(),
-                params.status,
-                params.source_type,
-                page_or_default(params.page),
-                page_size_or_default(params.page_size),
-                Some(sort_by.to_string()),
-                sort_dir == SortDir::Asc,
-                &mut NoTransaction,
-            )
+            .load_offering_list_page(&query, &mut NoTransaction)
             .await?;
         let context = OfferingListContext {
             skus: by_id(bundle.skus),

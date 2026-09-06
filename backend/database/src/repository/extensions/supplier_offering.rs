@@ -8,6 +8,8 @@ use mongodb::Database;
 use super::super::supplier_offering::{SupplierOfferingFilter, SupplierOfferingRepository};
 use crate::Repository;
 
+pub use super::super::supplier_offering::list_filter::SupplierOfferingListQuery;
+
 /// 供应商供给仓储访问器。
 pub trait SupplierOfferingExt: Sized {
     /// 供给稳定身份集合。
@@ -21,6 +23,9 @@ pub trait SupplierOfferingExt: Sized {
 
     /// 供给列表筛选条件类型。
     type SupplierOfferingFilter;
+
+    /// 供给列表高层查询条件类型（定义见 `repository::supplier_offering::list_filter`）。
+    type OfferingListQuery;
 
     /// 获取供给稳定身份集合。
     ///
@@ -55,6 +60,7 @@ pub trait SupplierOfferingExt: Sized {
 
 impl SupplierOfferingExt for Database {
     type SupplierOfferingFilter = SupplierOfferingFilter;
+    type OfferingListQuery = SupplierOfferingListQuery;
 
     fn supplier_offerings(&self) -> Repository<'_, SupplierOffering> {
         Repository::new(self, Self::SUPPLIER_OFFERINGS)

@@ -24,12 +24,8 @@ mod entry;
 mod payment;
 
 pub use account::PayableAccountFilter;
-#[allow(unused_imports)]
-pub use account::{InvoicingBatchResult, PayableAccountRow, SettlementBatchResult};
 pub use allocation::PurchaseInvoiceAllocationFilter;
 pub use payment::SupplierPaymentFilter;
-#[allow(unused_imports)]
-pub use payment::SupplierPaymentRow;
 
 /// `payable_entry` 集合名（单一来源：`PayableExt` 关联常量）。
 const PAYABLE_ENTRIES: &str = <mongodb::Database as PayableExt>::PAYABLE_ENTRIES;

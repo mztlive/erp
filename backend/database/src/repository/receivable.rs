@@ -32,16 +32,10 @@ mod card_funds;
 #[path = "receivable_sales_order_summary.rs"]
 mod sales_order_summary;
 
-pub use account::ReceivableAccountFilter;
-#[allow(unused_imports)]
-pub use account::{InvoicingBatchResult, ReceivableAccountRow, SettlementBatchResult};
+pub use account::{ReceivableAccountFilter, SettlementBatchResult};
 pub use command::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
 pub use invoice::InvoiceFilter;
-#[allow(unused_imports)]
-pub use invoice::InvoiceRow;
 pub use receipt::CustomerReceiptFilter;
-#[allow(unused_imports)]
-pub use receipt::CustomerReceiptRow;
 
 /// `receivable_entry` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;

@@ -14,14 +14,10 @@ use mongodb::Database;
 
 use super::extensions::InventoryExt;
 
-#[allow(unused_imports)]
-pub use adjustment::{StockAdjustmentFilter, StockAdjustmentRow};
-#[allow(unused_imports)]
-pub use balance::{StockBalanceFilter, StockBalanceRow};
-#[allow(unused_imports)]
-pub use movement::{StockMovementFilter, StockMovementRow};
-#[allow(unused_imports)]
-pub use reservation::{StockReservationFilter, StockReservationRow};
+pub use adjustment::StockAdjustmentFilter;
+pub use balance::StockBalanceFilter;
+pub use movement::StockMovementFilter;
+pub use reservation::StockReservationFilter;
 
 /// `stock_adjustment_line` 集合名（单一来源：`InventoryExt` 关联常量）。
 const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENT_LINES;

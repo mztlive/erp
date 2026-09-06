@@ -65,22 +65,6 @@ impl WorkItemDueFilter {
             },
         })
     }
-
-    /// 按单值展示优先级返回指定到期时点的分类。
-    ///
-    /// # 返回
-    /// 逾期优先于今日；不属于任一分类时返回 `None`。
-    pub fn display_at(due_at: Instant, now: Instant) -> Result<Option<Self>> {
-        if due_at.unix_secs() < now.unix_secs() {
-            return Ok(Some(Self::Overdue));
-        }
-        let today = Self::Today.window_at(now)?;
-        Ok(
-            (due_at.unix_secs() >= today.from.expect("今日窗口必须有下界").unix_secs()
-                && due_at.unix_secs() < today.before.unix_secs())
-            .then_some(Self::Today),
-        )
-    }
 }
 
 #[cfg(test)]
@@ -96,25 +80,9 @@ mod tests {
         assert_eq!(today.from.unwrap().unix_secs(), 1_788_105_600);
         assert_eq!(today.before.unix_secs(), 1_788_192_000);
         assert_eq!(overdue.before, now);
-        assert_eq!(
-            WorkItemDueFilter::display_at(now, now).unwrap(),
-            Some(WorkItemDueFilter::Today)
-        );
-        assert_eq!(
-            WorkItemDueFilter::display_at(Instant::from_unix_secs(now.unix_secs() - 1), now).unwrap(),
-            Some(WorkItemDueFilter::Overdue)
-        );
-        assert_eq!(
-            WorkItemDueFilter::display_at(Instant::from_unix_secs(1_788_105_600), now).unwrap(),
-            Some(WorkItemDueFilter::Overdue)
-        );
-        assert_eq!(
-            WorkItemDueFilter::display_at(Instant::from_unix_secs(1_788_019_200), now).unwrap(),
-            Some(WorkItemDueFilter::Overdue)
-        );
-        assert_eq!(
-            WorkItemDueFilter::display_at(Instant::from_unix_secs(1_788_192_000), now).unwrap(),
-            None
-        );
+        assert!(overdue.from.is_none());
+        assert!(now.unix_secs() >= today.from.unwrap().unix_secs());
+        assert!(now.unix_secs() < today.before.unix_secs());
+        assert!(now.unix_secs() - 1 < overdue.before.unix_secs());
     }
 }

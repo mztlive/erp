@@ -15,7 +15,8 @@ use super::apply_plan::{apply_plan, DomainActionKind};
 use super::authorization::requires_blocked_cancel;
 use super::idempotency::{
     cancel_blocked_identity, cancel_identity, document_cancel_identity, map_receipt_first_write_error,
-    normalize_idempotency_key, payload_conflict_error, PreparedCommandIdentity, ReceiptBranch,
+    normalize_idempotency_key, payload_conflict_error, CancelBlockedIdentityParams, CancelIdentityParams,
+    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
 };
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PlannedWrites, PreparedExecution};
@@ -203,17 +204,17 @@ pub async fn replay_committed_document_cancel(
         .version
         .checked_sub(1)
         .ok_or_else(document_cancel_terminal_conflict)?;
-    let identity = document_cancel_identity(
-        command.idempotency_key().clone(),
-        &instance.base.id,
-        command.subject_version(),
-        command.expected_document_version(),
+    let identity = document_cancel_identity(DocumentCancelIdentityParams {
+        idempotency_key: command.idempotency_key().clone(),
+        instance_id: &instance.base.id,
+        subject_version: command.subject_version(),
+        expected_document_version: command.expected_document_version(),
         expected_instance_version,
         expected_execution_version,
         expected_task_version,
-        command.reason(),
-        command.actor().as_str(),
-    )?;
+        reason: command.reason(),
+        actor_id: command.actor().as_str(),
+    })?;
     let Some(receipt) = find_document_cancel_receipt(db, &identity, executor).await? else {
         return Ok(None);
     };
@@ -422,16 +423,16 @@ fn prepare_cancel_with_document_version(
                 "原审批人可恢复时不得走受阻取消".to_string(),
             ));
         }
-        cancel_blocked_identity(
-            input.command.idempotency_key.clone(),
-            &input.instance.base.id,
-            blocker.as_str(),
-            input.expected_instance_version,
-            input.expected_execution_version,
-            input.expected_task_version,
-            &input.reason,
-            input.actor.as_str(),
-        )
+        cancel_blocked_identity(CancelBlockedIdentityParams {
+            idempotency_key: input.command.idempotency_key.clone(),
+            instance_id: &input.instance.base.id,
+            blocker: blocker.as_str(),
+            expected_instance_version: input.expected_instance_version,
+            expected_execution_version: input.expected_execution_version,
+            expected_task_version: input.expected_task_version,
+            reason: &input.reason,
+            actor_id: input.actor.as_str(),
+        })
     } else {
         if input.instance.blocker_code.is_some_and(requires_blocked_cancel) {
             return Err(Error::ValidationError(
@@ -439,27 +440,27 @@ fn prepare_cancel_with_document_version(
             ));
         }
         match expected_document_version {
-            Some(version) => document_cancel_identity(
-                input.command.idempotency_key.clone(),
-                &input.instance.base.id,
-                input.subject_version,
-                version,
-                input.expected_instance_version,
-                input.expected_execution_version,
-                input.expected_task_version,
-                &input.reason,
-                input.actor.as_str(),
-            ),
-            None => cancel_identity(
-                input.command.idempotency_key.clone(),
-                &input.instance.base.id,
-                input.subject_version,
-                input.expected_instance_version,
-                input.expected_execution_version,
-                input.expected_task_version,
-                &input.reason,
-                input.actor.as_str(),
-            ),
+            Some(version) => document_cancel_identity(DocumentCancelIdentityParams {
+                idempotency_key: input.command.idempotency_key.clone(),
+                instance_id: &input.instance.base.id,
+                subject_version: input.subject_version,
+                expected_document_version: version,
+                expected_instance_version: input.expected_instance_version,
+                expected_execution_version: input.expected_execution_version,
+                expected_task_version: input.expected_task_version,
+                reason: &input.reason,
+                actor_id: input.actor.as_str(),
+            }),
+            None => cancel_identity(CancelIdentityParams {
+                idempotency_key: input.command.idempotency_key.clone(),
+                instance_id: &input.instance.base.id,
+                subject_version: input.subject_version,
+                expected_instance_version: input.expected_instance_version,
+                expected_execution_version: input.expected_execution_version,
+                expected_task_version: input.expected_task_version,
+                reason: &input.reason,
+                actor_id: input.actor.as_str(),
+            }),
         }
     }?;
     match identity.classify(input.command.receipt.as_ref()) {

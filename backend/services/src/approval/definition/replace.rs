@@ -98,10 +98,12 @@ impl ApprovalDefinitionService {
                         &db,
                         &rbac,
                         graph,
-                        transaction_policy,
-                        request,
-                        &transaction_actor,
-                        &transaction_identity,
+                        ReplaceNodesTxInput {
+                            policy: transaction_policy,
+                            request,
+                            actor: &transaction_actor,
+                            identity: &transaction_identity,
+                        },
                         session,
                     )
                     .await
@@ -113,18 +115,66 @@ impl ApprovalDefinitionService {
     }
 }
 
+/// 替换草稿节点事务的政策、请求、命令身份与操作人。
+///
+/// # 用途
+/// 打包 [`replace_nodes_tx`] 的非基础设施参数。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 收据回放优先于任何图替换写库。
+struct ReplaceNodesTxInput<'a> {
+    /// 单据审批政策。
+    policy: ProcessRequiredApprovalPolicy,
+    /// 节点替换请求。
+    request: ReplaceDefinitionNodesRequest,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+    /// 已规范化的当前命令身份及精确旧格式候选。
+    identity: &'a PreparedDefinitionIdentity,
+}
+
 /// 事务内替换草稿节点。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 回放收据或校验并持久化新草稿图。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `graph` - 当前草稿图
+/// * `input` - 政策、请求、摘要与操作人
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 返回替换后的定义详情。
+///
+/// # 错误
+/// 陈旧锁、节点非法、账号校验失败或写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 已有收据必须原样回放，不得重复 persist。
 async fn replace_nodes_tx(
     db: &Database,
     rbac: &SharedRbacService,
     graph: DefinitionGraph,
-    policy: ProcessRequiredApprovalPolicy,
-    request: ReplaceDefinitionNodesRequest,
-    actor: &AuditActor,
-    identity: &PreparedDefinitionIdentity,
+    input: ReplaceNodesTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
+    let ReplaceNodesTxInput {
+        policy,
+        request,
+        actor,
+        identity,
+    } = input;
     ensure_definition_admin_permission(db, rbac, actor, &policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,

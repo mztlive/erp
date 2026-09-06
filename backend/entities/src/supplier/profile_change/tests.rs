@@ -1,7 +1,8 @@
 use super::{
     apply_qualification_input, disable_addresses, disable_bank_accounts, disable_contacts,
     disable_tax_profiles, new_capability, new_qualification, plan_commercial_profile_revision,
-    plan_party_revision,
+    plan_party_revision, NewQualificationParams, PlanCommercialProfileRevisionParams,
+    PlanPartyRevisionParams,
 };
 use crate::common::time::BusinessDate;
 use crate::ids::{
@@ -40,16 +41,16 @@ fn party_revision_updates_code_and_pointer() {
         "admin-1",
     )
     .unwrap();
-    let rev = plan_party_revision(
-        &mut party,
-        Some("91310000MA1BL4KW9X".to_string()),
-        "新法定名".to_string(),
-        Some("新简称".to_string()),
-        "变更".to_string(),
-        PartyRevisionId::new("rev-1"),
-        1,
-        "admin-2",
-    )
+    let rev = plan_party_revision(PlanPartyRevisionParams {
+        party: &mut party,
+        unified_credit_code: Some("91310000MA1BL4KW9X".to_string()),
+        legal_name: "新法定名".to_string(),
+        short_name: Some("新简称".to_string()),
+        change_reason: "变更".to_string(),
+        revision_id: PartyRevisionId::new("rev-1"),
+        revision_no: 1,
+        actor_id: "admin-2",
+    })
     .unwrap();
     assert_eq!(party.unified_credit_code.as_deref(), Some("91310000MA1BL4KW9X"));
     assert_eq!(party.stable.current_revision_id.as_deref(), Some("rev-1"));
@@ -71,16 +72,16 @@ fn party_revision_clears_code_when_none() {
         "admin-1",
     )
     .unwrap();
-    plan_party_revision(
-        &mut party,
-        None,
-        "名".to_string(),
-        None,
-        "清空".to_string(),
-        PartyRevisionId::new("rev-2"),
-        2,
-        "admin-2",
-    )
+    plan_party_revision(PlanPartyRevisionParams {
+        party: &mut party,
+        unified_credit_code: None,
+        legal_name: "名".to_string(),
+        short_name: None,
+        change_reason: "清空".to_string(),
+        revision_id: PartyRevisionId::new("rev-2"),
+        revision_no: 2,
+        actor_id: "admin-2",
+    })
     .unwrap();
     assert_eq!(party.unified_credit_code, None);
 }
@@ -100,21 +101,21 @@ fn commercial_profile_revision_advances_pointer() {
         "admin-1",
     )
     .unwrap();
-    let rev = plan_commercial_profile_revision(
-        &mut supplier,
-        SettlementMode::Prepayment,
-        ReconciliationCycle::Monthly,
-        "PREPAY_30".to_string(),
-        None,
-        InvoiceType::VatSpecial,
-        crate::money::Rate::from_str("0.13").unwrap(),
-        PartyId::new("party-sign"),
-        PartyId::new("party-pay"),
-        "首版".to_string(),
-        SupplierCommercialProfileRevisionId::new("cpr-1"),
-        1,
-        "admin-2",
-    )
+    let rev = plan_commercial_profile_revision(PlanCommercialProfileRevisionParams {
+        supplier: &mut supplier,
+        settlement_mode: SettlementMode::Prepayment,
+        reconciliation_cycle: ReconciliationCycle::Monthly,
+        payment_term_snapshot: "PREPAY_30".to_string(),
+        business_category: None,
+        invoice_type: InvoiceType::VatSpecial,
+        invoice_tax_rate: crate::money::Rate::from_str("0.13").unwrap(),
+        signing_entity_party_id: PartyId::new("party-sign"),
+        payment_entity_party_id: PartyId::new("party-pay"),
+        change_reason: "首版".to_string(),
+        revision_id: SupplierCommercialProfileRevisionId::new("cpr-1"),
+        revision_no: 1,
+        actor_id: "admin-2",
+    })
     .unwrap();
     assert_eq!(rev.revision.revision_no, 1);
     assert_eq!(
@@ -360,21 +361,21 @@ fn apply_qualification_input_no_change_keeps_valid() {
 fn new_qualification_fails_when_capability_missing() {
     let mut cap_ids = HashMap::new();
     cap_ids.insert("physical".to_string(), SupplierCapabilityId::new("cap-1"));
-    let err = new_qualification(
-        &SupplierAccountId::new("supplier-1"),
-        QualificationType::Contract,
-        "C-003".to_string(),
-        None,
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Api],
-        &cap_ids,
-        "admin-1",
-        SupplierQualificationId::new("qual-3"),
-        SupplierQualificationRevisionId::new("qual-rev-3"),
-        vec![SupplierQualificationCapabilityId::new("link-1")],
-    )
+    let err = new_qualification(NewQualificationParams {
+        supplier_id: &SupplierAccountId::new("supplier-1"),
+        qualification_type: QualificationType::Contract,
+        certificate_no: "C-003".to_string(),
+        issuer: None,
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Api],
+        capability_ids: &cap_ids,
+        actor_id: "admin-1",
+        qualification_id: SupplierQualificationId::new("qual-3"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-3"),
+        link_ids: vec![SupplierQualificationCapabilityId::new("link-1")],
+    })
     .unwrap_err();
     assert!(err.to_string().contains("资质适用能力不存在"));
 }
@@ -385,24 +386,24 @@ fn new_qualification_creates_with_links() {
     let mut cap_ids = HashMap::new();
     cap_ids.insert("physical".to_string(), SupplierCapabilityId::new("cap-1"));
     cap_ids.insert("api".to_string(), SupplierCapabilityId::new("cap-2"));
-    let (qual, rev, links) = new_qualification(
-        &SupplierAccountId::new("supplier-1"),
-        QualificationType::Contract,
-        "C-004".to_string(),
-        Some("机构".to_string()),
-        business_date(2026, 1, 1),
-        Some(business_date(2026, 12, 31)),
-        None,
-        &[CapabilityCode::Physical, CapabilityCode::Api],
-        &cap_ids,
-        "admin-1",
-        SupplierQualificationId::new("qual-4"),
-        SupplierQualificationRevisionId::new("qual-rev-4"),
-        vec![
+    let (qual, rev, links) = new_qualification(NewQualificationParams {
+        supplier_id: &SupplierAccountId::new("supplier-1"),
+        qualification_type: QualificationType::Contract,
+        certificate_no: "C-004".to_string(),
+        issuer: Some("机构".to_string()),
+        valid_from: business_date(2026, 1, 1),
+        valid_to: Some(business_date(2026, 12, 31)),
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical, CapabilityCode::Api],
+        capability_ids: &cap_ids,
+        actor_id: "admin-1",
+        qualification_id: SupplierQualificationId::new("qual-4"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-4"),
+        link_ids: vec![
             SupplierQualificationCapabilityId::new("link-1"),
             SupplierQualificationCapabilityId::new("link-2"),
         ],
-    )
+    })
     .unwrap();
     assert_eq!(rev.revision.revision_no, 1);
     assert_eq!(links.len(), 2);
@@ -413,21 +414,21 @@ fn new_qualification_creates_with_links() {
 #[test]
 fn new_qualification_rejects_mismatched_link_ids() {
     let cap_ids = HashMap::new();
-    let err = new_qualification(
-        &SupplierAccountId::new("supplier-1"),
-        QualificationType::Contract,
-        "C-005".to_string(),
-        None,
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Physical],
-        &cap_ids,
-        "admin-1",
-        SupplierQualificationId::new("qual-5"),
-        SupplierQualificationRevisionId::new("qual-rev-5"),
-        vec![],
-    )
+    let err = new_qualification(NewQualificationParams {
+        supplier_id: &SupplierAccountId::new("supplier-1"),
+        qualification_type: QualificationType::Contract,
+        certificate_no: "C-005".to_string(),
+        issuer: None,
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical],
+        capability_ids: &cap_ids,
+        actor_id: "admin-1",
+        qualification_id: SupplierQualificationId::new("qual-5"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-5"),
+        link_ids: vec![],
+    })
     .unwrap_err();
     assert!(err.to_string().contains("关联 ID 数量不一致"));
 }
@@ -579,21 +580,21 @@ fn clear_intent_for_address_tax_bank_preserves_disable_semantics() {
 fn qualification_no_change_preserves_valid_and_matches_fields() {
     let mut cap_ids = HashMap::new();
     cap_ids.insert("physical".to_string(), SupplierCapabilityId::new("cap-p"));
-    let (mut qual, _, _) = new_qualification(
-        &SupplierAccountId::new("supplier-nc"),
-        QualificationType::Certificate,
-        "CERT-NC".to_string(),
-        Some("机构".to_string()),
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Physical],
-        &cap_ids,
-        "admin-1",
-        SupplierQualificationId::new("qual-nc"),
-        SupplierQualificationRevisionId::new("qual-rev-nc"),
-        vec![SupplierQualificationCapabilityId::new("link-nc")],
-    )
+    let (mut qual, _, _) = new_qualification(NewQualificationParams {
+        supplier_id: &SupplierAccountId::new("supplier-nc"),
+        qualification_type: QualificationType::Certificate,
+        certificate_no: "CERT-NC".to_string(),
+        issuer: Some("机构".to_string()),
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical],
+        capability_ids: &cap_ids,
+        actor_id: "admin-1",
+        qualification_id: SupplierQualificationId::new("qual-nc"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-nc"),
+        link_ids: vec![SupplierQualificationCapabilityId::new("link-nc")],
+    })
     .unwrap();
     assert!(qual.is_valid());
     assert!(qual.matches_profile_fields(Some("机构"), business_date(2026, 1, 1), None, None));
@@ -695,54 +696,54 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
     // Existing qualifications: one valid matching, one valid to be updated, one valid to be disabled
     let mut cap_ids_for_qual = HashMap::new();
     cap_ids_for_qual.insert("physical".to_string(), SupplierCapabilityId::new("cap-phy"));
-    let (qual_match, _, _) = new_qualification(
-        &supplier_id,
-        QualificationType::Contract,
-        "MATCH-001".to_string(),
-        Some("机构".to_string()),
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Physical],
-        &cap_ids_for_qual,
-        "admin",
-        SupplierQualificationId::new("qual-match"),
-        SupplierQualificationRevisionId::new("qual-rev-match"),
-        vec![SupplierQualificationCapabilityId::new("link-match")],
-    )
+    let (qual_match, _, _) = new_qualification(NewQualificationParams {
+        supplier_id: &supplier_id,
+        qualification_type: QualificationType::Contract,
+        certificate_no: "MATCH-001".to_string(),
+        issuer: Some("机构".to_string()),
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical],
+        capability_ids: &cap_ids_for_qual,
+        actor_id: "admin",
+        qualification_id: SupplierQualificationId::new("qual-match"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-match"),
+        link_ids: vec![SupplierQualificationCapabilityId::new("link-match")],
+    })
     .unwrap();
     // keep valid
-    let (qual_to_update, _, _) = new_qualification(
-        &supplier_id,
-        QualificationType::Certificate,
-        "UPDATE-001".to_string(),
-        Some("旧机构".to_string()),
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Physical],
-        &cap_ids_for_qual,
-        "admin",
-        SupplierQualificationId::new("qual-update"),
-        SupplierQualificationRevisionId::new("qual-rev-update"),
-        vec![SupplierQualificationCapabilityId::new("link-update")],
-    )
+    let (qual_to_update, _, _) = new_qualification(NewQualificationParams {
+        supplier_id: &supplier_id,
+        qualification_type: QualificationType::Certificate,
+        certificate_no: "UPDATE-001".to_string(),
+        issuer: Some("旧机构".to_string()),
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical],
+        capability_ids: &cap_ids_for_qual,
+        actor_id: "admin",
+        qualification_id: SupplierQualificationId::new("qual-update"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-update"),
+        link_ids: vec![SupplierQualificationCapabilityId::new("link-update")],
+    })
     .unwrap();
-    let (qual_to_disable, _, _) = new_qualification(
-        &supplier_id,
-        QualificationType::Authorization,
-        "DISABLE-001".to_string(),
-        None,
-        business_date(2026, 1, 1),
-        None,
-        None,
-        &[CapabilityCode::Physical],
-        &cap_ids_for_qual,
-        "admin",
-        SupplierQualificationId::new("qual-disable"),
-        SupplierQualificationRevisionId::new("qual-rev-disable"),
-        vec![SupplierQualificationCapabilityId::new("link-disable")],
-    )
+    let (qual_to_disable, _, _) = new_qualification(NewQualificationParams {
+        supplier_id: &supplier_id,
+        qualification_type: QualificationType::Authorization,
+        certificate_no: "DISABLE-001".to_string(),
+        issuer: None,
+        valid_from: business_date(2026, 1, 1),
+        valid_to: None,
+        attachment_id: None,
+        capability_codes: &[CapabilityCode::Physical],
+        capability_ids: &cap_ids_for_qual,
+        actor_id: "admin",
+        qualification_id: SupplierQualificationId::new("qual-disable"),
+        revision_id: SupplierQualificationRevisionId::new("qual-rev-disable"),
+        link_ids: vec![SupplierQualificationCapabilityId::new("link-disable")],
+    })
     .unwrap();
     let qualifications = vec![
         qual_match.clone(),

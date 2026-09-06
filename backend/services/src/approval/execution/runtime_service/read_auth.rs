@@ -44,19 +44,64 @@ pub(super) struct RuntimeReadAuthorizationFacts {
     pub(super) runtime_admin: bool,
 }
 
+/// 决定审批人写时重验输入。
+///
+/// # 用途
+/// 打包 [`revalidate_decision_approver`] 的审批人与主体事实。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 认证主体若提供，必须与账号 ID/类型一致。
+pub(super) struct RevalidateDecisionApproverInput<'a> {
+    pub(super) assignee_id: &'a str,
+    pub(super) assignee_name: &'a str,
+    pub(super) authenticated_actor: Option<&'a AuditActor>,
+    pub(super) snapshot: &'a ApprovalSubjectSnapshot,
+    pub(super) spec: &'a crate::approval::business_adapter::ApprovalAdapterSpec,
+    pub(super) separation_policy: SeparationOfDutiesPolicy,
+}
+
 /// 按冻结快照重验审批人账号、动作权限、对象读取、DataScope 与岗位分离。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 将审批人资格收敛为 BPM 可消费的 Eligible/Blocked。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `input` - 审批人、快照与分离政策
+/// * `executor` - 调用方持有的数据库执行器
+///
+/// # 返回
+/// 返回有效或结构化受阻资格。
+///
+/// # 错误
+/// Repository、权限解析、RBAC 或对象读取适配器失败时返回错误。
+///
+/// # 关键业务约束
+/// 任一资格失败必须收敛为 blocker，不得回滚为空。
 pub(super) async fn revalidate_decision_approver(
     db: &Database,
     rbac: &SharedRbacService,
-    assignee_id: &str,
-    assignee_name: &str,
-    authenticated_actor: Option<&AuditActor>,
-    snapshot: &ApprovalSubjectSnapshot,
-    spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
-    separation_policy: SeparationOfDutiesPolicy,
+    input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
+    let RevalidateDecisionApproverInput {
+        assignee_id,
+        assignee_name,
+        authenticated_actor,
+        snapshot,
+        spec,
+        separation_policy,
+    } = input;
     let account = db
         .accounts()
         .find_approval_assignee_by_id(assignee_id, executor)

@@ -4,7 +4,7 @@ use entities::common::time::Instant;
 use entities::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
 use entities::money::Quantity;
 use entities::supplier_offering::{
-    AvailabilityStatus, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
+    AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
     SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevisionData,
 };
 use serde::{Deserialize, Serialize};
@@ -561,20 +561,22 @@ impl SupplierOfferingTermsWrite {
             .transpose()
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok(SupplierOfferingRevisionData::from_gross_prices(
-            offering_id,
-            revision_no,
-            dropship_gross,
-            bulk_gross,
-            rate,
-            self.dropship_express.clone(),
-            freight,
-            service_fee,
-            moq,
-            self.supply_region.clone(),
-            self.product_capabilities.clone(),
-            valid_from,
-            valid_to,
-            PrefillSourceRefs::default(),
+            FromGrossPricesParams {
+                supplier_offering_id: offering_id,
+                revision_no,
+                dropship_supply_price_gross: dropship_gross,
+                bulk_supply_price_gross: bulk_gross,
+                input_tax_rate: rate,
+                dropship_express: self.dropship_express.clone(),
+                freight_amount: freight,
+                service_fee_amount: service_fee,
+                bulk_minimum_order_quantity: moq,
+                supply_region: self.supply_region.clone(),
+                product_capabilities: self.product_capabilities.clone(),
+                valid_from,
+                valid_to,
+                prefill_source_refs: PrefillSourceRefs::default(),
+            },
         ))
     }
 }

@@ -704,36 +704,59 @@ mod tests {
         .expect("退款事实构造失败")
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn refund_allocation(
-        id: &str,
-        fact_id: &SupplierRefundFactId,
-        item_id: &SupplierFulfillmentItemId,
-        gross: &str,
-        net: &str,
-        tax: &str,
+    /// 测试用退款分配构造入参。
+    struct RefundAllocationParams<'a> {
+        /// 分配主键。
+        id: &'a str,
+        /// 退款事实主键。
+        fact_id: &'a SupplierRefundFactId,
+        /// 履约明细主键。
+        item_id: &'a SupplierFulfillmentItemId,
+        /// 含税金额。
+        gross: &'a str,
+        /// 未税金额。
+        net: &'a str,
+        /// 税额。
+        tax: &'a str,
+        /// 分配动作。
         action: AllocationAction,
+        /// 冲销目标分配主键。
         reverses_allocation_id: Option<SupplierRefundAllocationId>,
-    ) -> SupplierRefundAllocation {
+    }
+
+    /// 构造测试用退款分配。
+    ///
+    /// # 参数
+    /// * `params` - 分配主键、金额分量与动作
+    ///
+    /// # 返回
+    /// 返回可写入完整性校验的退款分配。
+    ///
+    /// # 错误
+    /// 金额解析或领域构造失败时 panic。
+    ///
+    /// # 关键业务约束
+    /// 仅用于本模块单测，不承载生产路径语义。
+    fn refund_allocation(params: RefundAllocationParams<'_>) -> SupplierRefundAllocation {
         SupplierRefundAllocation::new(
-            SupplierRefundAllocationId::new(id),
+            SupplierRefundAllocationId::new(params.id),
             SupplierRefundAllocationData {
-                supplier_refund_fact_id: fact_id.clone(),
+                supplier_refund_fact_id: params.fact_id.clone(),
                 allocation_no: 1,
-                supplier_fulfillment_item_id: item_id.clone(),
-                original_cost_entry_id: CostEntryId::new(format!("cost-{id}")),
-                original_cost_allocation_id: CostAllocationId::new(format!("cost-alloc-{id}")),
-                original_payable_entry_id: PayableEntryId::new(format!("payable-{id}")),
+                supplier_fulfillment_item_id: params.item_id.clone(),
+                original_cost_entry_id: CostEntryId::new(format!("cost-{}", params.id)),
+                original_cost_allocation_id: CostAllocationId::new(format!("cost-alloc-{}", params.id)),
+                original_payable_entry_id: PayableEntryId::new(format!("payable-{}", params.id)),
                 original_payment_allocation_id: None,
                 refund_quantity: Quantity::from_str("1.000000").unwrap(),
-                gross_amount: Amount::from_str(gross).unwrap(),
-                net_amount: Amount::from_str(net).unwrap(),
-                tax_amount: Amount::from_str(tax).unwrap(),
-                payable_reduction_amount: Amount::from_str(gross).unwrap(),
+                gross_amount: Amount::from_str(params.gross).unwrap(),
+                net_amount: Amount::from_str(params.net).unwrap(),
+                tax_amount: Amount::from_str(params.tax).unwrap(),
+                payable_reduction_amount: Amount::from_str(params.gross).unwrap(),
                 cash_refund_amount: Amount::from_str("0.00").unwrap(),
                 cash_supplier_refund_id: None,
-                allocation_action: action,
-                reverses_allocation_id,
+                allocation_action: params.action,
+                reverses_allocation_id: params.reverses_allocation_id,
             },
         )
         .expect("退款分配构造失败")
@@ -821,16 +844,16 @@ mod tests {
             &SupplierFulfillmentOrderId::new("order-1"),
             instant("2026-07-20T10:00:00+08:00"),
         );
-        let allocation = refund_allocation(
-            "alloc-1",
-            &SupplierRefundFactId::new("fact-1"),
-            &SupplierFulfillmentItemId::new("item-1"),
-            "10.00",
-            "8.70",
-            "1.30",
-            AllocationAction::Apply,
-            None,
-        );
+        let allocation = refund_allocation(RefundAllocationParams {
+            id: "alloc-1",
+            fact_id: &SupplierRefundFactId::new("fact-1"),
+            item_id: &SupplierFulfillmentItemId::new("item-1"),
+            gross: "10.00",
+            net: "8.70",
+            tax: "1.30",
+            action: AllocationAction::Apply,
+            reverses_allocation_id: None,
+        });
         assert!(ensure_scope(
             vec![line_request("item-1", "order-1")],
             vec![order],
@@ -872,16 +895,16 @@ mod tests {
             instant("2026-07-20T10:00:00+08:00"),
         );
         // 期间内退款分配指向 item-2，但命令只覆盖 item-1 → 完整性检查必须拒绝。
-        let allocation = refund_allocation(
-            "alloc-1",
-            &SupplierRefundFactId::new("fact-1"),
-            &SupplierFulfillmentItemId::new("item-2"),
-            "10.00",
-            "8.70",
-            "1.30",
-            AllocationAction::Apply,
-            None,
-        );
+        let allocation = refund_allocation(RefundAllocationParams {
+            id: "alloc-1",
+            fact_id: &SupplierRefundFactId::new("fact-1"),
+            item_id: &SupplierFulfillmentItemId::new("item-2"),
+            gross: "10.00",
+            net: "8.70",
+            tax: "1.30",
+            action: AllocationAction::Apply,
+            reverses_allocation_id: None,
+        });
         let message = business_logic_message(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -902,16 +925,16 @@ mod tests {
     fn complete_scope_rejects_allocation_missing_fact_head() {
         let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
         let item_1 = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
-        let allocation = refund_allocation(
-            "alloc-1",
-            &SupplierRefundFactId::new("fact-missing"),
-            &SupplierFulfillmentItemId::new("item-1"),
-            "10.00",
-            "8.70",
-            "1.30",
-            AllocationAction::Apply,
-            None,
-        );
+        let allocation = refund_allocation(RefundAllocationParams {
+            id: "alloc-1",
+            fact_id: &SupplierRefundFactId::new("fact-missing"),
+            item_id: &SupplierFulfillmentItemId::new("item-1"),
+            gross: "10.00",
+            net: "8.70",
+            tax: "1.30",
+            action: AllocationAction::Apply,
+            reverses_allocation_id: None,
+        });
         let message = business_logic_message(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -956,26 +979,26 @@ mod tests {
             instant("2026-07-20T10:00:00+08:00"),
         );
         let allocations = vec![
-            refund_allocation(
-                "alloc-1",
-                &SupplierRefundFactId::new("fact-1"),
-                &SupplierFulfillmentItemId::new("item-1"),
-                "10.00",
-                "8.70",
-                "1.30",
-                AllocationAction::Apply,
-                None,
-            ),
-            refund_allocation(
-                "alloc-2",
-                &SupplierRefundFactId::new("fact-1"),
-                &SupplierFulfillmentItemId::new("item-1"),
-                "4.00",
-                "3.48",
-                "0.52",
-                AllocationAction::Reverse,
-                Some(SupplierRefundAllocationId::new("alloc-1")),
-            ),
+            refund_allocation(RefundAllocationParams {
+                id: "alloc-1",
+                fact_id: &SupplierRefundFactId::new("fact-1"),
+                item_id: &SupplierFulfillmentItemId::new("item-1"),
+                gross: "10.00",
+                net: "8.70",
+                tax: "1.30",
+                action: AllocationAction::Apply,
+                reverses_allocation_id: None,
+            }),
+            refund_allocation(RefundAllocationParams {
+                id: "alloc-2",
+                fact_id: &SupplierRefundFactId::new("fact-1"),
+                item_id: &SupplierFulfillmentItemId::new("item-1"),
+                gross: "4.00",
+                net: "3.48",
+                tax: "0.52",
+                action: AllocationAction::Reverse,
+                reverses_allocation_id: Some(SupplierRefundAllocationId::new("alloc-1")),
+            }),
         ];
         let facts = [fact];
         let fact_map = fact_map(&facts);
@@ -1009,26 +1032,26 @@ mod tests {
             instant("2026-07-20T10:00:00+08:00"),
         );
         let allocations = vec![
-            refund_allocation(
-                "alloc-out",
-                &SupplierRefundFactId::new("fact-out"),
-                &SupplierFulfillmentItemId::new("item-1"),
-                "10.00",
-                "8.70",
-                "1.30",
-                AllocationAction::Apply,
-                None,
-            ),
-            refund_allocation(
-                "alloc-other",
-                &SupplierRefundFactId::new("fact-other"),
-                &SupplierFulfillmentItemId::new("item-9"),
-                "10.00",
-                "8.70",
-                "1.30",
-                AllocationAction::Apply,
-                None,
-            ),
+            refund_allocation(RefundAllocationParams {
+                id: "alloc-out",
+                fact_id: &SupplierRefundFactId::new("fact-out"),
+                item_id: &SupplierFulfillmentItemId::new("item-1"),
+                gross: "10.00",
+                net: "8.70",
+                tax: "1.30",
+                action: AllocationAction::Apply,
+                reverses_allocation_id: None,
+            }),
+            refund_allocation(RefundAllocationParams {
+                id: "alloc-other",
+                fact_id: &SupplierRefundFactId::new("fact-other"),
+                item_id: &SupplierFulfillmentItemId::new("item-9"),
+                gross: "10.00",
+                net: "8.70",
+                tax: "1.30",
+                action: AllocationAction::Apply,
+                reverses_allocation_id: None,
+            }),
         ];
         let facts = [out_fact, other_fact];
         let fact_map = fact_map(&facts);
@@ -1045,16 +1068,16 @@ mod tests {
     #[test]
     fn refund_amounts_reject_allocation_without_fact_head() {
         let input = line_request("item-1", "order-1");
-        let allocation = refund_allocation(
-            "alloc-1",
-            &SupplierRefundFactId::new("fact-missing"),
-            &SupplierFulfillmentItemId::new("item-1"),
-            "10.00",
-            "8.70",
-            "1.30",
-            AllocationAction::Apply,
-            None,
-        );
+        let allocation = refund_allocation(RefundAllocationParams {
+            id: "alloc-1",
+            fact_id: &SupplierRefundFactId::new("fact-missing"),
+            item_id: &SupplierFulfillmentItemId::new("item-1"),
+            gross: "10.00",
+            net: "8.70",
+            tax: "1.30",
+            action: AllocationAction::Apply,
+            reverses_allocation_id: None,
+        });
         let fact_map = HashMap::new();
         let mut references = Vec::new();
         let message = business_logic_message(

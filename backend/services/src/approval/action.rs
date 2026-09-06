@@ -26,19 +26,90 @@ pub struct ApprovalActionContext {
     idempotency_key: String,
 }
 
+/// 正式决定领域动作上下文的构造参数。
+///
+/// # 用途
+/// 打包 [`ApprovalActionContext::for_decision`] 所需身份字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 字段在构造器内统一清洗；本结构本身不做校验。
+#[derive(Debug, Clone)]
+pub struct DecisionActionParams {
+    /// 审批流程实例 ID。
+    pub approval_process_instance_id: String,
+    /// 当前节点执行 ID。
+    pub approval_node_execution_id: String,
+    /// 当前待办 ID。
+    pub work_item_id: String,
+    /// 业务对象类型稳定码。
+    pub business_object_type: String,
+    /// 业务对象主键。
+    pub business_object_id: String,
+    /// 冻结业务版本十进制字符串。
+    pub subject_version: String,
+    /// 已认证操作人。
+    pub actor_id: String,
+    /// 可选决定原因。
+    pub reason: Option<String>,
+    /// 调用方幂等键。
+    pub idempotency_key: String,
+}
+
+/// 受阻取消领域动作上下文的构造参数。
+///
+/// # 用途
+/// 打包 [`ApprovalActionContext::for_blocked_cancel`] 所需身份字段。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 任务 ID 必须缺省；若误带则由构造器失败关闭。
+#[derive(Debug, Clone)]
+pub struct BlockedCancelActionParams {
+    /// 审批流程实例 ID。
+    pub approval_process_instance_id: String,
+    /// 当前节点执行 ID。
+    pub approval_node_execution_id: String,
+    /// 若调用方误带任务 ID，错误必须携带该任务。
+    pub work_item_id: Option<String>,
+    /// 业务对象类型稳定码。
+    pub business_object_type: String,
+    /// 业务对象主键。
+    pub business_object_id: String,
+    /// 冻结业务版本十进制字符串。
+    pub subject_version: String,
+    /// 已认证操作人。
+    pub actor_id: String,
+    /// 非空取消原因。
+    pub reason: String,
+    /// 调用方幂等键。
+    pub idempotency_key: String,
+}
+
 impl ApprovalActionContext {
     /// 构造正式决定使用的领域动作上下文。
     ///
+    /// # 用途
+    /// 校验并冻结决定形态所需的跨聚合身份字段。
+    ///
     /// # 参数
-    /// * `approval_process_instance_id` - 审批流程实例 ID
-    /// * `approval_node_execution_id` - 当前节点执行 ID
-    /// * `work_item_id` - 当前待办 ID
-    /// * `business_object_type` - 业务对象类型稳定码
-    /// * `business_object_id` - 业务对象主键
-    /// * `subject_version` - 冻结业务版本十进制字符串
-    /// * `actor_id` - 已认证操作人
-    /// * `reason` - 可选决定原因
-    /// * `idempotency_key` - 调用方幂等键
+    /// * `params` - 决定上下文身份字段
     ///
     /// # 返回
     /// 两个合法形态之一：决定上下文，执行与任务 ID 均非空。
@@ -48,45 +119,29 @@ impl ApprovalActionContext {
     ///
     /// # 关键业务约束
     /// 跨聚合动作选择仍归 Service；本构造只约束决定形态的身份字段。
-    #[allow(clippy::too_many_arguments)]
-    pub fn for_decision(
-        approval_process_instance_id: impl Into<String>,
-        approval_node_execution_id: impl Into<String>,
-        work_item_id: impl Into<String>,
-        business_object_type: impl Into<String>,
-        business_object_id: impl Into<String>,
-        subject_version: impl Into<String>,
-        actor_id: impl Into<String>,
-        reason: Option<String>,
-        idempotency_key: impl Into<String>,
-    ) -> Result<Self> {
-        let execution_id = required_id(approval_node_execution_id, "审批节点执行")?;
-        let task_id = required_id(work_item_id, "审批任务")?;
+    pub fn for_decision(params: DecisionActionParams) -> Result<Self> {
+        let execution_id = required_id(params.approval_node_execution_id, "审批节点执行")?;
+        let task_id = required_id(params.work_item_id, "审批任务")?;
         Ok(Self {
-            approval_process_instance_id: required_id(approval_process_instance_id, "审批流程实例")?,
+            approval_process_instance_id: required_id(params.approval_process_instance_id, "审批流程实例")?,
             approval_node_execution_id: Some(execution_id),
             work_item_id: Some(task_id),
-            business_object_type: required_id(business_object_type, "业务对象类型")?,
-            business_object_id: required_id(business_object_id, "业务对象")?,
-            subject_version: parse_subject_version(subject_version)?,
-            actor_id: required_id(actor_id, "操作人")?,
-            reason: optional_reason(reason)?,
-            idempotency_key: required_id(idempotency_key, "幂等键")?,
+            business_object_type: required_id(params.business_object_type, "业务对象类型")?,
+            business_object_id: required_id(params.business_object_id, "业务对象")?,
+            subject_version: parse_subject_version(params.subject_version)?,
+            actor_id: required_id(params.actor_id, "操作人")?,
+            reason: optional_reason(params.reason)?,
+            idempotency_key: required_id(params.idempotency_key, "幂等键")?,
         })
     }
 
     /// 构造受阻取消使用的领域动作上下文。
     ///
+    /// # 用途
+    /// 校验并冻结受阻取消形态所需的跨聚合身份字段。
+    ///
     /// # 参数
-    /// * `approval_process_instance_id` - 审批流程实例 ID
-    /// * `approval_node_execution_id` - 当前节点执行 ID
-    /// * `work_item_id` - 若调用方误带任务 ID，错误必须携带该任务
-    /// * `business_object_type` - 业务对象类型稳定码
-    /// * `business_object_id` - 业务对象主键
-    /// * `subject_version` - 冻结业务版本十进制字符串
-    /// * `actor_id` - 已认证操作人
-    /// * `reason` - 非空取消原因
-    /// * `idempotency_key` - 调用方幂等键
+    /// * `params` - 受阻取消上下文身份字段
     ///
     /// # 返回
     /// 两个合法形态之一：受阻取消上下文，任务 ID 固定为空。
@@ -96,19 +151,8 @@ impl ApprovalActionContext {
     ///
     /// # 关键业务约束
     /// 受阻取消不得写入待办 ID；若请求携带任务，错误文案必须包含该任务 ID。
-    #[allow(clippy::too_many_arguments)]
-    pub fn for_blocked_cancel(
-        approval_process_instance_id: impl Into<String>,
-        approval_node_execution_id: impl Into<String>,
-        work_item_id: Option<String>,
-        business_object_type: impl Into<String>,
-        business_object_id: impl Into<String>,
-        subject_version: impl Into<String>,
-        actor_id: impl Into<String>,
-        reason: impl Into<String>,
-        idempotency_key: impl Into<String>,
-    ) -> Result<Self> {
-        if let Some(task_id) = work_item_id {
+    pub fn for_blocked_cancel(params: BlockedCancelActionParams) -> Result<Self> {
+        if let Some(task_id) = params.work_item_id {
             let task_id = task_id.trim();
             if !task_id.is_empty() {
                 return Err(Error::ValidationError(format!(
@@ -117,17 +161,17 @@ impl ApprovalActionContext {
             }
             return Err(Error::ValidationError("受阻取消不得携带空审批任务".to_string()));
         }
-        let reason = required_id(reason, "取消原因")?;
+        let reason = required_id(params.reason, "取消原因")?;
         Ok(Self {
-            approval_process_instance_id: required_id(approval_process_instance_id, "审批流程实例")?,
-            approval_node_execution_id: Some(required_id(approval_node_execution_id, "审批节点执行")?),
+            approval_process_instance_id: required_id(params.approval_process_instance_id, "审批流程实例")?,
+            approval_node_execution_id: Some(required_id(params.approval_node_execution_id, "审批节点执行")?),
             work_item_id: None,
-            business_object_type: required_id(business_object_type, "业务对象类型")?,
-            business_object_id: required_id(business_object_id, "业务对象")?,
-            subject_version: parse_subject_version(subject_version)?,
-            actor_id: required_id(actor_id, "操作人")?,
+            business_object_type: required_id(params.business_object_type, "业务对象类型")?,
+            business_object_id: required_id(params.business_object_id, "业务对象")?,
+            subject_version: parse_subject_version(params.subject_version)?,
+            actor_id: required_id(params.actor_id, "操作人")?,
             reason: Some(reason),
-            idempotency_key: required_id(idempotency_key, "幂等键")?,
+            idempotency_key: required_id(params.idempotency_key, "幂等键")?,
         })
     }
 
@@ -406,17 +450,17 @@ mod tests {
 
     #[tokio::test]
     async fn unbound_domain_action_fails_closed() {
-        let context = ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            None,
-            "request-1",
-        )
+        let context = ApprovalActionContext::for_decision(DecisionActionParams {
+            approval_process_instance_id: "instance-1".to_string(),
+            approval_node_execution_id: "exec-1".to_string(),
+            work_item_id: "wi-1".to_string(),
+            business_object_type: "stock_adjustment".to_string(),
+            business_object_id: "adj-1".to_string(),
+            subject_version: "1".to_string(),
+            actor_id: "user-1".to_string(),
+            reason: None,
+            idempotency_key: "request-1".to_string(),
+        })
         .expect("合法决定上下文");
         let error = FailClosedApprovalActionPort
             .execute(
@@ -433,33 +477,33 @@ mod tests {
     /// 决定与受阻取消是仅有的两种合法动作上下文形态。
     #[test]
     fn action_context_has_two_legal_shapes() {
-        let decision = ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            Some("同意".to_string()),
-            "key-1",
-        )
+        let decision = ApprovalActionContext::for_decision(DecisionActionParams {
+            approval_process_instance_id: "instance-1".to_string(),
+            approval_node_execution_id: "exec-1".to_string(),
+            work_item_id: "wi-1".to_string(),
+            business_object_type: "stock_adjustment".to_string(),
+            business_object_id: "adj-1".to_string(),
+            subject_version: "1".to_string(),
+            actor_id: "user-1".to_string(),
+            reason: Some("同意".to_string()),
+            idempotency_key: "key-1".to_string(),
+        })
         .unwrap();
         assert_eq!(decision.work_item_id(), Some("wi-1"));
         assert_eq!(decision.approval_node_execution_id(), Some("exec-1"));
         assert_eq!(decision.reason(), Some("同意"));
 
-        let blocked = ApprovalActionContext::for_blocked_cancel(
-            "instance-1",
-            "exec-1",
-            None,
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "admin-1",
-            "结构损坏",
-            "key-2",
-        )
+        let blocked = ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {
+            approval_process_instance_id: "instance-1".to_string(),
+            approval_node_execution_id: "exec-1".to_string(),
+            work_item_id: None,
+            business_object_type: "stock_adjustment".to_string(),
+            business_object_id: "adj-1".to_string(),
+            subject_version: "1".to_string(),
+            actor_id: "admin-1".to_string(),
+            reason: "结构损坏".to_string(),
+            idempotency_key: "key-2".to_string(),
+        })
         .unwrap();
         assert!(blocked.work_item_id().is_none());
         assert_eq!(blocked.reason(), Some("结构损坏"));
@@ -469,6 +513,11 @@ mod tests {
     #[test]
     fn action_context_fields_are_private_outside_this_module() {
         let source = include_str!("action.rs");
+        let context_struct = source
+            .split("pub struct ApprovalActionContext {")
+            .nth(1)
+            .and_then(|rest| rest.split('}').next())
+            .expect("ApprovalActionContext 结构体定义");
         for field in [
             "approval_process_instance_id",
             "approval_node_execution_id",
@@ -480,7 +529,14 @@ mod tests {
             "reason",
             "idempotency_key",
         ] {
-            assert!(!source.contains(&format!("pub {field}")), "{field} 不得公开");
+            assert!(
+                !context_struct.contains(&format!("pub {field}")),
+                "ApprovalActionContext.{field} 不得公开"
+            );
+            assert!(
+                context_struct.contains(field),
+                "ApprovalActionContext 应包含私有字段 {field}"
+            );
         }
         assert!(!include_str!("execution/runtime_service.rs").contains("ApprovalActionContext {"));
         assert!(![
@@ -498,130 +554,86 @@ mod tests {
     /// 缺/空身份、空原因/幂等键、非法版本必须失败关闭；受阻取消误带任务时错误携带任务。
     #[test]
     fn action_context_constructors_reject_illegal_identity() {
-        assert!(ApprovalActionContext::for_decision(
-            " ",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            None,
-            "key-1",
-        )
-        .is_err());
-        assert!(ApprovalActionContext::for_decision(
-            "instance-1",
-            "",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            None,
-            "key-1",
-        )
-        .is_err());
-        assert!(ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "  ",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            None,
-            "key-1",
-        )
-        .is_err());
-        assert!(ApprovalActionContext::for_decision(
+        fn decision(
+            approval_process_instance_id: &str,
+            approval_node_execution_id: &str,
+            work_item_id: &str,
+            business_object_id: &str,
+            subject_version: &str,
+            reason: Option<String>,
+            idempotency_key: &str,
+        ) -> Result<ApprovalActionContext> {
+            ApprovalActionContext::for_decision(DecisionActionParams {
+                approval_process_instance_id: approval_process_instance_id.to_string(),
+                approval_node_execution_id: approval_node_execution_id.to_string(),
+                work_item_id: work_item_id.to_string(),
+                business_object_type: "stock_adjustment".to_string(),
+                business_object_id: business_object_id.to_string(),
+                subject_version: subject_version.to_string(),
+                actor_id: "user-1".to_string(),
+                reason,
+                idempotency_key: idempotency_key.to_string(),
+            })
+        }
+
+        assert!(decision(" ", "exec-1", "wi-1", "adj-1", "1", None, "key-1").is_err());
+        assert!(decision("instance-1", "", "wi-1", "adj-1", "1", None, "key-1").is_err());
+        assert!(decision("instance-1", "exec-1", "  ", "adj-1", "1", None, "key-1").is_err());
+        assert!(decision("instance-1", "exec-1", "wi-1", "", "1", None, "key-1").is_err());
+        assert!(decision("instance-1", "exec-1", "wi-1", "adj-1", "v1", None, "key-1").is_err());
+        assert!(decision(
             "instance-1",
             "exec-1",
             "wi-1",
-            "stock_adjustment",
-            "",
-            "1",
-            "user-1",
-            None,
-            "key-1",
-        )
-        .is_err());
-        assert!(ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "v1",
-            "user-1",
-            None,
-            "key-1",
-        )
-        .is_err());
-        assert!(ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
             "adj-1",
             "1",
-            "user-1",
             Some("  ".to_string()),
             "key-1",
         )
         .is_err());
-        assert!(ApprovalActionContext::for_decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "user-1",
-            None,
-            " ",
-        )
-        .is_err());
+        assert!(decision("instance-1", "exec-1", "wi-1", "adj-1", "1", None, " ").is_err());
 
-        let carried = ApprovalActionContext::for_blocked_cancel(
-            "instance-1",
-            "exec-1",
-            Some("wi-9".to_string()),
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "admin-1",
-            "结构损坏",
-            "key-2",
-        )
+        let carried = ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {
+            approval_process_instance_id: "instance-1".to_string(),
+            approval_node_execution_id: "exec-1".to_string(),
+            work_item_id: Some("wi-9".to_string()),
+            business_object_type: "stock_adjustment".to_string(),
+            business_object_id: "adj-1".to_string(),
+            subject_version: "1".to_string(),
+            actor_id: "admin-1".to_string(),
+            reason: "结构损坏".to_string(),
+            idempotency_key: "key-2".to_string(),
+        })
         .unwrap_err();
         assert!(carried.to_string().contains("wi-9"));
 
-        let empty_task = ApprovalActionContext::for_blocked_cancel(
-            "instance-1",
-            "exec-1",
-            Some("  ".to_string()),
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "admin-1",
-            "结构损坏",
-            "key-2",
-        )
+        let empty_task = ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {
+            approval_process_instance_id: "instance-1".to_string(),
+            approval_node_execution_id: "exec-1".to_string(),
+            work_item_id: Some("  ".to_string()),
+            business_object_type: "stock_adjustment".to_string(),
+            business_object_id: "adj-1".to_string(),
+            subject_version: "1".to_string(),
+            actor_id: "admin-1".to_string(),
+            reason: "结构损坏".to_string(),
+            idempotency_key: "key-2".to_string(),
+        })
         .unwrap_err();
         assert!(empty_task.to_string().contains("任务"));
 
-        assert!(ApprovalActionContext::for_blocked_cancel(
-            "instance-1",
-            "exec-1",
-            None,
-            "stock_adjustment",
-            "adj-1",
-            "1",
-            "admin-1",
-            "  ",
-            "key-2",
-        )
-        .is_err());
+        assert!(
+            ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {
+                approval_process_instance_id: "instance-1".to_string(),
+                approval_node_execution_id: "exec-1".to_string(),
+                work_item_id: None,
+                business_object_type: "stock_adjustment".to_string(),
+                business_object_id: "adj-1".to_string(),
+                subject_version: "1".to_string(),
+                actor_id: "admin-1".to_string(),
+                reason: "  ".to_string(),
+                idempotency_key: "key-2".to_string(),
+            })
+            .is_err()
+        );
     }
 }

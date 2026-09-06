@@ -54,7 +54,12 @@ impl SupplierFulfillmentItemData {
     ///
     /// # 返回
     /// 返回已派生含税总成本的创建数据。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 错误
+    /// 含税总成本无法转为合法金额时返回错误。
+    ///
+    /// # 约束
+    /// 无。
     pub fn from_unit_cost(
         supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
         supplier_offering_revision_id: SupplierOfferingRevisionId,

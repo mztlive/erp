@@ -19,6 +19,7 @@ pub use self::draft::{
     CreateSettlementStatementRequest, RefreshSettlementStatementRequest, SettlementDraftAction,
     SettlementDraftCommandResult, VoidSettlementRequest,
 };
+pub(crate) use self::query::StatementListQuery;
 pub use self::query::{
     SettlementDifferenceEvidenceView, SettlementPageView, SettlementReviewActionBlockerView,
     SettlementReviewProcessingState, SettlementReviewWorkItemView, SettlementStatementListStatsView,
@@ -27,8 +28,6 @@ pub use self::query::{
     SupplierSettlementStatementListParams, SupplierSettlementStatementListView,
     SupplierSettlementStatementView,
 };
-#[allow(unused_imports)]
-pub(crate) use self::query::{SettlementDifferenceListQuery, SettlementItemListQuery, StatementListQuery};
 pub use self::review::{
     SettlementObjectAction, SettlementReviewAction, SettlementReviewCommand, SettlementReviewDecisionResult,
     SettlementReviewDecisionStatus, SettlementReviewSubmissionStatus, SubmitSettlementReviewRequest,

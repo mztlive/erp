@@ -154,13 +154,15 @@ impl PurchaseOrderService {
                     ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
                     create_from_sourcing_in_transaction(
                         &db,
-                        &binding_rbac,
-                        &transaction_req,
-                        &assignments,
-                        &transaction_sales_order_id,
-                        &transaction_audit_id,
-                        &transaction_fingerprint,
-                        &transaction_actor,
+                        CreateFromSourcingInTransactionInput {
+                            rbac: &binding_rbac,
+                            req: &transaction_req,
+                            assignments: &assignments,
+                            sales_order_id: &transaction_sales_order_id,
+                            audit_id: &transaction_audit_id,
+                            request_fingerprint: &transaction_fingerprint,
+                            actor: &transaction_actor,
+                        },
                         session,
                     )
                     .await
@@ -184,17 +186,29 @@ impl PurchaseOrderService {
     }
 }
 
+/// 选源建单事务内写入所需上下文。
+struct CreateFromSourcingInTransactionInput<'a> {
+    /// 审批绑定授权源。
+    rbac: &'a SharedRbacService,
+    /// 原始选源请求。
+    req: &'a CreatePurchaseOrdersFromSourcingRequest,
+    /// 已规范化且稳定行不重复的选源集合。
+    assignments: &'a SourcingAssignmentSet,
+    /// 来源销售单。
+    sales_order_id: &'a SalesOrderId,
+    /// 整批命令收据 ID。
+    audit_id: &'a str,
+    /// 整批命令载荷指纹。
+    request_fingerprint: &'a str,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+}
+
 /// 在 MongoDB 事务内按供给计划写入库存预占、仓发草稿和采购单。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `rbac` - 审批绑定授权源
-/// * `req` - 原始选源请求
-/// * `assignments` - 已规范化且稳定行不重复的选源集合
-/// * `sales_order_id` - 来源销售单
-/// * `audit_id` - 整批命令收据 ID
-/// * `request_fingerprint` - 整批命令载荷指纹
-/// * `actor` - 审计操作人
+/// * `input` - 选源请求、分配集合与命令收据上下文
 /// * `session` - MongoDB 事务会话
 ///
 /// # 返回
@@ -205,40 +219,45 @@ impl PurchaseOrderService {
 ///
 /// # 关键业务约束
 /// guard CAS 成功后必须再次按统一供给覆盖计算剩余量，且本函数只推进一次 guard。
-#[allow(clippy::too_many_arguments)]
 async fn create_from_sourcing_in_transaction(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
-    req: &CreatePurchaseOrdersFromSourcingRequest,
-    assignments: &SourcingAssignmentSet,
-    sales_order_id: &SalesOrderId,
-    audit_id: &str,
-    request_fingerprint: &str,
-    actor: &AuditActor,
+    input: CreateFromSourcingInTransactionInput<'_>,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
     if let Some(result) = replay_sourcing(
         db,
-        audit_id,
-        request_fingerprint,
-        actor,
-        sales_order_id.as_ref(),
-        &req.work_item_id,
+        input.audit_id,
+        input.request_fingerprint,
+        input.actor,
+        input.sales_order_id.as_ref(),
+        &input.req.work_item_id,
         session,
     )
     .await?
     {
         return Ok(result);
     }
-    let task =
-        load_owned_open_procurement_task(db, &req.work_item_id, sales_order_id, actor.id(), session).await?;
-    let mut order = load_effective_sales_order(db, sales_order_id, session).await?;
+    let task = load_owned_open_procurement_task(
+        db,
+        &input.req.work_item_id,
+        input.sales_order_id,
+        input.actor.id(),
+        session,
+    )
+    .await?;
+    let mut order = load_effective_sales_order(db, input.sales_order_id, session).await?;
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
     let stock_groups =
         stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    let plan = SourcingPlan::plan(&order, &groups, &stock_groups, &req.work_item_id, assignments)
-        .map_err(map_sourcing_plan_error)?;
-    order.advance_procurement_guard(actor.id())?;
+    let plan = SourcingPlan::plan(
+        &order,
+        &groups,
+        &stock_groups,
+        &input.req.work_item_id,
+        input.assignments,
+    )
+    .map_err(map_sourcing_plan_error)?;
+    order.advance_procurement_guard(input.actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
     let latest_stock_groups =
         stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
@@ -248,13 +267,13 @@ async fn create_from_sourcing_in_transaction(
         db,
         plan.stock_plans(),
         &latest_stock_groups,
-        sales_order_id,
-        audit_id,
-        request_fingerprint,
+        input.sales_order_id,
+        input.audit_id,
+        input.request_fingerprint,
         session,
     )
     .await?;
-    create_stock_delivery_drafts(db, sales_order_id, &persisted_stock, session).await?;
+    create_stock_delivery_drafts(db, input.sales_order_id, &persisted_stock, session).await?;
     let stock_reservations = persisted_stock
         .into_iter()
         .map(|allocation| allocation.result)
@@ -273,11 +292,11 @@ async fn create_from_sourcing_in_transaction(
         let basis_id = basis_id_for(
             &order,
             latest,
-            &req.work_item_id,
+            &input.req.work_item_id,
             plan.target_warehouse_id.as_ref(),
         );
         let item_req = CreatePurchaseOrderFromBasisRequest {
-            work_item_id: req.work_item_id.clone(),
+            work_item_id: input.req.work_item_id.clone(),
             basis_id: basis_id.clone(),
             purchase_type: latest.scope.purchase_type,
             payment_term_code: latest.scope.payment_term_code.clone(),
@@ -291,29 +310,29 @@ async fn create_from_sourcing_in_transaction(
                     expected_delivery_date: line.expected_delivery_date.to_string(),
                 })
                 .collect(),
-            idempotency_key: req.idempotency_key.clone(),
+            idempotency_key: input.req.idempotency_key.clone(),
         };
         let item_receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
             CREATE_SOURCING_ITEM_PREFIX,
-            actor.id(),
+            input.actor.id(),
             CREATE_SOURCING_ACTION,
             Some(basis_id.as_str()),
-            &req.idempotency_key,
+            &input.req.idempotency_key,
             LegacyReceiptIdScheme::None,
         )?;
         let item_audit_id = item_receipt_identity.receipt_id().to_string();
         let command = CreateBasisCommand {
-            sales_order_id,
+            sales_order_id: input.sales_order_id,
             req: &item_req,
             requested_lines: &plan.requested_lines,
             audit_id: &item_audit_id,
-            request_fingerprint,
-            actor,
+            request_fingerprint: input.request_fingerprint,
+            actor: input.actor,
         };
         orders.push(
             persist_basis_draft(
                 db,
-                rbac,
+                input.rbac,
                 &VerifiedBasisInput {
                     sales_order: &order,
                     group: latest,
@@ -326,10 +345,10 @@ async fn create_from_sourcing_in_transaction(
             .await?,
         );
     }
-    sync_procurement_tasks_for_sales_order(db, sales_order_id, session).await?;
+    sync_procurement_tasks_for_sales_order(db, input.sales_order_id, session).await?;
     let work_item_status = db
         .work_items()
-        .find_by_id(&req.work_item_id, session)
+        .find_by_id(&input.req.work_item_id, session)
         .await?
         .ok_or_else(|| Error::ConflictError("供给分配任务在同步后不存在".to_string()))?
         .status;
@@ -348,11 +367,11 @@ async fn create_from_sourcing_in_transaction(
     };
     write_sourcing_receipt(
         db,
-        audit_id,
-        request_fingerprint,
-        sales_order_id.as_ref(),
+        input.audit_id,
+        input.request_fingerprint,
+        input.sales_order_id.as_ref(),
         &receipt,
-        actor,
+        input.actor,
         session,
     )
     .await?;
@@ -361,7 +380,7 @@ async fn create_from_sourcing_in_transaction(
         stock_reservations,
         work_item_status: response_work_item_status,
         replayed: false,
-        reference: sales_order_id.to_string(),
+        reference: input.sales_order_id.to_string(),
     })
 }
 
@@ -404,7 +423,6 @@ fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn persist_stock_allocations(
     db: &mongodb::Database,
     plans: &[StockAllocationPlan],

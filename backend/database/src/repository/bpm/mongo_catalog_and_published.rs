@@ -1,7 +1,7 @@
 use super::DefinitionCatalogStatusFact;
 use crate::repository::extensions::BpmExt;
 use crate::{ensure_indexes, NoTransaction, Transactional};
-use bpm::graph::DefinitionGraph;
+use bpm::graph::{DefinitionGraph, NewPopulatedDraftParams};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::types::ApprovalDefinitionStatus;
 use bpm::model::{
@@ -36,18 +36,18 @@ fn one_node_graph(id: &str, kind: ProcessKind, version: u32) -> DefinitionGraph 
         at: Timestamp::from_unix_secs(1).unwrap(),
     })
     .unwrap()];
-    DefinitionGraph::new_populated_draft(
-        ApprovalProcessDefinitionId::new(id),
-        kind,
-        version,
-        "测试定义",
-        ParticipantId::new("admin").unwrap(),
+    DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
+        definition_id: ApprovalProcessDefinitionId::new(id),
+        process_kind: kind,
+        definition_version: version,
+        name: "测试定义".into(),
+        created_by: ParticipantId::new("admin").unwrap(),
         nodes,
-        (1..=2)
+        transition_ids: (1..=2)
             .map(|index| ApprovalTransitionDefinitionId::new(format!("{id}-t{index}")))
             .collect(),
-        Timestamp::from_unix_secs(1).unwrap(),
-    )
+        at: Timestamp::from_unix_secs(1).unwrap(),
+    })
     .unwrap()
 }
 

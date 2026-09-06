@@ -31,8 +31,6 @@ mod command;
 mod qualification;
 mod revision;
 
-#[allow(unused_imports)]
-pub use account::SupplierAccountIdDuplicate;
 pub use account::{SupplierAccountFilter, SupplierAccountRow};
 pub use bundle::{
     SupplierDetailBundle, SupplierListBundle, SupplierListSearchInput, SupplierQualificationHealthFilter,

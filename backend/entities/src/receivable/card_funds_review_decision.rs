@@ -290,19 +290,34 @@ pub struct ValidatedCardFundsReviewDecision {
     workflow_comment: Option<String>,
 }
 
+/// 构造 [`ValidatedCardFundsReviewDecision`] 的输入参数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidatedCardFundsReviewDecisionParams<'a> {
+    /// 应收账户 ID（原始输入）。
+    pub receivable_account_id: &'a str,
+    /// 期望复核链尾（可选，空白需拒绝）。
+    pub expected_review_chain_tail_id: Option<&'a str>,
+    /// 复核类型。
+    pub review_type: CardFundsReviewType,
+    /// 复核结果。
+    pub review_result: CardFundsReviewResult,
+    /// 复核结论。
+    pub conclusion: CardFundsReviewConclusion,
+    /// 证据文件 ID。
+    pub evidence_document_ids: &'a [FileAssetId],
+    /// 证据引用。
+    pub evidence_references: &'a [String],
+    /// 驳回原因代码（原始输入，需 trim）。
+    pub reason_code: Option<&'a str>,
+    /// 补充说明（原始输入，需 trim）。
+    pub comment: Option<&'a str>,
+}
+
 impl ValidatedCardFundsReviewDecision {
     /// 校验并构造已验证决定。
     ///
     /// # 参数
-    /// * `receivable_account_id` - 应收账户 ID（原始输入）
-    /// * `expected_review_chain_tail_id` - 期望复核链尾（可选，空白需拒绝）
-    /// * `review_type` - 复核类型
-    /// * `review_result` - 复核结果
-    /// * `conclusion` - 复核结论
-    /// * `evidence_document_ids` - 证据文件 ID
-    /// * `evidence_references` - 证据引用
-    /// * `reason_code` - 驳回原因代码（原始输入，需 trim）
-    /// * `comment` - 补充说明（原始输入，需 trim）
+    /// * `params` - 账户、链尾、决策／结论、证据与原因说明
     ///
     /// # 返回
     /// 校验通过的已验证决定，含预计算的 canonical 证据与工作流意见。
@@ -319,30 +334,21 @@ impl ValidatedCardFundsReviewDecision {
     ///
     /// # 约束
     /// 纯内存确定性校验；不依赖 MongoDB、HTTP、时钟或密钥；错误文案与原 Service 一致。
-    #[allow(clippy::too_many_arguments)]
-    pub fn try_new(
-        receivable_account_id: &str,
-        expected_review_chain_tail_id: Option<&str>,
-        review_type: CardFundsReviewType,
-        review_result: CardFundsReviewResult,
-        conclusion: CardFundsReviewConclusion,
-        evidence_document_ids: &[FileAssetId],
-        evidence_references: &[String],
-        reason_code: Option<&str>,
-        comment: Option<&str>,
-    ) -> Result<Self> {
-        if receivable_account_id.trim().is_empty() || receivable_account_id.chars().count() > 128 {
+    pub fn try_new(params: ValidatedCardFundsReviewDecisionParams<'_>) -> Result<Self> {
+        if params.receivable_account_id.trim().is_empty()
+            || params.receivable_account_id.chars().count() > 128
+        {
             return Err(Error::from("应收账户 ID 非法".to_string()));
         }
-        let expected_review_chain_tail_id = match expected_review_chain_tail_id {
+        let expected_review_chain_tail_id = match params.expected_review_chain_tail_id {
             Some(tail) if tail.trim().is_empty() => {
                 return Err(Error::from("复核链尾不能为空白".to_string()));
             }
             Some(tail) => Some(tail.to_string()),
             None => None,
         };
-        let normalized_reason = reason_code.map(str::trim).filter(|v| !v.is_empty());
-        match (review_result, conclusion) {
+        let normalized_reason = params.reason_code.map(str::trim).filter(|v| !v.is_empty());
+        match (params.review_result, params.conclusion) {
             (CardFundsReviewResult::Approved, CardFundsReviewConclusion::NoHistoryFromZero)
             | (CardFundsReviewResult::Approved, CardFundsReviewConclusion::RecordedFactsReconciled) => {
                 if normalized_reason.is_some() {
@@ -360,21 +366,26 @@ impl ValidatedCardFundsReviewDecision {
                 return Err(Error::from("复核结果与结论组合不合法".to_string()));
             }
         }
-        let evidence = CardFundsReviewEvidence::new(evidence_document_ids, evidence_references)?;
+        let evidence =
+            CardFundsReviewEvidence::new(params.evidence_document_ids, params.evidence_references)?;
         let canonical_evidence = evidence.canonical().map(|s| s.to_string());
         let reason_owned = normalized_reason.map(|s| s.to_string());
-        let comment_owned = comment
+        let comment_owned = params
+            .comment
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(|s| s.to_string());
-        let workflow_comment =
-            Self::build_workflow_comment(conclusion, reason_owned.as_deref(), comment_owned.as_deref())?;
+        let workflow_comment = Self::build_workflow_comment(
+            params.conclusion,
+            reason_owned.as_deref(),
+            comment_owned.as_deref(),
+        )?;
         Ok(Self {
-            receivable_account_id: receivable_account_id.to_string(),
+            receivable_account_id: params.receivable_account_id.to_string(),
             expected_review_chain_tail_id,
-            review_type,
-            review_result,
-            conclusion,
+            review_type: params.review_type,
+            review_result: params.review_result,
+            conclusion: params.conclusion,
             evidence,
             reason_code: reason_owned,
             comment: comment_owned,
@@ -483,17 +494,17 @@ mod tests {
     }
 
     fn approved_no_history() -> ValidatedCardFundsReviewDecision {
-        ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            None,
-            Some("已核对"),
-        )
+        ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Approved,
+            conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: None,
+            comment: Some("已核对"),
+        })
         .unwrap()
     }
 
@@ -531,131 +542,143 @@ mod tests {
     #[test]
     fn decision_conclusion_matrix() {
         // Approved + NoHistoryFromZero 合法
-        assert!(ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            None,
-            None
-        )
-        .is_ok());
+        assert!(
+            ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                receivable_account_id: "ra-1",
+                expected_review_chain_tail_id: None,
+                review_type: CardFundsReviewType::Opening,
+                review_result: CardFundsReviewResult::Approved,
+                conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+                evidence_document_ids: &decision_ids(),
+                evidence_references: &[],
+                reason_code: None,
+                comment: None,
+            })
+            .is_ok()
+        );
         // Approved + RecordedFactsReconciled 合法
-        assert!(ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::RecordedFactsReconciled,
-            &decision_ids(),
-            &[],
-            None,
-            None
-        )
-        .is_ok());
+        assert!(
+            ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                receivable_account_id: "ra-1",
+                expected_review_chain_tail_id: None,
+                review_type: CardFundsReviewType::Opening,
+                review_result: CardFundsReviewResult::Approved,
+                conclusion: CardFundsReviewConclusion::RecordedFactsReconciled,
+                evidence_document_ids: &decision_ids(),
+                evidence_references: &[],
+                reason_code: None,
+                comment: None,
+            })
+            .is_ok()
+        );
         // Rejected + Rejected 合法（需原因）
-        assert!(ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            Some("OTHER"),
-            None
-        )
-        .is_ok());
+        assert!(
+            ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                receivable_account_id: "ra-1",
+                expected_review_chain_tail_id: None,
+                review_type: CardFundsReviewType::Opening,
+                review_result: CardFundsReviewResult::Rejected,
+                conclusion: CardFundsReviewConclusion::Rejected,
+                evidence_document_ids: &decision_ids(),
+                evidence_references: &[],
+                reason_code: Some("OTHER"),
+                comment: None,
+            })
+            .is_ok()
+        );
         // 非法组合：Approved + Rejected
-        assert!(ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            None,
-            None
-        )
-        .is_err());
+        assert!(
+            ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                receivable_account_id: "ra-1",
+                expected_review_chain_tail_id: None,
+                review_type: CardFundsReviewType::Opening,
+                review_result: CardFundsReviewResult::Approved,
+                conclusion: CardFundsReviewConclusion::Rejected,
+                evidence_document_ids: &decision_ids(),
+                evidence_references: &[],
+                reason_code: None,
+                comment: None,
+            })
+            .is_err()
+        );
         // 非法组合：Rejected + NoHistoryFromZero
-        assert!(ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            Some("OTHER"),
-            None
-        )
-        .is_err());
+        assert!(
+            ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                receivable_account_id: "ra-1",
+                expected_review_chain_tail_id: None,
+                review_type: CardFundsReviewType::Opening,
+                review_result: CardFundsReviewResult::Rejected,
+                conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+                evidence_document_ids: &decision_ids(),
+                evidence_references: &[],
+                reason_code: Some("OTHER"),
+                comment: None,
+            })
+            .is_err()
+        );
     }
 
     /// 受控理由：通过不得携带、驳回应为白名单、空白拒绝。
     #[test]
     fn controlled_reason() {
         // 通过携带原因拒绝
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            Some("OTHER"),
-            None,
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Approved,
+            conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: Some("OTHER"),
+            comment: None,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("通过决定不得携带驳回原因"));
         // 驳回缺少原因拒绝
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            None,
-            None,
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Rejected,
+            conclusion: CardFundsReviewConclusion::Rejected,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: None,
+            comment: None,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("驳回决定必须填写原因代码"));
         // 驳回原因不在白名单拒绝
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            Some("UNKNOWN"),
-            None,
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Rejected,
+            conclusion: CardFundsReviewConclusion::Rejected,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: Some("UNKNOWN"),
+            comment: None,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("驳回原因代码不在受控范围内"));
         // 白名单四项均可通过
         for code in ALLOWED_REASON_CODES {
-            assert!(ValidatedCardFundsReviewDecision::try_new(
-                "ra-1",
-                None,
-                CardFundsReviewType::Opening,
-                CardFundsReviewResult::Rejected,
-                CardFundsReviewConclusion::Rejected,
-                &decision_ids(),
-                &[],
-                Some(code),
-                None
-            )
-            .is_ok());
+            assert!(
+                ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+                    receivable_account_id: "ra-1",
+                    expected_review_chain_tail_id: None,
+                    review_type: CardFundsReviewType::Opening,
+                    review_result: CardFundsReviewResult::Rejected,
+                    conclusion: CardFundsReviewConclusion::Rejected,
+                    evidence_document_ids: &decision_ids(),
+                    evidence_references: &[],
+                    reason_code: Some(code),
+                    comment: None,
+                })
+                .is_ok()
+            );
         }
     }
 
@@ -687,17 +710,17 @@ mod tests {
         assert!(CardFundsReviewEvidence::new(&[], &refs).is_err());
         // workflow 边界：conclusion + reason + comment 超 512
         let long_comment = "c".repeat(600);
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            Some("OTHER"),
-            Some(&long_comment),
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Rejected,
+            conclusion: CardFundsReviewConclusion::Rejected,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: Some("OTHER"),
+            comment: Some(&long_comment),
+        })
         .unwrap_err();
         assert!(err.to_string().contains("工作流复核意见不能超过 512"));
     }
@@ -791,17 +814,17 @@ mod tests {
         assert_eq!(d1.canonical_evidence(), d2.canonical_evidence());
         assert_eq!(d1.workflow_comment(), d2.workflow_comment());
         // 改变原因或补充说明则文本变化
-        let d3 = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Rejected,
-            CardFundsReviewConclusion::Rejected,
-            &decision_ids(),
-            &[],
-            Some("OTHER"),
-            Some("补充说明"),
-        )
+        let d3 = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Rejected,
+            conclusion: CardFundsReviewConclusion::Rejected,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: Some("OTHER"),
+            comment: Some("补充说明"),
+        })
         .unwrap();
         assert!(d3.workflow_comment().unwrap().contains("reason=OTHER"));
         assert!(d3.workflow_comment().unwrap().contains("补充说明"));
@@ -810,30 +833,30 @@ mod tests {
     /// 账户 ID 与链尾空白校验。
     #[test]
     fn account_and_chain_tail_validation() {
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "  ",
-            None,
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            None,
-            None,
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "  ",
+            expected_review_chain_tail_id: None,
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Approved,
+            conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: None,
+            comment: None,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("应收账户 ID 非法"));
-        let err = ValidatedCardFundsReviewDecision::try_new(
-            "ra-1",
-            Some("  "),
-            CardFundsReviewType::Opening,
-            CardFundsReviewResult::Approved,
-            CardFundsReviewConclusion::NoHistoryFromZero,
-            &decision_ids(),
-            &[],
-            None,
-            None,
-        )
+        let err = ValidatedCardFundsReviewDecision::try_new(ValidatedCardFundsReviewDecisionParams {
+            receivable_account_id: "ra-1",
+            expected_review_chain_tail_id: Some("  "),
+            review_type: CardFundsReviewType::Opening,
+            review_result: CardFundsReviewResult::Approved,
+            conclusion: CardFundsReviewConclusion::NoHistoryFromZero,
+            evidence_document_ids: &decision_ids(),
+            evidence_references: &[],
+            reason_code: None,
+            comment: None,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("复核链尾不能为空白"));
     }

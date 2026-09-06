@@ -576,23 +576,12 @@ pub async fn stock_adjustment_post(
     ))
 }
 
-/// 证明人工 approve/reject 端点已删除。
-///
-/// # 返回
-/// 返回不再暴露的路径片段。
-pub fn removed_manual_review_paths() -> &'static [&'static str] {
-    &[
-        "/stock-adjustments/{id}/approve",
-        "/stock-adjustments/{id}/reject",
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        removed_manual_review_paths, CancelStockAdjustmentApprovalHttpRequest,
-        CreateStockAdjustmentHttpRequest, StockAdjustmentSubmitResultHttpQuery,
-        SubmitStockAdjustmentHttpRequest, UpdateStockAdjustmentHttpRequest,
+        CancelStockAdjustmentApprovalHttpRequest, CreateStockAdjustmentHttpRequest,
+        StockAdjustmentSubmitResultHttpQuery, SubmitStockAdjustmentHttpRequest,
+        UpdateStockAdjustmentHttpRequest,
     };
     use axum::http::HeaderMap;
     use services::inventory::SubmitStockAdjustmentRequest;
@@ -600,8 +589,12 @@ mod tests {
     /// 人工复核端点已删除，提交请求拒绝客户端选择审批人。
     #[test]
     fn manual_approve_reject_endpoints_are_removed() {
+        const REMOVED_PATHS: &[&str] = &[
+            "/stock-adjustments/{id}/approve",
+            "/stock-adjustments/{id}/reject",
+        ];
         assert_eq!(
-            removed_manual_review_paths(),
+            REMOVED_PATHS,
             &[
                 "/stock-adjustments/{id}/approve",
                 "/stock-adjustments/{id}/reject"

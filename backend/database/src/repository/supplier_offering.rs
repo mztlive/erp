@@ -449,6 +449,23 @@ impl<'a> Repository<'a, SupplierOfferingAvailability> {
     }
 }
 
+/// 供给列表展示所需的跨域只读实体。
+#[derive(Debug, Clone)]
+pub struct SupplierOfferingDisplayEntities {
+    /// 公司 SKU。
+    pub skus: Vec<Sku>,
+    /// SKU 当前修订。
+    pub sku_revisions: Vec<SkuRevision>,
+    /// 公司商品。
+    pub products: Vec<Product>,
+    /// 供应商账户。
+    pub suppliers: Vec<SupplierAccount>,
+    /// 主体。
+    pub parties: Vec<Party>,
+    /// 主体当前修订。
+    pub party_revisions: Vec<PartyRevision>,
+}
+
 /// 供给聚合的跨集合事务仓储。
 pub struct SupplierOfferingRepository<'a> {
     db: &'a Database,
@@ -518,23 +535,15 @@ impl<'a> SupplierOfferingRepository<'a> {
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 依次返回 SKU、SKU 当前修订、商品、供应商账户、主体、主体当前修订。
+    /// 返回 SKU、SKU 当前修订、商品、供应商账户、主体、主体当前修订。
     ///
     /// # 错误
     /// 任一 MongoDB 批量查询失败时返回错误。
-    #[allow(clippy::type_complexity)]
     pub async fn load_display_entities(
         &self,
         rows: &[SupplierOfferingRow],
         executor: &mut dyn Executor,
-    ) -> Result<(
-        Vec<Sku>,
-        Vec<SkuRevision>,
-        Vec<Product>,
-        Vec<SupplierAccount>,
-        Vec<Party>,
-        Vec<PartyRevision>,
-    )> {
+    ) -> Result<SupplierOfferingDisplayEntities> {
         let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
         let skus = Repository::<Sku>::new(self.db, SKUS)
             .find_many(in_filter("id", sku_ids), executor)
@@ -567,7 +576,14 @@ impl<'a> SupplierOfferingRepository<'a> {
         let party_revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
             .find_many(in_filter("id", party_revision_ids), executor)
             .await?;
-        Ok((skus, sku_revisions, products, suppliers, parties, party_revisions))
+        Ok(SupplierOfferingDisplayEntities {
+            skus,
+            sku_revisions,
+            products,
+            suppliers,
+            parties,
+            party_revisions,
+        })
     }
 
     /// 原子创建供给、首版商业条款与初始可供投影。

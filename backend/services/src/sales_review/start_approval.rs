@@ -24,6 +24,7 @@ use super::adapter::sales_change_order_object_readable;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use crate::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+    StartIdentityParams,
 };
 use crate::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
@@ -126,16 +127,16 @@ pub(super) async fn replay_sales_change_start_with_executor(
 ) -> Result<Option<String>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::SalesChangeOrder);
-    let identity = start_identity(
-        key,
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    let identity = start_identity(StartIdentityParams {
+        idempotency_key: key,
+        process_kind: process_kind.as_str(),
+        subject_kind: subject.subject_kind(),
+        subject_id: subject.subject_id(),
         subject_version,
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-        actor_id,
-    )?;
+        binding_id: binding.approval_process_definition_id.as_ref(),
+        definition_version: binding.approval_definition_version,
+        actor_participant_id: actor_id,
+    })?;
     let mut receipt = None;
     for scope in identity.scope_candidates() {
         receipt = db

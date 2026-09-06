@@ -17,7 +17,8 @@ mod scope;
 pub mod upgrade_subject;
 
 pub use action::{
-    ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort, FailClosedApprovalActionPort,
+    ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort, BlockedCancelActionParams,
+    DecisionActionParams, FailClosedApprovalActionPort,
 };
 pub use dto::{
     ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
@@ -31,8 +32,8 @@ pub(crate) use scope::{
     definition_management_visibility_with_executor,
 };
 pub use scope::{
-    approval_management_scope, approval_recovery_authorization, approval_recovery_authorization_scope,
-    approval_recovery_scope, ApprovalManagementScope,
+    approval_recovery_authorization, approval_recovery_authorization_scope, approval_recovery_scope,
+    ApprovalManagementScope,
 };
 pub use upgrade_subject::{
     ensure_initial_unsubmitted_approval_upgrade_subject, load_approval_upgrade_subject_facts,

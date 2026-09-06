@@ -686,32 +686,6 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
-    /// 组装验收工作台与过账进度共用的分组输入（FUL-E07 同一规则源）。
-    #[allow(clippy::too_many_arguments)]
-    fn group_sources<'a>(
-        revision_lines: &'a [SalesOrderRevisionLine],
-        goods_service_lines: &'a [SalesOrderGoodsServiceLineRevision],
-        deliveries: &'a [Delivery],
-        delivery_lines: &'a [DeliveryLine],
-        electronic: &'a [ElectronicDelivery],
-        service: &'a [ServiceFulfillment],
-        delivery_allocations: &'a [AcceptanceFulfillmentAllocation],
-        electronic_allocations: &'a [AcceptanceFulfillmentAllocation],
-        service_allocations: &'a [AcceptanceFulfillmentAllocation],
-    ) -> EligibilityGroupSources<'a> {
-        EligibilityGroupSources {
-            revision_lines,
-            goods_service_lines,
-            deliveries,
-            delivery_lines,
-            electronic,
-            service,
-            delivery_allocations,
-            electronic_allocations,
-            service_allocations,
-        }
-    }
-
     /// 三类履约事实（发货/电子交付/服务履约）按稳定销售明细分组，净验收与
     /// 剩余可验收守恒；工作台视图保持行号稳定排序与展示字段。
     #[test]
@@ -743,17 +717,17 @@ mod acceptance_eligibility_rule_source_tests {
             "sf-1",
             "1.5",
         )];
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &electronic,
-            &service,
-            &delivery_allocations,
-            &electronic_allocations,
-            &service_allocations,
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &electronic,
+            service: &service,
+            delivery_allocations: &delivery_allocations,
+            electronic_allocations: &electronic_allocations,
+            service_allocations: &service_allocations,
+        };
 
         let lines = build_line_eligibilities(&sources).unwrap();
         let line_1 = lines
@@ -884,17 +858,17 @@ mod acceptance_eligibility_rule_source_tests {
             .collect();
         assert!(service.is_empty());
 
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &service,
-            &delivery_allocations,
-            &[],
-            &[],
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &service,
+            delivery_allocations: &delivery_allocations,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let lines = build_line_eligibilities(&sources).unwrap();
         assert_eq!(lines[0].facts.len(), 1);
         assert_eq!(lines[0].facts[0].fulfillment_line_id, "dl-1");
@@ -903,17 +877,17 @@ mod acceptance_eligibility_rule_source_tests {
         assert!(!progress.has_remaining_eligible);
 
         // 与根本不加载失败记录相比，派生结果完全一致（失败记录无任何影响）。
-        let sources_without_failed = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &[],
-            &delivery_allocations,
-            &[],
-            &[],
-        );
+        let sources_without_failed = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &[],
+            delivery_allocations: &delivery_allocations,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let lines_without_failed = build_line_eligibilities(&sources_without_failed).unwrap();
         assert_eq!(lines, lines_without_failed);
         assert_eq!(AcceptanceProgress::derive(&lines_without_failed), Some(progress));
@@ -921,17 +895,17 @@ mod acceptance_eligibility_rule_source_tests {
         // 未筛选（修复前行为）：失败记录被当作可验收事实，全部验收后
         // has_remaining_eligible 仍为真，验收任务保持开放。
         let raw_service = vec![failed_service];
-        let raw_sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &raw_service,
-            &delivery_allocations,
-            &[],
-            &[],
-        );
+        let raw_sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &raw_service,
+            delivery_allocations: &delivery_allocations,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let raw_lines = build_line_eligibilities(&raw_sources).unwrap();
         assert_eq!(raw_lines[0].facts.len(), 2);
         let raw_progress = AcceptanceProgress::derive(&raw_lines).unwrap();
@@ -947,17 +921,17 @@ mod acceptance_eligibility_rule_source_tests {
         let deliveries = vec![delivery("dlv-1", "DLV-2026-001")];
         let delivery_lines = vec![delivery_line("dl-1", "dlv-1", 1, "so-line-1", "5")];
         let over_accepted = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "6")];
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &[],
-            &over_accepted,
-            &[],
-            &[],
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &[],
+            delivery_allocations: &over_accepted,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let error =
             build_line_eligibilities(&sources).expect_err("净验收超过成功履约数量必须向上传递，禁止回退为零");
         assert!(error.to_string().contains("超过其净成功履约数量"));
@@ -974,48 +948,48 @@ mod acceptance_eligibility_rule_source_tests {
         let delivery_lines = vec![delivery_line("dl-1", "dlv-1", 1, "so-line-1", "2")];
 
         let fully_accepted = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "2")];
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &[],
-            &fully_accepted,
-            &[],
-            &[],
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &[],
+            delivery_allocations: &fully_accepted,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let progress = AcceptanceProgress::derive(&build_line_eligibilities(&sources).unwrap()).unwrap();
         assert_eq!(progress.progress, FulfillmentProgress::Completed);
         assert!(!progress.has_remaining_eligible);
 
         let partial = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "1")];
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &[],
-            &partial,
-            &[],
-            &[],
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &[],
+            delivery_allocations: &partial,
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let progress = AcceptanceProgress::derive(&build_line_eligibilities(&sources).unwrap()).unwrap();
         assert_eq!(progress.progress, FulfillmentProgress::PartiallyFulfilled);
         assert!(progress.has_remaining_eligible);
 
-        let sources = group_sources(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-        );
+        let sources = EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &[],
+            service: &[],
+            delivery_allocations: &[],
+            electronic_allocations: &[],
+            service_allocations: &[],
+        };
         let progress = AcceptanceProgress::derive(&build_line_eligibilities(&sources).unwrap()).unwrap();
         assert_eq!(progress.progress, FulfillmentProgress::NotStarted);
         assert!(progress.has_remaining_eligible);

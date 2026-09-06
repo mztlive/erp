@@ -79,7 +79,6 @@ impl SupplierProfileChangePlan {
     /// 纯内存计算，不触及 MongoDB、全局 ID 或时钟；判定逻辑与 `profile.rs` 原 Service
     /// helper 完全一致（`wanted == is_active` 能力跳过，`matches_profile_fields` 与
     /// `current_links == desired_links` 资质跳过），便于单测锁定。
-    #[allow(clippy::too_many_arguments)]
     pub fn from_loaded(
         capabilities: &[SupplierCapability],
         qualifications: &[SupplierQualification],

@@ -30,7 +30,7 @@ use super::notifications::{
 use super::query::{first_open_task, list_projection_from_writes};
 use super::read_auth::{
     process_required_separation_policy, revalidate_decision_approver, task_proves_current_responsibility,
-    RuntimeReadSubject,
+    RevalidateDecisionApproverInput, RuntimeReadSubject,
 };
 use super::tasks::{
     complete_or_close_tasks, create_open_tasks, CompleteOrCloseTasksInput, CreateOpenTasksInput,
@@ -41,7 +41,7 @@ use super::{
 };
 use crate::approval::business_adapter::adapter_spec_of;
 use crate::approval::process_kind::process_kind_of;
-use crate::approval::{ApprovalActionContext, ApprovalDomainActionPort};
+use crate::approval::{ApprovalActionContext, ApprovalDomainActionPort, DecisionActionParams};
 use crate::audit::AuditActor;
 use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::SharedRbacService;
@@ -378,12 +378,14 @@ async fn submit_decision_in_transaction(
     let current_eligibility = revalidate_decision_approver(
         db,
         rbac,
-        actor.id(),
-        &execution.assignee_name_snapshot,
-        Some(actor),
-        &snapshot,
-        &spec,
-        separation_policy,
+        RevalidateDecisionApproverInput {
+            assignee_id: actor.id(),
+            assignee_name: &execution.assignee_name_snapshot,
+            authenticated_actor: Some(actor),
+            snapshot: &snapshot,
+            spec: &spec,
+            separation_policy,
+        },
         session,
     )
     .await?;
@@ -396,12 +398,14 @@ async fn submit_decision_in_transaction(
                 revalidate_decision_approver(
                     db,
                     rbac,
-                    node.assignee_participant_id.as_str(),
-                    &node.assignee_label_snapshot,
-                    None,
-                    &snapshot,
-                    &spec,
-                    separation_policy,
+                    RevalidateDecisionApproverInput {
+                        assignee_id: node.assignee_participant_id.as_str(),
+                        assignee_name: &node.assignee_label_snapshot,
+                        authenticated_actor: None,
+                        snapshot: &snapshot,
+                        spec: &spec,
+                        separation_policy,
+                    },
                     session,
                 )
                 .await?
@@ -459,17 +463,17 @@ async fn submit_decision_in_transaction(
         Vec::new()
     };
     let should_finalize = writes.commit == CommitRequired::TerminalApproved;
-    let action_context = ApprovalActionContext::for_decision(
-        instance_id.to_string(),
-        execution_id.to_string(),
-        command.work_item_id.clone(),
-        document_type.as_str(),
-        business_object_id.clone(),
-        subject_version.clone(),
-        actor_id.clone(),
-        command.reason.clone(),
-        command.idempotency_key.as_str(),
-    )?;
+    let action_context = ApprovalActionContext::for_decision(DecisionActionParams {
+        approval_process_instance_id: instance_id.to_string(),
+        approval_node_execution_id: execution_id.to_string(),
+        work_item_id: command.work_item_id.clone(),
+        business_object_type: document_type.as_str().to_string(),
+        business_object_id: business_object_id.clone(),
+        subject_version: subject_version.clone(),
+        actor_id: actor_id.clone(),
+        reason: command.reason.clone(),
+        idempotency_key: command.idempotency_key.as_str().to_string(),
+    })?;
     let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
     let list_projection =
         list_projection_from_writes(&writes, execution_id.as_ref(), command.reason.clone(), now);
@@ -497,27 +501,29 @@ async fn submit_decision_in_transaction(
     }
     persist_decision_writes(
         db,
-        &writes,
-        execution_id.as_ref(),
-        expected_instance_version,
-        expected_execution_version,
-        command.expected_task_version,
-        &command.work_item_id,
-        &new_task_ids,
-        &list_projection,
-        &audit,
-        now,
-        &actor_id,
-        &owner_role,
-        &owner_organization_id,
-        &subject_version,
-        &business_object_id,
-        &document_type_label,
-        &snapshot.payload.document_no,
-        &snapshot.payload.submitted_by,
-        &execution,
-        command.reason.as_deref(),
-        &runtime_admin_ids,
+        PersistDecisionWrites {
+            writes: &writes,
+            ended_execution_id: execution_id.as_ref(),
+            expected_instance_version,
+            expected_execution_version,
+            expected_task_version: command.expected_task_version,
+            work_item_id: &command.work_item_id,
+            new_task_ids: &new_task_ids,
+            list_projection: &list_projection,
+            audit: &audit,
+            now,
+            actor_id: &actor_id,
+            owner_role: &owner_role,
+            owner_organization_id: &owner_organization_id,
+            subject_version: &subject_version,
+            business_object_id: &business_object_id,
+            document_type_label: &document_type_label,
+            document_no: &snapshot.payload.document_no,
+            submitted_by: &snapshot.payload.submitted_by,
+            ended_execution: &execution,
+            reject_reason: command.reason.as_deref(),
+            runtime_admin_ids: &runtime_admin_ids,
+        },
         session,
     )
     .await?;
@@ -703,12 +709,14 @@ async fn authorize_decision_terminal_replay(
     let eligibility = revalidate_decision_approver(
         db,
         rbac,
-        actor.id(),
-        &execution.assignee_name_snapshot,
-        Some(actor),
-        &snapshot,
-        &spec,
-        process_required_separation_policy(document_type)?,
+        RevalidateDecisionApproverInput {
+            assignee_id: actor.id(),
+            assignee_name: &execution.assignee_name_snapshot,
+            authenticated_actor: Some(actor),
+            snapshot: &snapshot,
+            spec: &spec,
+            separation_policy: process_required_separation_policy(document_type)?,
+        },
         session,
     )
     .await?;
@@ -762,34 +770,93 @@ fn map_runtime_graph_error(error: ModelError) -> Error {
     Error::ConflictError(error.to_string())
 }
 
-/// 单事务应用决定写入：实例 CAS 推进、执行结束/插入、审批人绑定、任务
-/// 完成/关闭/新建、通知 outbox 与审计。命令收据必须由调用方先写入以仲裁并发。
-#[allow(clippy::too_many_arguments)]
-async fn persist_decision_writes(
-    db: &Database,
-    writes: &PlannedWrites,
-    ended_execution_id: &str,
+/// 决定写库事务所需的计划、版本守卫与通知事实。
+///
+/// # 用途
+/// 打包 [`persist_decision_writes`] 的非基础设施参数。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 调用方必须先写入命令收据，再传入本结构执行领域写。
+struct PersistDecisionWrites<'a> {
+    writes: &'a PlannedWrites,
+    ended_execution_id: &'a str,
     expected_instance_version: u64,
     expected_execution_version: u64,
     expected_task_version: u64,
-    work_item_id: &str,
-    new_task_ids: &[String],
-    list_projection: &ApprovalInstanceListProjection,
-    audit: &entities::audit_log::AuditLog,
+    work_item_id: &'a str,
+    new_task_ids: &'a [String],
+    list_projection: &'a ApprovalInstanceListProjection,
+    audit: &'a entities::audit_log::AuditLog,
     now: Instant,
-    actor_id: &str,
-    owner_role: &str,
-    owner_organization_id: &str,
-    subject_version: &str,
-    business_object_id: &str,
-    document_type_label: &str,
-    document_no: &str,
-    submitted_by: &str,
-    ended_execution: &ApprovalNodeExecution,
-    reject_reason: Option<&str>,
-    runtime_admin_ids: &[String],
+    actor_id: &'a str,
+    owner_role: &'a str,
+    owner_organization_id: &'a str,
+    subject_version: &'a str,
+    business_object_id: &'a str,
+    document_type_label: &'a str,
+    document_no: &'a str,
+    submitted_by: &'a str,
+    ended_execution: &'a ApprovalNodeExecution,
+    reject_reason: Option<&'a str>,
+    runtime_admin_ids: &'a [String],
+}
+
+/// 单事务应用决定写入：实例 CAS 推进、执行结束/插入、审批人绑定、任务
+/// 完成/关闭/新建、通知 outbox 与审计。
+///
+/// # 用途
+/// 在调用方已写入命令收据后，持久化决定计划的全部领域副作用。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 计划、版本守卫、任务与通知事实
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 全部写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// CAS 冲突、任务缺失、通知意图非法或仓储写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 命令收据必须由调用方先写入以仲裁并发；本函数不再重复写收据。
+async fn persist_decision_writes(
+    db: &Database,
+    input: PersistDecisionWrites<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let PersistDecisionWrites {
+        writes,
+        ended_execution_id,
+        expected_instance_version,
+        expected_execution_version,
+        expected_task_version,
+        work_item_id,
+        new_task_ids,
+        list_projection,
+        audit,
+        now,
+        actor_id,
+        owner_role,
+        owner_organization_id,
+        subject_version,
+        business_object_id,
+        document_type_label,
+        document_no,
+        submitted_by,
+        ended_execution,
+        reject_reason,
+        runtime_admin_ids,
+    } = input;
     // 实例 CAS 推进（RUNNING|BLOCKED + 当前执行不变式）。期望版本为加载时的
     // 持久化版本（引擎计划内的版本已在快照上自增），未应用视为并发冲突。
     let expected_current_execution_id = ApprovalNodeExecutionId::new(ended_execution_id);

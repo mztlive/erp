@@ -19,9 +19,6 @@ mod apply_scope;
 mod failed_retry;
 mod supersede_batch;
 
-#[allow(unused_imports)]
-pub use apply_scope::LegacyImportApplyScope;
-
 use entities::common::time::BusinessDate;
 use entities::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchId,

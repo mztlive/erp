@@ -2,9 +2,9 @@ use database::{AccessControlExt, NoTransaction, SupplierFulfillmentExt, Transact
 use entities::common::time::Instant;
 use entities::ids::SupplierOrderStatusHistoryId;
 use entities::supplier_fulfillment::{
-    FulfillmentStatus, SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionStatus,
-    SupplierOrderActionType, SupplierOrderActionUpdate, SupplierOrderStatusHistory,
-    SupplierOrderStatusHistoryData,
+    FulfillmentStatus, SupplierCallbackParams, SupplierFulfillmentOrderId, SupplierOrderAction,
+    SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderActionUpdate,
+    SupplierOrderStatusHistory, SupplierOrderStatusHistoryData,
 };
 use id_generator::next_id;
 use validator::Validate;
@@ -54,16 +54,16 @@ impl SupplierFulfillmentService {
         order.advance_fulfillment(FulfillmentStatus::Rejected)?;
         let history = SupplierOrderStatusHistory::new(
             SupplierOrderStatusHistoryId::new(next_id()),
-            SupplierOrderStatusHistoryData::supplier_callback(
-                SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+            SupplierOrderStatusHistoryData::supplier_callback(SupplierCallbackParams {
+                order_id: SupplierFulfillmentOrderId::new(order.base.id.as_str()),
                 connection_id,
-                previous,
-                FulfillmentStatus::Rejected,
-                req.supplier_status_version.clone(),
-                Instant::from_unix_secs(req.occurred_at),
-                Instant::now(),
-                req.external_event_id.clone(),
-            ),
+                previous_status: previous,
+                new_status: FulfillmentStatus::Rejected,
+                supplier_status_version: req.supplier_status_version.clone(),
+                occurred_at: Instant::from_unix_secs(req.occurred_at),
+                received_at: Instant::now(),
+                external_event_id: req.external_event_id.clone(),
+            }),
         )?;
         let mut action = self.latest_place_action(id).await?;
         action.update(SupplierOrderActionUpdate {

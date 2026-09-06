@@ -98,22 +98,41 @@ pub fn apply_qualification_input(
     Ok(())
 }
 
+/// 创建新资质及关联的输入参数。
+#[derive(Debug)]
+pub struct NewQualificationParams<'a> {
+    /// 供应商角色 ID。
+    pub supplier_id: &'a SupplierAccountId,
+    /// 资质类型。
+    pub qualification_type: crate::supplier::QualificationType,
+    /// 证书编号。
+    pub certificate_no: String,
+    /// 发证机构。
+    pub issuer: Option<String>,
+    /// 生效日。
+    pub valid_from: BusinessDate,
+    /// 失效日。
+    pub valid_to: Option<BusinessDate>,
+    /// 附件。
+    pub attachment_id: Option<crate::ids::FileAssetId>,
+    /// 适用能力代码。
+    pub capability_codes: &'a [CapabilityCode],
+    /// 能力代码到稳定 ID 的映射。
+    pub capability_ids: &'a std::collections::HashMap<String, SupplierCapabilityId>,
+    /// 操作人 ID。
+    pub actor_id: &'a str,
+    /// 新资质主键。
+    pub qualification_id: SupplierQualificationId,
+    /// 首版修订主键。
+    pub revision_id: SupplierQualificationRevisionId,
+    /// 待创建关联主键列表，按 `capability_codes` 顺序一一对应。
+    pub link_ids: Vec<SupplierQualificationCapabilityId>,
+}
+
 /// 创建一份新资质、首版快照及适用能力关联的领域组装数据。
 ///
 /// # 参数
-/// * `supplier_id` - 供应商角色 ID
-/// * `qualification_type` - 资质类型
-/// * `certificate_no` - 证书编号
-/// * `issuer` - 发证机构
-/// * `valid_from` - 生效日
-/// * `valid_to` - 失效日
-/// * `attachment_id` - 附件
-/// * `capability_codes` - 适用能力代码
-/// * `capability_ids` - 能力代码到稳定 ID 的映射
-/// * `actor_id` - 操作人 ID
-/// * `qualification_id` - 新资质主键
-/// * `revision_id` - 首版修订主键
-/// * `link_ids` - 待创建关联主键列表，按 `capability_codes` 顺序一一对应
+/// * `params` - 供应商、资质字段、能力映射与新建身份
 ///
 /// # 返回
 /// 返回 `(Qualification, Revision, Links)`，修订号固定为 1。
@@ -123,26 +142,28 @@ pub fn apply_qualification_input(
 ///
 /// # 约束
 /// 纯内存，不触及 DB；`supplier_id` 与 `capability_ids` 由 Service 保证为当前有效能力。
-#[allow(clippy::too_many_arguments)]
 pub fn new_qualification(
-    supplier_id: &SupplierAccountId,
-    qualification_type: crate::supplier::QualificationType,
-    certificate_no: String,
-    issuer: Option<String>,
-    valid_from: BusinessDate,
-    valid_to: Option<BusinessDate>,
-    attachment_id: Option<crate::ids::FileAssetId>,
-    capability_codes: &[CapabilityCode],
-    capability_ids: &std::collections::HashMap<String, SupplierCapabilityId>,
-    actor_id: &str,
-    qualification_id: SupplierQualificationId,
-    revision_id: SupplierQualificationRevisionId,
-    link_ids: Vec<SupplierQualificationCapabilityId>,
+    params: NewQualificationParams<'_>,
 ) -> crate::Result<(
     SupplierQualification,
     SupplierQualificationRevision,
     Vec<SupplierQualificationCapability>,
 )> {
+    let NewQualificationParams {
+        supplier_id,
+        qualification_type,
+        certificate_no,
+        issuer,
+        valid_from,
+        valid_to,
+        attachment_id,
+        capability_codes,
+        capability_ids,
+        actor_id,
+        qualification_id,
+        revision_id,
+        link_ids,
+    } = params;
     if capability_codes.len() != link_ids.len() {
         return Err(crate::Error::from("资质适用能力与关联 ID 数量不一致"));
     }

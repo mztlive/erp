@@ -1,7 +1,6 @@
 use config::{Config, SafeConfig};
 use mongodb::Database;
 use serde::Serialize;
-use services::approval::definition::ApprovalDefinitionService;
 use services::approval::execution::ApprovalRuntimeService;
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
@@ -123,7 +122,6 @@ pub struct AppState {
     rbac: SharedRbacService,
     storage: Arc<S3Storage>,
     sensitive_data: Arc<SensitiveDataCodec>,
-    approval_definition: Arc<ApprovalDefinitionService>,
     approval_runtime_service: Arc<ApprovalRuntimeService>,
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
     external_connectors: ExternalConnectorPorts,
@@ -154,7 +152,6 @@ impl AppState {
             config.snapshot().app.secret.as_bytes(),
         ));
         let rbac = services::iam::shared_rbac_service(db.clone());
-        let approval_definition = Arc::new(ApprovalDefinitionService::new(db.clone(), Arc::clone(&rbac)));
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_action_port(
             db.clone(),
@@ -169,7 +166,6 @@ impl AppState {
             rbac,
             storage: Arc::new(storage),
             sensitive_data,
-            approval_definition,
             approval_runtime_service,
             approval_outbox,
             external_connectors,

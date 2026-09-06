@@ -413,7 +413,7 @@ mod tests {
     use crate::sales_order::snapshot::HeaderSnapshotData;
     use crate::sales_order::{CommercialStatus, LineType, ProcurementCoverageSummary, RevisionSource};
     use crate::supplier_offering::{
-        AvailabilityStatus, OfferingSourceType, PrefillSourceRefs, SupplierOffering,
+        AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, PrefillSourceRefs, SupplierOffering,
         SupplierOfferingAvailability, SupplierOfferingAvailabilityData, SupplierOfferingData,
         SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
@@ -540,28 +540,28 @@ mod tests {
     ) -> SupplierOfferingRevision {
         SupplierOfferingRevision::new(
             SupplierOfferingRevisionId::new(format!("offrev-{offering_id}")),
-            SupplierOfferingRevisionData::from_gross_prices(
-                SupplierOfferingId::new(offering_id),
-                1,
-                UnitPrice::from_str("6").unwrap(),
-                UnitPrice::from_str("5").unwrap(),
-                Rate::from_str("0.13").unwrap(),
-                None,
-                None,
-                None,
-                Quantity::from_str("1").unwrap(),
-                vec!["全国".to_string()],
-                Vec::new(),
-                crate::common::time::BusinessDate::from_str(valid_from).unwrap(),
-                valid_to.map(|value| crate::common::time::BusinessDate::from_str(value).unwrap()),
-                PrefillSourceRefs {
+            SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+                supplier_offering_id: SupplierOfferingId::new(offering_id),
+                revision_no: 1,
+                dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
+                bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
+                input_tax_rate: Rate::from_str("0.13").unwrap(),
+                dropship_express: None,
+                freight_amount: None,
+                service_fee_amount: None,
+                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+                supply_region: vec!["全国".to_string()],
+                product_capabilities: Vec::new(),
+                valid_from: crate::common::time::BusinessDate::from_str(valid_from).unwrap(),
+                valid_to: valid_to.map(|value| crate::common::time::BusinessDate::from_str(value).unwrap()),
+                prefill_source_refs: PrefillSourceRefs {
                     input_tax_rate: None,
                     supply_region: None,
                     valid_from_date: None,
                     valid_from_timezone: None,
                     valid_from_calendar_version: None,
                 },
-            ),
+            }),
         )
         .unwrap()
     }

@@ -16,12 +16,13 @@ use mongodb::Database;
 use super::super::authorization::{converge_eligibility, hidden_forbidden, requires_blocked_cancel};
 use super::super::idempotency::{
     cancel_blocked_identity, command_may_have_committed, command_recovery_delay,
-    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error, ReceiptBranch,
+    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
+    CancelBlockedIdentityParams, ReceiptBranch,
 };
 use super::super::runtime_query::{recovery_options_for, RuntimeRecoveryAction};
 use super::super::view::{map_command_view, ApprovalCommandView};
 use super::super::{prepare_cancel, CancelExecutionInput, ExecutionCommandInput, PreparedExecution};
-use super::notifications::persist_cancel_notifications;
+use super::notifications::{persist_cancel_notifications, CancelNotificationFacts};
 use super::read_auth::runtime_object_readable;
 use super::{
     ensure_command_actor, ensure_expected_version, find_receipt_for_identity, hidden_not_found,
@@ -31,7 +32,7 @@ use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationCont
 use crate::approval::{
     approval_actor_is_active_with_executor, approval_cancel_blocked_scope_with_executor,
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
-    ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort,
+    ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -204,16 +205,16 @@ async fn replay_cancel_blocked_in_transaction(
     let Some(terminal_facts) = terminal_facts else {
         return Ok(None);
     };
-    let identity = cancel_blocked_identity(
-        idempotency_key.clone(),
-        &command.approval_process_instance_id,
-        terminal_facts.blocker.as_str(),
-        command.expected_instance_version,
-        command.expected_execution_version,
-        command.expected_task_version,
-        &command.reason,
-        actor.id(),
-    )?;
+    let identity = cancel_blocked_identity(CancelBlockedIdentityParams {
+        idempotency_key: idempotency_key.clone(),
+        instance_id: &command.approval_process_instance_id,
+        blocker: terminal_facts.blocker.as_str(),
+        expected_instance_version: command.expected_instance_version,
+        expected_execution_version: command.expected_execution_version,
+        expected_task_version: command.expected_task_version,
+        reason: &command.reason,
+        actor_id: actor.id(),
+    })?;
     let Some(receipt) = find_receipt_for_identity(db, &identity, session).await? else {
         return Ok(None);
     };
@@ -445,17 +446,17 @@ async fn cancel_blocked_in_transaction(
         return Err(Error::Internal("新受阻取消命令不得进入幂等回放分支".to_string()));
     };
     let writes = *writes;
-    let action_context = ApprovalActionContext::for_blocked_cancel(
-        command.approval_process_instance_id.clone(),
-        current.base.id.clone(),
-        None,
-        document_type.as_str(),
-        snapshot.business_object_id.clone(),
-        snapshot.subject_version.to_string(),
-        actor.id(),
-        command.reason.clone(),
-        command.idempotency_key.clone(),
-    )?;
+    let action_context = ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {
+        approval_process_instance_id: command.approval_process_instance_id.clone(),
+        approval_node_execution_id: current.base.id.clone(),
+        work_item_id: None,
+        business_object_type: document_type.as_str().to_string(),
+        business_object_id: snapshot.business_object_id.clone(),
+        subject_version: snapshot.subject_version.to_string(),
+        actor_id: actor.id().to_string(),
+        reason: command.reason.clone(),
+        idempotency_key: command.idempotency_key.clone(),
+    })?;
     let audit = actor.clone().resource_log_with_message(
         "approval.cancel_blocked",
         "approval_process_instance",
@@ -476,12 +477,14 @@ async fn cancel_blocked_in_transaction(
     persist_cancel_notifications(
         db,
         &writes,
-        &snapshot.payload.submitted_by,
-        actor.id(),
-        document_type.label(),
-        &snapshot.payload.document_no,
-        &current.node_name,
-        &current.assignee_name_snapshot,
+        CancelNotificationFacts {
+            submitted_by: &snapshot.payload.submitted_by,
+            actor_id: actor.id(),
+            document_type_label: document_type.label(),
+            document_no: &snapshot.payload.document_no,
+            current_node_name: &current.node_name,
+            current_approver_display_name: &current.assignee_name_snapshot,
+        },
         now,
         session,
     )
