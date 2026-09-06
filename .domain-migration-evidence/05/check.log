@@ -1,8 +1,9 @@
 === check ===
 command: cargo check --workspace --locked
 cwd: /Users/huangjiajiang/Development/erp/backend
-started: 2026-09-06T20:20:22Z
+started: 2026-09-06T21:16:38Z
     Checking erp-supplier v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-supplier)
+    Checking erp-party v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-party)
     Checking entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
     Checking database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
     Checking test-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/test-support)
@@ -11,8 +12,8 @@ started: 2026-09-06T20:20:22Z
     Checking erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
     Checking cli v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/cli)
     Checking web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.32s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.99s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 check_exit=0
-finished: 2026-09-06T20:20:33Z
+finished: 2026-09-06T21:16:46Z

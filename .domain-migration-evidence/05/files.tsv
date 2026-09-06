@@ -397,3 +397,6 @@ modify	backend/services/src/supplier_fulfillment/query.rs	phase 05 unique-cut / 
 modify	backend/services/src/supplier_offering/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/funds_document_brief/query.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-party/src/indexes/party.rs	coverage repair: restore DuplicatePartyId and env-gated PROC-R10 tests with local fixtures; no test-support back-edge；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-supplier/src/repository/supplier/bundle/mod.rs	coverage repair: re-mod proc_supplier_io_mongo_tests；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs	coverage repair: restore source-map phase=05 mongo tests with local fixtures; keep ERP_TEST_MONGO_URI ignore gates；禁止标记已验收；真实数据库运行未验证

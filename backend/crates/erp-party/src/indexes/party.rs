@@ -275,3 +275,236 @@ mod tests {
         }));
     }
 }
+
+/// PROC-R10 主体业务主键索引的真实 MongoDB 验收（隔离库，Quality 单独执行）。
+#[cfg(test)]
+mod proc_r10_mongo_tests {
+    use mongodb::bson::{doc, Document};
+    use serde::Deserialize;
+
+    use super::{ensure, PARTIES};
+
+    /// 按随机库名连接并创建、`Drop` 时清理的本地测试库夹具。
+    ///
+    /// 不依赖 `test-support`，避免领域 crate 对旧夹具 crate 形成 dev 回边。
+    struct TestDb {
+        client: mongodb::Client,
+        db: mongodb::Database,
+        name: String,
+    }
+
+    impl TestDb {
+        /// 创建独立测试数据库。
+        ///
+        /// # 参数
+        /// * `prefix` - 数据库名前缀，仅保留字母数字与 `-`/`_`，超长截断
+        ///
+        /// # 返回值
+        /// 返回连接并创建完成（含标记集合）的测试数据库夹具。
+        ///
+        /// # 错误
+        /// `ERP_TEST_MONGO_URI` 未设置或 MongoDB 连接/建库失败时返回错误。
+        async fn new(prefix: &str) -> mongodb::error::Result<Self> {
+            let uri = std::env::var("ERP_TEST_MONGO_URI").unwrap_or_default();
+            let client = mongodb::Client::with_uri_str(&uri).await?;
+            let sanitized: String = prefix
+                .chars()
+                .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+                .take(32)
+                .collect();
+            let prefix = if sanitized.is_empty() {
+                "test".to_string()
+            } else {
+                sanitized
+            };
+            let name = format!("{prefix}_{}", &mongodb::bson::oid::ObjectId::new().to_hex()[..8]);
+            let db = client.database(&name);
+            db.create_collection("_fixture").await?;
+            Ok(Self { client, db, name })
+        }
+
+        /// 返回数据库实例引用。
+        fn db(&self) -> &mongodb::Database {
+            &self.db
+        }
+    }
+
+    impl Drop for TestDb {
+        fn drop(&mut self) {
+            let client = self.client.clone();
+            let name = self.name.clone();
+            std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+                let Ok(runtime) = runtime else { return };
+                let _ = runtime.block_on(async move { client.database(&name).drop().await });
+            });
+        }
+    }
+
+    /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
+    fn mongo_env_present() -> bool {
+        std::env::var("ERP_TEST_MONGO_URI")
+            .map(|uri| !uri.trim().is_empty())
+            .unwrap_or(false)
+    }
+
+    /// 需要真实 MongoDB 的集成测试门控宏。
+    ///
+    /// `ERP_TEST_MONGO_URI` 缺失或为空时打印跳过原因并从当前测试函数 `return`。
+    macro_rules! require_mongo {
+        (async $body:block) => {{
+            if mongo_env_present() {
+                (async $body).await
+            } else {
+                ::std::eprintln!(
+                    "SKIP: ERP_TEST_MONGO_URI 未设置（需要 mongo:7 单节点副本集），已跳过 MongoDB 集成测试: {}",
+                    ::std::module_path!()
+                );
+                return;
+            }
+        }};
+    }
+
+    /// 重复 `id` 审计行。
+    #[derive(Debug, Deserialize, PartialEq, Eq)]
+    struct DuplicatePartyId {
+        /// 重复的业务主键。
+        id: String,
+        /// 该主键出现次数。
+        count: i64,
+    }
+
+    /// 插入仅携带索引相关字段的主体原始文档。
+    ///
+    /// # 参数
+    /// * `db` - 隔离测试库
+    /// * `id` - 业务主键（可故意重复）
+    /// * `party_no` - 主体编号（保持唯一，避免干扰其他唯一索引）
+    ///
+    /// # 错误
+    /// 写入失败时 panic。
+    async fn insert_raw_party(db: &mongodb::Database, id: &str, party_no: &str) {
+        db.collection::<Document>(PARTIES)
+            .insert_one(doc! { "id": id, "party_no": party_no })
+            .await
+            .expect("原始主体写入失败");
+    }
+
+    /// 按 `id` 分组审计重复值，与部署前检查共用同一语义。
+    ///
+    /// # 参数
+    /// * `db` - 隔离测试库
+    ///
+    /// # 返回
+    /// 按 `id` 字典序排列的重复主键及出现次数。
+    ///
+    /// # 错误
+    /// 聚合执行失败时 panic。
+    async fn audit_duplicate_party_ids(db: &mongodb::Database) -> Vec<DuplicatePartyId> {
+        let mut cursor = db
+            .collection::<Document>(PARTIES)
+            .aggregate(vec![
+                doc! { "$group": { "_id": "$id", "count": { "$sum": 1 } } },
+                doc! { "$match": { "count": { "$gt": 1 } } },
+                doc! { "$sort": { "_id": 1 } },
+                doc! { "$project": { "_id": 0, "id": "$_id", "count": 1 } },
+            ])
+            .with_type::<DuplicatePartyId>()
+            .await
+            .expect("重复审计聚合失败");
+        let mut duplicates = Vec::new();
+        while cursor.advance().await.expect("重复审计游标读取失败") {
+            duplicates.push(cursor.deserialize_current().expect("重复审计反序列化失败"));
+        }
+        duplicates
+    }
+
+    /// 重复 `id` 必须先被审计报出，再拒绝索引迁移并输出冲突索引诊断。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库。
+    ///
+    /// # 返回
+    /// 审计命中重复主键且迁移失败关闭时通过。
+    ///
+    /// # 错误
+    /// 审计漏报或迁移未拒绝时测试失败。
+    ///
+    /// # 约束
+    /// 仅验证 `parties` 集合；`#[ignore]` 由 Quality 在隔离副本集执行。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn duplicate_party_ids_are_audited_and_refuse_migration() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_r10_party_id_dup")
+                .await
+                .expect("测试数据库创建失败");
+            insert_raw_party(fixture.db(), "dup-1", "P-DUP-1").await;
+            insert_raw_party(fixture.db(), "dup-1", "P-DUP-2").await;
+
+            let duplicates = audit_duplicate_party_ids(fixture.db()).await;
+            assert_eq!(
+                duplicates,
+                vec![DuplicatePartyId {
+                    id: "dup-1".to_string(),
+                    count: 2
+                }],
+                "部署前审计必须报出重复 id"
+            );
+
+            let err = ensure(fixture.db()).await.expect_err("重复 id 必须拒绝建索引");
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("uk_parties_id"),
+                "诊断必须包含冲突索引名：{rendered}"
+            );
+        });
+    }
+
+    /// `id $in` 批量查询的执行计划必须命中唯一索引且无集合扫描。
+    ///
+    /// # 参数
+    /// 无，内部创建隔离库。
+    ///
+    /// # 返回
+    /// `explain` 命中 `uk_parties_id` 的 `IXSCAN` 且无 `COLLSCAN` 时通过。
+    ///
+    /// # 错误
+    /// 索引未命中或出现集合扫描时测试失败。
+    ///
+    /// # 约束
+    /// 不使用 `hint`；`#[ignore]` 由 Quality 在隔离副本集执行。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn party_id_in_queries_use_unique_id_index() {
+        require_mongo!(async {
+            let fixture = TestDb::new("proc_r10_party_id_explain")
+                .await
+                .expect("测试数据库创建失败");
+            ensure(fixture.db()).await.expect("索引创建失败");
+            insert_raw_party(fixture.db(), "pty-1", "P-1").await;
+
+            let explain = fixture
+                .db()
+                .run_command(doc! {
+                    "explain": {
+                        "find": PARTIES,
+                        "filter": { "id": { "$in": ["pty-1", "pty-missing"] } },
+                    },
+                    "verbosity": "executionStats",
+                })
+                .await
+                .expect("主体 id 查询 explain 失败");
+            let rendered = format!("{explain:?}");
+            assert!(rendered.contains("IXSCAN"), "explain 未使用 IXSCAN：{rendered}");
+            assert!(
+                rendered.contains("uk_parties_id"),
+                "explain 未命中 uk_parties_id：{rendered}"
+            );
+            assert!(
+                !rendered.contains("COLLSCAN"),
+                "explain 出现 COLLSCAN：{rendered}"
+            );
+        });
+    }
+}

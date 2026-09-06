@@ -2,7 +2,7 @@
   "phase": "05",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": true,
+  "review_approved": false,
   "branch": "chore/domain-crate-05-party-customer-supplier",
   "evidence_dir": ".domain-migration-evidence/05",
   "input_head": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
@@ -82,18 +82,18 @@
     "web-api"
   ],
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T20:36:16Z",
+  "recorded_at": "2026-09-06T21:19:43Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
     "passed": 3281,
     "failed": 0,
-    "ignored": 62,
+    "ignored": 68,
     "crates": 24,
     "mongodb_started": false,
     "include_ignored": false,
     "log": ".domain-migration-evidence/05/unit-tests.log",
-    "source_log": "backend/logs/phase-05-qg-gates/04-test-lib.log"
+    "source_log": "backend/logs/phase-05-repair-gates/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -108,8 +108,8 @@
     "all_exit_0": true,
     "files_changed": [],
     "log": ".domain-migration-evidence/05/quality-gates.log",
-    "source_dir": "backend/logs/phase-05-qg-gates",
-    "summary": "Phase 05 public gates all passed from backend/. fmt --check, check --locked, clippy -D warnings, lib tests without Mongo, BPM/service/domain boundaries, permissions drift, and git diff --check each exited 0. Customer compile measurement passed (check median 6.070s, build median 11.899s). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+    "source_dir": "backend/logs/phase-05-repair-gates",
+    "summary": "Phase 05 coverage repair public gates all passed from backend/. Restored DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures, no test-support back-edge. fmt/check/clippy/lib tests without Mongo/BPM/service/domain/permissions/git-diff-check each exited 0. 3281 passed, 0 failed, 68 ignored. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
   },
   "contracts": {
     "admin_routes": 369,
@@ -174,5 +174,35 @@
       "summary": "Registered crates, unwired old mods, moved profile roots to erp-processes, wired AppState/handlers/indexes/callers."
     }
   ],
-  "implement_summary": "Phase 05 party/customer/supplier unique-cut and integrator wiring on chore/domain-crate-05-party-customer-supplier (implement 9838c29b). erp-party/erp-customer/erp-supplier own aggregates; customer_profile/supplier_profile hold root txns. Public gates passed (3281 lib tests, 0 failed, 62 ignored). Customer compile retest recorded. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+  "implement_summary": "Phase 05 coverage repair on chore/domain-crate-05-party-customer-supplier. Restored DuplicatePartyId plus env-gated party index audit/explain tests and proc_supplier_io_mongo_tests.rs with local Mongo fixtures (no test-support/dev back-edge). Public gates passed (3281 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证",
+  "coverage_repair": {
+    "restored_symbols": [
+      "DuplicatePartyId",
+      "insert_raw_party",
+      "audit_duplicate_party_ids",
+      "duplicate_party_ids_are_audited_and_refuse_migration",
+      "party_id_in_queries_use_unique_id_index",
+      "supplier_account",
+      "commercial_profile",
+      "capability",
+      "qualification",
+      "seed_supplier_io_fixture",
+      "list_input",
+      "bundle_ids",
+      "supplier_list_bundle_applies_all_prefilters_before_paging",
+      "supplier_detail_bundle_returns_batch_facts_and_missing_pointer_semantics",
+      "supplier_list_candidate_query_uses_index_without_collscan",
+      "supplier_bundles_see_same_session_writes"
+    ],
+    "restored_files": [
+      "backend/crates/erp-party/src/indexes/party.rs",
+      "backend/crates/erp-supplier/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs"
+    ],
+    "local_fixtures": true,
+    "no_test_support_back_edge": true,
+    "erp_test_mongo_uri_ignore_gates_kept": true,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "note": "source-map phase=05 party index DuplicatePartyId/mongo helpers and proc_supplier_io_mongo_tests.rs restored with local fixtures. party_with_revision is not restored because erp-supplier must not write party collections; keyword party-name hits use keyword_party_ids; detail bundle asserts party_id/commercial_party_ids. No deferral."
+  }
 }
