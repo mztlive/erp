@@ -88,11 +88,12 @@ pipeline {
                     set -eu
                     cd backend
                     cargo fmt --all -- --check
-                    cargo check --workspace
-                    cargo clippy --workspace --all-targets --all-features -- -D warnings
-                    cargo test --workspace
+                    cargo check --workspace --locked
+                    cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+                    env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
                     ./scripts/check-bpm-boundaries.sh
                     ./scripts/check-service-boundaries.sh
+                    ./scripts/check-domain-boundaries.sh
                     ./scripts/check-permissions-drift.sh
                 '''
             }
@@ -112,18 +113,9 @@ pipeline {
             }
         }
 
-        stage('P0 集成测试（需 MongoDB 副本集）') {
-            when {
-                environment name: 'ERP_TEST_MONGO_URI', value: '.*'
-            }
-            steps {
-                sh '''
-                    set -eu
-                    cd backend
-                    cargo test --workspace -- --include-ignored
-                '''
-            }
-        }
+        // 领域 crate 迁移阶段 00：P0 集成测试已按合同移除。
+        // 不再运行 cargo test --workspace -- --include-ignored，也不再启动真实 MongoDB。
+        // 单元测试仅保留 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib。
 
         stage('Build and push images') {
             steps {

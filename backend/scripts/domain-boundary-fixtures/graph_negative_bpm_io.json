@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "name": "bpm",
+      "deps": [
+        { "name": "mongodb", "kind": "normal" },
+        { "name": "axum", "kind": "build" }
+      ]
+    }
+  ]
+}

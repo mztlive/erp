@@ -1,0 +1,27 @@
+{
+  "scenario": "sales",
+  "mode": "check",
+  "revision": "baseline",
+  "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "valid_samples": 5,
+  "seconds": [
+    3.942499207914807,
+    3.8949399170232937,
+    3.9176285840803757,
+    3.9012910830788314,
+    3.9705619169399142
+  ],
+  "median_seconds": 3.9176285840803757,
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "measurement_passed": true,
+  "selected_package": "services",
+  "probe_path": "services/src/sales_order/command/identity.rs",
+  "warmup_untimed": true,
+  "restore_self_test": {
+    "passed": true,
+    "temporary_workspace": true,
+    "simulated_failure_restored": true,
+    "recovery_json_restore": true
+  }
+}

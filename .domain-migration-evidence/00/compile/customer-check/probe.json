@@ -1,0 +1,10 @@
+{
+  "id": "customer",
+  "path": "services/src/customer/profile/validation.rs",
+  "package": "services",
+  "symbol": "CustomerProfileFactInput for CustomerProfileContactInput::required_value",
+  "before": "self.mobile.as_deref()",
+  "after": "self.mobile.as_ref().map(String::as_str)",
+  "equivalence": "Option<String> 到 Option<&str> 的等价映射；覆盖 None、空串、非空 Unicode；纯校验实现保留在 erp-customer",
+  "sha256_before": "1e63e136caff3347b172250ce5539a13ca0f8890f26b9c7c2770bab11f827011"
+}

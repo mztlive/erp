@@ -1,0 +1,12 @@
+{
+  "packages": [
+    {
+      "name": "erp-sales",
+      "deps": [{ "name": "erp-finance", "kind": "normal" }]
+    },
+    {
+      "name": "erp-finance",
+      "deps": [{ "name": "erp-sales", "kind": "dev" }]
+    }
+  ]
+}

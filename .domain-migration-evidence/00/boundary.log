@@ -1,0 +1,27 @@
+=== bpm ===
+command: ./scripts/check-bpm-boundaries.sh
+start: 2026-09-06T05:23:06Z
+检查 BPM crate 与成员 manifest…
+检查 bpm 依赖图…
+检查 bpm 源码边界…
+检查 ID 定义源…
+检查 id_type 过程宏定义源…
+检查 DocumentType -> ProcessKind 映射入口…
+BPM 边界检查通过。
+exit: 0
+=== service ===
+command: ./scripts/check-service-boundaries.sh
+start: 2026-09-06T05:23:09Z
+Service 边界检查通过；当前基线共 0 个受控命中。
+exit: 0
+=== domain ===
+command: ./scripts/check-domain-boundaries.sh
+start: 2026-09-06T05:23:10Z
+领域边界检查
+夹具: errors=0
+工作区: errors=0
+  说明: planned domain crates not present; forbidden-edge contract loaded; current workspace has no instantiated domain isolation to certify
+  说明: cargo metadata 无 kind=test 集成目标
+  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
+领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+exit: 0

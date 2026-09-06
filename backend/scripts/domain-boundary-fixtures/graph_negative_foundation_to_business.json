@@ -1,0 +1,9 @@
+{
+  "packages": [
+    {
+      "name": "erp-core",
+      "deps": [{ "name": "erp-sales", "kind": "normal" }]
+    },
+    { "name": "erp-sales", "deps": [] }
+  ]
+}

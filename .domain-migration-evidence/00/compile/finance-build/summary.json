@@ -1,0 +1,27 @@
+{
+  "scenario": "finance",
+  "mode": "build",
+  "revision": "baseline",
+  "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "valid_samples": 5,
+  "seconds": [
+    9.39402683393564,
+    9.48780570900999,
+    9.417873458005488,
+    9.367313458002172,
+    9.45588720892556
+  ],
+  "median_seconds": 9.417873458005488,
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "measurement_passed": true,
+  "selected_package": "services",
+  "probe_path": "services/src/receivable/mapping.rs",
+  "warmup_untimed": true,
+  "restore_self_test": {
+    "passed": true,
+    "temporary_workspace": true,
+    "simulated_failure_restored": true,
+    "recovery_json_restore": true
+  }
+}

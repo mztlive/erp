@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 00 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | 治理/范围核验/最终验收，不创建空业务 crate |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-00-baseline`） |
+| 输入/输出提交 | `400ab4f7855255b284fe8a8e1caffe27acc96083` / 本阶段提交（见 `.domain-migration-evidence/00/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -75,19 +75,21 @@
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 从仓库根记录 git status --short、git diff --stat、暂存/未暂存差异和当前 HEAD。建立涵盖现有修改的可追溯迁移基线提交；不得自动 stash、reset 或提交不属于本任务的代码。重叠文件未有明确归属时只暂停重叠的代码迁移。
+1. [x] 从仓库根记录 git status --short、git diff --stat、暂存/未暂存差异和当前 HEAD。建立涵盖现有修改的可追溯迁移基线提交；不得自动 stash、reset 或提交不属于本任务的代码。重叠文件未有明确归属时只暂停重叠的代码迁移。
 
-2. [ ] 在独立地基修订中，为本迁移登记冻结文件的唯一集成负责人、00–17 阶段映射和阶段分支规则。旧 P1/P2/P3 owns 规则不用于绕过共享文件冻结；以后每阶段的注册变更与该阶段业务迁移一起验收。
+2. [x] 在独立地基修订中，为本迁移登记冻结文件的唯一集成负责人、00–17 阶段映射和阶段分支规则。旧 P1/P2/P3 owns 规则不用于绕过共享文件冻结；以后每阶段的注册变更与该阶段业务迁移一起验收。
 
-3. [ ] 用 cargo metadata 枚举所有成员 manifest。在 [package] 设置 autotests = false，并移除显式 [[test]] 注册；不修改既有 tests/ 文件，不关闭 [lib]、内联测试、二进制或检查规则。再次用 metadata 验证没有 kind=test 的集成目标。同步 Jenkinsfile 的测试命令。
+3. [x] 用 cargo metadata 枚举所有成员 manifest。在 [package] 设置 autotests = false，并移除显式 [[test]] 注册；不修改既有 tests/ 文件，不关闭 [lib]、内联测试、二进制或检查规则。再次用 metadata 验证没有 kind=test 的集成目标。同步 Jenkinsfile 的测试命令。
 
-4. [ ] 新增 scripts/check-domain-boundaries.sh 及其解析实现。输入为 cargo metadata 的真实依赖图、已验收阶段清单和 Rust 源码；必须覆盖依赖重命名、grouped use、pub use、路径别名与条件编译。新增至少一条对应每条规则的正/负夹具；纯 grep 计数不能作为依赖闭合证明。
+4. [x] 新增 scripts/check-domain-boundaries.sh 及其解析实现。输入为 cargo metadata 的真实依赖图、已验收阶段清单和 Rust 源码；必须覆盖依赖重命名、grouped use、pub use、路径别名与条件编译。新增至少一条对应每条规则的正/负夹具；纯 grep 计数不能作为依赖闭合证明。
 
-5. [ ] 新增 scripts/measure-incremental.py，严格实现 compile-measurement.md 的命令行、源文件恢复、无修改检查、预热、五次独立有效样本、Fresh/dirty 单元和中位数输出。脚本先在临时最小工作区验证失败恢复；不启动 web-api 或数据库。
+5. [x] 新增 scripts/measure-incremental.py，严格实现 compile-measurement.md 的命令行、源文件恢复、无修改检查、预热、五次独立有效样本、Fresh/dirty 单元和中位数输出。脚本先在临时最小工作区验证失败恢复；不启动 web-api 或数据库。
 
-6. [ ] 在专用基线 worktree，分别保存 Customer/Sales/Finance 的 check 与 build 样本。每组记录真实 rustc/cargo 版本、features、profile、存储路径、负载、两种补丁内容及哈希；保存构建日志和 timings 报告。无修改仍触发业务 crate 编译时先解决 fingerprint 原因。
+6. [x] 在专用基线 worktree，分别保存 Customer/Sales/Finance 的 check 与 build 样本。每组记录真实 rustc/cargo 版本、features、profile、存储路径、负载、两种补丁内容及哈希；保存构建日志和 timings 报告。无修改仍触发业务 crate 编译时先解决 fingerprint 原因。
 
-7. [ ] 按 execution-contract.md 记录 HTTP 路由/权限、JSON/BSON、索引定义、命令指纹、错误码及关键事务调用轨迹。为缺失的行为边界补纯内联测试，再执行公共门禁；将基线提交和完整证据登记到本阶段证据表。
+7. [x] 按 execution-contract.md 记录 HTTP 路由/权限、JSON/BSON、索引定义、命令指纹、错误码及关键事务调用轨迹。为缺失的行为边界补纯内联测试，再执行公共门禁；将基线提交和完整证据登记到本阶段证据表。
+
+- [ ] 人工将状态改为已验收。本阶段执行者不得勾选；最高状态为本地门禁通过。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -157,13 +159,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | HEAD `400ab4f7855255b284fe8a8e1caffe27acc96083`；分支 `chore/domain-crate-00-baseline`；source-map phase=00 行 0；owner_phase=00 行 0；`verify_plan.py --sources` passed | 已采集 `.domain-migration-evidence/00/input.json` |
+| 文件与符号 | 治理脚本/manifest/Jenkins/AGENTS；无业务符号搬迁；第 6 节入口调用方未改导入 | 已采集 `.domain-migration-evidence/00/files.tsv` |
+| 依赖 | 13 个成员；无 kind=test；尚无新领域 crate，禁止边合同已加载且未伪造隔离通过 | 已采集 `boundary.log` / cargo metadata |
+| 旧实现清零 | 本阶段不迁业务实现；无 façade、无第二实现 | 不适用（已记录） |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3262 passed / 0 failed / 71 ignored；exit 0 | 已执行 `unit-tests.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；154 个集合常量；金额 JSON 字符串 + BSON Decimal128 | 已采集 `contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、run_audited 写入顺序；真实数据库运行未验证 | 已采集 `transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `quality-gates.log` |
+| 编译收益 | Customer/Sales/Finance × check/build 各 5 个有效样本；noop Fresh；中位数已记录。改善率阈值不适用，待阶段 17 | 已执行 `compile/` |
+| 阶段提交 | 本地门禁通过后的阶段提交；禁止标记已验收 | 待写入本阶段 commit |

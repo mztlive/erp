@@ -2,6 +2,7 @@
 name = "permission-macros"
 version = "0.1.0"
 edition = "2021"
+autotests = false
 
 [lib]
 proc-macro = true

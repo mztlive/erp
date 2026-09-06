@@ -1,0 +1,30 @@
+{
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "executor": {
+    "file": "database/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden"
+  },
+  "transactional": {
+    "file": "database/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden"
+  },
+  "run_audited": {
+    "file": "services/src/transaction.rs",
+    "sha256": "f565ff20230bf487b5e62996aef9f2f19a77f3dee2d096d279885d3162e66839",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true
+  },
+  "source_contains_with_transaction": true
+}

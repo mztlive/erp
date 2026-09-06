@@ -1,0 +1,42 @@
+{
+  "packages": [
+    {
+      "name": "erp-core",
+      "deps": []
+    },
+    {
+      "name": "application-core",
+      "deps": [{ "name": "erp-core", "kind": "normal" }]
+    },
+    {
+      "name": "persistence-core",
+      "deps": [{ "name": "erp-core", "kind": "normal" }]
+    },
+    {
+      "name": "erp-customer",
+      "deps": [
+        { "name": "erp-core", "kind": "normal" },
+        { "name": "application-core", "kind": "normal" },
+        { "name": "persistence-core", "kind": "normal" }
+      ]
+    },
+    {
+      "name": "erp-sales",
+      "deps": [
+        { "name": "erp-core", "kind": "normal" },
+        { "name": "application-core", "kind": "normal" }
+      ]
+    },
+    {
+      "name": "erp-processes",
+      "deps": [
+        { "name": "erp-customer", "kind": "normal" },
+        { "name": "erp-sales", "kind": "normal" }
+      ]
+    },
+    {
+      "name": "bpm",
+      "deps": [{ "name": "entity-core", "kind": "normal" }]
+    }
+  ]
+}

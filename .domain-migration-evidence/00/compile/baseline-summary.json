@@ -1,0 +1,148 @@
+{
+  "phase": "00",
+  "revision": "baseline",
+  "input_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "isolated_worktree": "/private/tmp/erp-domain-crate-00-measure",
+  "performance_threshold_applies_at": "17",
+  "note": "阶段 00 只采集基线；改善率在阶段 17 用同一脚本复测。当前三场景均改 services，Sales/Finance 互不隔离是单体基线事实。",
+  "groups": [
+    {
+      "scenario": "customer",
+      "mode": "check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        4.027166708023287,
+        4.020657874993049,
+        3.941003125044517,
+        3.958196916966699,
+        4.053565292037092
+      ],
+      "median_seconds": 4.020657874993049,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/customer/profile/validation.rs"
+    },
+    {
+      "scenario": "customer",
+      "mode": "build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        9.589832124998793,
+        9.587874082964845,
+        9.4214145001024,
+        9.36479695898015,
+        9.451421375037171
+      ],
+      "median_seconds": 9.451421375037171,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/customer/profile/validation.rs"
+    },
+    {
+      "scenario": "sales",
+      "mode": "check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        3.942499207914807,
+        3.8949399170232937,
+        3.9176285840803757,
+        3.9012910830788314,
+        3.9705619169399142
+      ],
+      "median_seconds": 3.9176285840803757,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/sales_order/command/identity.rs"
+    },
+    {
+      "scenario": "sales",
+      "mode": "build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        9.391724042012356,
+        9.23231091699563,
+        9.144028541981243,
+        8.9944202080369,
+        9.169490083004348
+      ],
+      "median_seconds": 9.169490083004348,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/sales_order/command/identity.rs"
+    },
+    {
+      "scenario": "finance",
+      "mode": "check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        3.8880297080613673,
+        3.895839791977778,
+        3.9159282919717953,
+        3.9187827080022544,
+        3.900631625088863
+      ],
+      "median_seconds": 3.900631625088863,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/receivable/mapping.rs"
+    },
+    {
+      "scenario": "finance",
+      "mode": "build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "valid_samples": 5,
+      "seconds": [
+        9.39402683393564,
+        9.48780570900999,
+        9.417873458005488,
+        9.367313458002172,
+        9.45588720892556
+      ],
+      "median_seconds": 9.417873458005488,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "services",
+        "web-api"
+      ],
+      "selected_package": "services",
+      "probe_path": "services/src/receivable/mapping.rs"
+    }
+  ]
+}

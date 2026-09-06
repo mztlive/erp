@@ -1,0 +1,27 @@
+{
+  "scenario": "customer",
+  "mode": "build",
+  "revision": "baseline",
+  "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "valid_samples": 5,
+  "seconds": [
+    9.589832124998793,
+    9.587874082964845,
+    9.4214145001024,
+    9.36479695898015,
+    9.451421375037171
+  ],
+  "median_seconds": 9.451421375037171,
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "measurement_passed": true,
+  "selected_package": "services",
+  "probe_path": "services/src/customer/profile/validation.rs",
+  "warmup_untimed": true,
+  "restore_self_test": {
+    "passed": true,
+    "temporary_workspace": true,
+    "simulated_failure_restored": true,
+    "recovery_json_restore": true
+  }
+}

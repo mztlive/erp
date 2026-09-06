@@ -1,0 +1,37 @@
+{
+  "phase": "00",
+  "recorded_at": "2026-09-06T05:00:00+00:00",
+  "input_head": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "branch": "chore/domain-crate-00-baseline",
+  "git_at_start": {
+    "status_short": "?? .grok/workflows/migrate-domain-crates.rhai",
+    "diff_stat": "",
+    "staged_diff_stat": "",
+    "current_branch_before_checkout": "main",
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "verify_plan_sources": "passed",
+  "plan_manifest_inspected_head_at_planning": "b889b0a9ddca7bd42c135105fc7ab35cb382fbb0",
+  "source_map_phase_00_rows": 0,
+  "repository_types_owner_phase_00": 0,
+  "section_6_callers": [
+    "apps/cli/src/main.rs",
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/errors.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
+  "section_6_callers_change": "none; phase 00 does not move business symbols",
+  "workspace_member_count": 13,
+  "historical_tests_archives_byte_for_byte": true,
+  "note": "计划编制 HEAD 与源哈希不是执行基线。本阶段以当前 main HEAD 400ab4f 作为可追溯输入。"
+}

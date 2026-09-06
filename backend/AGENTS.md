@@ -32,8 +32,8 @@
 4. **HTTP 层**：在 `apps/web-api/src/core/handler` 新增 handler，默认必须复用 service DTO，禁止重复定义等价请求/响应类型；仅在 HTTP 形态差异时允许最小薄包装并实现 `From/Into`。
 5. **路由/权限**：将新接口挂到 `apps/web-api/src/core/routes`；管理员路由必须位于 `admin` 并走 JWT + RBAC；为 handler 添加 `#[permission_macros::permission(...)]`。
 6. **测试**：按“测试期望”覆盖维度新增单元测试（至少一个 happy-path，加失败/边界路径，尽量覆盖全面）；不新增集成测试。
-7. **检查**：执行 `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`./scripts/check-bpm-boundaries.sh`。
-8. **回归**：执行 `cargo test --workspace --lib`，确保变更无回归；不执行任何集成测试。
+7. **检查**：执行 `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-domain-boundaries.sh`。
+8. **回归**：执行 `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`，确保变更无回归；不执行任何集成测试。
 
 ## 编码约定
 
@@ -87,7 +87,7 @@
 - **迁移与验收要求**：
   - 下沉后必须删除原 Service 重复私有 helper，避免双份规则源。
   - 至少补充一条实体/值对象单元测试覆盖该规则（happy-path + 失败路径）。
-  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；不执行任何集成测试。
+  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-domain-boundaries.sh`；不执行任何集成测试。
 
 ## 性能优化约定（社区最佳实践）
 
@@ -112,8 +112,8 @@
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"`；`cargo run -p cli -- reset-password --account admin`。密码优先 `--password`，其次环境变量 `ERP_ADMIN_PASSWORD`，否则交互输入。
-- Workspace：`cargo build --workspace`、`cargo test --workspace --lib`（只跑单元测试，不执行任何集成测试）。
-- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；不执行任何集成测试。
+- Workspace：`cargo build --workspace`、`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`（只跑单元测试，不执行任何集成测试）。
+- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-domain-boundaries.sh`；不执行任何集成测试。
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。
 
 ## 测试期望
@@ -130,7 +130,7 @@
 
 ## CI 与质量门禁
 
-- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`；CI 不执行任何集成测试。
+- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-domain-boundaries.sh`；CI 不执行任何集成测试。
 - 任何生成文件（如权限定义）必须在 CI 中校验未漂移。
 
 ## API 契约与兼容性
@@ -1177,3 +1177,29 @@ erp-client/lib/query-client.ts
   （分支 `chore/erp-p0-amend-<主题>`）单独完成并合并，其他 worktree 随后
   rebase；一次地基修订只做一件事。
 - 出现共享文件冲突即说明有人越界：**回退越界改动**，不要在 PR 里手工解冲突。
+
+## 领域 Crate 迁移（00–17）
+
+本迁移通过独立地基修订登记所有权，**不得**用旧 P1/P2/P3 owns 规则绕过上方共享注册文件冻结清单。每个 00–17 阶段只有一名唯一集成负责人；该阶段的注册变更必须与该阶段业务迁移一并验收。
+
+### 唯一集成负责人可更新的共享注册文件
+
+仅限当前阶段唯一集成负责人修改，且必须落在该阶段执行文档内：
+
+- `backend/Cargo.toml` 与 `backend/Cargo.lock`
+- 旧三层根模块（`entities` / `database` / `services` 的 `src/lib.rs` 及为迁出符号所需的 `mod`）
+- 仓储工厂、`DatabaseExt` 与 `indexes` 注册
+- `apps/web-api` 的 `AppState`、根路由、错误映射、`build.rs` 权限生成入口
+- `apps/cli` 入口接线
+- `backend/scripts` 下的边界检查、增量编译测量与权限漂移脚本
+- 对应阶段文档与 `plan-manifest.json` 状态
+
+禁止修改 `erp-client` 业务源码。权限生成物仍由 `./scripts/check-permissions-drift.sh` 校验，不在本迁移中手改前端。
+
+### 阶段映射与分支
+
+- 分支命名：`chore/domain-crate-<阶段>-<主题>`，例如 `chore/domain-crate-00-baseline`、`chore/domain-crate-01-foundations`。不得伪装成 `feat/erp-<letter>-<batch>-<slug>` 等旧业务阶段分支。
+- 00 基线与执行治理；01 `erp-core` / `application-core` / `persistence-core`；02 身份与审计；03 工作流与 `erp-processes` / `erp-read-models`；04 通用支撑；05 主体/客户/供应商；06 商品/仓库/合同；07 导入；08 库存；09 财务；10 销售；11 采购；12 履约；13 退货；14 外部集成；15 商城范围核验；16 供应链；17 最终切换。
+- 状态只允许：未开始 → 执行中 → 本地门禁通过 → 已验收。执行者最高登记「本地门禁通过」，不得自行标记「已验收」。
+- 新基础/领域 crate 设置 `autotests = false`，不新增 `[[test]]`。历史 `tests/` 档案保持字节不变，不是 Cargo target。回归：`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`。
+- 迁出代码保留原注释；新写的拥有仓储、Port、Process 模块与脚本需要 rustdoc。不把 AccountCore / Role / AuditLog / WorkItem / SalesOrder 放入基础 crate。

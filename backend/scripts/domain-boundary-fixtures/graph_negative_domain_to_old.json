@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "name": "erp-customer",
+      "deps": [
+        { "name": "services", "kind": "normal" },
+        { "name": "entities", "kind": "dev" }
+      ]
+    }
+  ]
+}

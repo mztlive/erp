@@ -1,0 +1,70 @@
+{
+  "phase": "00",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "branch": "chore/domain-crate-00-baseline",
+  "input_head": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "unique_integration_owner": "chore/domain-crate-00-baseline implementer",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "workspace_members": 13,
+  "kind_test_targets": 0,
+  "autotests": false,
+  "unit_tests": {
+    "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+    "exit_code": 0,
+    "passed": 3262,
+    "failed": 0,
+    "ignored": 71,
+    "log": ".domain-migration-evidence/00/unit-tests.log"
+  },
+  "quality_gates": {
+    "fmt": 0,
+    "check": 0,
+    "clippy": 0,
+    "unit-tests": 0,
+    "bpm": 0,
+    "service": 0,
+    "domain": 0,
+    "permissions": 0,
+    "git-diff-check": 0,
+    "log": ".domain-migration-evidence/00/quality-gates.log"
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "error_codes": 21,
+    "indexes": 368,
+    "collection_constants": 154,
+    "dto_files": 32,
+    "comparison": ".domain-migration-evidence/00/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/00/transaction-contract.json"
+  },
+  "compile_baseline": {
+    "worktree": "/private/tmp/erp-domain-crate-00-measure",
+    "revision": "baseline",
+    "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+    "median_seconds": {
+      "customer-check": 4.020657874993049,
+      "customer-build": 9.451421375037171,
+      "sales-check": 3.9176285840803757,
+      "sales-build": 9.169490083004348,
+      "finance-check": 3.900631625088863,
+      "finance-build": 9.417873458005488
+    },
+    "noop_all_business_units_fresh": true,
+    "sample_dirty_packages": [
+      "services",
+      "web-api"
+    ],
+    "isolation_note": "基线仍为单体 services；Sales 修改会编译 Finance 所在同一 crate。结构隔离与 30% 改善率在阶段 17 判定。",
+    "reports": ".domain-migration-evidence/00/compile/"
+  },
+  "toolchain": {
+    "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+    "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
+    "host": "aarch64-apple-darwin",
+    "profile": "dev",
+    "codegen_backend": "cranelift (workspace packages)"
+  },
+  "phase_commit": "039fa49d8f1638d632c382ee992f61164c8450c6"
+}

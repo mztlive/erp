@@ -2,6 +2,7 @@
 name = "entity-core"
 version = "0.1.0"
 edition = "2021"
+autotests = false
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }

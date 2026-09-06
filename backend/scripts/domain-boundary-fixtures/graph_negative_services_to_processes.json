@@ -1,0 +1,8 @@
+{
+  "packages": [
+    {
+      "name": "services",
+      "deps": [{ "name": "erp-processes", "kind": "normal" }]
+    }
+  ]
+}

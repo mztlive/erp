@@ -1,0 +1,35 @@
+action	path	note
+modify	backend/AGENTS.md	独立地基修订：唯一集成负责人、00–17 映射、chore/domain-crate-<phase>-<theme>；保留「共享注册文件冻结清单」「测试期望」
+modify	backend/Jenkinsfile	cargo test --workspace --lib --locked；移除真实 MongoDB P0 集成测试阶段；保留「P0 质量门禁」「P0 集成测试」文案
+modify	backend/apps/cli/Cargo.toml	autotests = false
+modify	backend/apps/web-api/Cargo.toml	autotests = false
+modify	backend/config/Cargo.toml	autotests = false
+modify	backend/crates/bpm/Cargo.toml	autotests = false
+modify	backend/crates/entity-core/Cargo.toml	autotests = false
+modify	backend/crates/entity-macros/Cargo.toml	autotests = false
+modify	backend/crates/id-generator/Cargo.toml	autotests = false
+modify	backend/crates/permission-macros/Cargo.toml	autotests = false
+modify	backend/crates/storage/Cargo.toml	autotests = false
+modify	backend/crates/test-support/Cargo.toml	autotests = false
+modify	backend/database/Cargo.toml	autotests = false
+modify	backend/entities/Cargo.toml	autotests = false
+modify	backend/services/Cargo.toml	autotests = false
+add	backend/scripts/check-domain-boundaries.sh	领域边界入口
+add	backend/scripts/domain_boundaries.py	Cargo metadata + use 树解析实现
+add	backend/scripts/domain-boundary-fixtures/	每条规则正/负夹具
+add	backend/scripts/measure-incremental.py	compile-measurement.md 测量脚本
+add	backend/scripts/capture-domain-contract.py	HTTP/DTO/index/idempotency/error 黄金值采集
+add	.domain-migration-evidence/00/	阶段证据
+modify	backend/docs/superpowers/plans/domain-crate-migration/00-baseline.md	状态 执行中→本地门禁通过；任务核销
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 00 status
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 00 状态
+unchanged	backend/Cargo.toml	只记录原 workspace/profile.dev；不混入优化参数
+unchanged	backend/scripts/check-bpm-boundaries.sh	规则基线保留；权威路径仍为编制时路径
+unchanged	backend/scripts/check-service-boundaries.sh	旧 Service 检查与严格度保留
+unchanged	backend/apps/cli/src/main.rs	无业务符号迁移，不改导入
+unchanged	backend/apps/web-api/src/app_state.rs	无业务符号迁移，不改导入
+unchanged	backend/apps/web-api/src/core/errors.rs	无业务符号迁移，不改导入
+unchanged	backend/apps/web-api/src/lib.rs	无业务符号迁移，不改导入
+unchanged	backend/apps/web-api/src/main.rs	无业务符号迁移，不改导入
+unchanged	backend/**/tests/**	历史 tests/ 档案字节不变；autotests=false 后不再作为 Cargo target
+not-committed	.grok/workflows/migrate-domain-crates.rhai	无关未跟踪文件，未 stash/reset/提交

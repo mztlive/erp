@@ -2,6 +2,7 @@
 name = "storage"
 version = "0.1.0"
 edition = "2021"
+autotests = false
 
 [dependencies]
 aws-sdk-s3 = { workspace = true }
