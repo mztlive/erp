@@ -5,14 +5,16 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PartyExt>::PARTIES` 等值。
 
-use entities::party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile};
+use crate::repository::owned::{
+    PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
+    PartyRevisionRepository, PartyTaxProfileRepository,
+};
 use mongodb::Database;
 
 use super::super::party::{
-    PartyAddressFilter, PartyBankAccountFilter, PartyContactFilter, PartyFilter, PartyRepository,
+    PartyAddressFilter, PartyBankAccountFilter, PartyContactFilter, PartyDomainRepository, PartyFilter,
     PartyRevisionFilter, PartyTaxProfileFilter,
 };
-use crate::Repository;
 
 /// 域 D07 仓储访问器。
 pub trait PartyExt {
@@ -45,44 +47,44 @@ pub trait PartyExt {
     /// 获取 `party` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::Party>`。
-    fn parties(&self) -> Repository<'_, Party>;
+    /// 返回 `PartyRepository<'_>`。
+    fn parties(&self) -> PartyRepository<'_>;
 
     /// 获取 `party_revision` 集合的 Repository（追加式修订，无软删除）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::PartyRevision>`。
-    fn party_revisions(&self) -> Repository<'_, PartyRevision>;
+    /// 返回 `PartyRevisionRepository<'_>`。
+    fn party_revisions(&self) -> PartyRevisionRepository<'_>;
 
     /// 获取 `party_contact` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::PartyContact>`。
-    fn party_contacts(&self) -> Repository<'_, PartyContact>;
+    /// 返回 `PartyContactRepository<'_>`。
+    fn party_contacts(&self) -> PartyContactRepository<'_>;
 
     /// 获取 `party_address` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::PartyAddress>`。
-    fn party_addresses(&self) -> Repository<'_, PartyAddress>;
+    /// 返回 `PartyAddressRepository<'_>`。
+    fn party_addresses(&self) -> PartyAddressRepository<'_>;
 
     /// 获取 `party_tax_profile` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::PartyTaxProfile>`。
-    fn party_tax_profiles(&self) -> Repository<'_, PartyTaxProfile>;
+    /// 返回 `PartyTaxProfileRepository<'_>`。
+    fn party_tax_profiles(&self) -> PartyTaxProfileRepository<'_>;
 
     /// 获取 `party_bank_account` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::party::PartyBankAccount>`。
-    fn party_bank_accounts(&self) -> Repository<'_, PartyBankAccount>;
+    /// 返回 `PartyBankAccountRepository<'_>`。
+    fn party_bank_accounts(&self) -> PartyBankAccountRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
-    /// 返回 `PartyRepository` 实例。
-    fn party(&self) -> PartyRepository<'_>;
+    /// 返回 `PartyDomainRepository` 实例。
+    fn party(&self) -> PartyDomainRepository<'_>;
 }
 
 impl PartyExt for Database {
@@ -93,31 +95,31 @@ impl PartyExt for Database {
     type PartyTaxProfileFilter = PartyTaxProfileFilter;
     type PartyBankAccountFilter = PartyBankAccountFilter;
 
-    fn parties(&self) -> Repository<'_, Party> {
-        Repository::new(self, Self::PARTIES)
+    fn parties(&self) -> PartyRepository<'_> {
+        PartyRepository::new(self, Self::PARTIES)
     }
 
-    fn party_revisions(&self) -> Repository<'_, PartyRevision> {
-        Repository::new(self, Self::PARTY_REVISIONS)
+    fn party_revisions(&self) -> PartyRevisionRepository<'_> {
+        PartyRevisionRepository::new(self, Self::PARTY_REVISIONS)
     }
 
-    fn party_contacts(&self) -> Repository<'_, PartyContact> {
-        Repository::new(self, Self::PARTY_CONTACTS)
+    fn party_contacts(&self) -> PartyContactRepository<'_> {
+        PartyContactRepository::new(self, Self::PARTY_CONTACTS)
     }
 
-    fn party_addresses(&self) -> Repository<'_, PartyAddress> {
-        Repository::new(self, Self::PARTY_ADDRESSES)
+    fn party_addresses(&self) -> PartyAddressRepository<'_> {
+        PartyAddressRepository::new(self, Self::PARTY_ADDRESSES)
     }
 
-    fn party_tax_profiles(&self) -> Repository<'_, PartyTaxProfile> {
-        Repository::new(self, Self::PARTY_TAX_PROFILES)
+    fn party_tax_profiles(&self) -> PartyTaxProfileRepository<'_> {
+        PartyTaxProfileRepository::new(self, Self::PARTY_TAX_PROFILES)
     }
 
-    fn party_bank_accounts(&self) -> Repository<'_, PartyBankAccount> {
-        Repository::new(self, Self::PARTY_BANK_ACCOUNTS)
+    fn party_bank_accounts(&self) -> PartyBankAccountRepository<'_> {
+        PartyBankAccountRepository::new(self, Self::PARTY_BANK_ACCOUNTS)
     }
 
-    fn party(&self) -> PartyRepository<'_> {
-        PartyRepository::new(self)
+    fn party(&self) -> PartyDomainRepository<'_> {
+        PartyDomainRepository::new(self)
     }
 }

@@ -1,3 +1,4 @@
+use crate::repository::owned::PartyBankAccountRepository;
 use entities::party::{EffectiveRecordStatus, PartyBankAccount};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
@@ -5,10 +6,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{active_fact_filter, sort_doc};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 银行账户列表投影行。
 ///
@@ -94,7 +95,7 @@ impl Pagination for PartyBankAccountFilter {
     }
 }
 
-impl<'a> Repository<'a, PartyBankAccount> {
+impl<'a> PartyBankAccountRepository<'a> {
     /// 分页检索银行账户列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`bank_account_no`/`valid_from`），

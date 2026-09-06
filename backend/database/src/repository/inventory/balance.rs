@@ -1,3 +1,4 @@
+use crate::repository::owned::StockBalanceRepository;
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -10,9 +11,9 @@ use erp_core::money::Quantity;
 
 use super::shared::{active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_BALANCES};
-use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,7 +83,7 @@ impl Pagination for StockBalanceFilter {
     }
 }
 
-impl<'a> Repository<'a, StockBalance> {
+impl<'a> StockBalanceRepository<'a> {
     /// 分页检索库存余额列表（投影查询）。
     ///
     /// 只返回 [`StockBalanceRow`] 所需的列表字段，不加载整文档；排序字段走
@@ -499,9 +500,9 @@ fn stock_balance_projection() -> Document {
 #[cfg(test)]
 mod filter_tests {
     use super::{stock_balance_sort, StockBalanceFilter};
-    use crate::repository::QueryFilter;
     use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
+    use persistence_core::QueryFilter;
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {
         StockBalanceFilter {

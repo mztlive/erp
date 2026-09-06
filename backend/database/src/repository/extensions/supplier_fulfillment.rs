@@ -5,14 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ORDERS` 等值。
 
-use entities::supplier_fulfillment::{
-    SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierOrderAction, SupplierOrderActionLine,
-    SupplierOrderStatusHistory, SupplierRefundAllocation, SupplierRefundFact,
+use crate::repository::owned::{
+    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOrderActionLineRepository,
+    SupplierOrderActionRepository, SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository,
+    SupplierRefundFactRepository,
 };
 use mongodb::Database;
 
 use super::super::supplier_fulfillment::{SupplierFulfillmentOrderFilter, SupplierFulfillmentRepository};
-use crate::Repository;
 
 /// 域 D32 仓储访问器。
 pub trait SupplierFulfillmentExt {
@@ -37,44 +37,44 @@ pub trait SupplierFulfillmentExt {
     /// 获取 `supplier_fulfillment_order` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierFulfillmentOrder>`。
-    fn supplier_fulfillment_orders(&self) -> Repository<'_, SupplierFulfillmentOrder>;
+    /// 返回 `SupplierFulfillmentOrderRepository<'_>`。
+    fn supplier_fulfillment_orders(&self) -> SupplierFulfillmentOrderRepository<'_>;
 
     /// 获取 `supplier_fulfillment_item` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierFulfillmentItem>`。
-    fn supplier_fulfillment_items(&self) -> Repository<'_, SupplierFulfillmentItem>;
+    /// 返回 `SupplierFulfillmentItemRepository<'_>`。
+    fn supplier_fulfillment_items(&self) -> SupplierFulfillmentItemRepository<'_>;
 
     /// 获取 `supplier_order_action` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierOrderAction>`。
-    fn supplier_order_actions(&self) -> Repository<'_, SupplierOrderAction>;
+    /// 返回 `SupplierOrderActionRepository<'_>`。
+    fn supplier_order_actions(&self) -> SupplierOrderActionRepository<'_>;
 
     /// 获取 `supplier_order_action_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierOrderActionLine>`。
-    fn supplier_order_action_lines(&self) -> Repository<'_, SupplierOrderActionLine>;
+    /// 返回 `SupplierOrderActionLineRepository<'_>`。
+    fn supplier_order_action_lines(&self) -> SupplierOrderActionLineRepository<'_>;
 
     /// 获取 `supplier_order_status_history` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierOrderStatusHistory>`。
-    fn supplier_order_status_histories(&self) -> Repository<'_, SupplierOrderStatusHistory>;
+    /// 返回 `SupplierOrderStatusHistoryRepository<'_>`。
+    fn supplier_order_status_histories(&self) -> SupplierOrderStatusHistoryRepository<'_>;
 
     /// 获取 `supplier_refund_fact` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierRefundFact>`。
-    fn supplier_refund_facts(&self) -> Repository<'_, SupplierRefundFact>;
+    /// 返回 `SupplierRefundFactRepository<'_>`。
+    fn supplier_refund_facts(&self) -> SupplierRefundFactRepository<'_>;
 
     /// 获取 `supplier_refund_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_fulfillment::SupplierRefundAllocation>`。
-    fn supplier_refund_allocations(&self) -> Repository<'_, SupplierRefundAllocation>;
+    /// 返回 `SupplierRefundAllocationRepository<'_>`。
+    fn supplier_refund_allocations(&self) -> SupplierRefundAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -86,32 +86,32 @@ pub trait SupplierFulfillmentExt {
 impl SupplierFulfillmentExt for Database {
     type SupplierFulfillmentOrderFilter = SupplierFulfillmentOrderFilter;
 
-    fn supplier_fulfillment_orders(&self) -> Repository<'_, SupplierFulfillmentOrder> {
-        Repository::new(self, Self::SUPPLIER_FULFILLMENT_ORDERS)
+    fn supplier_fulfillment_orders(&self) -> SupplierFulfillmentOrderRepository<'_> {
+        SupplierFulfillmentOrderRepository::new(self, Self::SUPPLIER_FULFILLMENT_ORDERS)
     }
 
-    fn supplier_fulfillment_items(&self) -> Repository<'_, SupplierFulfillmentItem> {
-        Repository::new(self, Self::SUPPLIER_FULFILLMENT_ITEMS)
+    fn supplier_fulfillment_items(&self) -> SupplierFulfillmentItemRepository<'_> {
+        SupplierFulfillmentItemRepository::new(self, Self::SUPPLIER_FULFILLMENT_ITEMS)
     }
 
-    fn supplier_order_actions(&self) -> Repository<'_, SupplierOrderAction> {
-        Repository::new(self, Self::SUPPLIER_ORDER_ACTIONS)
+    fn supplier_order_actions(&self) -> SupplierOrderActionRepository<'_> {
+        SupplierOrderActionRepository::new(self, Self::SUPPLIER_ORDER_ACTIONS)
     }
 
-    fn supplier_order_action_lines(&self) -> Repository<'_, SupplierOrderActionLine> {
-        Repository::new(self, Self::SUPPLIER_ORDER_ACTION_LINES)
+    fn supplier_order_action_lines(&self) -> SupplierOrderActionLineRepository<'_> {
+        SupplierOrderActionLineRepository::new(self, Self::SUPPLIER_ORDER_ACTION_LINES)
     }
 
-    fn supplier_order_status_histories(&self) -> Repository<'_, SupplierOrderStatusHistory> {
-        Repository::new(self, Self::SUPPLIER_ORDER_STATUS_HISTORIES)
+    fn supplier_order_status_histories(&self) -> SupplierOrderStatusHistoryRepository<'_> {
+        SupplierOrderStatusHistoryRepository::new(self, Self::SUPPLIER_ORDER_STATUS_HISTORIES)
     }
 
-    fn supplier_refund_facts(&self) -> Repository<'_, SupplierRefundFact> {
-        Repository::new(self, Self::SUPPLIER_REFUND_FACTS)
+    fn supplier_refund_facts(&self) -> SupplierRefundFactRepository<'_> {
+        SupplierRefundFactRepository::new(self, Self::SUPPLIER_REFUND_FACTS)
     }
 
-    fn supplier_refund_allocations(&self) -> Repository<'_, SupplierRefundAllocation> {
-        Repository::new(self, Self::SUPPLIER_REFUND_ALLOCATIONS)
+    fn supplier_refund_allocations(&self) -> SupplierRefundAllocationRepository<'_> {
+        SupplierRefundAllocationRepository::new(self, Self::SUPPLIER_REFUND_ALLOCATIONS)
     }
 
     fn supplier_fulfillment(&self) -> SupplierFulfillmentRepository<'_> {

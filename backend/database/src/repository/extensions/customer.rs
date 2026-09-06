@@ -5,11 +5,12 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS` 等值。
 
-use entities::customer::{CustomerAccount, CustomerAssignment, CustomerProfileCommand};
+use crate::repository::owned::{
+    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
+};
 use mongodb::Database;
 
 use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter};
-use crate::Repository;
 
 /// 域 D08 仓储访问器。
 pub trait CustomerExt {
@@ -28,35 +29,35 @@ pub trait CustomerExt {
     /// 获取 `customer_account` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::customer::CustomerAccount>`。
-    fn customer_accounts(&self) -> Repository<'_, CustomerAccount>;
+    /// 返回 `CustomerAccountRepository<'_>`。
+    fn customer_accounts(&self) -> CustomerAccountRepository<'_>;
 
     /// 获取 `customer_assignment` 集合的 Repository（按有效期的归属事实行）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::customer::CustomerAssignment>`。
-    fn customer_assignments(&self) -> Repository<'_, CustomerAssignment>;
+    /// 返回 `CustomerAssignmentRepository<'_>`。
+    fn customer_assignments(&self) -> CustomerAssignmentRepository<'_>;
 
     /// 获取客户资料根级命令去重仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, CustomerProfileCommand>`。
-    fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand>;
+    /// 返回 `CustomerProfileCommandRepository<'_>`。
+    fn customer_profile_commands(&self) -> CustomerProfileCommandRepository<'_>;
 }
 
 impl CustomerExt for Database {
     type CustomerAccountFilter = CustomerAccountFilter;
     type CustomerAssignmentFilter = CustomerAssignmentFilter;
 
-    fn customer_accounts(&self) -> Repository<'_, CustomerAccount> {
-        Repository::new(self, Self::CUSTOMER_ACCOUNTS)
+    fn customer_accounts(&self) -> CustomerAccountRepository<'_> {
+        CustomerAccountRepository::new(self, Self::CUSTOMER_ACCOUNTS)
     }
 
-    fn customer_assignments(&self) -> Repository<'_, CustomerAssignment> {
-        Repository::new(self, Self::CUSTOMER_ASSIGNMENTS)
+    fn customer_assignments(&self) -> CustomerAssignmentRepository<'_> {
+        CustomerAssignmentRepository::new(self, Self::CUSTOMER_ASSIGNMENTS)
     }
 
-    fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand> {
-        Repository::new(self, Self::CUSTOMER_PROFILE_COMMANDS)
+    fn customer_profile_commands(&self) -> CustomerProfileCommandRepository<'_> {
+        CustomerProfileCommandRepository::new(self, Self::CUSTOMER_PROFILE_COMMANDS)
     }
 }

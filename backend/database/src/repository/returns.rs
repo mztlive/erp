@@ -10,6 +10,11 @@
 //! 类型对外暴露（`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加
 //! re-export）。
 
+use crate::repository::owned::{
+    CustomerRefundRepository, PaymentReversalRepository, PurchaseReturnLineRepository,
+    PurchaseReturnOrderRepository, ReceiptReversalRepository, SalesReturnCaseRepository,
+    SalesReturnLineRepository, SupplierRefundRepository,
+};
 use entities::returns::{
     CaseType, CustomerRefund, CustomerRefundStatus, PaymentReversal, PurchaseReturnLine, PurchaseReturnOrder,
     PurchaseReturnStatus, ReceiptReversal, ReturnMode, ReturnRoute, SalesReturnCase, SalesReturnCaseStatus,
@@ -27,10 +32,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::ReturnsExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 #[path = "returns_posted_totals.rs"]
 mod posted_totals;
@@ -272,7 +277,7 @@ impl Pagination for CustomerRefundFilter {
     }
 }
 
-impl<'a> Repository<'a, SalesReturnCase> {
+impl<'a> SalesReturnCaseRepository<'a> {
     /// 分页检索销售退货处理单列表（投影查询）。
     ///
     /// 只返回 [`SalesReturnCaseRow`] 所需的列表字段；退货处理号支持字面量
@@ -313,7 +318,7 @@ impl<'a> Repository<'a, SalesReturnCase> {
     }
 }
 
-impl<'a> Repository<'a, SalesReturnLine> {
+impl<'a> SalesReturnLineRepository<'a> {
     /// 批量按退货处理单集合取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -339,7 +344,7 @@ impl<'a> Repository<'a, SalesReturnLine> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseReturnOrder> {
+impl<'a> PurchaseReturnOrderRepository<'a> {
     /// 分页检索采购退货单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseReturnOrderRow`] 所需的列表字段；采购退货单号支持
@@ -380,7 +385,7 @@ impl<'a> Repository<'a, PurchaseReturnOrder> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseReturnLine> {
+impl<'a> PurchaseReturnLineRepository<'a> {
     /// 批量按退货单集合取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -409,7 +414,7 @@ impl<'a> Repository<'a, PurchaseReturnLine> {
     }
 }
 
-impl<'a> Repository<'a, CustomerRefund> {
+impl<'a> CustomerRefundRepository<'a> {
     /// 分页检索客户退款列表（投影查询）。
     ///
     /// 只返回 [`CustomerRefundRow`] 所需的列表字段；退款单号支持字面量模糊匹配。
@@ -479,7 +484,7 @@ impl<'a> Repository<'a, CustomerRefund> {
     }
 }
 
-impl<'a> Repository<'a, SupplierRefund> {
+impl<'a> SupplierRefundRepository<'a> {
     /// 批量按原事实取回供应商退款（`$in`，用于累计冲正校验）。
     ///
     /// # 参数
@@ -511,7 +516,7 @@ impl<'a> Repository<'a, SupplierRefund> {
     }
 }
 
-impl<'a> Repository<'a, ReceiptReversal> {
+impl<'a> ReceiptReversalRepository<'a> {
     /// 批量按原回款集合取回冲正单（`$in`，用于累计有效冲正校验）。
     ///
     /// # 参数
@@ -540,7 +545,7 @@ impl<'a> Repository<'a, ReceiptReversal> {
     }
 }
 
-impl<'a> Repository<'a, PaymentReversal> {
+impl<'a> PaymentReversalRepository<'a> {
     /// 批量按原付款集合取回冲正单（`$in`，用于累计有效冲正校验）。
     ///
     /// # 参数
@@ -755,11 +760,12 @@ fn customer_refund_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        customer_refund_projection, sort_doc, CustomerRefundFilter, PurchaseReturnOrderFilter, QueryFilter,
+        customer_refund_projection, sort_doc, CustomerRefundFilter, PurchaseReturnOrderFilter,
         SalesReturnCaseFilter,
     };
     use entities::returns::{CaseType, CustomerRefundStatus, PurchaseReturnStatus};
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn case_filter_applies_optional_fields_and_deleted_filter() {

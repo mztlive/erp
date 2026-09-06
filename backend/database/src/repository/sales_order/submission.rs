@@ -3,6 +3,7 @@
 //! 提交快照是冻结审批对象（事实类），形成后不可修改，**不提供软删除方法**；
 //! 被驳回的提交永久保留但不进入经营台账（数据模型 §6.5）。
 
+use crate::repository::owned::{SalesOrderSubmissionLineRepository, SalesOrderSubmissionRepository};
 use entities::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine,
     SalesOrderWorkingCopyId, SubmissionStatus,
@@ -10,9 +11,9 @@ use entities::sales_order::{
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
-use super::super::{Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::Result;
+use persistence_core::{Pagination, QueryFilter};
 
 /// 提交历史筛选条件。
 #[derive(Debug, Clone)]
@@ -58,7 +59,7 @@ impl Pagination for SubmissionFilter {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderSubmission> {
+impl<'a> SalesOrderSubmissionRepository<'a> {
     /// 按工作副本查找已冻结提交。
     ///
     /// # 参数
@@ -197,7 +198,7 @@ impl<'a> Repository<'a, SalesOrderSubmission> {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderSubmissionLine> {
+impl<'a> SalesOrderSubmissionLineRepository<'a> {
     /// 按提交 ID 集合批量取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数

@@ -5,17 +5,17 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as InventoryExt>::STOCK_MOVEMENTS` 等值。
 
-use entities::inventory::{
-    StockAdjustment, StockAdjustmentLine, StockBalance, StockMovement, StockReservation,
-    StockReservationEntry,
+use crate::repository::owned::{
+    StockAdjustmentLineRepository, StockAdjustmentRepository, StockBalanceRepository,
+    StockMovementRepository, StockReservationRepository,
 };
+use entities::inventory::StockReservationEntry;
 use mongodb::Database;
 
 use super::super::inventory::{
     InventoryRepository, StockAdjustmentFilter, StockBalanceFilter, StockMovementFilter,
     StockReservationFilter,
 };
-use crate::Repository;
 
 /// 域 D17 仓储访问器。
 pub trait InventoryExt {
@@ -47,38 +47,38 @@ pub trait InventoryExt {
     /// 获取 `stock_movement` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockMovement>`。
-    fn stock_movements(&self) -> Repository<'_, StockMovement>;
+    /// 返回 `StockMovementRepository<'_>`。
+    fn stock_movements(&self) -> StockMovementRepository<'_>;
 
     /// 获取 `stock_balance` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockBalance>`。
-    fn stock_balances(&self) -> Repository<'_, StockBalance>;
+    /// 返回 `StockBalanceRepository<'_>`。
+    fn stock_balances(&self) -> StockBalanceRepository<'_>;
 
     /// 获取 `stock_reservation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockReservation>`。
-    fn stock_reservations(&self) -> Repository<'_, StockReservation>;
+    /// 返回 `StockReservationRepository<'_>`。
+    fn stock_reservations(&self) -> StockReservationRepository<'_>;
 
     /// 获取 `stock_reservation_entry` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockReservationEntry>`。
-    fn stock_reservation_entries(&self) -> Repository<'_, StockReservationEntry>;
+    /// 返回 `persistence_core::Repository<'_, entities::inventory::StockReservationEntry>`。
+    fn stock_reservation_entries(&self) -> persistence_core::Repository<'_, StockReservationEntry>;
 
     /// 获取 `stock_adjustment` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockAdjustment>`。
-    fn stock_adjustments(&self) -> Repository<'_, StockAdjustment>;
+    /// 返回 `StockAdjustmentRepository<'_>`。
+    fn stock_adjustments(&self) -> StockAdjustmentRepository<'_>;
 
     /// 获取 `stock_adjustment_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::inventory::StockAdjustmentLine>`。
-    fn stock_adjustment_lines(&self) -> Repository<'_, StockAdjustmentLine>;
+    /// 返回 `StockAdjustmentLineRepository<'_>`。
+    fn stock_adjustment_lines(&self) -> StockAdjustmentLineRepository<'_>;
 
     /// 获取承载跨集合写入的域专用仓储。
     ///
@@ -93,28 +93,28 @@ impl InventoryExt for Database {
     type StockReservationFilter = StockReservationFilter;
     type StockAdjustmentFilter = StockAdjustmentFilter;
 
-    fn stock_movements(&self) -> Repository<'_, StockMovement> {
-        Repository::new(self, Self::STOCK_MOVEMENTS)
+    fn stock_movements(&self) -> StockMovementRepository<'_> {
+        StockMovementRepository::new(self, Self::STOCK_MOVEMENTS)
     }
 
-    fn stock_balances(&self) -> Repository<'_, StockBalance> {
-        Repository::new(self, Self::STOCK_BALANCES)
+    fn stock_balances(&self) -> StockBalanceRepository<'_> {
+        StockBalanceRepository::new(self, Self::STOCK_BALANCES)
     }
 
-    fn stock_reservations(&self) -> Repository<'_, StockReservation> {
-        Repository::new(self, Self::STOCK_RESERVATIONS)
+    fn stock_reservations(&self) -> StockReservationRepository<'_> {
+        StockReservationRepository::new(self, Self::STOCK_RESERVATIONS)
     }
 
-    fn stock_reservation_entries(&self) -> Repository<'_, StockReservationEntry> {
-        Repository::new(self, Self::STOCK_RESERVATION_ENTRIES)
+    fn stock_reservation_entries(&self) -> persistence_core::Repository<'_, StockReservationEntry> {
+        persistence_core::Repository::new(self, Self::STOCK_RESERVATION_ENTRIES)
     }
 
-    fn stock_adjustments(&self) -> Repository<'_, StockAdjustment> {
-        Repository::new(self, Self::STOCK_ADJUSTMENTS)
+    fn stock_adjustments(&self) -> StockAdjustmentRepository<'_> {
+        StockAdjustmentRepository::new(self, Self::STOCK_ADJUSTMENTS)
     }
 
-    fn stock_adjustment_lines(&self) -> Repository<'_, StockAdjustmentLine> {
-        Repository::new(self, Self::STOCK_ADJUSTMENT_LINES)
+    fn stock_adjustment_lines(&self) -> StockAdjustmentLineRepository<'_> {
+        StockAdjustmentLineRepository::new(self, Self::STOCK_ADJUSTMENT_LINES)
     }
 
     fn inventory(&self) -> InventoryRepository<'_> {

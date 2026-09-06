@@ -8,8 +8,8 @@
 //! `SalesOrderExt` 关联常量（单一权威来源，conventions §4.3）。
 //!
 //! 数据模型 §6.5 提交/生效两个事务入口在此落地为多步骤方法：
-//! - [`SalesOrderRepository::submit_working_copy`]（工作副本 → 提交快照）；
-//! - [`SalesOrderRepository::formalize_submission`]（提交 → 正式版本）。
+//! - [`SalesOrderDomainRepository::submit_working_copy`]（工作副本 → 提交快照）；
+//! - [`SalesOrderDomainRepository::formalize_submission`]（提交 → 正式版本）。
 //!
 //! 两者都必须收到事务执行器（P2 §2.1）。
 
@@ -47,16 +47,16 @@ const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 
 /// D13 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入，以及按 ID
 /// 集合批量返回存在性事实的精确读取（如
-/// [`SalesOrderRepository::find_existing_ids`]）。
+/// [`SalesOrderDomainRepository::find_existing_ids`]）。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
 /// 跨集合原子写入入口（提交快照化、版本生效、明细替换）与批量精确读取，
 /// 由 `SalesOrderExt::sales_order()` 访问。
-pub struct SalesOrderRepository<'a> {
+pub struct SalesOrderDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> SalesOrderRepository<'a> {
+impl<'a> SalesOrderDomainRepository<'a> {
     /// 创建域专用仓储。
     ///
     /// # 参数

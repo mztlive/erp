@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 
-use super::{Pagination, QueryFilter};
+use persistence_core::{Pagination, QueryFilter};
 
 mod approval;
 mod finance;
@@ -264,9 +264,10 @@ fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option
 mod tests {
     use mongodb::bson::{doc, Bson};
 
-    use super::{QueryFilter, WorkItemFilter};
+    use super::WorkItemFilter;
     use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
     use erp_core::common::time::Instant;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn scope_filter_supports_direct_owner_and_history_facts() {

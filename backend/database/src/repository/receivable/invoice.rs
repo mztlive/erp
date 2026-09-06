@@ -1,3 +1,4 @@
+use crate::repository::owned::{InvoiceRepository, SalesInvoiceAllocationRepository};
 use entities::receivable::{Invoice, InvoiceDirection, InvoiceKind, InvoiceStatus, SalesInvoiceAllocation};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::{stable::StableBase, time::BusinessDate};
@@ -7,11 +8,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 发票列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +114,7 @@ impl Pagination for InvoiceFilter {
     }
 }
 
-impl<'a> Repository<'a, Invoice> {
+impl<'a> InvoiceRepository<'a> {
     /// 分页检索发票列表（投影查询）。
     ///
     /// 只返回 [`InvoiceRow`] 所需的列表字段；发票号码支持字面量模糊匹配。
@@ -210,7 +211,7 @@ impl<'a> Repository<'a, Invoice> {
     }
 }
 
-impl<'a> Repository<'a, SalesInvoiceAllocation> {
+impl<'a> SalesInvoiceAllocationRepository<'a> {
     /// 批量按发票集合取回销项发票分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -290,7 +291,8 @@ fn invoice_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{InvoiceFilter, QueryFilter};
+    use super::InvoiceFilter;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn scope_filters_with_empty_ids_match_nothing() {

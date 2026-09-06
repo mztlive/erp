@@ -1,16 +1,17 @@
+use crate::repository::owned::{SkuAttributeRepository, SkuAttributeValueRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::sku_attribute::AttributeValueType;
-use entities::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
+use entities::catalog::EnableStatus;
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkuAttributeRow {
@@ -82,7 +83,7 @@ impl Pagination for SkuAttributeFilter {
     }
 }
 
-impl<'a> Repository<'a, SkuAttribute> {
+impl<'a> SkuAttributeRepository<'a> {
     /// 分页检索规格属性列表（投影查询）。
     ///
     /// 只返回 [`SkuAttributeRow`] 所需的列表字段；排序字段白名单化
@@ -195,7 +196,7 @@ impl Pagination for SkuAttributeValueFilter {
     }
 }
 
-impl<'a> Repository<'a, SkuAttributeValue> {
+impl<'a> SkuAttributeValueRepository<'a> {
     /// 分页检索规格属性值列表（投影查询）。
     ///
     /// 只返回 [`SkuAttributeValueRow`] 所需的列表字段；排序字段白名单化

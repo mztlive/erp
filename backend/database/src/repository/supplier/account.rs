@@ -1,3 +1,4 @@
+use crate::repository::owned::SupplierAccountRepository;
 use std::collections::{HashMap, HashSet};
 
 use entities::supplier::{SupplierAccount, SupplierAccountStatus};
@@ -9,11 +10,11 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::super::extensions::PartyExt;
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::{SupplierRepository, SUPPLIER_ACCOUNTS};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -174,7 +175,7 @@ impl Pagination for SupplierAccountFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierAccount> {
+impl<'a> SupplierAccountRepository<'a> {
     /// 批量读取未删除供应商的稳定 ID 与供应商编号。
     ///
     /// # 参数
@@ -313,7 +314,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>> {
-        Repository::new(self.db, SUPPLIER_ACCOUNTS)
+        SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .find_by_id(supplier_id.as_ref(), executor)
             .await
     }
@@ -557,9 +558,10 @@ fn supplier_account_id_duplicate_pipeline() -> Vec<Document> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, SupplierAccountFilter};
+    use super::{sort_doc, SupplierAccountFilter};
     use entities::supplier::SupplierAccountStatus;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn account_filter_applies_candidate_and_excluded_supplier_ids() {

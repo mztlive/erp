@@ -14,8 +14,8 @@ use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
 use crate::repository::extensions::{AccessControlExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
-use crate::repository::PageResult;
 use persistence_core::Executor;
+use persistence_core::PageResult;
 use persistence_core::Result;
 
 /// 采购单列表关联事实。
@@ -235,7 +235,7 @@ mod tests {
     use erp_core::ids::{SalesOrderId, SupplierAccountId};
 
     use super::{split_pointer_ids, unique_owner_ids, unique_sales_ids, unique_supplier_ids};
-    use crate::repository::PageResult;
+    use persistence_core::PageResult;
 
     /// 构造最小列表行。
     fn row(

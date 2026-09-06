@@ -3,7 +3,9 @@
 //! 草稿与审批中不占正式额度，已冲正单据不再计入；四个聚合均使用 Decimal128
 //! `$sum`，不得加载完整实体后在内存折叠。
 
-use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
+use crate::repository::owned::{
+    CustomerRefundRepository, PaymentReversalRepository, ReceiptReversalRepository, SupplierRefundRepository,
+};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{CustomerReceiptId, SupplierPaymentId};
 use erp_core::money::Amount;
@@ -11,7 +13,6 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
-use super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -105,7 +106,7 @@ fn posted_total_pipeline(original_field: &str, original_id: &str, exclude_id: &s
     ]
 }
 
-impl<'a> Repository<'a, CustomerRefund> {
+impl<'a> CustomerRefundRepository<'a> {
     /// 按原回款聚合已过账客户退款合计。
     ///
     /// # 参数
@@ -134,7 +135,7 @@ impl<'a> Repository<'a, CustomerRefund> {
     }
 }
 
-impl<'a> Repository<'a, SupplierRefund> {
+impl<'a> SupplierRefundRepository<'a> {
     /// 按原付款聚合已过账供应商退款合计。
     ///
     /// # 参数
@@ -163,7 +164,7 @@ impl<'a> Repository<'a, SupplierRefund> {
     }
 }
 
-impl<'a> Repository<'a, ReceiptReversal> {
+impl<'a> ReceiptReversalRepository<'a> {
     /// 按原回款聚合已过账回款冲正合计。
     ///
     /// # 参数
@@ -192,7 +193,7 @@ impl<'a> Repository<'a, ReceiptReversal> {
     }
 }
 
-impl<'a> Repository<'a, PaymentReversal> {
+impl<'a> PaymentReversalRepository<'a> {
     /// 按原付款聚合已过账付款冲正合计。
     ///
     /// # 参数

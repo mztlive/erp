@@ -1,3 +1,4 @@
+use crate::repository::owned::{ProductBrandRepository, UnitOfMeasureRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -11,12 +12,12 @@ use entities::catalog::{EnableStatus, ProductBrand, ProductCategory, UnitOfMeasu
 use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 
 use super::super::extensions::CatalogExt;
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc};
 use super::CatalogRepository;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 商品品牌列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -84,7 +85,7 @@ impl Pagination for ProductBrandFilter {
     }
 }
 
-impl<'a> Repository<'a, ProductBrand> {
+impl<'a> ProductBrandRepository<'a> {
     /// 分页检索商品品牌列表（投影查询）。
     ///
     /// 只返回 [`ProductBrandRow`] 所需的列表字段；排序字段白名单化
@@ -192,7 +193,7 @@ impl Pagination for UnitOfMeasureFilter {
     }
 }
 
-impl<'a> Repository<'a, UnitOfMeasure> {
+impl<'a> UnitOfMeasureRepository<'a> {
     /// 分页检索计量单位列表（投影查询）。
     ///
     /// 只返回 [`UnitOfMeasureRow`] 所需的列表字段；排序字段白名单化

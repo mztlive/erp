@@ -2,6 +2,9 @@
 //!
 //! 旧采购确认、低毛利确认、卡券审批记录与变更复核集合已删除。
 
+use crate::repository::owned::{
+    SalesChangeOrderRepository, SalesChangeSubmissionLineRepository, SalesChangeSubmissionRepository,
+};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
@@ -13,9 +16,9 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SalesReviewExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `sales_change_order` 集合名。
 const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;
@@ -90,7 +93,7 @@ impl Pagination for SalesChangeOrderFilter {
     }
 }
 
-impl<'a> Repository<'a, SalesChangeOrder> {
+impl<'a> SalesChangeOrderRepository<'a> {
     /// 分页检索销售变更单（投影查询）。
     ///
     /// # 参数
@@ -185,7 +188,7 @@ impl<'a> Repository<'a, SalesChangeOrder> {
     }
 }
 
-impl<'a> Repository<'a, SalesChangeSubmission> {
+impl<'a> SalesChangeSubmissionRepository<'a> {
     /// 列出销售变更单提交历史，新提交在前。
     ///
     /// # 参数
@@ -287,7 +290,7 @@ impl<'a> Repository<'a, SalesChangeSubmission> {
     }
 }
 
-impl<'a> Repository<'a, SalesChangeSubmissionLine> {
+impl<'a> SalesChangeSubmissionLineRepository<'a> {
     /// 批量列出多个变更提交的全部明细。
     ///
     /// # 参数
@@ -393,7 +396,7 @@ impl<'a> SalesReviewRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, SALES_CHANGE_ORDERS)
+        SalesChangeOrderRepository::new(self.db, SALES_CHANGE_ORDERS)
             .update(change_order, executor)
             .await
     }

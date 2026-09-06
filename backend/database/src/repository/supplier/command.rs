@@ -1,3 +1,4 @@
+use crate::repository::owned::SupplierProfileCommandRepository;
 use entities::supplier::{
     SupplierAccount, SupplierCommercialProfileRevision, SupplierProfileCommand,
     SupplierQualificationCapability,
@@ -5,7 +6,6 @@ use entities::supplier::{
 use erp_core::ids::SupplierQualificationId;
 use mongodb::bson::doc;
 
-use super::super::Repository;
 use super::{
     SupplierRepository, SUPPLIER_ACCOUNTS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_PROFILE_COMMANDS,
     SUPPLIER_QUALIFICATION_CAPABILITIES,
@@ -13,7 +13,7 @@ use super::{
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
-impl<'a> Repository<'a, SupplierProfileCommand> {
+impl<'a> SupplierProfileCommandRepository<'a> {
     /// 按客户端幂等键读取已成功命令结果。
     ///
     /// # Errors
@@ -45,7 +45,7 @@ impl<'a> SupplierRepository<'a> {
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierProfileCommand>> {
-        Repository::<SupplierProfileCommand>::new(self.db, SUPPLIER_PROFILE_COMMANDS)
+        SupplierProfileCommandRepository::new(self.db, SUPPLIER_PROFILE_COMMANDS)
             .find_by_idempotency_key(idempotency_key, executor)
             .await
     }

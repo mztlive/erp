@@ -1,3 +1,4 @@
+use crate::repository::owned::SupplierSettlementStatementRepository;
 use entities::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
     SupplierSettlementStatement,
@@ -5,7 +6,6 @@ use entities::supplier_settlement::{
 use mongodb::bson::doc;
 use mongodb::Database;
 
-use super::super::Repository;
 use super::{
     SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE, SUPPLIER_SETTLEMENT_ITEMS,
     SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -128,7 +128,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, SUPPLIER_SETTLEMENT_STATEMENTS)
+        SupplierSettlementStatementRepository::new(self.db, SUPPLIER_SETTLEMENT_STATEMENTS)
             .update(statement, executor)
             .await?;
         mongo_ops::insert_many(

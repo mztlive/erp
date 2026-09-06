@@ -1,3 +1,6 @@
+use crate::repository::owned::{
+    SupplierSettlementSourceEvidenceRepository, SupplierSettlementStatementRepository,
+};
 use entities::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
@@ -9,11 +12,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{statement_sort_doc, supplier_settlement_statement_projection};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商结算单列表投影行。
 ///
@@ -158,7 +161,7 @@ impl Pagination for SupplierSettlementStatementFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierSettlementStatement> {
+impl<'a> SupplierSettlementStatementRepository<'a> {
     /// 按结算单 ID 集合批量读取结算单。
     ///
     /// # 参数
@@ -375,7 +378,7 @@ impl<'a> Repository<'a, SupplierSettlementStatement> {
     }
 }
 
-impl<'a> Repository<'a, SupplierSettlementSourceEvidence> {
+impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
     /// 按稳定请求 ID 查找不可变来源证据批次。
     pub async fn find_by_request_id(
         &self,

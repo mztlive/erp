@@ -1,3 +1,4 @@
+use crate::repository::owned::StockMovementRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -10,9 +11,9 @@ use erp_core::money::Quantity;
 
 use super::shared::{entities_by_ids, sort_doc};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
-use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,7 +113,7 @@ impl Pagination for StockMovementFilter {
     }
 }
 
-impl<'a> Repository<'a, StockMovement> {
+impl<'a> StockMovementRepository<'a> {
     /// 分页检索库存流水台账（投影查询）。
     ///
     /// 只返回 [`StockMovementRow`] 所需的列表字段，不加载整文档；排序字段走
@@ -275,7 +276,8 @@ fn stock_movement_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{stock_movement_sort, QueryFilter, StockMovementFilter};
+    use super::{stock_movement_sort, StockMovementFilter};
+    use persistence_core::QueryFilter;
 
     use entities::inventory::{MovementDirection, MovementType};
     use erp_core::common::time::Instant;

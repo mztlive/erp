@@ -1,14 +1,15 @@
+use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 use entities::catalog::EnableStatus;
 use entities::procurement_responsibility::ProcurementResponsibilityRule;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::ProcurementResponsibilityRuleFilter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
-impl<'a> Repository<'a, ProcurementResponsibilityRule> {
+impl<'a> ProcurementResponsibilityRuleRepository<'a> {
     /// 分页查询采购责任规则。
     ///
     /// # 参数

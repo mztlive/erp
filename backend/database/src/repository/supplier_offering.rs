@@ -3,6 +3,11 @@
 //! 本域只持久化供给稳定身份、不可变商业条款修订、实时可供投影和幂等命令。
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
+use crate::repository::owned::{
+    PartyRepository, PartyRevisionRepository, ProductRepository, SkuRepository, SkuRevisionRepository,
+    SupplierAccountRepository, SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository,
+    SupplierOfferingRepository, SupplierOfferingRevisionRepository,
+};
 use std::collections::HashMap;
 
 use entities::catalog::{Product, Sku, SkuRevision};
@@ -20,10 +25,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::{CatalogExt, PartyExt, SupplierExt, SupplierOfferingExt};
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 pub mod list_filter;
 mod query;
@@ -39,7 +44,7 @@ const PARTIES: &str = <Database as PartyExt>::PARTIES;
 const PARTY_REVISIONS: &str = <Database as PartyExt>::PARTY_REVISIONS;
 const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "status", "supplier_sku_code"];
 
-impl<'a> Repository<'a, SupplierOfferingCommand> {
+impl<'a> SupplierOfferingCommandRepository<'a> {
     /// 按客户端幂等键查询已成功命令。
     ///
     /// # 参数
@@ -170,7 +175,7 @@ impl Pagination for SupplierOfferingFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierOffering> {
+impl<'a> SupplierOfferingRepository<'a> {
     /// 分页检索供给列表。
     ///
     /// # 参数
@@ -287,7 +292,7 @@ impl<'a> Repository<'a, SupplierOffering> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOfferingRevision> {
+impl<'a> SupplierOfferingRevisionRepository<'a> {
     /// 按修订主键批量取回商业条款修订。
     ///
     /// # 参数
@@ -376,7 +381,7 @@ impl<'a> Repository<'a, SupplierOfferingRevision> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOfferingAvailability> {
+impl<'a> SupplierOfferingAvailabilityRepository<'a> {
     /// 按当前可供状态查询供给主键。
     ///
     /// # 参数
@@ -467,11 +472,11 @@ pub struct SupplierOfferingDisplayEntities {
 }
 
 /// 供给聚合的跨集合事务仓储。
-pub struct SupplierOfferingRepository<'a> {
+pub struct SupplierOfferingDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> SupplierOfferingRepository<'a> {
+impl<'a> SupplierOfferingDomainRepository<'a> {
     /// 创建供给聚合仓储。
     ///
     /// # 参数
@@ -511,7 +516,7 @@ impl<'a> SupplierOfferingRepository<'a> {
             })
             .collect::<HashMap<_, _>>();
         let revision_ids = current_by_revision.keys().cloned().collect::<Vec<_>>();
-        let revisions = Repository::<SupplierOfferingRevision>::new(self.db, OFFERING_REVISIONS)
+        let revisions = SupplierOfferingRevisionRepository::new(self.db, OFFERING_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
         Ok(revisions
@@ -545,7 +550,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingDisplayEntities> {
         let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
-        let skus = Repository::<Sku>::new(self.db, SKUS)
+        let skus = SkuRepository::new(self.db, SKUS)
             .find_many(in_filter("id", sku_ids), executor)
             .await?;
         let sku_revision_ids = unique_strings(
@@ -553,19 +558,19 @@ impl<'a> SupplierOfferingRepository<'a> {
                 .filter_map(|sku| sku.stable.current_revision_id.clone()),
         );
         let product_ids = unique_strings(skus.iter().map(|sku| sku.product_id.to_string()));
-        let sku_revisions = Repository::<SkuRevision>::new(self.db, SKU_REVISIONS)
+        let sku_revisions = SkuRevisionRepository::new(self.db, SKU_REVISIONS)
             .find_many(in_filter("id", sku_revision_ids), executor)
             .await?;
-        let products = Repository::<Product>::new(self.db, PRODUCTS)
+        let products = ProductRepository::new(self.db, PRODUCTS)
             .find_many(in_filter("id", product_ids), executor)
             .await?;
 
         let supplier_ids = unique_strings(rows.iter().map(|row| row.supplier_id.to_string()));
-        let suppliers = Repository::<SupplierAccount>::new(self.db, SUPPLIER_ACCOUNTS)
+        let suppliers = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .find_many(in_filter("id", supplier_ids), executor)
             .await?;
         let party_ids = unique_strings(suppliers.iter().map(|supplier| supplier.party_id.to_string()));
-        let parties = Repository::<Party>::new(self.db, PARTIES)
+        let parties = PartyRepository::new(self.db, PARTIES)
             .find_many(in_filter("id", party_ids), executor)
             .await?;
         let party_revision_ids = unique_strings(
@@ -573,7 +578,7 @@ impl<'a> SupplierOfferingRepository<'a> {
                 .iter()
                 .filter_map(|party| party.stable.current_revision_id.clone()),
         );
-        let party_revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+        let party_revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(in_filter("id", party_revision_ids), executor)
             .await?;
         Ok(SupplierOfferingDisplayEntities {
@@ -652,7 +657,7 @@ impl<'a> SupplierOfferingRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, OFFERINGS)
+        SupplierOfferingRepository::new(self.db, OFFERINGS)
             .update(offering, executor)
             .await
     }
@@ -700,7 +705,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{sort_doc, SupplierOfferingFilter};
-    use crate::repository::{Pagination, QueryFilter};
+    use persistence_core::{Pagination, QueryFilter};
 
     #[test]
     fn offering_filter_uses_direct_supplier_identity() {

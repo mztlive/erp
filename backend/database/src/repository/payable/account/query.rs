@@ -1,15 +1,16 @@
+use crate::repository::owned::PayableAccountRepository;
 use entities::payable::{PayableAccount, PayableSourceType};
 use erp_core::ids::{PayableAccountId, PurchaseOrderId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use super::super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::super::sort_doc;
 use super::{PayableAccountFilter, PayableAccountRow};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
-impl<'a> Repository<'a, PayableAccount> {
+impl<'a> PayableAccountRepository<'a> {
     /// 分页检索应付往来子账列表（投影查询）。
     ///
     /// 只返回 [`PayableAccountRow`] 所需的列表字段，不加载整文档；

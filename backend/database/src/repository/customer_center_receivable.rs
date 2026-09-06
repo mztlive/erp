@@ -5,9 +5,10 @@
 //! 应收余额、可开票余额、逾期未核销金额和最早逾期日在 MongoDB 内按客户聚合；
 //! 金额始终保持 Decimal128，不经过二进制浮点数。
 
+use crate::repository::owned::ReceivableAccountRepository;
 use std::str::FromStr;
 
-use entities::receivable::{EntryDirection, ReceivableAccount};
+use entities::receivable::EntryDirection;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use futures_util::TryStreamExt;
@@ -16,7 +17,6 @@ use mongodb::Database;
 use serde::Deserialize;
 
 use crate::repository::extensions::ReceivableExt;
-use crate::repository::Repository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use persistence_core::Executor;
 use persistence_core::Result;
@@ -33,7 +33,7 @@ pub struct CustomerCenterReceivableRow {
     pub earliest_overdue_date: Option<BusinessDate>,
 }
 
-impl<'a> Repository<'a, ReceivableAccount> {
+impl<'a> ReceivableAccountRepository<'a> {
     /// 查询指定客户的应收跨账户汇总。
     ///
     /// # 参数

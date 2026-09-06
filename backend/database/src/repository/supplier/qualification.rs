@@ -1,3 +1,4 @@
+use crate::repository::owned::{SupplierQualificationCapabilityRepository, SupplierQualificationRepository};
 use entities::file_asset::FileAsset;
 use entities::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
@@ -7,10 +8,10 @@ use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 use mongodb::bson::{doc, Document};
 
 use super::super::extensions::FileAssetExt;
-use super::super::{Pagination, QueryFilter, Repository};
-use super::{find_supplier_ids, SupplierRepository, SUPPLIER_QUALIFICATIONS};
+use super::{SupplierRepository, SUPPLIER_QUALIFICATIONS};
 use persistence_core::Executor;
 use persistence_core::Result;
+use persistence_core::{Pagination, QueryFilter};
 
 /// 供应商资质列表筛选条件。
 #[derive(Debug, Clone)]
@@ -61,7 +62,7 @@ impl Pagination for SupplierQualificationFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierQualification> {
+impl<'a> SupplierQualificationRepository<'a> {
     /// 检索资质的到期预警列表（§6.2：`valid_to + status` 到期预警索引），
     /// 按 `valid_to` 升序。
     ///
@@ -101,7 +102,12 @@ impl<'a> Repository<'a, SupplierQualification> {
         qualification_types: &[QualificationType],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        find_supplier_ids(self, qualification_type_filter(qualification_types), executor).await
+        super::find_supplier_ids(
+            self.collection().clone_with_type(),
+            qualification_type_filter(qualification_types),
+            executor,
+        )
+        .await
     }
 
     /// 查询当前有效的供应商资质对应的供应商角色 ID。
@@ -129,7 +135,7 @@ impl<'a> Repository<'a, SupplierQualification> {
             "$or",
             vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }],
         );
-        find_supplier_ids(self, filter, executor).await
+        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
 
     /// 查询将在指定日期前到期且当前仍有效的供应商资质对应的供应商角色 ID。
@@ -156,7 +162,7 @@ impl<'a> Repository<'a, SupplierQualification> {
         filter.insert("status", QualificationStatus::Active.as_str());
         filter.insert("valid_from", doc! { "$lte": as_of });
         filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
-        find_supplier_ids(self, filter, executor).await
+        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
 
     /// 查询已失效供应商资质对应的供应商角色 ID。
@@ -188,11 +194,11 @@ impl<'a> Repository<'a, SupplierQualification> {
                 },
             ],
         );
-        find_supplier_ids(self, filter, executor).await
+        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
 }
 
-impl<'a> Repository<'a, SupplierQualificationCapability> {
+impl<'a> SupplierQualificationCapabilityRepository<'a> {
     /// 批量读取指定资质的适用能力关联。
     ///
     /// # Errors
@@ -274,7 +280,7 @@ impl<'a> SupplierRepository<'a> {
         qualification_types: &[QualificationType],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .list_supplier_ids_by_qualification_types(qualification_types, executor)
             .await
     }
@@ -297,7 +303,7 @@ impl<'a> SupplierRepository<'a> {
         as_of: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)
             .await
     }
@@ -322,7 +328,7 @@ impl<'a> SupplierRepository<'a> {
         expires_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .list_supplier_ids_by_expiring_qualifications(qualification_types, as_of, expires_by, executor)
             .await
     }
@@ -345,7 +351,7 @@ impl<'a> SupplierRepository<'a> {
         as_of: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .list_supplier_ids_by_expired_qualifications(qualification_types, as_of, executor)
             .await
     }
@@ -366,7 +372,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierQualification>> {
-        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .find_many_sorted(
                 doc! { "supplier_id": supplier_id.to_string() },
                 doc! { "created_at": -1 },
@@ -378,8 +384,9 @@ impl<'a> SupplierRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{QueryFilter, SupplierQualificationFilter};
+    use super::SupplierQualificationFilter;
     use entities::supplier::QualificationStatus;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn qualification_filter_applies_type_and_status() {

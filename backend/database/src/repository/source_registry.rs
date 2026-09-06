@@ -8,6 +8,9 @@
 //! 筛选/行类型定义在本文件，经 `SourceRegistryExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{
+    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
+};
 use std::collections::HashMap;
 
 use entities::source_registry::{
@@ -21,9 +24,9 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SourceRegistryExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `external_identity_map` 集合名（单一来源：`SourceRegistryExt` 关联常量）。
 const EXTERNAL_IDENTITY_MAPS: &str = <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS;
@@ -98,7 +101,7 @@ impl Pagination for SourceSystemFilter {
     }
 }
 
-impl<'a> Repository<'a, SourceSystem> {
+impl<'a> SourceSystemRepository<'a> {
     /// 分页检索来源系统列表（投影查询）。
     ///
     /// 只返回 [`SourceSystemRow`] 所需的列表字段，不加载整文档；
@@ -231,7 +234,7 @@ impl Pagination for ExternalIdentityMapFilter {
     }
 }
 
-impl<'a> Repository<'a, ExternalIdentityMap> {
+impl<'a> ExternalIdentityMapRepository<'a> {
     /// 分页检索外部身份映射列表（投影查询）。
     ///
     /// 只返回 [`ExternalIdentityMapRow`] 所需的列表字段，不加载整文档
@@ -341,7 +344,7 @@ impl<'a> Repository<'a, ExternalIdentityMap> {
     }
 }
 
-impl<'a> Repository<'a, ExternalIdentityTarget> {
+impl<'a> ExternalIdentityTargetRepository<'a> {
     /// 查询外部身份映射的全部目标历史，最新有效期优先。
     ///
     /// # 参数
@@ -707,11 +710,10 @@ fn external_identity_map_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        active_identity_map_filter, active_identity_target_filter, sort_doc, QueryFilter, SourceSystemFilter,
-    };
+    use super::{active_identity_map_filter, active_identity_target_filter, sort_doc, SourceSystemFilter};
     use entities::source_registry::{ExternalObjectType, SourceSystemId};
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn source_system_filter_applies_optional_fields_and_deleted_filter() {

@@ -9,6 +9,7 @@
 //! 筛选/行类型定义在本文件，经 `CostExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 use entities::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
@@ -20,10 +21,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::CostExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `cost_allocation` 集合名（单一来源：`CostExt` 关联常量）。
 const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_ALLOCATIONS;
@@ -197,7 +198,7 @@ impl Pagination for CostAllocationFilter {
     }
 }
 
-impl<'a> Repository<'a, CostEntry> {
+impl<'a> CostEntryRepository<'a> {
     /// 分页检索成本事实列表（投影查询）。
     ///
     /// 只返回 [`CostEntryRow`] 所需的列表字段；来源单据 ID 支持字面量模糊匹配
@@ -238,7 +239,7 @@ impl<'a> Repository<'a, CostEntry> {
     }
 }
 
-impl<'a> Repository<'a, CostAllocation> {
+impl<'a> CostAllocationRepository<'a> {
     /// 分页检索成本分配列表（投影查询）。
     ///
     /// 只返回 [`CostAllocationRow`] 所需的列表字段；支持按成本事实与销售单筛选。
@@ -428,10 +429,11 @@ fn cost_allocation_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{cost_entry_projection, sort_doc, CostAllocationFilter, CostEntryFilter, QueryFilter};
+    use super::{cost_entry_projection, sort_doc, CostAllocationFilter, CostEntryFilter};
     use entities::cost::{CostScope, CostStage, CostType};
     use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn entry_filter_applies_optional_fields_and_deleted_filter() {

@@ -5,21 +5,21 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS` 等值。
 
+use crate::repository::owned::{
+    PurchaseChangeOrderRepository, PurchaseChangeSubmissionLineRepository,
+    PurchaseChangeSubmissionRepository, PurchaseLineSalesAllocationRepository, PurchaseOrderRepository,
+    PurchaseOrderRevisionLineRepository, PurchaseOrderRevisionRepository,
+    PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository,
+};
 use std::future::Future;
 
 use entities::purchase_order::{CreationBasisFacts, ProcurementCoverageFacts};
-use entities::purchase_order::{
-    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseLineSalesAllocation,
-    PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine,
-};
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
 use mongodb::Database;
 
 use super::super::purchase_order::{
-    PurchaseOrderFilter, PurchaseOrderRepository, PurchaseOrderSubmissionFilter,
+    PurchaseOrderDomainRepository, PurchaseOrderFilter, PurchaseOrderSubmissionFilter,
 };
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -53,62 +53,62 @@ pub trait PurchaseOrderExt: Sized {
     /// 获取 `purchase_order` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseOrder>`。
-    fn purchase_orders(&self) -> Repository<'_, PurchaseOrder>;
+    /// 返回 `PurchaseOrderRepository<'_>`。
+    fn purchase_orders(&self) -> PurchaseOrderRepository<'_>;
 
     /// 获取 `purchase_order_submission` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseOrderSubmission>`。
-    fn purchase_order_submissions(&self) -> Repository<'_, PurchaseOrderSubmission>;
+    /// 返回 `PurchaseOrderSubmissionRepository<'_>`。
+    fn purchase_order_submissions(&self) -> PurchaseOrderSubmissionRepository<'_>;
 
     /// 获取 `purchase_order_submission_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseOrderSubmissionLine>`。
-    fn purchase_order_submission_lines(&self) -> Repository<'_, PurchaseOrderSubmissionLine>;
+    /// 返回 `PurchaseOrderSubmissionLineRepository<'_>`。
+    fn purchase_order_submission_lines(&self) -> PurchaseOrderSubmissionLineRepository<'_>;
 
     /// 获取 `purchase_order_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseOrderRevision>`。
-    fn purchase_order_revisions(&self) -> Repository<'_, PurchaseOrderRevision>;
+    /// 返回 `PurchaseOrderRevisionRepository<'_>`。
+    fn purchase_order_revisions(&self) -> PurchaseOrderRevisionRepository<'_>;
 
     /// 获取 `purchase_order_revision_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseOrderRevisionLine>`。
-    fn purchase_order_revision_lines(&self) -> Repository<'_, PurchaseOrderRevisionLine>;
+    /// 返回 `PurchaseOrderRevisionLineRepository<'_>`。
+    fn purchase_order_revision_lines(&self) -> PurchaseOrderRevisionLineRepository<'_>;
 
     /// 获取 `purchase_line_sales_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseLineSalesAllocation>`。
-    fn purchase_line_sales_allocations(&self) -> Repository<'_, PurchaseLineSalesAllocation>;
+    /// 返回 `PurchaseLineSalesAllocationRepository<'_>`。
+    fn purchase_line_sales_allocations(&self) -> PurchaseLineSalesAllocationRepository<'_>;
 
     /// 获取 `purchase_change_order` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseChangeOrder>`。
-    fn purchase_change_orders(&self) -> Repository<'_, PurchaseChangeOrder>;
+    /// 返回 `PurchaseChangeOrderRepository<'_>`。
+    fn purchase_change_orders(&self) -> PurchaseChangeOrderRepository<'_>;
 
     /// 获取 `purchase_change_submission` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseChangeSubmission>`。
-    fn purchase_change_submissions(&self) -> Repository<'_, PurchaseChangeSubmission>;
+    /// 返回 `PurchaseChangeSubmissionRepository<'_>`。
+    fn purchase_change_submissions(&self) -> PurchaseChangeSubmissionRepository<'_>;
 
     /// 获取 `purchase_change_submission_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::purchase_order::PurchaseChangeSubmissionLine>`。
-    fn purchase_change_submission_lines(&self) -> Repository<'_, PurchaseChangeSubmissionLine>;
+    /// 返回 `PurchaseChangeSubmissionLineRepository<'_>`。
+    fn purchase_change_submission_lines(&self) -> PurchaseChangeSubmissionLineRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
-    /// 返回 `PurchaseOrderRepository` 实例。
-    fn purchase_order(&self) -> PurchaseOrderRepository<'_>;
+    /// 返回 `PurchaseOrderDomainRepository` 实例。
+    fn purchase_order(&self) -> PurchaseOrderDomainRepository<'_>;
 
     /// 批量加载采购覆盖计算所需的最小持久化事实。
     ///
@@ -182,7 +182,7 @@ pub trait PurchaseOrderExt: Sized {
         executor: &mut dyn Executor,
     ) -> impl Future<
         Output = Result<(
-            crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
+            persistence_core::PageResult<super::super::purchase_order::PurchaseOrderRow>,
             super::super::purchase_order::PurchaseOrderListFacts,
         )>,
     > + Send;
@@ -214,44 +214,44 @@ impl PurchaseOrderExt for Database {
     type PurchaseOrderFilter = PurchaseOrderFilter;
     type PurchaseOrderSubmissionFilter = PurchaseOrderSubmissionFilter;
 
-    fn purchase_orders(&self) -> Repository<'_, PurchaseOrder> {
-        Repository::new(self, Self::PURCHASE_ORDERS)
+    fn purchase_orders(&self) -> PurchaseOrderRepository<'_> {
+        PurchaseOrderRepository::new(self, Self::PURCHASE_ORDERS)
     }
 
-    fn purchase_order_submissions(&self) -> Repository<'_, PurchaseOrderSubmission> {
-        Repository::new(self, Self::PURCHASE_ORDER_SUBMISSIONS)
+    fn purchase_order_submissions(&self) -> PurchaseOrderSubmissionRepository<'_> {
+        PurchaseOrderSubmissionRepository::new(self, Self::PURCHASE_ORDER_SUBMISSIONS)
     }
 
-    fn purchase_order_submission_lines(&self) -> Repository<'_, PurchaseOrderSubmissionLine> {
-        Repository::new(self, Self::PURCHASE_ORDER_SUBMISSION_LINES)
+    fn purchase_order_submission_lines(&self) -> PurchaseOrderSubmissionLineRepository<'_> {
+        PurchaseOrderSubmissionLineRepository::new(self, Self::PURCHASE_ORDER_SUBMISSION_LINES)
     }
 
-    fn purchase_order_revisions(&self) -> Repository<'_, PurchaseOrderRevision> {
-        Repository::new(self, Self::PURCHASE_ORDER_REVISIONS)
+    fn purchase_order_revisions(&self) -> PurchaseOrderRevisionRepository<'_> {
+        PurchaseOrderRevisionRepository::new(self, Self::PURCHASE_ORDER_REVISIONS)
     }
 
-    fn purchase_order_revision_lines(&self) -> Repository<'_, PurchaseOrderRevisionLine> {
-        Repository::new(self, Self::PURCHASE_ORDER_REVISION_LINES)
+    fn purchase_order_revision_lines(&self) -> PurchaseOrderRevisionLineRepository<'_> {
+        PurchaseOrderRevisionLineRepository::new(self, Self::PURCHASE_ORDER_REVISION_LINES)
     }
 
-    fn purchase_line_sales_allocations(&self) -> Repository<'_, PurchaseLineSalesAllocation> {
-        Repository::new(self, Self::PURCHASE_LINE_SALES_ALLOCATIONS)
+    fn purchase_line_sales_allocations(&self) -> PurchaseLineSalesAllocationRepository<'_> {
+        PurchaseLineSalesAllocationRepository::new(self, Self::PURCHASE_LINE_SALES_ALLOCATIONS)
     }
 
-    fn purchase_change_orders(&self) -> Repository<'_, PurchaseChangeOrder> {
-        Repository::new(self, Self::PURCHASE_CHANGE_ORDERS)
+    fn purchase_change_orders(&self) -> PurchaseChangeOrderRepository<'_> {
+        PurchaseChangeOrderRepository::new(self, Self::PURCHASE_CHANGE_ORDERS)
     }
 
-    fn purchase_change_submissions(&self) -> Repository<'_, PurchaseChangeSubmission> {
-        Repository::new(self, Self::PURCHASE_CHANGE_SUBMISSIONS)
+    fn purchase_change_submissions(&self) -> PurchaseChangeSubmissionRepository<'_> {
+        PurchaseChangeSubmissionRepository::new(self, Self::PURCHASE_CHANGE_SUBMISSIONS)
     }
 
-    fn purchase_change_submission_lines(&self) -> Repository<'_, PurchaseChangeSubmissionLine> {
-        Repository::new(self, Self::PURCHASE_CHANGE_SUBMISSION_LINES)
+    fn purchase_change_submission_lines(&self) -> PurchaseChangeSubmissionLineRepository<'_> {
+        PurchaseChangeSubmissionLineRepository::new(self, Self::PURCHASE_CHANGE_SUBMISSION_LINES)
     }
 
-    fn purchase_order(&self) -> PurchaseOrderRepository<'_> {
-        PurchaseOrderRepository::new(self)
+    fn purchase_order(&self) -> PurchaseOrderDomainRepository<'_> {
+        PurchaseOrderDomainRepository::new(self)
     }
 
     /// 批量加载采购覆盖计算所需的最小持久化事实。
@@ -332,7 +332,7 @@ impl PurchaseOrderExt for Database {
         filter: &PurchaseOrderFilter,
         executor: &mut dyn Executor,
     ) -> Result<(
-        crate::repository::PageResult<super::super::purchase_order::PurchaseOrderRow>,
+        persistence_core::PageResult<super::super::purchase_order::PurchaseOrderRow>,
         super::super::purchase_order::PurchaseOrderListFacts,
     )> {
         super::super::purchase_order::load_purchase_order_list_page(self, filter, executor).await

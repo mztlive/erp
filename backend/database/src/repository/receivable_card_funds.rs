@@ -4,10 +4,13 @@
 //! 精确定位，以及回款核销的批量条件进度更新与 `insert_many`。所有方法接收
 //! 调用方 `&mut dyn Executor`，不开启事务，不返回 services DTO。
 
+use crate::repository::owned::{
+    ReceivableAccountRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
+};
 use std::collections::HashSet;
 
 use entities::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableAccount, ReceivableEntry, ReceivableFundsReview,
+    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, ReceivableFundsReview,
     SalesInvoiceAllocation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -18,7 +21,6 @@ use mongodb::bson::{doc, Bson, Document};
 use super::account::{amount_bson, progress_pipeline};
 use super::{ReceivableRepository, SettlementBatchResult};
 use crate::repository::extensions::ReceivableExt;
-use crate::repository::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -158,7 +160,7 @@ impl<'a> ReceivableRepository<'a> {
     }
 }
 
-impl<'a> Repository<'a, ReceivableAccount> {
+impl<'a> ReceivableAccountRepository<'a> {
     /// 批量条件核销：按账户聚合增量逐个执行不超额核销（FIN-R09）。
     ///
     /// # 参数
@@ -201,7 +203,7 @@ impl<'a> Repository<'a, ReceivableAccount> {
     }
 }
 
-impl<'a> Repository<'a, ReceivableEntry> {
+impl<'a> ReceivableEntryRepository<'a> {
     /// 按主键集合批量取回应收分录（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -229,7 +231,7 @@ impl<'a> Repository<'a, ReceivableEntry> {
     }
 }
 
-impl<'a> Repository<'a, ReceivableFundsReview> {
+impl<'a> ReceivableFundsReviewRepository<'a> {
     /// 按 `supersedes_review_id` 精确读取后继复核（FIN-R12）。
     ///
     /// 使用 `uk_receivable_funds_reviews_supersedes` 唯一索引，长链不做全量扫描。
@@ -311,8 +313,8 @@ fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 mod tests {
     use super::{settlement_guard, unique_ids, CardFundsSnapshotFacts};
     use crate::repository::extensions::ReceivableExt;
+    use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
     use crate::repository::receivable::SettlementBatchResult;
-    use crate::repository::Repository;
     use entities::receivable::{ReceivableAccount, ReceivableEntry};
     use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
     use erp_core::money::Amount;
@@ -433,7 +435,7 @@ mod tests {
             .await
             .expect("客户端句柄创建失败");
         let database = client.database("unused");
-        let repository: Repository<'_, ReceivableAccount> = Repository::new(
+        let repository: ReceivableAccountRepository<'_> = ReceivableAccountRepository::new(
             &database,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
         );
@@ -473,7 +475,7 @@ mod tests {
             .await
             .expect("客户端句柄创建失败");
         let database = client.database("unused");
-        let repository: Repository<'_, entities::receivable::ReceivableEntry> = Repository::new(
+        let repository: ReceivableEntryRepository<'_> = ReceivableEntryRepository::new(
             &database,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES,
         );

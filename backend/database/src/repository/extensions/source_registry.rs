@@ -5,13 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SourceRegistryExt>::SOURCE_SYSTEMS` 等值。
 
-use entities::source_registry::{ExternalIdentityMap, ExternalIdentityTarget, SourceSystem};
+use crate::repository::owned::{
+    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
+};
 use mongodb::Database;
 
 use super::super::source_registry::{
     ExternalIdentityMapFilter, SourceRegistryRepository, SourceSystemFilter,
 };
-use crate::Repository;
 
 /// 域 D01 仓储访问器。
 pub trait SourceRegistryExt {
@@ -31,20 +32,20 @@ pub trait SourceRegistryExt {
     /// 获取 `source_system` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::source_registry::SourceSystem>`。
-    fn source_systems(&self) -> Repository<'_, SourceSystem>;
+    /// 返回 `SourceSystemRepository<'_>`。
+    fn source_systems(&self) -> SourceSystemRepository<'_>;
 
     /// 获取 `external_identity_map` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::source_registry::ExternalIdentityMap>`。
-    fn external_identity_maps(&self) -> Repository<'_, ExternalIdentityMap>;
+    /// 返回 `ExternalIdentityMapRepository<'_>`。
+    fn external_identity_maps(&self) -> ExternalIdentityMapRepository<'_>;
 
     /// 获取 `external_identity_target` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::source_registry::ExternalIdentityTarget>`。
-    fn external_identity_targets(&self) -> Repository<'_, ExternalIdentityTarget>;
+    /// 返回 `ExternalIdentityTargetRepository<'_>`。
+    fn external_identity_targets(&self) -> ExternalIdentityTargetRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -57,16 +58,16 @@ impl SourceRegistryExt for Database {
     type SourceSystemFilter = SourceSystemFilter;
     type ExternalIdentityMapFilter = ExternalIdentityMapFilter;
 
-    fn source_systems(&self) -> Repository<'_, SourceSystem> {
-        Repository::new(self, Self::SOURCE_SYSTEMS)
+    fn source_systems(&self) -> SourceSystemRepository<'_> {
+        SourceSystemRepository::new(self, Self::SOURCE_SYSTEMS)
     }
 
-    fn external_identity_maps(&self) -> Repository<'_, ExternalIdentityMap> {
-        Repository::new(self, Self::EXTERNAL_IDENTITY_MAPS)
+    fn external_identity_maps(&self) -> ExternalIdentityMapRepository<'_> {
+        ExternalIdentityMapRepository::new(self, Self::EXTERNAL_IDENTITY_MAPS)
     }
 
-    fn external_identity_targets(&self) -> Repository<'_, ExternalIdentityTarget> {
-        Repository::new(self, Self::EXTERNAL_IDENTITY_TARGETS)
+    fn external_identity_targets(&self) -> ExternalIdentityTargetRepository<'_> {
+        ExternalIdentityTargetRepository::new(self, Self::EXTERNAL_IDENTITY_TARGETS)
     }
 
     fn source_registry(&self) -> SourceRegistryRepository<'_> {

@@ -2,9 +2,9 @@
 //!
 //! 单次聚合返回跨页指标和最近摘要；页面不得逐页拉取合同、销售单后自行计数。
 
+use crate::repository::owned::CustomerAccountRepository;
 use entities::{
     contract::ContractStatus,
-    customer::CustomerAccount,
     sales_order::{CloseStatus, CommercialStatus},
 };
 use futures_util::TryStreamExt;
@@ -13,7 +13,6 @@ use mongodb::Database;
 use serde::Deserialize;
 
 use super::extensions::{ContractExt, SalesOrderExt};
-use super::Repository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
@@ -50,7 +49,7 @@ pub struct CustomerCenterRelatedRow {
     pub sales_orders: Vec<CustomerCenterSalesOrderRow>,
 }
 
-impl<'a> Repository<'a, CustomerAccount> {
+impl<'a> CustomerAccountRepository<'a> {
     /// 查询指定客户的关联业务跨页指标与最近摘要。
     ///
     /// # 参数

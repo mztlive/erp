@@ -1,16 +1,15 @@
-use entities::payable::PayableAccount;
+use crate::repository::owned::PayableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PayableAccountId;
 use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
-use super::super::super::Repository;
 use super::write::{amount_bson, progress_pipeline};
 use super::InvoicingBatchResult;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, PayableAccount> {
+impl<'a> PayableAccountRepository<'a> {
     /// 条件收票：增加净已收票进度（不超过可收票额度）。
     ///
     /// 进项蓝票 `APPLY` 的原子写入口：以写条件保证

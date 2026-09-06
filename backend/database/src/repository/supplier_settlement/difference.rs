@@ -1,3 +1,6 @@
+use crate::repository::owned::{
+    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
+};
 use entities::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceEvidence,
@@ -9,10 +12,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{difference_sort_doc, supplier_settlement_difference_projection};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商结算差异列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -83,7 +86,7 @@ impl Pagination for SupplierSettlementDifferenceFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierSettlementDifferenceEvidence> {
+impl<'a> SupplierSettlementDifferenceEvidenceRepository<'a> {
     /// 按稳定请求 ID 查找不可变差异补证。
     pub async fn find_by_request_id(
         &self,
@@ -111,7 +114,7 @@ impl<'a> Repository<'a, SupplierSettlementDifferenceEvidence> {
     }
 }
 
-impl<'a> Repository<'a, SupplierSettlementDifference> {
+impl<'a> SupplierSettlementDifferenceRepository<'a> {
     /// 按结算明细批量读取差异，按创建时间和主键升序排列。
     ///
     /// # 参数

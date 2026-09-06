@@ -1,4 +1,4 @@
-//! FIN-R01 `SalesOrderRepository::find_existing_ids`（按 ID 集合批量返回已存在
+//! FIN-R01 `SalesOrderDomainRepository::find_existing_ids`（按 ID 集合批量返回已存在
 //! ID 的精确读取）的真实 MongoDB 验收（P6 阶段）。
 //!
 //! 覆盖合同「关闭验收」四维：空输入不发数据库往返（仓储内早退）；重复 ID

@@ -5,12 +5,12 @@
 //! 稳定排序下至多取两条的有界精确读取，零条由 Service 解释为缺失、一条为唯一
 //! 责任、两条即证明数据损坏。存在性门禁复用同一有界读取，非空即拒绝。
 
+use crate::repository::owned::WorkItemRepository;
 use entities::work_item::WorkItem;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use crate::repository::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -83,7 +83,7 @@ fn unique_read_options() -> FindOptions {
         .build()
 }
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 按集成错误任务精确查找唯一正式责任任务的有界读取（INT-R25）。
     ///
     /// 业务对象范围与旧无界读取一致（对象类型 + 对象 ID，同样排除软删除行），

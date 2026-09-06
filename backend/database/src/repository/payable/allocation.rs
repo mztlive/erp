@@ -1,12 +1,13 @@
+use crate::repository::owned::{PaymentAllocationRepository, PurchaseInvoiceAllocationRepository};
 use entities::payable::{PaymentAllocation, PurchaseInvoiceAllocation};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PayableAccountId, PayableEntryId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 进项发票分配服务端分页筛选条件（FIN-R06）。
 #[derive(Debug, Clone)]
@@ -50,7 +51,7 @@ impl Pagination for PurchaseInvoiceAllocationFilter {
     }
 }
 
-impl<'a> Repository<'a, PaymentAllocation> {
+impl<'a> PaymentAllocationRepository<'a> {
     /// 批量按付款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -100,7 +101,7 @@ impl<'a> Repository<'a, PaymentAllocation> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseInvoiceAllocation> {
+impl<'a> PurchaseInvoiceAllocationRepository<'a> {
     /// 批量按发票集合取回进项发票分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -188,8 +189,9 @@ impl<'a> Repository<'a, PurchaseInvoiceAllocation> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Pagination, PurchaseInvoiceAllocationFilter, QueryFilter};
+    use super::PurchaseInvoiceAllocationFilter;
     use erp_core::ids::PayableAccountId;
+    use persistence_core::{Pagination, QueryFilter};
 
     #[test]
     fn invoice_allocation_filter_applies_account_invoice_and_deleted_filter() {

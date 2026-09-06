@@ -5,6 +5,7 @@
 //! 本文件只补充域特有查询与跨集合多步骤写入入口；集合名常量统一取
 //! `ContractExt` 关联常量（单一权威来源，conventions §4.3）。
 
+use crate::repository::owned::{ContractRepository, ContractRevisionRepository};
 use entities::contract::{Contract, ContractId, ContractRevision, ContractStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -13,10 +14,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::ContractExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `contract` 集合名（单一来源：`ContractExt` 关联常量）。
 const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;
@@ -107,7 +108,7 @@ impl Pagination for ContractFilter {
     }
 }
 
-impl<'a> Repository<'a, Contract> {
+impl<'a> ContractRepository<'a> {
     /// 分页检索合同列表（投影查询）。
     ///
     /// 只返回 [`ContractRow`] 所需的列表字段，不加载整文档；排序字段由 Service
@@ -179,7 +180,7 @@ impl<'a> Repository<'a, Contract> {
     }
 }
 
-impl<'a> Repository<'a, ContractRevision> {
+impl<'a> ContractRevisionRepository<'a> {
     /// 按修订 ID 集合批量读取不可变合同版本。
     pub async fn find_by_ids(
         &self,
@@ -250,11 +251,11 @@ impl<'a> Repository<'a, ContractRevision> {
 ///
 /// 合同归档是「插入不可变版本 + 切换当前版本指针」的两步写入；单一集合 CRUD
 /// 使用 [`Repository`] 基类。本类型由 `ContractExt::contract()` 访问。
-pub struct ContractRepository<'a> {
+pub struct ContractDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> ContractRepository<'a> {
+impl<'a> ContractDomainRepository<'a> {
     /// 创建域专用仓储。
     ///
     /// # 参数
@@ -296,7 +297,7 @@ impl<'a> ContractRepository<'a> {
         )
         .await?;
         contract.attach_revision(&revision.base.id, contract.stable.updated_by.clone());
-        Repository::new(self.db, CONTRACTS)
+        ContractRepository::new(self.db, CONTRACTS)
             .update(contract, executor)
             .await
     }
@@ -328,7 +329,7 @@ impl<'a> ContractRepository<'a> {
         )
         .await?;
         contract.attach_revision(&revision.base.id, contract.stable.updated_by.clone());
-        Repository::new(self.db, CONTRACTS)
+        ContractRepository::new(self.db, CONTRACTS)
             .update(contract, executor)
             .await
     }
@@ -425,10 +426,11 @@ fn contract_revision_no_from_rows(rows: Vec<ContractRevisionNoRow>) -> Option<u3
 mod tests {
     use super::{
         contract_revision_no_from_rows, latest_contract_revision_filter, latest_contract_revision_options,
-        sort_doc, ContractFilter, ContractRevisionNoRow, QueryFilter,
+        sort_doc, ContractFilter, ContractRevisionNoRow,
     };
     use erp_core::ids::ContractId;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn contract_filter_applies_optional_fields_and_deleted_filter() {

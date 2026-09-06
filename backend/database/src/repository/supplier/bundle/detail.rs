@@ -1,10 +1,10 @@
+use crate::repository::owned::SupplierQualificationCapabilityRepository;
 use std::collections::{HashMap, HashSet};
 
-use entities::supplier::{SupplierCommercialProfileRevision, SupplierQualificationCapability};
+use entities::supplier::SupplierCommercialProfileRevision;
 use erp_core::ids::{PartyId, SupplierAccountId};
 
 use super::super::super::extensions::PartyExt;
-use super::super::super::Repository;
 use super::super::{SupplierRepository, SUPPLIER_QUALIFICATION_CAPABILITIES};
 use super::SupplierDetailBundle;
 use persistence_core::Executor;
@@ -74,7 +74,7 @@ impl<'a> SupplierRepository<'a> {
             .map(|item| erp_core::ids::SupplierQualificationId::new(&item.base.id))
             .collect();
         let qualification_links =
-            Repository::<SupplierQualificationCapability>::new(self.db, SUPPLIER_QUALIFICATION_CAPABILITIES)
+            SupplierQualificationCapabilityRepository::new(self.db, SUPPLIER_QUALIFICATION_CAPABILITIES)
                 .list_by_qualification_ids(&qualification_ids, executor)
                 .await?;
         let ratings = self.list_ratings_latest_first(supplier_id, executor).await?;

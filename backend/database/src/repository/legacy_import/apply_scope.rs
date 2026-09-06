@@ -3,6 +3,7 @@
 //! 固定两次有界读取：`$in` 取请求行，再按批次统计请求外仍待导入行数。
 //! 空 ID 集合不访问数据库。全部使用调用方 executor，不开事务。
 
+use crate::repository::owned::LegacyImportRowRepository;
 use std::collections::{HashMap, HashSet};
 
 use entities::legacy_import::{ImportStatus, LegacyImportRow};
@@ -10,7 +11,6 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use mongodb::bson::doc;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -25,7 +25,7 @@ pub struct LegacyImportApplyScope {
     pub pending_outside_request: u64,
 }
 
-impl<'a> Repository<'a, LegacyImportRow> {
+impl<'a> LegacyImportRowRepository<'a> {
     /// 按请求行 ID 读取目标批次内的导入行，并返回缺失集合。
     ///
     /// 查询同时约束 `id ∈ requested` 与 `batch_id`，软删除行视为缺失。
@@ -271,7 +271,8 @@ mod tests {
             .await
             .unwrap();
         let database = client.database("legacy_import_apply_empty");
-        let repository = crate::Repository::<LegacyImportRow>::new(&database, "legacy_import_rows");
+        let repository =
+            crate::repository::owned::LegacyImportRowRepository::new(&database, "legacy_import_rows");
         let scope = repository
             .apply_row_scope(
                 &LegacyImportBatchId::new("batch-1"),

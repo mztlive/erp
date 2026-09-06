@@ -9,10 +9,10 @@ use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
-use super::super::PageResult;
 use super::shared::{PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
 use super::CatalogRepository;
 use persistence_core::Executor;
+use persistence_core::PageResult;
 use persistence_core::Result;
 
 /// `supplier_offering_revision` 集合名（公司商品池资格依赖的当前供给修订）。

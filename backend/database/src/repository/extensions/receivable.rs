@@ -8,16 +8,16 @@
 //! `invoice` 由 D18 拥有（domains.md §3 唯一跨批次共享聚合），D19 在 P3 通过
 //! `invoices()` 访问器复用，禁止复制发票实体或另建访问路径。
 
-use entities::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableAccount, ReceivableEntry, ReceivableEntryOffset,
-    ReceivableFundsReview, SalesInvoiceAllocation,
+use crate::repository::owned::{
+    CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
+    ReceivableEntryOffsetRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
+    SalesInvoiceAllocationRepository,
 };
 use mongodb::Database;
 
 use super::super::receivable::{
     CustomerReceiptFilter, InvoiceFilter, ReceivableAccountFilter, ReceivableRepository,
 };
-use crate::Repository;
 
 /// 域 D18 仓储访问器。
 pub trait ReceivableExt {
@@ -50,50 +50,50 @@ pub trait ReceivableExt {
     /// 获取 `receivable_account` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::ReceivableAccount>`。
-    fn receivable_accounts(&self) -> Repository<'_, ReceivableAccount>;
+    /// 返回 `ReceivableAccountRepository<'_>`。
+    fn receivable_accounts(&self) -> ReceivableAccountRepository<'_>;
 
     /// 获取 `receivable_entry` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::ReceivableEntry>`。
-    fn receivable_entries(&self) -> Repository<'_, ReceivableEntry>;
+    /// 返回 `ReceivableEntryRepository<'_>`。
+    fn receivable_entries(&self) -> ReceivableEntryRepository<'_>;
 
     /// 获取 `receivable_funds_review` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::ReceivableFundsReview>`。
-    fn receivable_funds_reviews(&self) -> Repository<'_, ReceivableFundsReview>;
+    /// 返回 `ReceivableFundsReviewRepository<'_>`。
+    fn receivable_funds_reviews(&self) -> ReceivableFundsReviewRepository<'_>;
 
     /// 获取 `receivable_entry_offset` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::ReceivableEntryOffset>`。
-    fn receivable_entry_offsets(&self) -> Repository<'_, ReceivableEntryOffset>;
+    /// 返回 `ReceivableEntryOffsetRepository<'_>`。
+    fn receivable_entry_offsets(&self) -> ReceivableEntryOffsetRepository<'_>;
 
     /// 获取 `customer_receipt` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::CustomerReceipt>`。
-    fn customer_receipts(&self) -> Repository<'_, CustomerReceipt>;
+    /// 返回 `CustomerReceiptRepository<'_>`。
+    fn customer_receipts(&self) -> CustomerReceiptRepository<'_>;
 
     /// 获取 `receipt_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::ReceiptAllocation>`。
-    fn receipt_allocations(&self) -> Repository<'_, ReceiptAllocation>;
+    /// 返回 `ReceiptAllocationRepository<'_>`。
+    fn receipt_allocations(&self) -> ReceiptAllocationRepository<'_>;
 
     /// 获取 `invoice` 集合的 Repository（D19 通过本访问器复用）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::Invoice>`。
-    fn invoices(&self) -> Repository<'_, Invoice>;
+    /// 返回 `InvoiceRepository<'_>`。
+    fn invoices(&self) -> InvoiceRepository<'_>;
 
     /// 获取 `sales_invoice_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::receivable::SalesInvoiceAllocation>`。
-    fn sales_invoice_allocations(&self) -> Repository<'_, SalesInvoiceAllocation>;
+    /// 返回 `SalesInvoiceAllocationRepository<'_>`。
+    fn sales_invoice_allocations(&self) -> SalesInvoiceAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -107,36 +107,36 @@ impl ReceivableExt for Database {
     type CustomerReceiptFilter = CustomerReceiptFilter;
     type InvoiceFilter = InvoiceFilter;
 
-    fn receivable_accounts(&self) -> Repository<'_, ReceivableAccount> {
-        Repository::new(self, Self::RECEIVABLE_ACCOUNTS)
+    fn receivable_accounts(&self) -> ReceivableAccountRepository<'_> {
+        ReceivableAccountRepository::new(self, Self::RECEIVABLE_ACCOUNTS)
     }
 
-    fn receivable_entries(&self) -> Repository<'_, ReceivableEntry> {
-        Repository::new(self, Self::RECEIVABLE_ENTRIES)
+    fn receivable_entries(&self) -> ReceivableEntryRepository<'_> {
+        ReceivableEntryRepository::new(self, Self::RECEIVABLE_ENTRIES)
     }
 
-    fn receivable_funds_reviews(&self) -> Repository<'_, ReceivableFundsReview> {
-        Repository::new(self, Self::RECEIVABLE_FUNDS_REVIEWS)
+    fn receivable_funds_reviews(&self) -> ReceivableFundsReviewRepository<'_> {
+        ReceivableFundsReviewRepository::new(self, Self::RECEIVABLE_FUNDS_REVIEWS)
     }
 
-    fn receivable_entry_offsets(&self) -> Repository<'_, ReceivableEntryOffset> {
-        Repository::new(self, Self::RECEIVABLE_ENTRY_OFFSETS)
+    fn receivable_entry_offsets(&self) -> ReceivableEntryOffsetRepository<'_> {
+        ReceivableEntryOffsetRepository::new(self, Self::RECEIVABLE_ENTRY_OFFSETS)
     }
 
-    fn customer_receipts(&self) -> Repository<'_, CustomerReceipt> {
-        Repository::new(self, Self::CUSTOMER_RECEIPTS)
+    fn customer_receipts(&self) -> CustomerReceiptRepository<'_> {
+        CustomerReceiptRepository::new(self, Self::CUSTOMER_RECEIPTS)
     }
 
-    fn receipt_allocations(&self) -> Repository<'_, ReceiptAllocation> {
-        Repository::new(self, Self::RECEIPT_ALLOCATIONS)
+    fn receipt_allocations(&self) -> ReceiptAllocationRepository<'_> {
+        ReceiptAllocationRepository::new(self, Self::RECEIPT_ALLOCATIONS)
     }
 
-    fn invoices(&self) -> Repository<'_, Invoice> {
-        Repository::new(self, Self::INVOICES)
+    fn invoices(&self) -> InvoiceRepository<'_> {
+        InvoiceRepository::new(self, Self::INVOICES)
     }
 
-    fn sales_invoice_allocations(&self) -> Repository<'_, SalesInvoiceAllocation> {
-        Repository::new(self, Self::SALES_INVOICE_ALLOCATIONS)
+    fn sales_invoice_allocations(&self) -> SalesInvoiceAllocationRepository<'_> {
+        SalesInvoiceAllocationRepository::new(self, Self::SALES_INVOICE_ALLOCATIONS)
     }
 
     fn receivable(&self) -> ReceivableRepository<'_> {

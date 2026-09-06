@@ -5,16 +5,16 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierApiExt>::SUPPLIER_API_CONNECTIONS` 等值。
 
-use entities::supplier_api::{
-    BusinessCapabilityConfirmation, SupplierApiCapability, SupplierApiConnection,
-    SupplierConnectionCommandReceipt, SupplierHealthCheckRun,
+use crate::repository::owned::{
+    BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
+    SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
+    SupplierHealthCheckRunRepository,
 };
 use mongodb::Database;
 
 use super::super::supplier_api::{
     SupplierApiCapabilityFilter, SupplierApiConnectionFilter, SupplierApiRepository,
 };
-use crate::Repository;
 
 /// 域 D25 仓储访问器。
 pub trait SupplierApiExt {
@@ -42,23 +42,23 @@ pub trait SupplierApiExt {
     /// 获取 `supplier_api_connection` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_api::SupplierApiConnection>`。
-    fn supplier_api_connections(&self) -> Repository<'_, SupplierApiConnection>;
+    /// 返回 `SupplierApiConnectionRepository<'_>`。
+    fn supplier_api_connections(&self) -> SupplierApiConnectionRepository<'_>;
 
     /// 获取 `supplier_api_capability` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_api::SupplierApiCapability>`。
-    fn supplier_api_capabilities(&self) -> Repository<'_, SupplierApiCapability>;
+    /// 返回 `SupplierApiCapabilityRepository<'_>`。
+    fn supplier_api_capabilities(&self) -> SupplierApiCapabilityRepository<'_>;
 
     /// 获取追加式采购业务能力确认集合。
-    fn supplier_api_business_confirmations(&self) -> Repository<'_, BusinessCapabilityConfirmation>;
+    fn supplier_api_business_confirmations(&self) -> BusinessCapabilityConfirmationRepository<'_>;
 
     /// 获取后台健康检查运行记录集合。
-    fn supplier_api_health_check_runs(&self) -> Repository<'_, SupplierHealthCheckRun>;
+    fn supplier_api_health_check_runs(&self) -> SupplierHealthCheckRunRepository<'_>;
 
     /// 获取连接治理命令幂等回执集合。
-    fn supplier_api_command_receipts(&self) -> Repository<'_, SupplierConnectionCommandReceipt>;
+    fn supplier_api_command_receipts(&self) -> SupplierConnectionCommandReceiptRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -72,24 +72,24 @@ impl SupplierApiExt for Database {
     type SupplierApiCapabilityFilter = SupplierApiCapabilityFilter;
     type SupplierConnectionImpact = super::super::supplier_api::SupplierConnectionImpact;
 
-    fn supplier_api_connections(&self) -> Repository<'_, SupplierApiConnection> {
-        Repository::new(self, Self::SUPPLIER_API_CONNECTIONS)
+    fn supplier_api_connections(&self) -> SupplierApiConnectionRepository<'_> {
+        SupplierApiConnectionRepository::new(self, Self::SUPPLIER_API_CONNECTIONS)
     }
 
-    fn supplier_api_capabilities(&self) -> Repository<'_, SupplierApiCapability> {
-        Repository::new(self, Self::SUPPLIER_API_CAPABILITIES)
+    fn supplier_api_capabilities(&self) -> SupplierApiCapabilityRepository<'_> {
+        SupplierApiCapabilityRepository::new(self, Self::SUPPLIER_API_CAPABILITIES)
     }
 
-    fn supplier_api_business_confirmations(&self) -> Repository<'_, BusinessCapabilityConfirmation> {
-        Repository::new(self, Self::SUPPLIER_API_BUSINESS_CONFIRMATIONS)
+    fn supplier_api_business_confirmations(&self) -> BusinessCapabilityConfirmationRepository<'_> {
+        BusinessCapabilityConfirmationRepository::new(self, Self::SUPPLIER_API_BUSINESS_CONFIRMATIONS)
     }
 
-    fn supplier_api_health_check_runs(&self) -> Repository<'_, SupplierHealthCheckRun> {
-        Repository::new(self, Self::SUPPLIER_API_HEALTH_CHECK_RUNS)
+    fn supplier_api_health_check_runs(&self) -> SupplierHealthCheckRunRepository<'_> {
+        SupplierHealthCheckRunRepository::new(self, Self::SUPPLIER_API_HEALTH_CHECK_RUNS)
     }
 
-    fn supplier_api_command_receipts(&self) -> Repository<'_, SupplierConnectionCommandReceipt> {
-        Repository::new(self, Self::SUPPLIER_API_COMMAND_RECEIPTS)
+    fn supplier_api_command_receipts(&self) -> SupplierConnectionCommandReceiptRepository<'_> {
+        SupplierConnectionCommandReceiptRepository::new(self, Self::SUPPLIER_API_COMMAND_RECEIPTS)
     }
 
     fn supplier_api(&self) -> SupplierApiRepository<'_> {

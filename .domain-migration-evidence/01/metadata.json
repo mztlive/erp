@@ -1,0 +1,60 @@
+{
+  "phase": "01",
+  "slice": "owned",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "branch": "chore/domain-crate-01-foundations",
+  "evidence_dir": ".domain-migration-evidence/01",
+  "input_head": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
+  "unique_integration_owner": "chore/domain-crate-01-foundations implementer",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "remaining_issues": [],
+  "owned_repositories": 141,
+  "no_e0116": true,
+  "no_deref": true,
+  "no_type_alias": true,
+  "autotests": false,
+  "recorded_at": "2026-09-06T06:54:48+00:00",
+  "unit_tests": {
+    "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+    "exit_code": 0,
+    "passed": 3262,
+    "failed": 0,
+    "ignored": 71,
+    "crates": 15,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "log": ".domain-migration-evidence/01/unit-tests.log"
+  },
+  "quality_gates": {
+    "fmt": 0,
+    "check": 0,
+    "clippy": 0,
+    "unit-tests": 0,
+    "bpm": 0,
+    "service": 0,
+    "domain": 0,
+    "permissions": 0,
+    "git-diff-check": 0,
+    "all_exit_0": true,
+    "log": ".domain-migration-evidence/01/quality-gates.log",
+    "summary": "Phase 01 owned-repository slice public gates all exited 0 from backend/. 141 owned repositories compose persistence_core::Repository. Duplicate database Repository deleted. HTTP/DTO/index/error goldens unchanged (369/21/368/154/32). 真实数据库运行未验证."
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "error_codes": 21,
+    "indexes": 368,
+    "collection_constants": 154,
+    "dto_files": 32,
+    "comparison": ".domain-migration-evidence/01/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/01/transaction-contract.json"
+  },
+  "compile_baseline": {
+    "applicable": false,
+    "reason": "阶段 01 不要求编译收益复测；阈值在阶段 17 判定。"
+  },
+  "implement_summary": "Created 141 owned <Entity>Repository types at database/src/repository/owned. Specialized impls retargeted. Factories keep accessor names. Colliding domain aggregates renamed *DomainRepository. Generic Repository remains only in persistence-core. 真实数据库运行未验证."
+}

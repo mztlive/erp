@@ -8,6 +8,7 @@
 //!
 //! 筛选/行类型定义在本文件，经 `FileAssetExt` 的关联类型对外暴露。
 
+use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 use std::collections::HashSet;
 
 use entities::file_asset::{
@@ -19,10 +20,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 文件资产列表投影行（列表接口只取必要字段，禁止返回整文档）。
 ///
@@ -104,7 +105,7 @@ impl Pagination for FileAssetFilter {
     }
 }
 
-impl<'a> Repository<'a, FileAsset> {
+impl<'a> FileAssetRepository<'a> {
     /// 在调用方执行器内有序批量创建文件资产。
     ///
     /// 空集合直接返回且不访问数据库；MongoDB 默认的 ordered 插入保证首个失败
@@ -227,7 +228,7 @@ impl<'a> Repository<'a, FileAsset> {
     }
 }
 
-impl<'a> Repository<'a, DocumentAttachment> {
+impl<'a> DocumentAttachmentRepository<'a> {
     /// 按业务单据批量取回附件关联（`idx_document_attachments_document`，无 N+1）。
     ///
     /// # 参数
@@ -293,10 +294,12 @@ fn file_asset_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, FileAsset, FileAssetFilter, QueryFilter, Repository};
+    use super::{sort_doc, FileAssetFilter};
+    use crate::repository::owned::FileAssetRepository;
     use entities::file_asset::{RetentionClass, SecurityScanStatus, SensitivityClass};
     use mongodb::bson::doc;
     use persistence_core::NoTransaction;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn filter_applies_name_regex_and_class_filters() {
@@ -337,7 +340,7 @@ mod tests {
             .await
             .unwrap();
         let database = client.database("repository_file_asset_empty_ids");
-        let repository = Repository::<FileAsset>::new(&database, "file_assets");
+        let repository = FileAssetRepository::new(&database, "file_assets");
 
         let assets = repository.find_by_ids(&[], &mut NoTransaction).await.unwrap();
 

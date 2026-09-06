@@ -1,3 +1,4 @@
+use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepository};
 use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -5,18 +6,18 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::catalog::{EnableStatus, ListingStatus, Product, Sku, SkuRevision, SkuRevisionAttributeValue};
+use entities::catalog::{EnableStatus, ListingStatus, Sku, SkuRevision, SkuRevisionAttributeValue};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
 use erp_core::money::{Amount, Quantity};
 
 use super::super::extensions::CatalogExt;
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc, SKUS, SKU_REVISIONS};
 use super::CatalogRepository;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `sku_revision_attribute_value` 集合名（单一来源：`CatalogExt` 关联常量）。
 const SKU_REVISION_ATTRIBUTE_VALUES: &str = <mongodb::Database as CatalogExt>::SKU_REVISION_ATTRIBUTE_VALUES;
@@ -116,7 +117,7 @@ impl Pagination for SkuFilter {
     }
 }
 
-impl<'a> Repository<'a, Sku> {
+impl<'a> SkuRepository<'a> {
     /// 按稳定主键批量查询 SKU。
     ///
     /// # 参数
@@ -332,7 +333,7 @@ impl Pagination for SkuRevisionFilter {
     }
 }
 
-impl<'a> Repository<'a, SkuRevision> {
+impl<'a> SkuRevisionRepository<'a> {
     /// 分页检索 SKU 修订列表（投影查询）。
     ///
     /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 销售可见价，
@@ -519,19 +520,19 @@ impl<'a> CatalogRepository<'a> {
     ) -> Result<Vec<SkuId>> {
         let mut sku_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut sku_filter, "sku_no", Some(keyword));
-        let mut skus = Repository::<Sku>::new(self.db, SKUS)
+        let mut skus = SkuRepository::new(self.db, SKUS)
             .find_many(sku_filter, executor)
             .await?;
 
         let mut revision_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut revision_filter, "name", Some(keyword));
-        let revisions = Repository::<SkuRevision>::new(self.db, SKU_REVISIONS)
+        let revisions = SkuRevisionRepository::new(self.db, SKU_REVISIONS)
             .find_many(revision_filter, executor)
             .await?;
         if !revisions.is_empty() {
             let revision_ids = revisions.into_iter().map(|revision| revision.base.id);
             skus.extend(
-                Repository::new(self.db, SKUS)
+                SkuRepository::new(self.db, SKUS)
                     .find_many(in_filter("current_revision_id", revision_ids), executor)
                     .await?,
             );
@@ -603,7 +604,7 @@ impl<'a> CatalogRepository<'a> {
     ) -> Result<Vec<SkuId>> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "product_no", Some(product_no));
-        let products = Repository::<Product>::new(self.db, <mongodb::Database as CatalogExt>::PRODUCTS)
+        let products = ProductRepository::new(self.db, <mongodb::Database as CatalogExt>::PRODUCTS)
             .find_many(filter, executor)
             .await?;
         if products.is_empty() {
@@ -613,7 +614,7 @@ impl<'a> CatalogRepository<'a> {
             .into_iter()
             .map(|product| ProductId::new(product.base.id))
             .collect::<Vec<_>>();
-        Ok(Repository::<Sku>::new(self.db, SKUS)
+        Ok(SkuRepository::new(self.db, SKUS)
             .find_by_product_ids(&product_ids, executor)
             .await?
             .into_iter()
@@ -635,7 +636,7 @@ impl<'a> CatalogRepository<'a> {
     async fn sku_ids_by_sku_no(&self, sku_no: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "sku_no", Some(sku_no));
-        Ok(Repository::<Sku>::new(self.db, SKUS)
+        Ok(SkuRepository::new(self.db, SKUS)
             .find_many(filter, executor)
             .await?
             .into_iter()

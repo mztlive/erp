@@ -5,9 +5,12 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS` 等值。
 
+use crate::repository::owned::{
+    CustomerAcceptanceRepository, DeliveryRepository, ElectronicDeliveryRepository,
+    PurchaseReceiptRepository, ServiceFulfillmentRepository,
+};
 use entities::fulfillment::{
-    AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
-    ElectronicDelivery, PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment,
+    AcceptanceFulfillmentAllocation, CustomerAcceptanceLine, DeliveryLine, PurchaseReceiptLine,
 };
 use mongodb::Database;
 
@@ -15,7 +18,6 @@ use super::super::fulfillment::{
     CustomerAcceptanceFilter, DeliveryFilter, ElectronicDeliveryFilter, FulfillmentRepository,
     PurchaseReceiptFilter, ServiceFulfillmentFilter,
 };
-use crate::Repository;
 
 /// 域 D16 仓储访问器。
 pub trait FulfillmentExt {
@@ -56,56 +58,58 @@ pub trait FulfillmentExt {
     /// 获取 `purchase_receipt` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::PurchaseReceipt>`。
-    fn purchase_receipts(&self) -> Repository<'_, PurchaseReceipt>;
+    /// 返回 `PurchaseReceiptRepository<'_>`。
+    fn purchase_receipts(&self) -> PurchaseReceiptRepository<'_>;
 
     /// 获取 `purchase_receipt_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::PurchaseReceiptLine>`。
-    fn purchase_receipt_lines(&self) -> Repository<'_, PurchaseReceiptLine>;
+    /// 返回 `persistence_core::Repository<'_, entities::fulfillment::PurchaseReceiptLine>`。
+    fn purchase_receipt_lines(&self) -> persistence_core::Repository<'_, PurchaseReceiptLine>;
 
     /// 获取 `delivery` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::Delivery>`。
-    fn deliveries(&self) -> Repository<'_, Delivery>;
+    /// 返回 `DeliveryRepository<'_>`。
+    fn deliveries(&self) -> DeliveryRepository<'_>;
 
     /// 获取 `delivery_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::DeliveryLine>`。
-    fn delivery_lines(&self) -> Repository<'_, DeliveryLine>;
+    /// 返回 `persistence_core::Repository<'_, entities::fulfillment::DeliveryLine>`。
+    fn delivery_lines(&self) -> persistence_core::Repository<'_, DeliveryLine>;
 
     /// 获取 `electronic_delivery` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::ElectronicDelivery>`。
-    fn electronic_deliveries(&self) -> Repository<'_, ElectronicDelivery>;
+    /// 返回 `ElectronicDeliveryRepository<'_>`。
+    fn electronic_deliveries(&self) -> ElectronicDeliveryRepository<'_>;
 
     /// 获取 `service_fulfillment` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::ServiceFulfillment>`。
-    fn service_fulfillments(&self) -> Repository<'_, ServiceFulfillment>;
+    /// 返回 `ServiceFulfillmentRepository<'_>`。
+    fn service_fulfillments(&self) -> ServiceFulfillmentRepository<'_>;
 
     /// 获取 `customer_acceptance` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::CustomerAcceptance>`。
-    fn customer_acceptances(&self) -> Repository<'_, CustomerAcceptance>;
+    /// 返回 `CustomerAcceptanceRepository<'_>`。
+    fn customer_acceptances(&self) -> CustomerAcceptanceRepository<'_>;
 
     /// 获取 `customer_acceptance_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::CustomerAcceptanceLine>`。
-    fn customer_acceptance_lines(&self) -> Repository<'_, CustomerAcceptanceLine>;
+    /// 返回 `persistence_core::Repository<'_, entities::fulfillment::CustomerAcceptanceLine>`。
+    fn customer_acceptance_lines(&self) -> persistence_core::Repository<'_, CustomerAcceptanceLine>;
 
     /// 获取 `acceptance_fulfillment_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::fulfillment::AcceptanceFulfillmentAllocation>`。
-    fn acceptance_fulfillment_allocations(&self) -> Repository<'_, AcceptanceFulfillmentAllocation>;
+    /// 返回 `persistence_core::Repository<'_, entities::fulfillment::AcceptanceFulfillmentAllocation>`。
+    fn acceptance_fulfillment_allocations(
+        &self,
+    ) -> persistence_core::Repository<'_, AcceptanceFulfillmentAllocation>;
 
     /// 获取承载跨集合写入的域专用仓储。
     ///
@@ -121,40 +125,42 @@ impl FulfillmentExt for Database {
     type ServiceFulfillmentFilter = ServiceFulfillmentFilter;
     type CustomerAcceptanceFilter = CustomerAcceptanceFilter;
 
-    fn purchase_receipts(&self) -> Repository<'_, PurchaseReceipt> {
-        Repository::new(self, Self::PURCHASE_RECEIPTS)
+    fn purchase_receipts(&self) -> PurchaseReceiptRepository<'_> {
+        PurchaseReceiptRepository::new(self, Self::PURCHASE_RECEIPTS)
     }
 
-    fn purchase_receipt_lines(&self) -> Repository<'_, PurchaseReceiptLine> {
-        Repository::new(self, Self::PURCHASE_RECEIPT_LINES)
+    fn purchase_receipt_lines(&self) -> persistence_core::Repository<'_, PurchaseReceiptLine> {
+        persistence_core::Repository::new(self, Self::PURCHASE_RECEIPT_LINES)
     }
 
-    fn deliveries(&self) -> Repository<'_, Delivery> {
-        Repository::new(self, Self::DELIVERIES)
+    fn deliveries(&self) -> DeliveryRepository<'_> {
+        DeliveryRepository::new(self, Self::DELIVERIES)
     }
 
-    fn delivery_lines(&self) -> Repository<'_, DeliveryLine> {
-        Repository::new(self, Self::DELIVERY_LINES)
+    fn delivery_lines(&self) -> persistence_core::Repository<'_, DeliveryLine> {
+        persistence_core::Repository::new(self, Self::DELIVERY_LINES)
     }
 
-    fn electronic_deliveries(&self) -> Repository<'_, ElectronicDelivery> {
-        Repository::new(self, Self::ELECTRONIC_DELIVERIES)
+    fn electronic_deliveries(&self) -> ElectronicDeliveryRepository<'_> {
+        ElectronicDeliveryRepository::new(self, Self::ELECTRONIC_DELIVERIES)
     }
 
-    fn service_fulfillments(&self) -> Repository<'_, ServiceFulfillment> {
-        Repository::new(self, Self::SERVICE_FULFILLMENTS)
+    fn service_fulfillments(&self) -> ServiceFulfillmentRepository<'_> {
+        ServiceFulfillmentRepository::new(self, Self::SERVICE_FULFILLMENTS)
     }
 
-    fn customer_acceptances(&self) -> Repository<'_, CustomerAcceptance> {
-        Repository::new(self, Self::CUSTOMER_ACCEPTANCES)
+    fn customer_acceptances(&self) -> CustomerAcceptanceRepository<'_> {
+        CustomerAcceptanceRepository::new(self, Self::CUSTOMER_ACCEPTANCES)
     }
 
-    fn customer_acceptance_lines(&self) -> Repository<'_, CustomerAcceptanceLine> {
-        Repository::new(self, Self::CUSTOMER_ACCEPTANCE_LINES)
+    fn customer_acceptance_lines(&self) -> persistence_core::Repository<'_, CustomerAcceptanceLine> {
+        persistence_core::Repository::new(self, Self::CUSTOMER_ACCEPTANCE_LINES)
     }
 
-    fn acceptance_fulfillment_allocations(&self) -> Repository<'_, AcceptanceFulfillmentAllocation> {
-        Repository::new(self, Self::ACCEPTANCE_FULFILLMENT_ALLOCATIONS)
+    fn acceptance_fulfillment_allocations(
+        &self,
+    ) -> persistence_core::Repository<'_, AcceptanceFulfillmentAllocation> {
+        persistence_core::Repository::new(self, Self::ACCEPTANCE_FULFILLMENT_ALLOCATIONS)
     }
 
     fn fulfillment(&self) -> FulfillmentRepository<'_> {

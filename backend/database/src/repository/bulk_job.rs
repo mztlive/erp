@@ -8,6 +8,10 @@
 //!
 //! 筛选/行类型定义在本文件，经 `BulkJobExt` 的关联类型对外暴露。
 
+use crate::repository::owned::{
+    BackgroundJobItemRepository, BackgroundJobRepository, BulkSelectionItemRepository,
+    BulkSelectionSnapshotRepository,
+};
 use entities::bulk_job::{
     BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkSelectionItem, BulkSelectionSnapshot,
     BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, SelectionItemStatus, SelectionStatus,
@@ -20,10 +24,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BulkJobExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 唯一请求身份仲裁后的后台任务登记结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +121,7 @@ impl Pagination for BulkSelectionSnapshotFilter {
     }
 }
 
-impl<'a> Repository<'a, BulkSelectionSnapshot> {
+impl<'a> BulkSelectionSnapshotRepository<'a> {
     /// 分页检索选择快照列表（投影查询）。
     ///
     /// 只返回 [`BulkSelectionSnapshotRow`] 所需的列表字段，不加载整文档；
@@ -173,7 +177,7 @@ pub struct BulkSelectionItemRow {
     pub result_code: Option<String>,
 }
 
-impl<'a> Repository<'a, BulkSelectionItem> {
+impl<'a> BulkSelectionItemRepository<'a> {
     /// 分页检索快照逐项结果（投影查询）。
     ///
     /// 只返回 [`BulkSelectionItemRow`] 所需的逐项字段，不加载整文档；
@@ -323,7 +327,7 @@ impl Pagination for BackgroundJobFilter {
     }
 }
 
-impl<'a> Repository<'a, BackgroundJob> {
+impl<'a> BackgroundJobRepository<'a> {
     /// 分页检索后台任务列表（投影查询，任务中心）。
     ///
     /// 只返回 [`BackgroundJobRow`] 所需的进度字段，不加载整文档；
@@ -427,7 +431,7 @@ pub struct BackgroundJobItemRow {
     pub result_object_id: Option<String>,
 }
 
-impl<'a> Repository<'a, BackgroundJobItem> {
+impl<'a> BackgroundJobItemRepository<'a> {
     /// 分页检索任务逐项结果（投影查询）。
     ///
     /// 只返回 [`BackgroundJobItemRow`] 所需的逐项字段，不加载整文档；
@@ -707,9 +711,10 @@ fn job_item_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, BackgroundJobFilter, BulkSelectionSnapshotFilter, QueryFilter};
+    use super::{sort_doc, BackgroundJobFilter, BulkSelectionSnapshotFilter};
     use entities::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn snapshot_filter_applies_type_status_and_creator() {

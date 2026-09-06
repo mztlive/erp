@@ -4,15 +4,15 @@
 //! 回到原销售明细（§6.6）。两个方向都由 `$in` 批量取回（禁止 N+1），
 //! 分别命中唯一索引与反向查询索引。分配是事实类集合，**不提供软删除方法**。
 
+use crate::repository::owned::PurchaseLineSalesAllocationRepository;
 use entities::purchase_order::PurchaseLineSalesAllocation;
 use erp_core::ids::PurchaseOrderRevisionLineId;
 
 use super::common::in_filter;
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, PurchaseLineSalesAllocation> {
+impl<'a> PurchaseLineSalesAllocationRepository<'a> {
     /// 按采购版本行批量取回分配（`$in`，禁止 N+1）。
     ///
     /// 正向查询：给定采购明细，取回其全部销售分配（入库预占沿本关系回到原

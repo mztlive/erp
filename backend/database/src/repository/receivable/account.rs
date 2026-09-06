@@ -1,3 +1,4 @@
+use crate::repository::owned::ReceivableAccountRepository;
 use entities::receivable::{AccountReviewStatus, ReceivableAccount, ReceivableAccountStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::stable::StableBase;
@@ -7,11 +8,11 @@ use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 应收往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,7 +140,7 @@ impl Pagination for ReceivableAccountFilter {
     }
 }
 
-impl<'a> Repository<'a, ReceivableAccount> {
+impl<'a> ReceivableAccountRepository<'a> {
     /// 分页检索应收往来子账列表（投影查询）。
     ///
     /// 只返回 [`ReceivableAccountRow`] 所需的列表字段，不加载整文档；
@@ -515,7 +516,7 @@ impl<'a> Repository<'a, ReceivableAccount> {
     }
 }
 
-impl<'a> Repository<'a, ReceivableAccount> {
+impl<'a> ReceivableAccountRepository<'a> {
     /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
     pub async fn find_accounts_by_sales_order_id(
         &self,
@@ -791,13 +792,15 @@ fn receivable_account_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{amount_bson, progress_pipeline, sort_doc, QueryFilter, ReceivableAccountFilter};
-    use crate::{ReceivableExt, Repository};
-    use entities::receivable::{ReceivableAccount, ReceivableAccountStatus};
+    use super::{amount_bson, progress_pipeline, sort_doc, ReceivableAccountFilter};
+    use crate::repository::owned::ReceivableAccountRepository;
+    use crate::ReceivableExt;
+    use entities::receivable::ReceivableAccountStatus;
     use erp_core::ids::{CustomerAccountId, PartyId};
     use erp_core::money::Amount;
     use mongodb::bson::{doc, Bson};
     use persistence_core::NoTransaction;
+    use persistence_core::QueryFilter;
     use std::str::FromStr;
 
     #[test]
@@ -906,11 +909,11 @@ mod tests {
             .await
             .expect("客户端句柄创建失败");
         let database = client.database("unused");
-        let repository = Repository::new(
+        let repository = ReceivableAccountRepository::new(
             &database,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
         );
-        let repository: Repository<'_, ReceivableAccount> = repository;
+        let repository: ReceivableAccountRepository<'_> = repository;
         let result = repository
             .revert_invoicings_many(&[], "tester", &mut NoTransaction)
             .await

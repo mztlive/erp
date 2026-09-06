@@ -1,3 +1,4 @@
+use crate::repository::owned::{PayableEntryOffsetRepository, PayableEntryRepository};
 use std::collections::HashMap;
 
 use entities::payable::{PayableEntry, PayableEntryOffset};
@@ -9,7 +10,6 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::Deserialize;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -30,7 +30,7 @@ struct IncreaseDueDateRow {
     due_date: BusinessDate,
 }
 
-impl<'a> Repository<'a, PayableEntry> {
+impl<'a> PayableEntryRepository<'a> {
     /// 按应付账户聚合最早分录到期日。
     ///
     /// # 参数
@@ -217,7 +217,7 @@ fn minimum_due_dates_pipeline(
     ]
 }
 
-impl<'a> Repository<'a, PayableEntryOffset> {
+impl<'a> PayableEntryOffsetRepository<'a> {
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
     /// 用于校验「减少分录分配合计等于其金额」（数据模型 §6.9）。

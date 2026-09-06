@@ -8,16 +8,15 @@
 //! `invoice` 由 D18 拥有，D19 在 P3 通过 `ReceivableExt::invoices()` 复用，
 //! 本域只拥有 `purchase_invoice_allocation`（domains.md §3）。
 
-use entities::payable::{
-    PayableAccount, PayableEntry, PayableEntryOffset, PaymentAllocation, PurchaseInvoiceAllocation,
-    SupplierPayment,
+use crate::repository::owned::{
+    PayableAccountRepository, PayableEntryOffsetRepository, PayableEntryRepository,
+    PaymentAllocationRepository, PurchaseInvoiceAllocationRepository, SupplierPaymentRepository,
 };
 use mongodb::Database;
 
 use super::super::payable::{
     PayableAccountFilter, PayableRepository, PurchaseInvoiceAllocationFilter, SupplierPaymentFilter,
 };
-use crate::Repository;
 
 /// 域 D19 仓储访问器。
 pub trait PayableExt {
@@ -46,38 +45,38 @@ pub trait PayableExt {
     /// 获取 `payable_account` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::PayableAccount>`。
-    fn payable_accounts(&self) -> Repository<'_, PayableAccount>;
+    /// 返回 `PayableAccountRepository<'_>`。
+    fn payable_accounts(&self) -> PayableAccountRepository<'_>;
 
     /// 获取 `payable_entry` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::PayableEntry>`。
-    fn payable_entries(&self) -> Repository<'_, PayableEntry>;
+    /// 返回 `PayableEntryRepository<'_>`。
+    fn payable_entries(&self) -> PayableEntryRepository<'_>;
 
     /// 获取 `payable_entry_offset` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::PayableEntryOffset>`。
-    fn payable_entry_offsets(&self) -> Repository<'_, PayableEntryOffset>;
+    /// 返回 `PayableEntryOffsetRepository<'_>`。
+    fn payable_entry_offsets(&self) -> PayableEntryOffsetRepository<'_>;
 
     /// 获取 `supplier_payment` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::SupplierPayment>`。
-    fn supplier_payments(&self) -> Repository<'_, SupplierPayment>;
+    /// 返回 `SupplierPaymentRepository<'_>`。
+    fn supplier_payments(&self) -> SupplierPaymentRepository<'_>;
 
     /// 获取 `payment_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::PaymentAllocation>`。
-    fn payment_allocations(&self) -> Repository<'_, PaymentAllocation>;
+    /// 返回 `PaymentAllocationRepository<'_>`。
+    fn payment_allocations(&self) -> PaymentAllocationRepository<'_>;
 
     /// 获取 `purchase_invoice_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::payable::PurchaseInvoiceAllocation>`。
-    fn purchase_invoice_allocations(&self) -> Repository<'_, PurchaseInvoiceAllocation>;
+    /// 返回 `PurchaseInvoiceAllocationRepository<'_>`。
+    fn purchase_invoice_allocations(&self) -> PurchaseInvoiceAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -91,28 +90,28 @@ impl PayableExt for Database {
     type SupplierPaymentFilter = SupplierPaymentFilter;
     type PurchaseInvoiceAllocationFilter = PurchaseInvoiceAllocationFilter;
 
-    fn payable_accounts(&self) -> Repository<'_, PayableAccount> {
-        Repository::new(self, Self::PAYABLE_ACCOUNTS)
+    fn payable_accounts(&self) -> PayableAccountRepository<'_> {
+        PayableAccountRepository::new(self, Self::PAYABLE_ACCOUNTS)
     }
 
-    fn payable_entries(&self) -> Repository<'_, PayableEntry> {
-        Repository::new(self, Self::PAYABLE_ENTRIES)
+    fn payable_entries(&self) -> PayableEntryRepository<'_> {
+        PayableEntryRepository::new(self, Self::PAYABLE_ENTRIES)
     }
 
-    fn payable_entry_offsets(&self) -> Repository<'_, PayableEntryOffset> {
-        Repository::new(self, Self::PAYABLE_ENTRY_OFFSETS)
+    fn payable_entry_offsets(&self) -> PayableEntryOffsetRepository<'_> {
+        PayableEntryOffsetRepository::new(self, Self::PAYABLE_ENTRY_OFFSETS)
     }
 
-    fn supplier_payments(&self) -> Repository<'_, SupplierPayment> {
-        Repository::new(self, Self::SUPPLIER_PAYMENTS)
+    fn supplier_payments(&self) -> SupplierPaymentRepository<'_> {
+        SupplierPaymentRepository::new(self, Self::SUPPLIER_PAYMENTS)
     }
 
-    fn payment_allocations(&self) -> Repository<'_, PaymentAllocation> {
-        Repository::new(self, Self::PAYMENT_ALLOCATIONS)
+    fn payment_allocations(&self) -> PaymentAllocationRepository<'_> {
+        PaymentAllocationRepository::new(self, Self::PAYMENT_ALLOCATIONS)
     }
 
-    fn purchase_invoice_allocations(&self) -> Repository<'_, PurchaseInvoiceAllocation> {
-        Repository::new(self, Self::PURCHASE_INVOICE_ALLOCATIONS)
+    fn purchase_invoice_allocations(&self) -> PurchaseInvoiceAllocationRepository<'_> {
+        PurchaseInvoiceAllocationRepository::new(self, Self::PURCHASE_INVOICE_ALLOCATIONS)
     }
 
     fn payable(&self) -> PayableRepository<'_> {

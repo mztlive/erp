@@ -5,7 +5,7 @@ use entities::procurement_responsibility::ProcurementResponsibilityRuleType;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
-use super::{Pagination, QueryFilter};
+use persistence_core::{Pagination, QueryFilter};
 
 /// 采购责任规则列表筛选条件。
 #[derive(Debug, Clone)]

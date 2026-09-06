@@ -1,3 +1,7 @@
+use crate::repository::owned::{
+    CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
+    ReceivableEntryRepository, SalesInvoiceAllocationRepository,
+};
 use entities::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,
     ReceivableAccount, ReceivableEntry, ReceivableFundsReview, SalesInvoiceAllocation,
@@ -7,11 +11,11 @@ use mongodb::bson::doc;
 use mongodb::options::FindOptions;
 
 use super::super::extensions::ReceivableExt;
-use super::super::{PageResult, Repository};
 use super::invoice::{InvoiceFilter, InvoiceRow};
 use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
 use super::{ReceivableRepository, RECEIVABLE_ENTRIES, RECEIVABLE_FUNDS_REVIEWS};
 use persistence_core::Executor;
+use persistence_core::PageResult;
 use persistence_core::{mongo_ops, Result};
 
 /// 回款/发票列表的账户关联作用域（FIN-R08）。
@@ -250,7 +254,7 @@ impl<'a> ReceivableRepository<'a> {
             sort_by: query.sort_by.clone(),
             sort_ascending: query.sort_ascending,
         };
-        Repository::new(self.db, <mongodb::Database as ReceivableExt>::CUSTOMER_RECEIPTS)
+        CustomerReceiptRepository::new(self.db, <mongodb::Database as ReceivableExt>::CUSTOMER_RECEIPTS)
             .search_customer_receipts(&filter, executor)
             .await
     }
@@ -294,7 +298,7 @@ impl<'a> ReceivableRepository<'a> {
             sort_by: query.sort_by.clone(),
             sort_ascending: query.sort_ascending,
         };
-        Repository::new(self.db, <mongodb::Database as ReceivableExt>::INVOICES)
+        InvoiceRepository::new(self.db, <mongodb::Database as ReceivableExt>::INVOICES)
             .search_invoices(&filter, executor)
             .await
     }
@@ -313,7 +317,7 @@ impl<'a> ReceivableRepository<'a> {
             return Ok(Vec::new());
         }
         let entries: Vec<ReceivableEntry> =
-            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES)
+            ReceivableEntryRepository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES)
                 .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
                 .await?;
         if entries.is_empty() {
@@ -323,10 +327,12 @@ impl<'a> ReceivableRepository<'a> {
             .iter()
             .map(|entry| entry.base.id.clone())
             .collect::<Vec<_>>();
-        let allocations: Vec<ReceiptAllocation> =
-            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS)
-                .find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor)
-                .await?;
+        let allocations: Vec<ReceiptAllocation> = ReceiptAllocationRepository::new(
+            self.db,
+            <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS,
+        )
+        .find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor)
+        .await?;
         let mut receipt_ids = allocations
             .into_iter()
             .map(|allocation| allocation.customer_receipt_id.to_string())
@@ -348,7 +354,7 @@ impl<'a> ReceivableRepository<'a> {
         if account_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let allocations: Vec<SalesInvoiceAllocation> = Repository::new(
+        let allocations: Vec<SalesInvoiceAllocation> = SalesInvoiceAllocationRepository::new(
             self.db,
             <mongodb::Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
         )
@@ -372,8 +378,10 @@ impl<'a> ReceivableRepository<'a> {
         scope: &ReceivableListScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let accounts: Repository<'_, ReceivableAccount> =
-            Repository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS);
+        let accounts: ReceivableAccountRepository<'_> = ReceivableAccountRepository::new(
+            self.db,
+            <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
+        );
         if let Some(account_id) = &scope.receivable_account_id {
             let account = accounts.find_by_id(account_id.as_ref(), executor).await?;
             let Some(account) = account else {

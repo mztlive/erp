@@ -1,3 +1,4 @@
+use crate::repository::owned::WorkItemRepository;
 use bpm::ApprovalNodeExecutionId;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
@@ -9,7 +10,6 @@ use serde::Deserialize;
 
 use super::super::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
 use super::super::extensions::{ApprovalIntegrationExt, BpmExt};
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Error, Result};
 
@@ -89,7 +89,7 @@ struct DocumentApprovalDuplicateInstance {
     open_execution_count: i64,
 }
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 按主键读取单据审批任务。
     ///
     /// # 参数

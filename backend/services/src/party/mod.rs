@@ -3,7 +3,7 @@
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 创建主体（party + 首版 party_revision + 审计）→ 跨集合，必须事务；
 //! - 更新主体（追加 party_revision + CAS 更新生效指针 + 审计）→
-//!   `PartyRepository::append_party_revision` 声明「必须收到事务执行器」；
+//!   `PartyDomainRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
 use database::{AccessControlExt, PartyExt, SupplierExt};

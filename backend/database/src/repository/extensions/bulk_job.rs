@@ -5,11 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS` 等值。
 
-use entities::bulk_job::{BackgroundJob, BackgroundJobItem, BulkSelectionItem, BulkSelectionSnapshot};
+use crate::repository::owned::{
+    BackgroundJobItemRepository, BackgroundJobRepository, BulkSelectionItemRepository,
+    BulkSelectionSnapshotRepository,
+};
 use mongodb::Database;
 
 use super::super::bulk_job::{BackgroundJobFilter, BulkJobRepository, BulkSelectionSnapshotFilter};
-use crate::Repository;
 
 /// 域 D04 仓储访问器。
 pub trait BulkJobExt {
@@ -31,26 +33,26 @@ pub trait BulkJobExt {
     /// 获取 `bulk_selection_snapshot` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::bulk_job::BulkSelectionSnapshot>`。
-    fn bulk_selection_snapshots(&self) -> Repository<'_, BulkSelectionSnapshot>;
+    /// 返回 `BulkSelectionSnapshotRepository<'_>`。
+    fn bulk_selection_snapshots(&self) -> BulkSelectionSnapshotRepository<'_>;
 
     /// 获取 `bulk_selection_item` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::bulk_job::BulkSelectionItem>`。
-    fn bulk_selection_items(&self) -> Repository<'_, BulkSelectionItem>;
+    /// 返回 `BulkSelectionItemRepository<'_>`。
+    fn bulk_selection_items(&self) -> BulkSelectionItemRepository<'_>;
 
     /// 获取 `background_job` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::bulk_job::BackgroundJob>`。
-    fn background_jobs(&self) -> Repository<'_, BackgroundJob>;
+    /// 返回 `BackgroundJobRepository<'_>`。
+    fn background_jobs(&self) -> BackgroundJobRepository<'_>;
 
     /// 获取 `background_job_item` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::bulk_job::BackgroundJobItem>`。
-    fn background_job_items(&self) -> Repository<'_, BackgroundJobItem>;
+    /// 返回 `BackgroundJobItemRepository<'_>`。
+    fn background_job_items(&self) -> BackgroundJobItemRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -63,20 +65,20 @@ impl BulkJobExt for Database {
     type BulkSelectionSnapshotFilter = BulkSelectionSnapshotFilter;
     type BackgroundJobFilter = BackgroundJobFilter;
 
-    fn bulk_selection_snapshots(&self) -> Repository<'_, BulkSelectionSnapshot> {
-        Repository::new(self, Self::BULK_SELECTION_SNAPSHOTS)
+    fn bulk_selection_snapshots(&self) -> BulkSelectionSnapshotRepository<'_> {
+        BulkSelectionSnapshotRepository::new(self, Self::BULK_SELECTION_SNAPSHOTS)
     }
 
-    fn bulk_selection_items(&self) -> Repository<'_, BulkSelectionItem> {
-        Repository::new(self, Self::BULK_SELECTION_ITEMS)
+    fn bulk_selection_items(&self) -> BulkSelectionItemRepository<'_> {
+        BulkSelectionItemRepository::new(self, Self::BULK_SELECTION_ITEMS)
     }
 
-    fn background_jobs(&self) -> Repository<'_, BackgroundJob> {
-        Repository::new(self, Self::BACKGROUND_JOBS)
+    fn background_jobs(&self) -> BackgroundJobRepository<'_> {
+        BackgroundJobRepository::new(self, Self::BACKGROUND_JOBS)
     }
 
-    fn background_job_items(&self) -> Repository<'_, BackgroundJobItem> {
-        Repository::new(self, Self::BACKGROUND_JOB_ITEMS)
+    fn background_job_items(&self) -> BackgroundJobItemRepository<'_> {
+        BackgroundJobItemRepository::new(self, Self::BACKGROUND_JOB_ITEMS)
     }
 
     fn bulk_job(&self) -> BulkJobRepository<'_> {

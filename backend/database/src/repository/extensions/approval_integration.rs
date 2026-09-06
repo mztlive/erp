@@ -1,9 +1,7 @@
 //! ERP 审批集成仓储访问器。
 
-use entities::approval_integration::{ApprovalNotificationOutbox, ApprovalSubjectSnapshot};
+use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 use mongodb::Database;
-
-use crate::Repository;
 
 /// 审批集成仓储访问器。只暴露业务对象快照与通知 outbox。
 pub trait ApprovalIntegrationExt {
@@ -17,23 +15,23 @@ pub trait ApprovalIntegrationExt {
     /// 返回业务对象快照仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalSubjectSnapshot>`。
-    fn approval_subject_snapshots(&self) -> Repository<'_, ApprovalSubjectSnapshot>;
+    /// 返回 `ApprovalSubjectSnapshotRepository<'_>`。
+    fn approval_subject_snapshots(&self) -> ApprovalSubjectSnapshotRepository<'_>;
 
     /// 返回通知 outbox 仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalNotificationOutbox>`。
-    fn approval_notification_outbox(&self) -> Repository<'_, ApprovalNotificationOutbox>;
+    /// 返回 `ApprovalNotificationOutboxRepository<'_>`。
+    fn approval_notification_outbox(&self) -> ApprovalNotificationOutboxRepository<'_>;
 }
 
 impl ApprovalIntegrationExt for Database {
-    fn approval_subject_snapshots(&self) -> Repository<'_, ApprovalSubjectSnapshot> {
-        Repository::new(self, Self::APPROVAL_SUBJECT_SNAPSHOTS)
+    fn approval_subject_snapshots(&self) -> ApprovalSubjectSnapshotRepository<'_> {
+        ApprovalSubjectSnapshotRepository::new(self, Self::APPROVAL_SUBJECT_SNAPSHOTS)
     }
 
-    fn approval_notification_outbox(&self) -> Repository<'_, ApprovalNotificationOutbox> {
-        Repository::new(self, Self::APPROVAL_NOTIFICATION_OUTBOX)
+    fn approval_notification_outbox(&self) -> ApprovalNotificationOutboxRepository<'_> {
+        ApprovalNotificationOutboxRepository::new(self, Self::APPROVAL_NOTIFICATION_OUTBOX)
     }
 }
 

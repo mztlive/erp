@@ -1,3 +1,4 @@
+use crate::repository::owned::{CustomerReceiptRepository, ReceiptAllocationRepository};
 use entities::receivable::{CustomerReceipt, CustomerReceiptStatus, ReceiptAllocation};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
@@ -7,11 +8,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 客户回款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -90,7 +91,7 @@ impl Pagination for CustomerReceiptFilter {
     }
 }
 
-impl<'a> Repository<'a, CustomerReceipt> {
+impl<'a> CustomerReceiptRepository<'a> {
     /// 分页检索客户回款单列表（投影查询）。
     ///
     /// 只返回 [`CustomerReceiptRow`] 所需的列表字段；回款单号支持字面量
@@ -174,7 +175,7 @@ impl<'a> Repository<'a, CustomerReceipt> {
     }
 }
 
-impl<'a> Repository<'a, ReceiptAllocation> {
+impl<'a> ReceiptAllocationRepository<'a> {
     /// 批量按回款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -245,7 +246,8 @@ fn customer_receipt_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{CustomerReceiptFilter, QueryFilter};
+    use super::CustomerReceiptFilter;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn receipt_filter_escapes_regex_literals() {

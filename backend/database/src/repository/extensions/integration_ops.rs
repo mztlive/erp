@@ -5,15 +5,15 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES` 等值。
 
-use entities::integration_ops::{
-    InboxMessage, IntegrationErrorTask, ReconciliationDifference, ReconciliationDifferenceResolution,
+use crate::repository::owned::{
+    InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
+    ReconciliationDifferenceResolutionRepository,
 };
 use mongodb::Database;
 
 use super::super::integration_ops::{
     InboxMessageFilter, IntegrationErrorTaskFilter, IntegrationOpsRepository, ReconciliationDifferenceFilter,
 };
-use crate::Repository;
 
 /// 域 D34 仓储访问器。
 pub trait IntegrationOpsExt {
@@ -38,26 +38,26 @@ pub trait IntegrationOpsExt {
     /// 获取 `inbox_message` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::integration_ops::InboxMessage>`。
-    fn inbox_messages(&self) -> Repository<'_, InboxMessage>;
+    /// 返回 `InboxMessageRepository<'_>`。
+    fn inbox_messages(&self) -> InboxMessageRepository<'_>;
 
     /// 获取 `integration_error_task` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::integration_ops::IntegrationErrorTask>`。
-    fn integration_error_tasks(&self) -> Repository<'_, IntegrationErrorTask>;
+    /// 返回 `IntegrationErrorTaskRepository<'_>`。
+    fn integration_error_tasks(&self) -> IntegrationErrorTaskRepository<'_>;
 
     /// 获取 `reconciliation_difference` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::integration_ops::ReconciliationDifference>`。
-    fn reconciliation_differences(&self) -> Repository<'_, ReconciliationDifference>;
+    /// 返回 `ReconciliationDifferenceRepository<'_>`。
+    fn reconciliation_differences(&self) -> ReconciliationDifferenceRepository<'_>;
 
     /// 获取 `reconciliation_difference_resolution` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::integration_ops::ReconciliationDifferenceResolution>`。
-    fn reconciliation_difference_resolutions(&self) -> Repository<'_, ReconciliationDifferenceResolution>;
+    /// 返回 `ReconciliationDifferenceResolutionRepository<'_>`。
+    fn reconciliation_difference_resolutions(&self) -> ReconciliationDifferenceResolutionRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -71,20 +71,20 @@ impl IntegrationOpsExt for Database {
     type IntegrationErrorTaskFilter = IntegrationErrorTaskFilter;
     type ReconciliationDifferenceFilter = ReconciliationDifferenceFilter;
 
-    fn inbox_messages(&self) -> Repository<'_, InboxMessage> {
-        Repository::new(self, Self::INBOX_MESSAGES)
+    fn inbox_messages(&self) -> InboxMessageRepository<'_> {
+        InboxMessageRepository::new(self, Self::INBOX_MESSAGES)
     }
 
-    fn integration_error_tasks(&self) -> Repository<'_, IntegrationErrorTask> {
-        Repository::new(self, Self::INTEGRATION_ERROR_TASKS)
+    fn integration_error_tasks(&self) -> IntegrationErrorTaskRepository<'_> {
+        IntegrationErrorTaskRepository::new(self, Self::INTEGRATION_ERROR_TASKS)
     }
 
-    fn reconciliation_differences(&self) -> Repository<'_, ReconciliationDifference> {
-        Repository::new(self, Self::RECONCILIATION_DIFFERENCES)
+    fn reconciliation_differences(&self) -> ReconciliationDifferenceRepository<'_> {
+        ReconciliationDifferenceRepository::new(self, Self::RECONCILIATION_DIFFERENCES)
     }
 
-    fn reconciliation_difference_resolutions(&self) -> Repository<'_, ReconciliationDifferenceResolution> {
-        Repository::new(self, Self::RECONCILIATION_DIFFERENCE_RESOLUTIONS)
+    fn reconciliation_difference_resolutions(&self) -> ReconciliationDifferenceResolutionRepository<'_> {
+        ReconciliationDifferenceResolutionRepository::new(self, Self::RECONCILIATION_DIFFERENCE_RESOLUTIONS)
     }
 
     fn integration_ops(&self) -> IntegrationOpsRepository<'_> {

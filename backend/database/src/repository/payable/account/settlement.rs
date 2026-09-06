@@ -1,16 +1,15 @@
-use entities::payable::PayableAccount;
+use crate::repository::owned::PayableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PayableAccountId;
 use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
-use super::super::super::Repository;
 use super::write::{amount_bson, progress_pipeline};
 use super::SettlementBatchResult;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, PayableAccount> {
+impl<'a> PayableAccountRepository<'a> {
     /// 条件核销：增加已核销进度（不超额核销）。
     ///
     /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证

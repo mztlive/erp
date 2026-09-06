@@ -3,6 +3,7 @@
 //! 提交是不可变采购内容快照（§6.6）：财务审批与工作任务必须引用具体提交，
 //! 不得审批可变采购主表。提交与明细**不提供软删除方法**。
 
+use crate::repository::owned::{PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository};
 use entities::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
@@ -10,11 +11,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
-use super::{PurchaseOrderRepository, PURCHASE_ORDER_SUBMISSIONS, PURCHASE_ORDER_SUBMISSION_LINES};
-use crate::repository::{Pagination, QueryFilter};
-use crate::Repository;
+use super::{PurchaseOrderDomainRepository, PURCHASE_ORDER_SUBMISSIONS, PURCHASE_ORDER_SUBMISSION_LINES};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{Pagination, QueryFilter};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -65,7 +65,7 @@ impl Pagination for PurchaseOrderSubmissionFilter {
     }
 }
 
-impl<'a> PurchaseOrderRepository<'a> {
+impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部提交，并按提交序号升序返回。
     ///
     /// # 参数
@@ -158,7 +158,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseOrderSubmission> {
+impl<'a> PurchaseOrderSubmissionRepository<'a> {
     /// 按「采购单 + 提交序号」查找唯一提交。
     ///
     /// 唯一性由 `uk_purchase_order_submissions_order_no` 唯一索引保证。
@@ -242,7 +242,7 @@ impl<'a> Repository<'a, PurchaseOrderSubmission> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseOrderSubmissionLine> {
+impl<'a> PurchaseOrderSubmissionLineRepository<'a> {
     /// 批量取回多个提交的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于提交详情页一次取回行集合；空集合直接返回空结果。
@@ -277,10 +277,11 @@ impl<'a> Repository<'a, PurchaseOrderSubmissionLine> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PurchaseOrderSubmissionFilter, QueryFilter};
+    use super::PurchaseOrderSubmissionFilter;
     use entities::purchase_order::SubmissionStatus;
     use erp_core::ids::PurchaseOrderId;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn submission_filter_applies_order_supplier_and_status() {

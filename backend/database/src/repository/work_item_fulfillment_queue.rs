@@ -4,14 +4,14 @@
 //! 作为权限范围，再关联四类履约草稿、来源采购/销售单和仓库。聚合在服务端完成
 //! 筛选、指标和分页；客户端不得逐页拉取四个单据列表后自行拼接。
 
-use entities::work_item::{WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
+use crate::repository::owned::WorkItemRepository;
+use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
 use serde::Deserialize;
 
 use super::extensions::{FulfillmentExt, PurchaseOrderExt, SalesOrderExt, WarehouseExt};
-use super::Repository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
@@ -126,7 +126,7 @@ struct FulfillmentQueueFacetRow {
     warehouses: Vec<FulfillmentQueueWarehouseRow>,
 }
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 查询当前个人责任范围内的履约页面投影。
     ///
     /// # 参数

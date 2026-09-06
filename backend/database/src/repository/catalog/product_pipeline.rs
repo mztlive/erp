@@ -5,10 +5,10 @@ use entities::catalog::{EnableStatus, ProductListingStatus, SkuCoverageStatus};
 use entities::supplier_offering::OfferingStatus;
 use erp_core::money::Amount;
 
-use super::super::{Pagination, QueryFilter};
 use super::listing::sku_is_listed_expr;
 use super::shared::{sort_doc, PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
 use super::ProductFilter;
+use persistence_core::{Pagination, QueryFilter};
 
 /// 构造商品列表的当前修订与 SKU 聚合管道。
 pub(super) fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {

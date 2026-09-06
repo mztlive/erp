@@ -1,3 +1,4 @@
+use crate::repository::owned::{StockAdjustmentLineRepository, StockAdjustmentRepository};
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -16,9 +17,9 @@ use super::shared::{
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENTS, STOCK_ADJUSTMENT_LINES};
 use crate::repository::extensions::InventoryExt;
-use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 库存调整单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -96,7 +97,7 @@ impl Pagination for StockAdjustmentFilter {
     }
 }
 
-impl<'a> Repository<'a, StockAdjustment> {
+impl<'a> StockAdjustmentRepository<'a> {
     /// 分页检索库存调整单列表（投影查询）。
     ///
     /// 只返回 [`StockAdjustmentRow`] 所需的列表字段，不加载整文档；排序字段
@@ -167,7 +168,7 @@ impl<'a> Repository<'a, StockAdjustment> {
     }
 }
 
-impl<'a> Repository<'a, StockAdjustmentLine> {
+impl<'a> StockAdjustmentLineRepository<'a> {
     /// 批量读取库存调整简报明细。
     ///
     /// 工作项简报 hydration 入口：按调整单 `$in` 一次取回全部明细，禁止 N+1。
@@ -471,9 +472,9 @@ fn stock_adjustment_projection() -> Document {
 #[cfg(test)]
 mod filter_tests {
     use super::{stock_adjustment_sort, StockAdjustmentFilter};
-    use crate::repository::QueryFilter;
     use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
+    use persistence_core::QueryFilter;
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockAdjustmentFilter {
         StockAdjustmentFilter {

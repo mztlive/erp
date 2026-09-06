@@ -1,6 +1,7 @@
 //! `delivery` 发货单仓储：列表投影查询与按物流单号查询。
 
-use entities::fulfillment::{Delivery, DeliveryState, DeliveryType};
+use crate::repository::owned::DeliveryRepository;
+use entities::fulfillment::{DeliveryState, DeliveryType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderId, SalesOrderId, WarehouseId};
@@ -9,10 +10,9 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 发货单排序白名单（查询与测试共用）。
 const DELIVERY_SORT_FIELDS: &[&str] = &["created_at", "shipped_at"];
@@ -90,7 +90,7 @@ impl Pagination for DeliveryFilter {
     }
 }
 
-impl<'a> Repository<'a, Delivery> {
+impl<'a> DeliveryRepository<'a> {
     /// 分页检索发货单列表（投影查询）。
     ///
     /// 只返回 [`DeliveryRow`] 所需的列表字段（敏感履约地址字段不进投影）；

@@ -5,13 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as WarehouseExt>::WAREHOUSES` 等值。
 
-use entities::warehouse::{Warehouse, WarehouseRevision, WarehouseSkuPolicy};
+use crate::repository::owned::{
+    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
+};
 use mongodb::Database;
 
 use super::super::warehouse::{
-    WarehouseFilter, WarehouseRepository, WarehouseRevisionFilter, WarehouseSkuPolicyFilter,
+    WarehouseDomainRepository, WarehouseFilter, WarehouseRevisionFilter, WarehouseSkuPolicyFilter,
 };
-use crate::Repository;
 
 /// 域 D11 仓储访问器。
 pub trait WarehouseExt {
@@ -34,26 +35,26 @@ pub trait WarehouseExt {
     /// 获取 `warehouse` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::Warehouse>`。
-    fn warehouses(&self) -> Repository<'_, Warehouse>;
+    /// 返回 `WarehouseRepository<'_>`。
+    fn warehouses(&self) -> WarehouseRepository<'_>;
 
     /// 获取 `warehouse_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::WarehouseRevision>`。
-    fn warehouse_revisions(&self) -> Repository<'_, WarehouseRevision>;
+    /// 返回 `WarehouseRevisionRepository<'_>`。
+    fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_>;
 
     /// 获取 `warehouse_sku_policy` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::WarehouseSkuPolicy>`。
-    fn warehouse_sku_policies(&self) -> Repository<'_, WarehouseSkuPolicy>;
+    /// 返回 `WarehouseSkuPolicyRepository<'_>`。
+    fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
-    /// 返回 `WarehouseRepository` 实例。
-    fn warehouse(&self) -> WarehouseRepository<'_>;
+    /// 返回 `WarehouseDomainRepository` 实例。
+    fn warehouse(&self) -> WarehouseDomainRepository<'_>;
 }
 
 impl WarehouseExt for Database {
@@ -64,32 +65,32 @@ impl WarehouseExt for Database {
     /// 获取 `warehouse` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::Warehouse>`。
-    fn warehouses(&self) -> Repository<'_, Warehouse> {
-        Repository::new(self, Self::WAREHOUSES)
+    /// 返回 `WarehouseRepository<'_>`。
+    fn warehouses(&self) -> WarehouseRepository<'_> {
+        WarehouseRepository::new(self, Self::WAREHOUSES)
     }
 
     /// 获取 `warehouse_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::WarehouseRevision>`。
-    fn warehouse_revisions(&self) -> Repository<'_, WarehouseRevision> {
-        Repository::new(self, Self::WAREHOUSE_REVISIONS)
+    /// 返回 `WarehouseRevisionRepository<'_>`。
+    fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_> {
+        WarehouseRevisionRepository::new(self, Self::WAREHOUSE_REVISIONS)
     }
 
     /// 获取 `warehouse_sku_policy` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::warehouse::WarehouseSkuPolicy>`。
-    fn warehouse_sku_policies(&self) -> Repository<'_, WarehouseSkuPolicy> {
-        Repository::new(self, Self::WAREHOUSE_SKU_POLICIES)
+    /// 返回 `WarehouseSkuPolicyRepository<'_>`。
+    fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_> {
+        WarehouseSkuPolicyRepository::new(self, Self::WAREHOUSE_SKU_POLICIES)
     }
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
-    /// 返回 `WarehouseRepository` 实例。
-    fn warehouse(&self) -> WarehouseRepository<'_> {
-        WarehouseRepository::new(self)
+    /// 返回 `WarehouseDomainRepository` 实例。
+    fn warehouse(&self) -> WarehouseDomainRepository<'_> {
+        WarehouseDomainRepository::new(self)
     }
 }

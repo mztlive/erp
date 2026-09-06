@@ -5,11 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CostExt>::COST_ENTRIES` 等值。
 
-use entities::cost::{CostAllocation, CostEntry};
+use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 use mongodb::Database;
 
 use super::super::cost::{CostAllocationFilter, CostEntryFilter, CostEntryRow, CostRepository};
-use crate::Repository;
 
 /// 域 D20 仓储访问器。
 pub trait CostExt {
@@ -30,14 +29,14 @@ pub trait CostExt {
     /// 获取 `cost_entry` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::cost::CostEntry>`。
-    fn cost_entries(&self) -> Repository<'_, CostEntry>;
+    /// 返回 `CostEntryRepository<'_>`。
+    fn cost_entries(&self) -> CostEntryRepository<'_>;
 
     /// 获取 `cost_allocation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::cost::CostAllocation>`。
-    fn cost_allocations(&self) -> Repository<'_, CostAllocation>;
+    /// 返回 `CostAllocationRepository<'_>`。
+    fn cost_allocations(&self) -> CostAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -51,12 +50,12 @@ impl CostExt for Database {
     type CostEntryRow = CostEntryRow;
     type CostAllocationFilter = CostAllocationFilter;
 
-    fn cost_entries(&self) -> Repository<'_, CostEntry> {
-        Repository::new(self, Self::COST_ENTRIES)
+    fn cost_entries(&self) -> CostEntryRepository<'_> {
+        CostEntryRepository::new(self, Self::COST_ENTRIES)
     }
 
-    fn cost_allocations(&self) -> Repository<'_, CostAllocation> {
-        Repository::new(self, Self::COST_ALLOCATIONS)
+    fn cost_allocations(&self) -> CostAllocationRepository<'_> {
+        CostAllocationRepository::new(self, Self::COST_ALLOCATIONS)
     }
 
     fn cost(&self) -> CostRepository<'_> {

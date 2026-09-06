@@ -5,11 +5,12 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS` 等值。
 
-use entities::supplier::{
-    SupplierAccount, SupplierCapability, SupplierCapabilityRevision, SupplierCommercialProfileRevision,
-    SupplierProfileCommand, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationRevision, SupplierRatingRevision,
+use crate::repository::owned::{
+    SupplierAccountRepository, SupplierCapabilityRepository, SupplierCommercialProfileRevisionRepository,
+    SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
+    SupplierQualificationRepository,
 };
+use entities::supplier::{SupplierCapabilityRevision, SupplierQualificationRevision, SupplierRatingRevision};
 use mongodb::Database;
 
 use super::super::supplier::{
@@ -17,7 +18,6 @@ use super::super::supplier::{
     SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,
     SupplierQualificationHealthFilter, SupplierRepository,
 };
-use crate::Repository;
 
 /// 域 D09 仓储访问器。
 pub trait SupplierExt {
@@ -60,53 +60,55 @@ pub trait SupplierExt {
     /// 获取 `supplier_account` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierAccount>`。
-    fn supplier_accounts(&self) -> Repository<'_, SupplierAccount>;
+    /// 返回 `SupplierAccountRepository<'_>`。
+    fn supplier_accounts(&self) -> SupplierAccountRepository<'_>;
 
     /// 获取 `supplier_commercial_profile_revision` 集合的 Repository（追加式修订）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierCommercialProfileRevision>`。
-    fn supplier_commercial_profile_revisions(&self) -> Repository<'_, SupplierCommercialProfileRevision>;
+    /// 返回 `SupplierCommercialProfileRevisionRepository<'_>`。
+    fn supplier_commercial_profile_revisions(&self) -> SupplierCommercialProfileRevisionRepository<'_>;
 
     /// 获取 `supplier_capability` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierCapability>`。
-    fn supplier_capabilities(&self) -> Repository<'_, SupplierCapability>;
+    /// 返回 `SupplierCapabilityRepository<'_>`。
+    fn supplier_capabilities(&self) -> SupplierCapabilityRepository<'_>;
 
     /// 获取 `supplier_capability_revision` 集合的 Repository（追加式修订）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierCapabilityRevision>`。
-    fn supplier_capability_revisions(&self) -> Repository<'_, SupplierCapabilityRevision>;
+    /// 返回 `persistence_core::Repository<'_, entities::supplier::SupplierCapabilityRevision>`。
+    fn supplier_capability_revisions(&self) -> persistence_core::Repository<'_, SupplierCapabilityRevision>;
 
     /// 获取 `supplier_qualification` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierQualification>`。
-    fn supplier_qualifications(&self) -> Repository<'_, SupplierQualification>;
+    /// 返回 `SupplierQualificationRepository<'_>`。
+    fn supplier_qualifications(&self) -> SupplierQualificationRepository<'_>;
 
     /// 获取 `supplier_qualification_revision` 集合的 Repository（追加式修订）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierQualificationRevision>`。
-    fn supplier_qualification_revisions(&self) -> Repository<'_, SupplierQualificationRevision>;
+    /// 返回 `persistence_core::Repository<'_, entities::supplier::SupplierQualificationRevision>`。
+    fn supplier_qualification_revisions(
+        &self,
+    ) -> persistence_core::Repository<'_, SupplierQualificationRevision>;
 
     /// 获取 `supplier_qualification_capability` 集合的 Repository（纯关联行）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierQualificationCapability>`。
-    fn supplier_qualification_capabilities(&self) -> Repository<'_, SupplierQualificationCapability>;
+    /// 返回 `SupplierQualificationCapabilityRepository<'_>`。
+    fn supplier_qualification_capabilities(&self) -> SupplierQualificationCapabilityRepository<'_>;
 
     /// 获取 `supplier_rating_revision` 集合的 Repository（追加式修订）。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier::SupplierRatingRevision>`。
-    fn supplier_rating_revisions(&self) -> Repository<'_, SupplierRatingRevision>;
+    /// 返回 `persistence_core::Repository<'_, entities::supplier::SupplierRatingRevision>`。
+    fn supplier_rating_revisions(&self) -> persistence_core::Repository<'_, SupplierRatingRevision>;
 
     /// 获取供应商资料根级命令去重仓储。
-    fn supplier_profile_commands(&self) -> Repository<'_, SupplierProfileCommand>;
+    fn supplier_profile_commands(&self) -> SupplierProfileCommandRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -125,40 +127,42 @@ impl SupplierExt for Database {
     type SupplierDetailBundle = SupplierDetailBundle;
     type SupplierQualificationHealthFilter = SupplierQualificationHealthFilter;
 
-    fn supplier_accounts(&self) -> Repository<'_, SupplierAccount> {
-        Repository::new(self, Self::SUPPLIER_ACCOUNTS)
+    fn supplier_accounts(&self) -> SupplierAccountRepository<'_> {
+        SupplierAccountRepository::new(self, Self::SUPPLIER_ACCOUNTS)
     }
 
-    fn supplier_commercial_profile_revisions(&self) -> Repository<'_, SupplierCommercialProfileRevision> {
-        Repository::new(self, Self::SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
+    fn supplier_commercial_profile_revisions(&self) -> SupplierCommercialProfileRevisionRepository<'_> {
+        SupplierCommercialProfileRevisionRepository::new(self, Self::SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
     }
 
-    fn supplier_capabilities(&self) -> Repository<'_, SupplierCapability> {
-        Repository::new(self, Self::SUPPLIER_CAPABILITIES)
+    fn supplier_capabilities(&self) -> SupplierCapabilityRepository<'_> {
+        SupplierCapabilityRepository::new(self, Self::SUPPLIER_CAPABILITIES)
     }
 
-    fn supplier_capability_revisions(&self) -> Repository<'_, SupplierCapabilityRevision> {
-        Repository::new(self, Self::SUPPLIER_CAPABILITY_REVISIONS)
+    fn supplier_capability_revisions(&self) -> persistence_core::Repository<'_, SupplierCapabilityRevision> {
+        persistence_core::Repository::new(self, Self::SUPPLIER_CAPABILITY_REVISIONS)
     }
 
-    fn supplier_qualifications(&self) -> Repository<'_, SupplierQualification> {
-        Repository::new(self, Self::SUPPLIER_QUALIFICATIONS)
+    fn supplier_qualifications(&self) -> SupplierQualificationRepository<'_> {
+        SupplierQualificationRepository::new(self, Self::SUPPLIER_QUALIFICATIONS)
     }
 
-    fn supplier_qualification_revisions(&self) -> Repository<'_, SupplierQualificationRevision> {
-        Repository::new(self, Self::SUPPLIER_QUALIFICATION_REVISIONS)
+    fn supplier_qualification_revisions(
+        &self,
+    ) -> persistence_core::Repository<'_, SupplierQualificationRevision> {
+        persistence_core::Repository::new(self, Self::SUPPLIER_QUALIFICATION_REVISIONS)
     }
 
-    fn supplier_qualification_capabilities(&self) -> Repository<'_, SupplierQualificationCapability> {
-        Repository::new(self, Self::SUPPLIER_QUALIFICATION_CAPABILITIES)
+    fn supplier_qualification_capabilities(&self) -> SupplierQualificationCapabilityRepository<'_> {
+        SupplierQualificationCapabilityRepository::new(self, Self::SUPPLIER_QUALIFICATION_CAPABILITIES)
     }
 
-    fn supplier_rating_revisions(&self) -> Repository<'_, SupplierRatingRevision> {
-        Repository::new(self, Self::SUPPLIER_RATING_REVISIONS)
+    fn supplier_rating_revisions(&self) -> persistence_core::Repository<'_, SupplierRatingRevision> {
+        persistence_core::Repository::new(self, Self::SUPPLIER_RATING_REVISIONS)
     }
 
-    fn supplier_profile_commands(&self) -> Repository<'_, SupplierProfileCommand> {
-        Repository::new(self, Self::SUPPLIER_PROFILE_COMMANDS)
+    fn supplier_profile_commands(&self) -> SupplierProfileCommandRepository<'_> {
+        SupplierProfileCommandRepository::new(self, Self::SUPPLIER_PROFILE_COMMANDS)
     }
 
     fn supplier(&self) -> SupplierRepository<'_> {

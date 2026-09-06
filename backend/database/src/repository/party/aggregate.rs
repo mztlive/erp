@@ -1,3 +1,7 @@
+use crate::repository::owned::{
+    PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
+    PartyRevisionRepository,
+};
 use std::collections::HashMap;
 
 use entities::party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile};
@@ -6,12 +10,11 @@ use mongodb::bson::doc;
 use mongodb::Database;
 
 use super::super::extensions::PartyExt;
-use super::super::Repository;
-use super::{PartyRepository, PARTIES, PARTY_REVISIONS};
+use super::{PartyDomainRepository, PARTIES, PARTY_REVISIONS};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
-impl<'a> PartyRepository<'a> {
+impl<'a> PartyDomainRepository<'a> {
     /// 按稳定 ID 读取未删除主体。
     ///
     /// # 参数
@@ -24,7 +27,7 @@ impl<'a> PartyRepository<'a> {
     /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn party(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
-        Repository::<Party>::new(self.db, PARTIES)
+        PartyRepository::new(self.db, PARTIES)
             .find_party(party_id, executor)
             .await
     }
@@ -45,7 +48,7 @@ impl<'a> PartyRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyContact>> {
-        Repository::<PartyContact>::new(self.db, <Database as PartyExt>::PARTY_CONTACTS)
+        PartyContactRepository::new(self.db, <Database as PartyExt>::PARTY_CONTACTS)
             .find_contact(record_id, executor)
             .await
     }
@@ -66,7 +69,7 @@ impl<'a> PartyRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyAddress>> {
-        Repository::<PartyAddress>::new(self.db, <Database as PartyExt>::PARTY_ADDRESSES)
+        PartyAddressRepository::new(self.db, <Database as PartyExt>::PARTY_ADDRESSES)
             .find_address(record_id, executor)
             .await
     }
@@ -87,7 +90,7 @@ impl<'a> PartyRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyBankAccount>> {
-        Repository::<PartyBankAccount>::new(self.db, <Database as PartyExt>::PARTY_BANK_ACCOUNTS)
+        PartyBankAccountRepository::new(self.db, <Database as PartyExt>::PARTY_BANK_ACCOUNTS)
             .find_bank_account(record_id, executor)
             .await
     }
@@ -111,14 +114,14 @@ impl<'a> PartyRepository<'a> {
         party_ids: &[PartyId],
         executor: &mut dyn Executor,
     ) -> Result<(Vec<Party>, Vec<PartyRevision>)> {
-        let parties = Repository::<Party>::new(self.db, PARTIES)
+        let parties = PartyRepository::new(self.db, PARTIES)
             .list_by_ids(party_ids, executor)
             .await?;
         let revision_ids: Vec<String> = parties
             .iter()
             .filter_map(|party| party.stable.current_revision_id.clone())
             .collect();
-        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+        let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
         Ok((parties, revisions))
@@ -141,7 +144,7 @@ impl<'a> PartyRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<(Party, Option<PartyRevision>)>> {
-        let Some(party) = Repository::<Party>::new(self.db, PARTIES)
+        let Some(party) = PartyRepository::new(self.db, PARTIES)
             .find_party(party_id, executor)
             .await?
         else {
@@ -149,7 +152,7 @@ impl<'a> PartyRepository<'a> {
         };
         let revision = match party.stable.current_revision_id.as_deref() {
             Some(revision_id) => {
-                Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+                PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
                     .find_revision(revision_id, executor)
                     .await?
             }
@@ -227,7 +230,7 @@ impl<'a> PartyRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyId>> {
         let escaped = regex::escape(keyword);
-        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+        let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(
                 doc! {
                     "$or": [
@@ -242,7 +245,7 @@ impl<'a> PartyRepository<'a> {
             return Ok(Vec::new());
         }
         let revision_ids: Vec<String> = revisions.into_iter().map(|revision| revision.base.id).collect();
-        let parties = Repository::<Party>::new(self.db, PARTIES)
+        let parties = PartyRepository::new(self.db, PARTIES)
             .find_many(doc! { "current_revision_id": { "$in": revision_ids } }, executor)
             .await?;
         let mut party_ids: Vec<PartyId> = parties
@@ -282,7 +285,7 @@ impl<'a> PartyRepository<'a> {
         if party_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let parties = Repository::<Party>::new(self.db, PARTIES)
+        let parties = PartyRepository::new(self.db, PARTIES)
             .list_by_ids(party_ids, executor)
             .await?;
         let revision_ids: Vec<String> = parties
@@ -292,7 +295,7 @@ impl<'a> PartyRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+        let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
         let revision_names: HashMap<(String, String), &str> = revisions
@@ -349,6 +352,8 @@ impl<'a> PartyRepository<'a> {
         .await?;
         party.stable.current_revision_id = Some(revision.base.id.clone());
         party.stable.touch(updated_by);
-        Repository::new(self.db, PARTIES).update(party, executor).await
+        PartyRepository::new(self.db, PARTIES)
+            .update(party, executor)
+            .await
     }
 }

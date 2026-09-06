@@ -1,3 +1,4 @@
+use crate::repository::owned::SupplierPaymentRepository;
 use entities::payable::{SupplierPayment, SupplierPaymentStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;
@@ -6,11 +7,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商付款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,7 +83,7 @@ impl Pagination for SupplierPaymentFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierPayment> {
+impl<'a> SupplierPaymentRepository<'a> {
     /// 按付款单号查询未删除付款单。
     ///
     /// # 参数
@@ -185,7 +186,8 @@ fn supplier_payment_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{QueryFilter, SupplierPaymentFilter};
+    use super::SupplierPaymentFilter;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn payment_filter_escapes_regex_literals() {

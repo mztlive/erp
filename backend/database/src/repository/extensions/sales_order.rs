@@ -5,17 +5,17 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SalesOrderExt>::SALES_ORDERS` 等值。
 
-use entities::sales_order::{
-    SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderLine, SalesOrderRevision,
-    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderVoucherLineRevision,
-    SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
+use crate::repository::owned::{
+    SalesOrderGoodsServiceLineRevisionRepository, SalesOrderLineRepository, SalesOrderRepository,
+    SalesOrderRevisionLineRepository, SalesOrderRevisionRepository, SalesOrderSubmissionLineRepository,
+    SalesOrderSubmissionRepository, SalesOrderVoucherLineRevisionRepository,
+    SalesOrderWorkingCopyLineRepository, SalesOrderWorkingCopyRepository,
 };
 use mongodb::Database;
 
 use super::super::sales_order::{
-    SalesOrderFilter, SalesOrderRepository, SubmissionFilter, WorkingCopyFilter,
+    SalesOrderDomainRepository, SalesOrderFilter, SubmissionFilter, WorkingCopyFilter,
 };
-use crate::Repository;
 
 /// 域 D13 仓储访问器。
 pub trait SalesOrderExt {
@@ -52,68 +52,68 @@ pub trait SalesOrderExt {
     /// 获取 `sales_order` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrder>`。
-    fn sales_orders(&self) -> Repository<'_, SalesOrder>;
+    /// 返回 `SalesOrderRepository<'_>`。
+    fn sales_orders(&self) -> SalesOrderRepository<'_>;
 
     /// 获取 `sales_order_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderLine>`。
-    fn sales_order_lines(&self) -> Repository<'_, SalesOrderLine>;
+    /// 返回 `SalesOrderLineRepository<'_>`。
+    fn sales_order_lines(&self) -> SalesOrderLineRepository<'_>;
 
     /// 获取 `sales_order_working_copy` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderWorkingCopy>`。
-    fn sales_order_working_copies(&self) -> Repository<'_, SalesOrderWorkingCopy>;
+    /// 返回 `SalesOrderWorkingCopyRepository<'_>`。
+    fn sales_order_working_copies(&self) -> SalesOrderWorkingCopyRepository<'_>;
 
     /// 获取 `sales_order_working_copy_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderWorkingCopyLine>`。
-    fn sales_order_working_copy_lines(&self) -> Repository<'_, SalesOrderWorkingCopyLine>;
+    /// 返回 `SalesOrderWorkingCopyLineRepository<'_>`。
+    fn sales_order_working_copy_lines(&self) -> SalesOrderWorkingCopyLineRepository<'_>;
 
     /// 获取 `sales_order_submission` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderSubmission>`。
-    fn sales_order_submissions(&self) -> Repository<'_, SalesOrderSubmission>;
+    /// 返回 `SalesOrderSubmissionRepository<'_>`。
+    fn sales_order_submissions(&self) -> SalesOrderSubmissionRepository<'_>;
 
     /// 获取 `sales_order_submission_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderSubmissionLine>`。
-    fn sales_order_submission_lines(&self) -> Repository<'_, SalesOrderSubmissionLine>;
+    /// 返回 `SalesOrderSubmissionLineRepository<'_>`。
+    fn sales_order_submission_lines(&self) -> SalesOrderSubmissionLineRepository<'_>;
 
     /// 获取 `sales_order_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderRevision>`。
-    fn sales_order_revisions(&self) -> Repository<'_, SalesOrderRevision>;
+    /// 返回 `SalesOrderRevisionRepository<'_>`。
+    fn sales_order_revisions(&self) -> SalesOrderRevisionRepository<'_>;
 
     /// 获取 `sales_order_revision_line` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderRevisionLine>`。
-    fn sales_order_revision_lines(&self) -> Repository<'_, SalesOrderRevisionLine>;
+    /// 返回 `SalesOrderRevisionLineRepository<'_>`。
+    fn sales_order_revision_lines(&self) -> SalesOrderRevisionLineRepository<'_>;
 
     /// 获取 `sales_order_goods_service_line_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderGoodsServiceLineRevision>`。
-    fn sales_order_goods_service_line_revisions(&self) -> Repository<'_, SalesOrderGoodsServiceLineRevision>;
+    /// 返回 `SalesOrderGoodsServiceLineRevisionRepository<'_>`。
+    fn sales_order_goods_service_line_revisions(&self) -> SalesOrderGoodsServiceLineRevisionRepository<'_>;
 
     /// 获取 `sales_order_voucher_line_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::sales_order::SalesOrderVoucherLineRevision>`。
-    fn sales_order_voucher_line_revisions(&self) -> Repository<'_, SalesOrderVoucherLineRevision>;
+    /// 返回 `SalesOrderVoucherLineRevisionRepository<'_>`。
+    fn sales_order_voucher_line_revisions(&self) -> SalesOrderVoucherLineRevisionRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
-    /// 返回 `SalesOrderRepository` 实例。
-    fn sales_order(&self) -> SalesOrderRepository<'_>;
+    /// 返回 `SalesOrderDomainRepository` 实例。
+    fn sales_order(&self) -> SalesOrderDomainRepository<'_>;
 }
 
 impl SalesOrderExt for Database {
@@ -121,47 +121,50 @@ impl SalesOrderExt for Database {
     type WorkingCopyFilter = WorkingCopyFilter;
     type SubmissionFilter = SubmissionFilter;
 
-    fn sales_orders(&self) -> Repository<'_, SalesOrder> {
-        Repository::new(self, Self::SALES_ORDERS)
+    fn sales_orders(&self) -> SalesOrderRepository<'_> {
+        SalesOrderRepository::new(self, Self::SALES_ORDERS)
     }
 
-    fn sales_order_lines(&self) -> Repository<'_, SalesOrderLine> {
-        Repository::new(self, Self::SALES_ORDER_LINES)
+    fn sales_order_lines(&self) -> SalesOrderLineRepository<'_> {
+        SalesOrderLineRepository::new(self, Self::SALES_ORDER_LINES)
     }
 
-    fn sales_order_working_copies(&self) -> Repository<'_, SalesOrderWorkingCopy> {
-        Repository::new(self, Self::SALES_ORDER_WORKING_COPIES)
+    fn sales_order_working_copies(&self) -> SalesOrderWorkingCopyRepository<'_> {
+        SalesOrderWorkingCopyRepository::new(self, Self::SALES_ORDER_WORKING_COPIES)
     }
 
-    fn sales_order_working_copy_lines(&self) -> Repository<'_, SalesOrderWorkingCopyLine> {
-        Repository::new(self, Self::SALES_ORDER_WORKING_COPY_LINES)
+    fn sales_order_working_copy_lines(&self) -> SalesOrderWorkingCopyLineRepository<'_> {
+        SalesOrderWorkingCopyLineRepository::new(self, Self::SALES_ORDER_WORKING_COPY_LINES)
     }
 
-    fn sales_order_submissions(&self) -> Repository<'_, SalesOrderSubmission> {
-        Repository::new(self, Self::SALES_ORDER_SUBMISSIONS)
+    fn sales_order_submissions(&self) -> SalesOrderSubmissionRepository<'_> {
+        SalesOrderSubmissionRepository::new(self, Self::SALES_ORDER_SUBMISSIONS)
     }
 
-    fn sales_order_submission_lines(&self) -> Repository<'_, SalesOrderSubmissionLine> {
-        Repository::new(self, Self::SALES_ORDER_SUBMISSION_LINES)
+    fn sales_order_submission_lines(&self) -> SalesOrderSubmissionLineRepository<'_> {
+        SalesOrderSubmissionLineRepository::new(self, Self::SALES_ORDER_SUBMISSION_LINES)
     }
 
-    fn sales_order_revisions(&self) -> Repository<'_, SalesOrderRevision> {
-        Repository::new(self, Self::SALES_ORDER_REVISIONS)
+    fn sales_order_revisions(&self) -> SalesOrderRevisionRepository<'_> {
+        SalesOrderRevisionRepository::new(self, Self::SALES_ORDER_REVISIONS)
     }
 
-    fn sales_order_revision_lines(&self) -> Repository<'_, SalesOrderRevisionLine> {
-        Repository::new(self, Self::SALES_ORDER_REVISION_LINES)
+    fn sales_order_revision_lines(&self) -> SalesOrderRevisionLineRepository<'_> {
+        SalesOrderRevisionLineRepository::new(self, Self::SALES_ORDER_REVISION_LINES)
     }
 
-    fn sales_order_goods_service_line_revisions(&self) -> Repository<'_, SalesOrderGoodsServiceLineRevision> {
-        Repository::new(self, Self::SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS)
+    fn sales_order_goods_service_line_revisions(&self) -> SalesOrderGoodsServiceLineRevisionRepository<'_> {
+        SalesOrderGoodsServiceLineRevisionRepository::new(
+            self,
+            Self::SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS,
+        )
     }
 
-    fn sales_order_voucher_line_revisions(&self) -> Repository<'_, SalesOrderVoucherLineRevision> {
-        Repository::new(self, Self::SALES_ORDER_VOUCHER_LINE_REVISIONS)
+    fn sales_order_voucher_line_revisions(&self) -> SalesOrderVoucherLineRevisionRepository<'_> {
+        SalesOrderVoucherLineRevisionRepository::new(self, Self::SALES_ORDER_VOUCHER_LINE_REVISIONS)
     }
 
-    fn sales_order(&self) -> SalesOrderRepository<'_> {
-        SalesOrderRepository::new(self)
+    fn sales_order(&self) -> SalesOrderDomainRepository<'_> {
+        SalesOrderDomainRepository::new(self)
     }
 }

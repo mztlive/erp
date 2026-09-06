@@ -672,7 +672,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .customer_receipts()
-            .list_work_item_brief_entities_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
+            .list_active_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
             .await?;
         if receipts.len() != ids.len()
             || receipts.iter().any(|receipt| {
@@ -703,7 +703,7 @@ impl WorkItemService {
         let invoices = self
             .db
             .invoices()
-            .list_work_item_brief_entities_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
+            .list_active_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
             .await?;
         if invoices.len() != ids.len()
             || invoices.iter().any(|invoice| {

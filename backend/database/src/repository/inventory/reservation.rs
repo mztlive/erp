@@ -1,3 +1,4 @@
+use crate::repository::owned::StockReservationRepository;
 use std::str::FromStr;
 
 use chrono::Local;
@@ -13,9 +14,9 @@ use erp_core::money::Quantity;
 
 use super::shared::{ids_to_strings, negate_bson, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_RESERVATIONS};
-use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 库存预占列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,7 +98,7 @@ impl Pagination for StockReservationFilter {
     }
 }
 
-impl<'a> Repository<'a, StockReservation> {
+impl<'a> StockReservationRepository<'a> {
     /// 分页检索库存预占列表（投影查询）。
     ///
     /// 只返回 [`StockReservationRow`] 所需的列表字段，不加载整文档；排序字段
@@ -514,9 +515,9 @@ fn stock_reservation_projection() -> Document {
 #[cfg(test)]
 mod filter_tests {
     use super::{stock_reservation_sort, StockReservationFilter};
-    use crate::repository::QueryFilter;
     use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
+    use persistence_core::QueryFilter;
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {
         StockReservationFilter {

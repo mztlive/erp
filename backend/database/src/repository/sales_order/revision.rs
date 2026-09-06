@@ -4,6 +4,10 @@
 //! 不可更新（数据模型 §6.4）。`previous_revision_id` 必须属于同一销售单由
 //! P3 在形成版本时校验。
 
+use crate::repository::owned::{
+    SalesOrderGoodsServiceLineRevisionRepository, SalesOrderRepository, SalesOrderRevisionLineRepository,
+    SalesOrderRevisionRepository, SalesOrderVoucherLineRevisionRepository,
+};
 use entities::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderId, SalesOrderRevision, SalesOrderRevisionId,
     SalesOrderRevisionLine, SalesOrderRevisionLineId, SalesOrderVoucherLineRevision,
@@ -15,10 +19,9 @@ use mongodb::{
 };
 use serde::Deserialize;
 
-use super::super::Repository;
 use super::{
-    SalesOrderRepository, SALES_ORDERS, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS, SALES_ORDER_REVISIONS,
-    SALES_ORDER_REVISION_LINES, SALES_ORDER_VOUCHER_LINE_REVISIONS,
+    SalesOrderDomainRepository, SALES_ORDERS, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS,
+    SALES_ORDER_REVISIONS, SALES_ORDER_REVISION_LINES, SALES_ORDER_VOUCHER_LINE_REVISIONS,
 };
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
@@ -30,7 +33,7 @@ struct SalesOrderRevisionNoRow {
     revision_no: u32,
 }
 
-impl<'a> Repository<'a, SalesOrderRevision> {
+impl<'a> SalesOrderRevisionRepository<'a> {
     /// 按销售版本 ID 集合批量读取正式版本。
     ///
     /// # 参数
@@ -194,7 +197,7 @@ fn sales_order_revision_no_from_rows(rows: Vec<SalesOrderRevisionNoRow>) -> Opti
     rows.into_iter().next().map(|row| row.revision_no)
 }
 
-impl<'a> Repository<'a, SalesOrderRevisionLine> {
+impl<'a> SalesOrderRevisionLineRepository<'a> {
     /// 列出版本的全部公共行版本（按行号升序）。
     ///
     /// # 参数
@@ -258,7 +261,7 @@ impl<'a> Repository<'a, SalesOrderRevisionLine> {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderGoodsServiceLineRevision> {
+impl<'a> SalesOrderGoodsServiceLineRevisionRepository<'a> {
     /// 按公共行版本 ID 集合批量取回实物及服务行（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -287,7 +290,7 @@ impl<'a> Repository<'a, SalesOrderGoodsServiceLineRevision> {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderVoucherLineRevision> {
+impl<'a> SalesOrderVoucherLineRevisionRepository<'a> {
     /// 按公共行版本 ID 集合批量取回卡券行（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -316,7 +319,7 @@ impl<'a> Repository<'a, SalesOrderVoucherLineRevision> {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {
+impl<'a> SalesOrderDomainRepository<'a> {
     /// 生效提交：把提交快照原样写成正式版本及版本行，并把销售单推进到生效态。
     ///
     /// 依次写入 `sales_order_revision`、`sales_order_revision_line` 与两个子类型
@@ -387,7 +390,7 @@ impl<'a> SalesOrderRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, SALES_ORDERS)
+        SalesOrderRepository::new(self.db, SALES_ORDERS)
             .update(order, executor)
             .await
     }

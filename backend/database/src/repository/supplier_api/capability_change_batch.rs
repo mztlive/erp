@@ -5,6 +5,7 @@
 //! primitive：已更新实体逐个 CAS 写回（保持乐观锁），新增实体一次有序批量插入；
 //! 空输入不访问数据库。版本决策、采购确认覆盖与事务仍归 Service。
 
+use crate::repository::owned::SupplierApiCapabilityRepository;
 use entities::supplier_api::SupplierApiCapability;
 use serde::Serialize;
 
@@ -90,7 +91,7 @@ impl<'a> SupplierApiRepository<'a> {
         if updates.is_empty() && creates.is_empty() {
             return Ok(());
         }
-        let capabilities = crate::Repository::new(self.db, SUPPLIER_API_CAPABILITIES);
+        let capabilities = SupplierApiCapabilityRepository::new(self.db, SUPPLIER_API_CAPABILITIES);
         for capability in updates.iter_mut() {
             capabilities.update(capability, executor).await?;
         }

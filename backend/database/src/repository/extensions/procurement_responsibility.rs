@@ -1,5 +1,6 @@
 //! 采购责任规则仓储访问器。
 
+use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 use std::future::Future;
 
 use entities::procurement_responsibility::{
@@ -10,7 +11,6 @@ use erp_core::ids::SkuId;
 use mongodb::Database;
 
 use super::super::procurement_responsibility::ProcurementResponsibilityRuleFilter;
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -26,7 +26,7 @@ pub trait ProcurementResponsibilityExt {
     ///
     /// # 返回
     /// 返回绑定 `procurement_responsibility_rules` 集合的 Repository。
-    fn procurement_responsibility_rules(&self) -> Repository<'_, ProcurementResponsibilityRule>;
+    fn procurement_responsibility_rules(&self) -> ProcurementResponsibilityRuleRepository<'_>;
 
     /// 批量加载采购责任目录所需的最小持久化事实。
     ///
@@ -96,8 +96,8 @@ impl ProcurementResponsibilityExt for Database {
     ///
     /// # 返回
     /// 返回绑定 `procurement_responsibility_rules` 集合的 Repository。
-    fn procurement_responsibility_rules(&self) -> Repository<'_, ProcurementResponsibilityRule> {
-        Repository::new(self, Self::PROCUREMENT_RESPONSIBILITY_RULES)
+    fn procurement_responsibility_rules(&self) -> ProcurementResponsibilityRuleRepository<'_> {
+        ProcurementResponsibilityRuleRepository::new(self, Self::PROCUREMENT_RESPONSIBILITY_RULES)
     }
 
     /// 批量加载采购责任目录所需的最小持久化事实。

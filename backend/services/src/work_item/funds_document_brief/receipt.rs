@@ -40,7 +40,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .customer_receipts()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         if receipts.is_empty() {
             return Ok(());
@@ -104,7 +104,7 @@ impl WorkItemService {
         let refunds = self
             .db
             .customer_refunds()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -204,7 +204,7 @@ impl WorkItemService {
         let reversals = self
             .db
             .receipt_reversals()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(

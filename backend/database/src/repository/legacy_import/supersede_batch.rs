@@ -5,15 +5,15 @@
 //! `invalidate` 的确认与已就地 `close` 的任务。空集合零写，任一版本冲突
 //! 由调用方事务整体回滚。全部使用调用方 executor，不开事务。
 
+use crate::repository::owned::{LegacyImportConfirmationRepository, WorkItemRepository};
 use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
 use entities::work_item::WorkItem;
 use erp_core::ids::LegacyImportConfirmationId;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, LegacyImportConfirmation> {
+impl<'a> LegacyImportConfirmationRepository<'a> {
     /// 批量写回本轮已失效的确认事实（INT-R28 批量写）。
     ///
     /// 调用方先经实体 `invalidate` 完成 `Pending → Invalidated` 迁移，
@@ -51,7 +51,7 @@ impl<'a> Repository<'a, LegacyImportConfirmation> {
     }
 }
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 批量写回已关闭的取代任务（INT-R28 批量写）。
     ///
     /// 调用方先经实体 `close` 完成开放任务关闭，本方法只执行逐项 CAS

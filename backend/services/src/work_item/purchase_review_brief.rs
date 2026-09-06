@@ -97,7 +97,7 @@ impl WorkItemService {
         Ok(self
             .db
             .purchase_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?)
     }
 
@@ -189,7 +189,7 @@ impl WorkItemService {
         Ok(self
             .db
             .sales_orders()
-            .list_work_item_brief_entities_by_ids(&sales_order_ids, executor)
+            .list_active_by_ids(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id.clone(), order.order_no))

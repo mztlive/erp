@@ -1,16 +1,17 @@
+use crate::repository::owned::ProductCategoryRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::catalog::{EnableStatus, ProductCategory, ProductCategoryAttribute, ProductKind};
+use entities::catalog::{EnableStatus, ProductCategory, ProductKind};
 use erp_core::ids::ProductCategoryId;
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 商品分类列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,7 +93,7 @@ impl Pagination for ProductCategoryFilter {
     }
 }
 
-impl<'a> Repository<'a, ProductCategory> {
+impl<'a> ProductCategoryRepository<'a> {
     /// 判断指定分类是否存在未删除的直接子分类。
     ///
     /// 查询使用存在性投影并在首条命中后停止；通用 Repository 会自动追加
@@ -299,8 +300,6 @@ impl Pagination for ProductCategoryAttributeFilter {
         (self.page, u64::from(self.page_size))
     }
 }
-
-impl<'a> Repository<'a, ProductCategoryAttribute> {}
 
 /// 构建商品分类排序文档（白名单：`created_at`/`category_code`/`name`）。
 ///

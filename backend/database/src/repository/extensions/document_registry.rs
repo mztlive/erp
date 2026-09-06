@@ -5,11 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS` 等值。
 
-use entities::document_registry::{BusinessDocument, DocumentParticipant, DocumentRelation, WorkflowAction};
+use crate::repository::owned::{
+    BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository,
+    WorkflowActionRepository,
+};
 use mongodb::Database;
 
 use super::super::document_registry::{BusinessDocumentFilter, WorkflowActionFilter};
-use crate::Repository;
 
 /// 域 D02 仓储访问器。
 pub trait DocumentRegistryExt {
@@ -31,45 +33,45 @@ pub trait DocumentRegistryExt {
     /// 获取 `business_document` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::document_registry::BusinessDocument>`。
-    fn business_documents(&self) -> Repository<'_, BusinessDocument>;
+    /// 返回 `BusinessDocumentRepository<'_>`。
+    fn business_documents(&self) -> BusinessDocumentRepository<'_>;
 
     /// 获取 `document_relation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::document_registry::DocumentRelation>`。
-    fn document_relations(&self) -> Repository<'_, DocumentRelation>;
+    /// 返回 `DocumentRelationRepository<'_>`。
+    fn document_relations(&self) -> DocumentRelationRepository<'_>;
 
     /// 获取 `document_participant` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::document_registry::DocumentParticipant>`。
-    fn document_participants(&self) -> Repository<'_, DocumentParticipant>;
+    /// 返回 `DocumentParticipantRepository<'_>`。
+    fn document_participants(&self) -> DocumentParticipantRepository<'_>;
 
     /// 获取 `workflow_action` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::document_registry::WorkflowAction>`。
-    fn workflow_actions(&self) -> Repository<'_, WorkflowAction>;
+    /// 返回 `WorkflowActionRepository<'_>`。
+    fn workflow_actions(&self) -> WorkflowActionRepository<'_>;
 }
 
 impl DocumentRegistryExt for Database {
     type BusinessDocumentFilter = BusinessDocumentFilter;
     type WorkflowActionFilter = WorkflowActionFilter;
 
-    fn business_documents(&self) -> Repository<'_, BusinessDocument> {
-        Repository::new(self, Self::BUSINESS_DOCUMENTS)
+    fn business_documents(&self) -> BusinessDocumentRepository<'_> {
+        BusinessDocumentRepository::new(self, Self::BUSINESS_DOCUMENTS)
     }
 
-    fn document_relations(&self) -> Repository<'_, DocumentRelation> {
-        Repository::new(self, Self::DOCUMENT_RELATIONS)
+    fn document_relations(&self) -> DocumentRelationRepository<'_> {
+        DocumentRelationRepository::new(self, Self::DOCUMENT_RELATIONS)
     }
 
-    fn document_participants(&self) -> Repository<'_, DocumentParticipant> {
-        Repository::new(self, Self::DOCUMENT_PARTICIPANTS)
+    fn document_participants(&self) -> DocumentParticipantRepository<'_> {
+        DocumentParticipantRepository::new(self, Self::DOCUMENT_PARTICIPANTS)
     }
 
-    fn workflow_actions(&self) -> Repository<'_, WorkflowAction> {
-        Repository::new(self, Self::WORKFLOW_ACTIONS)
+    fn workflow_actions(&self) -> WorkflowActionRepository<'_> {
+        WorkflowActionRepository::new(self, Self::WORKFLOW_ACTIONS)
     }
 }

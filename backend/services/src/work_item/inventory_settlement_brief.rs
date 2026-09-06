@@ -54,7 +54,7 @@ impl WorkItemService {
         let adjustments = self
             .db
             .stock_adjustments()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         if adjustments.is_empty() {
             return Ok(());
@@ -141,7 +141,7 @@ impl WorkItemService {
         let statements = self
             .db
             .supplier_settlement_statements()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let context = self
             .supplier_settlement_brief_context(&statements, executor)
@@ -401,7 +401,7 @@ impl WorkItemService {
         let warehouses = self
             .db
             .warehouses()
-            .list_work_item_brief_entities_by_ids(&warehouse_ids, executor)
+            .list_active_by_ids(&warehouse_ids, executor)
             .await?;
         let revision_ids = warehouses
             .iter()
@@ -410,7 +410,7 @@ impl WorkItemService {
         let revision_names = self
             .db
             .warehouse_revisions()
-            .list_work_item_brief_entities_by_ids(&revision_ids, executor)
+            .list_active_by_ids(&revision_ids, executor)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id, revision.name))
@@ -456,11 +456,7 @@ impl WorkItemService {
             .iter()
             .map(|line| line.sku_id.to_string())
             .collect::<Vec<_>>();
-        let skus = self
-            .db
-            .skus()
-            .list_work_item_brief_entities_by_ids(&sku_ids, executor)
-            .await?;
+        let skus = self.db.skus().list_active_by_ids(&sku_ids, executor).await?;
         let revision_ids = skus
             .iter()
             .filter_map(|sku| sku.stable.current_revision_id.clone())
@@ -468,7 +464,7 @@ impl WorkItemService {
         let revisions = self
             .db
             .sku_revisions()
-            .list_work_item_brief_entities_by_ids(&revision_ids, executor)
+            .list_active_by_ids(&revision_ids, executor)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))

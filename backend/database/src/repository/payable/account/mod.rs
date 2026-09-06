@@ -6,7 +6,7 @@ use erp_core::money::Amount;
 use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 
-use super::super::{Pagination, QueryFilter};
+use persistence_core::{Pagination, QueryFilter};
 
 mod invoicing;
 mod query;

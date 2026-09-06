@@ -85,7 +85,7 @@ impl WorkItemService {
         Ok(self
             .db
             .purchase_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.purchase_no))
@@ -128,11 +128,7 @@ impl WorkItemService {
         if party_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let parties = self
-            .db
-            .parties()
-            .list_work_item_brief_entities_by_ids(party_ids, executor)
-            .await?;
+        let parties = self.db.parties().list_active_by_ids(party_ids, executor).await?;
         self.legal_names_for_parties(&parties, executor).await
     }
 
@@ -162,7 +158,7 @@ impl WorkItemService {
         let names_by_revision = self
             .db
             .party_revisions()
-            .list_work_item_brief_entities_by_ids(&revision_ids, executor)
+            .list_active_by_ids(&revision_ids, executor)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
@@ -199,7 +195,7 @@ impl WorkItemService {
         let customers = self
             .db
             .customer_accounts()
-            .list_work_item_brief_entities_by_ids(customer_ids, executor)
+            .list_active_by_ids(customer_ids, executor)
             .await?;
         let party_ids = customers
             .iter()
@@ -240,7 +236,7 @@ impl WorkItemService {
         let suppliers = self
             .db
             .supplier_accounts()
-            .list_work_item_brief_entities_by_ids(supplier_ids, executor)
+            .list_active_by_ids(supplier_ids, executor)
             .await?;
         let party_ids = suppliers
             .iter()
@@ -281,7 +277,7 @@ impl WorkItemService {
         Ok(self
             .db
             .sales_orders()
-            .list_work_item_brief_entities_by_ids(sales_order_ids, executor)
+            .list_active_by_ids(sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -311,7 +307,7 @@ impl WorkItemService {
         let revisions = self
             .db
             .sales_order_revisions()
-            .list_work_item_brief_entities_by_ids(
+            .list_active_by_ids(
                 &revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )
@@ -491,7 +487,7 @@ impl WorkItemService {
         let entries = self
             .db
             .receivable_entries()
-            .list_work_item_brief_entities_by_ids(&entry_ids, executor)
+            .list_active_by_ids(&entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
@@ -500,7 +496,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .receivable_accounts()
-            .list_work_item_brief_entities_by_ids(&account_ids, executor)
+            .list_active_by_ids(&account_ids, executor)
             .await?;
         let sales_order_ids = accounts
             .iter()
@@ -550,7 +546,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .customer_receipts()
-            .list_work_item_brief_entities_by_ids(receipt_ids, executor)
+            .list_active_by_ids(receipt_ids, executor)
             .await?;
         let party_ids = receipts
             .iter()
@@ -603,7 +599,7 @@ impl WorkItemService {
         let entries = self
             .db
             .receivable_entries()
-            .list_work_item_brief_entities_by_ids(entry_ids, executor)
+            .list_active_by_ids(entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
@@ -612,7 +608,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .receivable_accounts()
-            .list_work_item_brief_entities_by_ids(&account_ids, executor)
+            .list_active_by_ids(&account_ids, executor)
             .await?;
         let sales_nos = self
             .sales_order_numbers(
@@ -688,7 +684,7 @@ impl WorkItemService {
         let payments = self
             .db
             .supplier_payments()
-            .list_work_item_brief_entities_by_ids(payment_ids, executor)
+            .list_active_by_ids(payment_ids, executor)
             .await?;
         let supplier_names = self
             .supplier_display_names(
@@ -744,7 +740,7 @@ impl WorkItemService {
         let entries = self
             .db
             .payable_entries()
-            .list_work_item_brief_entities_by_ids(entry_ids, executor)
+            .list_active_by_ids(entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
@@ -753,7 +749,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .payable_accounts()
-            .list_work_item_brief_entities_by_ids(&account_ids, executor)
+            .list_active_by_ids(&account_ids, executor)
             .await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
@@ -826,12 +822,12 @@ impl WorkItemService {
         let entries = self
             .db
             .payable_entries()
-            .list_work_item_brief_entities_by_ids(&entry_ids, executor)
+            .list_active_by_ids(&entry_ids, executor)
             .await?;
         let accounts = self
             .db
             .payable_accounts()
-            .list_work_item_brief_entities_by_ids(
+            .list_active_by_ids(
                 &entries
                     .iter()
                     .map(|entry| entry.payable_account_id.to_string())

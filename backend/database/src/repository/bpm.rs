@@ -15,7 +15,6 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BpmExt;
-use super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Error, Result};
 
@@ -239,20 +238,20 @@ impl<'a> BpmWorkflowRepository<'a> {
         Self { db }
     }
 
-    fn definitions(&self) -> Repository<'a, ApprovalProcessDefinition> {
-        Repository::new(self.db, DEFINITIONS)
+    fn definitions(&self) -> persistence_core::Repository<'a, ApprovalProcessDefinition> {
+        persistence_core::Repository::new(self.db, DEFINITIONS)
     }
 
-    fn instances(&self) -> Repository<'a, ApprovalProcessInstance> {
-        Repository::new(self.db, INSTANCES)
+    fn instances(&self) -> persistence_core::Repository<'a, ApprovalProcessInstance> {
+        persistence_core::Repository::new(self.db, INSTANCES)
     }
 
-    fn executions(&self) -> Repository<'a, ApprovalNodeExecution> {
-        Repository::new(self.db, EXECUTIONS)
+    fn executions(&self) -> persistence_core::Repository<'a, ApprovalNodeExecution> {
+        persistence_core::Repository::new(self.db, EXECUTIONS)
     }
 
-    fn receipts(&self) -> Repository<'a, ApprovalCommandReceipt> {
-        Repository::new(self.db, RECEIPTS)
+    fn receipts(&self) -> persistence_core::Repository<'a, ApprovalCommandReceipt> {
+        persistence_core::Repository::new(self.db, RECEIPTS)
     }
 }
 

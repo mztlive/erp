@@ -1,5 +1,6 @@
 //! `purchase_receipt` 采购入库单仓储：列表投影查询与按入库单号身份查询。
 
+use crate::repository::owned::PurchaseReceiptRepository;
 use entities::fulfillment::{PurchaseReceipt, PurchaseReceiptState};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
@@ -9,10 +10,9 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 采购入库单排序白名单（查询与测试共用）。
 const PURCHASE_RECEIPT_SORT_FIELDS: &[&str] = &["created_at", "posted_at"];
@@ -82,7 +82,7 @@ impl Pagination for PurchaseReceiptFilter {
     }
 }
 
-impl<'a> Repository<'a, PurchaseReceipt> {
+impl<'a> PurchaseReceiptRepository<'a> {
     /// 分页检索采购入库单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseReceiptRow`] 所需的列表字段，不加载整文档；排序字段
@@ -171,11 +171,9 @@ fn purchase_receipt_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        purchase_receipt_projection, sort_doc, Pagination, PurchaseReceiptFilter, QueryFilter,
-        PURCHASE_RECEIPT_SORT_FIELDS,
-    };
+    use super::{purchase_receipt_projection, sort_doc, PurchaseReceiptFilter, PURCHASE_RECEIPT_SORT_FIELDS};
     use mongodb::bson::doc;
+    use persistence_core::{Pagination, QueryFilter};
 
     use entities::fulfillment::PurchaseReceiptState;
     use erp_core::ids::PurchaseOrderId;

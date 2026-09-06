@@ -8,8 +8,8 @@ use entities::supplier::{
 };
 use erp_core::ids::PartyId;
 
-use super::super::PageResult;
 use super::SupplierAccountRow;
+use persistence_core::PageResult;
 
 mod detail;
 mod list;

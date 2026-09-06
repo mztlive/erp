@@ -37,7 +37,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .purchase_receipts()
-            .list_work_item_brief_entities_by_ids(&receipt_ids, executor)
+            .list_active_by_ids(&receipt_ids, executor)
             .await?;
         let receipt_purchase_nos = purchase_order_numbers(
             self,
@@ -64,7 +64,7 @@ impl WorkItemService {
         let deliveries = self
             .db
             .deliveries()
-            .list_work_item_brief_entities_by_ids(&delivery_ids, executor)
+            .list_active_by_ids(&delivery_ids, executor)
             .await?;
         let delivery_sales_nos = sales_order_numbers(
             self,
@@ -95,7 +95,7 @@ impl WorkItemService {
         let electronics = self
             .db
             .electronic_deliveries()
-            .list_work_item_brief_entities_by_ids(&electronic_ids, executor)
+            .list_active_by_ids(&electronic_ids, executor)
             .await?;
         let electronic_purchase_nos = purchase_order_numbers(
             self,
@@ -122,7 +122,7 @@ impl WorkItemService {
         let services = self
             .db
             .service_fulfillments()
-            .list_work_item_brief_entities_by_ids(&service_ids, executor)
+            .list_active_by_ids(&service_ids, executor)
             .await?;
         let service_purchase_nos = purchase_order_numbers(
             self,
@@ -176,7 +176,7 @@ async fn sales_order_numbers(
     Ok(service
         .db
         .sales_orders()
-        .list_work_item_brief_entities_by_ids(&sales_order_ids, executor)
+        .list_active_by_ids(&sales_order_ids, executor)
         .await?
         .into_iter()
         .filter_map(|order| {
@@ -216,7 +216,7 @@ async fn purchase_order_numbers(
     Ok(service
         .db
         .purchase_orders()
-        .list_work_item_brief_entities_by_ids(&purchase_order_ids, executor)
+        .list_active_by_ids(&purchase_order_ids, executor)
         .await?
         .into_iter()
         .filter_map(|order| {

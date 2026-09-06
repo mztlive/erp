@@ -15,6 +15,9 @@
 //!
 //! - `apply_scope`：按请求行 ID 且受批次约束的应用范围读取（INT-R29）。
 
+use crate::repository::owned::{
+    LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
+};
 mod apply_scope;
 mod failed_retry;
 mod supersede_batch;
@@ -31,10 +34,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::LegacyImportExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 /// `legacy_import_batch` 集合名（单一来源：`LegacyImportExt` 关联常量）。
 const LEGACY_IMPORT_BATCHES: &str = <mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_BATCHES;
 /// `legacy_import_row` 集合名（单一来源：`LegacyImportExt` 关联常量）。
@@ -138,7 +141,7 @@ impl Pagination for LegacyImportBatchFilter {
     }
 }
 
-impl<'a> Repository<'a, LegacyImportBatch> {
+impl<'a> LegacyImportBatchRepository<'a> {
     /// 分页检索导入批次列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportBatchRow`] 所需的列表字段，不加载整文档
@@ -290,7 +293,7 @@ impl Pagination for LegacyImportRowFilter {
     }
 }
 
-impl<'a> Repository<'a, LegacyImportRow> {
+impl<'a> LegacyImportRowRepository<'a> {
     /// 分页检索导入行列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportRowRow`] 所需的列表字段；规范化载荷
@@ -436,7 +439,7 @@ impl Pagination for LegacyImportConfirmationFilter {
     }
 }
 
-impl<'a> Repository<'a, LegacyImportConfirmation> {
+impl<'a> LegacyImportConfirmationRepository<'a> {
     /// 分页检索导入确认事实列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportConfirmationRow`] 所需的列表字段；确认事实
@@ -711,9 +714,10 @@ fn legacy_import_confirmation_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, LegacyImportBatchFilter, QueryFilter};
+    use super::{sort_doc, LegacyImportBatchFilter};
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn batch_filter_applies_optional_fields_and_deleted_filter() {

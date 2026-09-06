@@ -9,6 +9,9 @@
 //! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
 
+use crate::repository::owned::{
+    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
+};
 use std::collections::HashMap;
 
 use entities::customer::{
@@ -21,10 +24,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -123,7 +126,7 @@ impl Pagination for CustomerAccountFilter {
     }
 }
 
-impl<'a> Repository<'a, CustomerAccount> {
+impl<'a> CustomerAccountRepository<'a> {
     /// 批量读取未删除客户的稳定 ID 与客户编号。
     ///
     /// # 参数
@@ -326,7 +329,7 @@ impl Pagination for CustomerAssignmentFilter {
     }
 }
 
-impl<'a> Repository<'a, CustomerAssignment> {
+impl<'a> CustomerAssignmentRepository<'a> {
     /// 判断用户是否在指定日期拥有目标客户的有效归属。
     ///
     /// 查询同时约束客户、用户、OWNER/COLLABORATOR 角色与半开有效期；
@@ -651,7 +654,7 @@ fn active_customer_user_assignment_filter(customer_id: &str, user_id: &str, as_o
     }
 }
 
-impl<'a> Repository<'a, CustomerProfileCommand> {
+impl<'a> CustomerProfileCommandRepository<'a> {
     /// 按客户端幂等键读取已成功命令结果。
     ///
     /// # 参数
@@ -733,12 +736,12 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        active_customer_user_assignment_filter, distinct_sorted_customer_ids, sort_doc,
-        CustomerAccountFilter, QueryFilter,
+        active_customer_user_assignment_filter, distinct_sorted_customer_ids, sort_doc, CustomerAccountFilter,
     };
     use entities::customer::CustomerAccountStatus;
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn customer_account_filter_applies_keyword_and_status() {

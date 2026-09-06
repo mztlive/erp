@@ -2,12 +2,14 @@ use super::super::sort_doc;
 use super::invoicing::invoicing_guard;
 use super::settlement::settlement_guard;
 use super::write::{amount_bson, progress_pipeline};
-use super::{PayableAccountFilter, QueryFilter};
-use crate::{PayableExt, Repository};
+use super::PayableAccountFilter;
+use crate::repository::owned::PayableAccountRepository;
+use crate::PayableExt;
 use entities::payable::{PayableAccount, PayableAccountData, PayableAccountStatus, PayableSourceType};
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson};
+use persistence_core::QueryFilter;
 use persistence_core::{NoTransaction, Transactional};
 use std::str::FromStr;
 
@@ -133,8 +135,8 @@ async fn apply_settlements_many_empty_input_returns_empty_without_db() {
         .await
         .expect("客户端句柄创建失败");
     let database = client.database("unused");
-    let repository: Repository<'_, entities::payable::PayableAccount> =
-        Repository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+    let repository: PayableAccountRepository<'_> =
+        PayableAccountRepository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
     let result = repository
         .apply_settlements_many(&[], "tester", &mut NoTransaction)
         .await
@@ -314,8 +316,10 @@ async fn batch_settlement_rejected_rolls_back_whole_transaction() {
             .client()
             .with_transaction::<_, _, persistence_core::Error>(move |session| {
                 Box::pin(async move {
-                    let accounts: Repository<'_, entities::payable::PayableAccount> =
-                        Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                    let accounts: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                        &db_handle,
+                        <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+                    );
                     let result = accounts
                         .apply_settlements_many(&deltas, "tester", session)
                         .await?;
@@ -383,8 +387,10 @@ async fn concurrent_batch_settlement_never_exceeds_open_balance() {
         let db_handle_a = fixture.db().clone();
         let deltas_a = deltas.clone();
         let task_a = tokio::spawn(async move {
-            let repository: Repository<'_, entities::payable::PayableAccount> =
-                Repository::new(&db_handle_a, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+            let repository: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                &db_handle_a,
+                <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+            );
             repository
                 .apply_settlements_many(&deltas_a, "tester-a", &mut NoTransaction)
                 .await
@@ -392,8 +398,10 @@ async fn concurrent_batch_settlement_never_exceeds_open_balance() {
         });
         let db_handle_b = fixture.db().clone();
         let task_b = tokio::spawn(async move {
-            let repository: Repository<'_, entities::payable::PayableAccount> =
-                Repository::new(&db_handle_b, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+            let repository: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                &db_handle_b,
+                <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+            );
             repository
                 .apply_settlements_many(&deltas, "tester-b", &mut NoTransaction)
                 .await
@@ -438,8 +446,8 @@ async fn apply_invoicings_many_empty_input_returns_empty_without_db() {
         .await
         .expect("客户端句柄创建失败");
     let database = client.database("unused");
-    let repository: Repository<'_, entities::payable::PayableAccount> =
-        Repository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+    let repository: PayableAccountRepository<'_> =
+        PayableAccountRepository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
     let result = repository
         .apply_invoicings_many(&[], "tester", &mut NoTransaction)
         .await
@@ -455,8 +463,8 @@ async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
         .await
         .expect("客户端句柄创建失败");
     let database = client.database("unused");
-    let repository: Repository<'_, entities::payable::PayableAccount> =
-        Repository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+    let repository: PayableAccountRepository<'_> =
+        PayableAccountRepository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
     let result = repository
         .revert_invoicings_many(&[], "tester", &mut NoTransaction)
         .await
@@ -636,8 +644,10 @@ async fn batch_invoicing_rejected_rolls_back_whole_transaction() {
             .client()
             .with_transaction::<_, _, persistence_core::Error>(move |session| {
                 Box::pin(async move {
-                    let accounts: Repository<'_, entities::payable::PayableAccount> =
-                        Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                    let accounts: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                        &db_handle,
+                        <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+                    );
                     let result = accounts.apply_invoicings_many(&deltas, "tester", session).await?;
                     if !result.rejected.is_empty() {
                         return Err(persistence_core::Error::DatabaseError(
@@ -703,8 +713,10 @@ async fn concurrent_batch_invoicing_never_exceeds_invoiceable_balance() {
         let db_handle_a = fixture.db().clone();
         let deltas_a = deltas.clone();
         let task_a = tokio::spawn(async move {
-            let repository: Repository<'_, entities::payable::PayableAccount> =
-                Repository::new(&db_handle_a, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+            let repository: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                &db_handle_a,
+                <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+            );
             repository
                 .apply_invoicings_many(&deltas_a, "tester-a", &mut NoTransaction)
                 .await
@@ -712,8 +724,10 @@ async fn concurrent_batch_invoicing_never_exceeds_invoiceable_balance() {
         });
         let db_handle_b = fixture.db().clone();
         let task_b = tokio::spawn(async move {
-            let repository: Repository<'_, entities::payable::PayableAccount> =
-                Repository::new(&db_handle_b, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+            let repository: PayableAccountRepository<'_> = PayableAccountRepository::new(
+                &db_handle_b,
+                <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS,
+            );
             repository
                 .apply_invoicings_many(&deltas, "tester-b", &mut NoTransaction)
                 .await

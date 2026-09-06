@@ -39,7 +39,7 @@ impl WorkItemService {
         let payments = self
             .db
             .supplier_payments()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -135,7 +135,7 @@ impl WorkItemService {
         let refunds = self
             .db
             .supplier_refunds()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -228,7 +228,7 @@ impl WorkItemService {
         let reversals = self
             .db
             .payment_reversals()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(

@@ -4,16 +4,16 @@
 //! `created_at/id` 稳定排序；写入复用基类 CAS `update`，空集合零写，
 //! 任一版本冲突由调用方事务整体回滚。全部使用调用方 executor，不开事务。
 
+use crate::repository::owned::LegacyImportRowRepository;
 use entities::legacy_import::{ImportStatus, LegacyImportRow};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::LegacyImportBatchId;
 use mongodb::bson::doc;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, LegacyImportRow> {
+impl<'a> LegacyImportRowRepository<'a> {
     /// 按批次读取失败导入行（INT-R31 批量读取）。
     ///
     /// 取代执行命令事务中先全量加载再内存过滤的旧路径；已导入、已跳过与

@@ -6,13 +6,15 @@
 //! conventions §4.3「Repository 与索引共用同一常量」），`indexes/` 与
 //! `repository/` 两侧统一取 `<mongodb::Database as AccessControlExt>::` 值。
 
-use entities::access_control::{AuditEvent, DataScope, Permission, UserRole};
+use crate::repository::owned::{
+    AccountCoreRepository, AuditEventRepository, AuditLogRepository, DataScopeRepository,
+    PermissionRepository, RoleRepository, UserRoleRepository,
+};
 use mongodb::Database;
 
 use super::super::access_control::{
     AccessControlRepository, AuditEventFilter, DataScopeFilter, PermissionFilter,
 };
-use crate::Repository;
 
 /// 访问控制域仓储访问器。
 pub trait AccessControlExt {
@@ -37,44 +39,44 @@ pub trait AccessControlExt {
     /// 获取统一账号Repository
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::AccountCore>` 结果。
-    fn accounts(&self) -> Repository<'_, entities::AccountCore>;
+    /// 返回 `AccountCoreRepository<'_>` 结果。
+    fn accounts(&self) -> AccountCoreRepository<'_>;
 
     /// 获取审计日志Repository
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::AuditLog>` 结果。
-    fn audit_logs(&self) -> Repository<'_, entities::AuditLog>;
+    /// 返回 `AuditLogRepository<'_>` 结果。
+    fn audit_logs(&self) -> AuditLogRepository<'_>;
 
     /// 获取角色 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::Role>`。
-    fn roles(&self) -> Repository<'_, entities::Role>;
+    /// 返回 `RoleRepository<'_>`。
+    fn roles(&self) -> RoleRepository<'_>;
 
     /// 获取 `permission` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::access_control::Permission>`。
-    fn permissions(&self) -> Repository<'_, Permission>;
+    /// 返回 `PermissionRepository<'_>`。
+    fn permissions(&self) -> PermissionRepository<'_>;
 
     /// 获取 `user_role` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::access_control::UserRole>`。
-    fn user_roles(&self) -> Repository<'_, UserRole>;
+    /// 返回 `UserRoleRepository<'_>`。
+    fn user_roles(&self) -> UserRoleRepository<'_>;
 
     /// 获取 `data_scope` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::access_control::DataScope>`。
-    fn data_scopes(&self) -> Repository<'_, DataScope>;
+    /// 返回 `DataScopeRepository<'_>`。
+    fn data_scopes(&self) -> DataScopeRepository<'_>;
 
     /// 获取 `audit_event` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::access_control::AuditEvent>`。
-    fn audit_events(&self) -> Repository<'_, AuditEvent>;
+    /// 返回 `AuditEventRepository<'_>`。
+    fn audit_events(&self) -> AuditEventRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -91,41 +93,41 @@ impl AccessControlExt for Database {
     /// 获取统一账号Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::AccountCore>` 结果。
-    fn accounts(&self) -> Repository<'_, entities::AccountCore> {
-        Repository::new(self, "accounts")
+    /// 返回 `AccountCoreRepository<'_>` 结果。
+    fn accounts(&self) -> AccountCoreRepository<'_> {
+        AccountCoreRepository::new(self, "accounts")
     }
 
     /// 获取审计日志Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::AuditLog>` 结果。
-    fn audit_logs(&self) -> Repository<'_, entities::AuditLog> {
-        Repository::new(self, "audit_logs")
+    /// 返回 `AuditLogRepository<'_>` 结果。
+    fn audit_logs(&self) -> AuditLogRepository<'_> {
+        AuditLogRepository::new(self, "audit_logs")
     }
 
     /// 获取角色 Repository。
     ///
     /// # 返回
     /// 返回角色仓储。
-    fn roles(&self) -> Repository<'_, entities::Role> {
-        Repository::new(self, "roles")
+    fn roles(&self) -> RoleRepository<'_> {
+        RoleRepository::new(self, "roles")
     }
 
-    fn permissions(&self) -> Repository<'_, Permission> {
-        Repository::new(self, Self::PERMISSIONS)
+    fn permissions(&self) -> PermissionRepository<'_> {
+        PermissionRepository::new(self, Self::PERMISSIONS)
     }
 
-    fn user_roles(&self) -> Repository<'_, UserRole> {
-        Repository::new(self, Self::USER_ROLES)
+    fn user_roles(&self) -> UserRoleRepository<'_> {
+        UserRoleRepository::new(self, Self::USER_ROLES)
     }
 
-    fn data_scopes(&self) -> Repository<'_, DataScope> {
-        Repository::new(self, Self::DATA_SCOPES)
+    fn data_scopes(&self) -> DataScopeRepository<'_> {
+        DataScopeRepository::new(self, Self::DATA_SCOPES)
     }
 
-    fn audit_events(&self) -> Repository<'_, AuditEvent> {
-        Repository::new(self, Self::AUDIT_EVENTS)
+    fn audit_events(&self) -> AuditEventRepository<'_> {
+        AuditEventRepository::new(self, Self::AUDIT_EVENTS)
     }
 
     fn access_control(&self) -> AccessControlRepository<'_> {

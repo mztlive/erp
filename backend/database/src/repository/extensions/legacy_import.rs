@@ -5,13 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_BATCHES` 等值。
 
-use entities::legacy_import::{LegacyImportBatch, LegacyImportConfirmation, LegacyImportRow};
+use crate::repository::owned::{
+    LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
+};
 use mongodb::Database;
 
 use super::super::legacy_import::{
     LegacyImportBatchFilter, LegacyImportConfirmationFilter, LegacyImportRepository, LegacyImportRowFilter,
 };
-use crate::Repository;
 
 /// 域 D22 仓储访问器。
 pub trait LegacyImportExt {
@@ -34,20 +35,20 @@ pub trait LegacyImportExt {
     /// 获取 `legacy_import_batch` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::legacy_import::LegacyImportBatch>`。
-    fn legacy_import_batches(&self) -> Repository<'_, LegacyImportBatch>;
+    /// 返回 `LegacyImportBatchRepository<'_>`。
+    fn legacy_import_batches(&self) -> LegacyImportBatchRepository<'_>;
 
     /// 获取 `legacy_import_row` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::legacy_import::LegacyImportRow>`。
-    fn legacy_import_rows(&self) -> Repository<'_, LegacyImportRow>;
+    /// 返回 `LegacyImportRowRepository<'_>`。
+    fn legacy_import_rows(&self) -> LegacyImportRowRepository<'_>;
 
     /// 获取 `legacy_import_confirmation` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::legacy_import::LegacyImportConfirmation>`。
-    fn legacy_import_confirmations(&self) -> Repository<'_, LegacyImportConfirmation>;
+    /// 返回 `LegacyImportConfirmationRepository<'_>`。
+    fn legacy_import_confirmations(&self) -> LegacyImportConfirmationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -61,16 +62,16 @@ impl LegacyImportExt for Database {
     type LegacyImportRowFilter = LegacyImportRowFilter;
     type LegacyImportConfirmationFilter = LegacyImportConfirmationFilter;
 
-    fn legacy_import_batches(&self) -> Repository<'_, LegacyImportBatch> {
-        Repository::new(self, Self::LEGACY_IMPORT_BATCHES)
+    fn legacy_import_batches(&self) -> LegacyImportBatchRepository<'_> {
+        LegacyImportBatchRepository::new(self, Self::LEGACY_IMPORT_BATCHES)
     }
 
-    fn legacy_import_rows(&self) -> Repository<'_, LegacyImportRow> {
-        Repository::new(self, Self::LEGACY_IMPORT_ROWS)
+    fn legacy_import_rows(&self) -> LegacyImportRowRepository<'_> {
+        LegacyImportRowRepository::new(self, Self::LEGACY_IMPORT_ROWS)
     }
 
-    fn legacy_import_confirmations(&self) -> Repository<'_, LegacyImportConfirmation> {
-        Repository::new(self, Self::LEGACY_IMPORT_CONFIRMATIONS)
+    fn legacy_import_confirmations(&self) -> LegacyImportConfirmationRepository<'_> {
+        LegacyImportConfirmationRepository::new(self, Self::LEGACY_IMPORT_CONFIRMATIONS)
     }
 
     fn legacy_import(&self) -> LegacyImportRepository<'_> {

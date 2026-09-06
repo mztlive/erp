@@ -16,6 +16,10 @@
 //! 筛选/行类型定义在本文件，经 `IntegrationOpsExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{
+    InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
+    ReconciliationDifferenceResolutionRepository,
+};
 use entities::integration_ops::{
     ErrorClass, ErrorTaskStatus, InboxMessage, InboxMessageId, InboxMessageStatus, IntegrationErrorTask,
     MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
@@ -29,10 +33,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::IntegrationOpsExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 mod difference_resolution_batch;
 
@@ -335,7 +339,7 @@ pub struct ResolutionHistoryRow {
     pub handled_at: Instant,
 }
 
-impl<'a> Repository<'a, InboxMessage> {
+impl<'a> InboxMessageRepository<'a> {
     /// 按「来源系统 + 来源事件 ID」查找已接收消息（消息层去重判定）。
     ///
     /// 消息层唯一性由 `uk_inbox_messages_identity` 唯一索引保证；本方法用于
@@ -440,7 +444,7 @@ impl<'a> Repository<'a, InboxMessage> {
     }
 }
 
-impl<'a> Repository<'a, IntegrationErrorTask> {
+impl<'a> IntegrationErrorTaskRepository<'a> {
     /// 按稳定 ID 读取 W29 集成异常对象。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
@@ -505,7 +509,7 @@ impl<'a> Repository<'a, IntegrationErrorTask> {
     }
 }
 
-impl<'a> Repository<'a, ReconciliationDifference> {
+impl<'a> ReconciliationDifferenceRepository<'a> {
     /// 按稳定 ID 读取 W29 对账差异对象。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
@@ -570,7 +574,7 @@ impl<'a> Repository<'a, ReconciliationDifference> {
     }
 }
 
-impl<'a> Repository<'a, ReconciliationDifferenceResolution> {
+impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
     /// 按差异 ID 读取全部解决记录（不可变追加历史，按处理序号升序）。
     ///
     /// 处理记录不可更新或删除（§6.21），只提供追加与只读查询；
@@ -685,7 +689,7 @@ impl<'a> IntegrationOpsRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, INBOX_MESSAGES)
+        InboxMessageRepository::new(self.db, INBOX_MESSAGES)
             .update(message, executor)
             .await?;
         Ok(())
@@ -812,12 +816,13 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        sort_doc, InboxMessageFilter, IntegrationErrorTaskFilter, QueryFilter,
-        ReconciliationDifferenceFilter, DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS,
+        sort_doc, InboxMessageFilter, IntegrationErrorTaskFilter, ReconciliationDifferenceFilter,
+        DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS,
     };
     use entities::integration_ops::{
         ErrorClass, ErrorTaskStatus, InboxMessageStatus, MessageType, SourceSystemId,
     };
+    use persistence_core::QueryFilter;
 
     #[test]
     fn inbox_filter_applies_optional_fields_and_time_range() {

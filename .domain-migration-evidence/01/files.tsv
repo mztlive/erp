@@ -1,0 +1,307 @@
+action	path	note
+modify	backend/crates/persistence-core/src/repository/base.rs	add database() accessor for owned composition
+modify	backend/database/src/lib.rs	
+modify	backend/database/src/repository/access_control.rs	
+modify	backend/database/src/repository/account_core.rs	
+modify	backend/database/src/repository/approval_integration.rs	
+modify	backend/database/src/repository/audit_log.rs	
+delete	backend/database/src/repository/base.rs	delete duplicate generic Repository; mechanical CRUD lives in persistence-core
+modify	backend/database/src/repository/bpm.rs	
+modify	backend/database/src/repository/bulk_job.rs	
+modify	backend/database/src/repository/catalog/attribute.rs	
+modify	backend/database/src/repository/catalog/category.rs	
+modify	backend/database/src/repository/catalog/dictionary.rs	
+modify	backend/database/src/repository/catalog/parent_chain.rs	
+modify	backend/database/src/repository/catalog/product.rs	
+modify	backend/database/src/repository/catalog/product_pipeline.rs	
+modify	backend/database/src/repository/catalog/sellable.rs	
+modify	backend/database/src/repository/catalog/sku.rs	
+modify	backend/database/src/repository/catalog/voucher.rs	
+modify	backend/database/src/repository/contract.rs	
+modify	backend/database/src/repository/cost.rs	
+modify	backend/database/src/repository/customer.rs	
+modify	backend/database/src/repository/customer_center_receivable.rs	
+modify	backend/database/src/repository/customer_center_related.rs	
+modify	backend/database/src/repository/document_registry.rs	
+modify	backend/database/src/repository/extensions/access_control.rs	
+modify	backend/database/src/repository/extensions/approval_integration.rs	
+modify	backend/database/src/repository/extensions/bpm.rs	
+modify	backend/database/src/repository/extensions/bulk_job.rs	
+modify	backend/database/src/repository/extensions/catalog.rs	
+modify	backend/database/src/repository/extensions/contract.rs	
+modify	backend/database/src/repository/extensions/cost.rs	
+modify	backend/database/src/repository/extensions/customer.rs	
+modify	backend/database/src/repository/extensions/document_registry.rs	
+modify	backend/database/src/repository/extensions/file_asset.rs	
+modify	backend/database/src/repository/extensions/fulfillment.rs	
+modify	backend/database/src/repository/extensions/integration_ops.rs	
+modify	backend/database/src/repository/extensions/inventory.rs	
+modify	backend/database/src/repository/extensions/legacy_import.rs	
+modify	backend/database/src/repository/extensions/party.rs	
+modify	backend/database/src/repository/extensions/payable.rs	
+modify	backend/database/src/repository/extensions/procurement_responsibility.rs	
+modify	backend/database/src/repository/extensions/purchase_order.rs	
+modify	backend/database/src/repository/extensions/receivable.rs	
+modify	backend/database/src/repository/extensions/returns.rs	
+modify	backend/database/src/repository/extensions/sales_order.rs	
+modify	backend/database/src/repository/extensions/sales_review.rs	
+modify	backend/database/src/repository/extensions/source_registry.rs	
+modify	backend/database/src/repository/extensions/supplier.rs	
+modify	backend/database/src/repository/extensions/supplier_api.rs	
+modify	backend/database/src/repository/extensions/supplier_fulfillment.rs	
+modify	backend/database/src/repository/extensions/supplier_offering.rs	
+modify	backend/database/src/repository/extensions/supplier_settlement.rs	
+modify	backend/database/src/repository/extensions/warehouse.rs	
+modify	backend/database/src/repository/extensions/work_item.rs	
+modify	backend/database/src/repository/file_asset.rs	
+modify	backend/database/src/repository/fulfillment/customer_acceptance.rs	
+modify	backend/database/src/repository/fulfillment/delivery.rs	
+modify	backend/database/src/repository/fulfillment/electronic_delivery.rs	
+modify	backend/database/src/repository/fulfillment/purchase_receipt.rs	
+modify	backend/database/src/repository/fulfillment/service_fulfillment.rs	
+modify	backend/database/src/repository/integration_ops.rs	
+modify	backend/database/src/repository/integration_ops/difference_resolution_batch.rs	
+modify	backend/database/src/repository/inventory/adjustment.rs	
+modify	backend/database/src/repository/inventory/balance.rs	
+modify	backend/database/src/repository/inventory/movement.rs	
+modify	backend/database/src/repository/inventory/reservation.rs	
+modify	backend/database/src/repository/legacy_import/apply_scope.rs	
+modify	backend/database/src/repository/legacy_import/failed_retry.rs	
+modify	backend/database/src/repository/legacy_import/mod.rs	
+modify	backend/database/src/repository/legacy_import/supersede_batch.rs	
+modify	backend/database/src/repository/mod.rs	
+modify	backend/database/src/repository/party/address.rs	
+modify	backend/database/src/repository/party/aggregate.rs	
+modify	backend/database/src/repository/party/bank_account.rs	
+modify	backend/database/src/repository/party/contact.rs	
+modify	backend/database/src/repository/party/mod.rs	
+modify	backend/database/src/repository/party/record.rs	
+modify	backend/database/src/repository/party/revision.rs	
+modify	backend/database/src/repository/party/tax_profile.rs	
+modify	backend/database/src/repository/payable/account/invoicing.rs	
+modify	backend/database/src/repository/payable/account/mod.rs	
+modify	backend/database/src/repository/payable/account/query.rs	
+modify	backend/database/src/repository/payable/account/settlement.rs	
+modify	backend/database/src/repository/payable/account/tests.rs	
+modify	backend/database/src/repository/payable/account/write.rs	
+modify	backend/database/src/repository/payable/allocation.rs	
+modify	backend/database/src/repository/payable/entry.rs	
+modify	backend/database/src/repository/payable/payment.rs	
+modify	backend/database/src/repository/procurement_responsibility/mod.rs	
+modify	backend/database/src/repository/procurement_responsibility/query.rs	
+modify	backend/database/src/repository/purchase_order/allocation.rs	
+modify	backend/database/src/repository/purchase_order/change.rs	
+modify	backend/database/src/repository/purchase_order/list_facts.rs	
+modify	backend/database/src/repository/purchase_order/mod.rs	
+modify	backend/database/src/repository/purchase_order/order.rs	
+modify	backend/database/src/repository/purchase_order/revision.rs	
+modify	backend/database/src/repository/purchase_order/submission.rs	
+modify	backend/database/src/repository/receivable/account.rs	
+modify	backend/database/src/repository/receivable/command.rs	
+modify	backend/database/src/repository/receivable/entry.rs	
+modify	backend/database/src/repository/receivable/invoice.rs	
+modify	backend/database/src/repository/receivable/receipt.rs	
+modify	backend/database/src/repository/receivable_card_funds.rs	
+modify	backend/database/src/repository/receivable_sales_order_summary.rs	
+modify	backend/database/src/repository/returns.rs	
+modify	backend/database/src/repository/returns_posted_totals.rs	
+modify	backend/database/src/repository/role.rs	
+modify	backend/database/src/repository/sales_order/mod.rs	
+modify	backend/database/src/repository/sales_order/order.rs	
+modify	backend/database/src/repository/sales_order/revision.rs	
+modify	backend/database/src/repository/sales_order/submission.rs	
+modify	backend/database/src/repository/sales_order/working_copy.rs	
+modify	backend/database/src/repository/sales_review.rs	
+modify	backend/database/src/repository/source_registry.rs	
+modify	backend/database/src/repository/supplier.rs	
+modify	backend/database/src/repository/supplier/account.rs	
+modify	backend/database/src/repository/supplier/bundle/detail.rs	
+modify	backend/database/src/repository/supplier/bundle/list.rs	
+modify	backend/database/src/repository/supplier/bundle/mod.rs	
+modify	backend/database/src/repository/supplier/capability.rs	
+modify	backend/database/src/repository/supplier/command.rs	
+modify	backend/database/src/repository/supplier/qualification.rs	
+modify	backend/database/src/repository/supplier/revision.rs	
+modify	backend/database/src/repository/supplier_api.rs	
+modify	backend/database/src/repository/supplier_api/capability_change_batch.rs	
+modify	backend/database/src/repository/supplier_fulfillment.rs	
+modify	backend/database/src/repository/supplier_offering.rs	
+modify	backend/database/src/repository/supplier_offering/list_filter.rs	
+modify	backend/database/src/repository/supplier_offering/query.rs	
+modify	backend/database/src/repository/supplier_settlement/command.rs	
+modify	backend/database/src/repository/supplier_settlement/detail_snapshot.rs	
+modify	backend/database/src/repository/supplier_settlement/difference.rs	
+modify	backend/database/src/repository/supplier_settlement/item.rs	
+modify	backend/database/src/repository/supplier_settlement/source_scope.rs	
+modify	backend/database/src/repository/supplier_settlement/statement.rs	
+modify	backend/database/src/repository/supplier_settlement/tests.rs	
+modify	backend/database/src/repository/warehouse.rs	
+modify	backend/database/src/repository/work_item.rs	
+modify	backend/database/src/repository/work_item/approval.rs	
+modify	backend/database/src/repository/work_item/finance.rs	
+modify	backend/database/src/repository/work_item/fulfillment.rs	
+modify	backend/database/src/repository/work_item/integration_task_binding.rs	
+modify	backend/database/src/repository/work_item/mapping_task.rs	
+modify	backend/database/src/repository/work_item/query.rs	
+modify	backend/database/src/repository/work_item_fulfillment_queue.rs	
+modify	backend/database/tests/sales_order_existing_ids.rs	
+modify	backend/services/src/party/mod.rs	
+modify	backend/services/src/work_item/change_order_brief.rs	
+modify	backend/services/src/work_item/facts.rs	
+modify	backend/services/src/work_item/fulfillment_operation_brief.rs	
+modify	backend/services/src/work_item/funds_document_brief/account.rs	
+modify	backend/services/src/work_item/funds_document_brief/payment.rs	
+modify	backend/services/src/work_item/funds_document_brief/query.rs	
+modify	backend/services/src/work_item/funds_document_brief/receipt.rs	
+modify	backend/services/src/work_item/inventory_settlement_brief.rs	
+modify	backend/services/src/work_item/purchase_review_brief.rs	
+modify	backend/services/src/work_item/reassign.rs	
+modify	backend/services/src/work_item/sales_order_brief.rs	
+add	.domain-migration-evidence/01/boundary.log	
+add	.domain-migration-evidence/01/contract-comparison.json	
+add	.domain-migration-evidence/01/quality-gates.log	
+add	.domain-migration-evidence/01/transaction-contract.json	
+add	.domain-migration-evidence/01/unit-tests.log	
+add	backend/database/src/repository/owned/account_core.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/approval_notification_outbox.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/approval_subject_snapshot.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/audit_event.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/audit_log.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/background_job.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/background_job_item.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/bulk_selection_item.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/bulk_selection_snapshot.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/business_capability_confirmation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/business_document.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/contract.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/contract_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/cost_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/cost_entry.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_acceptance.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_account.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_assignment.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_profile_command.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_receipt.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/customer_refund.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/data_scope.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/delivery.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/document_attachment.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/document_participant.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/document_relation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/electronic_delivery.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/external_identity_map.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/external_identity_target.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/file_asset.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/finance_responsibility_rule.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/inbox_message.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/integration_error_task.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/invoice.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/legacy_import_batch.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/legacy_import_confirmation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/legacy_import_row.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/mod.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party_address.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party_bank_account.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party_contact.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/party_tax_profile.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/payable_account.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/payable_entry.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/payable_entry_offset.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/payment_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/payment_reversal.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/permission.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/procurement_responsibility_rule.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product_brand.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product_category.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product_category_attribute.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/product_revision_media.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_change_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_change_submission.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_change_submission_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_invoice_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_line_sales_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_order_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_order_revision_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_order_submission.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_order_submission_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_receipt.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_return_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/purchase_return_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receipt_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receipt_reversal.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receivable_account.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receivable_entry.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receivable_entry_offset.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/receivable_funds_review.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/reconciliation_difference.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/reconciliation_difference_resolution.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/role.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_change_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_change_submission.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_change_submission_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_invoice_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_goods_service_line_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_revision_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_submission.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_submission_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_voucher_line_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_working_copy.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_order_working_copy_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_return_case.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sales_return_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/service_fulfillment.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sku.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sku_attribute.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sku_attribute_value.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/sku_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/source_system.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/stock_adjustment.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/stock_adjustment_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/stock_balance.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/stock_movement.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/stock_reservation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_account.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_api_capability.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_api_connection.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_capability.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_commercial_profile_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_connection_command_receipt.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_fulfillment_item.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_fulfillment_order.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_health_check_run.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_offering.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_offering_availability.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_offering_command.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_offering_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_order_action.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_order_action_line.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_order_status_history.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_payment.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_profile_command.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_qualification.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_qualification_capability.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_refund.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_refund_allocation.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_refund_fact.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_settlement_difference.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_settlement_difference_evidence.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_settlement_item.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_settlement_source_evidence.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/supplier_settlement_statement.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/unit_of_measure.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/user_role.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/voucher_category_profile_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/warehouse.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/warehouse_revision.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/warehouse_sku_policy.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/work_item.rs	owned EntityRepository prepare_at
+add	backend/database/src/repository/owned/workflow_action.rs	owned EntityRepository prepare_at
+add	backend/scripts/__pycache__/capture-domain-contract.cpython-314.pyc	

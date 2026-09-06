@@ -3,10 +3,10 @@ use std::str::FromStr;
 use super::projection::{sort_doc, supplier_settlement_statement_projection};
 use super::source_scope::order_scope_filter;
 use super::{SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter};
-use crate::repository::QueryFilter;
 use entities::supplier_settlement::{SettlementDifferenceStatus, SettlementPeriod, SettlementStatus};
 use erp_core::ids::SupplierSettlementItemId;
 use mongodb::bson::doc;
+use persistence_core::QueryFilter;
 
 #[test]
 fn statement_filter_applies_optional_fields_and_deleted_filter() {

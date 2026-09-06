@@ -1,5 +1,6 @@
 //! ERP 审批集成仓储：业务对象快照与通知 outbox。
 
+use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 use bpm::ProcessKind;
 use entities::approval_integration::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
@@ -17,7 +18,6 @@ use super::bpm::{
     instance_list_sort, instance_summary_projection, ApprovalInstanceListFilter, ApprovalInstanceSummary,
 };
 use super::extensions::{ApprovalIntegrationExt, BpmExt};
-use super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Error, Result};
 
@@ -365,7 +365,7 @@ fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
 }
 
 /// 写入与实例一一对应的不可变业务对象快照。
-impl<'a> Repository<'a, ApprovalSubjectSnapshot> {
+impl<'a> ApprovalSubjectSnapshotRepository<'a> {
     /// 插入启动时冻结的业务对象快照；写后不得再更新。
     ///
     /// # 错误
@@ -421,7 +421,7 @@ impl<'a> Repository<'a, ApprovalSubjectSnapshot> {
     }
 }
 
-impl<'a> Repository<'a, ApprovalNotificationOutbox> {
+impl<'a> ApprovalNotificationOutboxRepository<'a> {
     /// 追加一条通知 outbox 记录。
     ///
     /// # 错误

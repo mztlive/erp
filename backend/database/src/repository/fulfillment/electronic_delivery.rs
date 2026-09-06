@@ -1,6 +1,7 @@
 //! `electronic_delivery` 电子交付记录仓储：列表投影查询。
 
-use entities::fulfillment::{ElectronicDelivery, ElectronicDeliveryState, FulfillmentResult};
+use crate::repository::owned::ElectronicDeliveryRepository;
+use entities::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
@@ -9,10 +10,9 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 电子交付记录排序白名单（查询与测试共用）。
 const ELECTRONIC_DELIVERY_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -88,7 +88,7 @@ impl Pagination for ElectronicDeliveryFilter {
     }
 }
 
-impl<'a> Repository<'a, ElectronicDelivery> {
+impl<'a> ElectronicDeliveryRepository<'a> {
     /// 分页检索电子交付记录列表（投影查询）。
     ///
     /// 只返回 [`ElectronicDeliveryRow`] 所需的列表字段（交付对象快照及其指纹

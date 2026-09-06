@@ -46,11 +46,7 @@ impl WorkItemService {
         if ids.is_empty() {
             return Ok(());
         }
-        let orders = self
-            .db
-            .sales_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
-            .await?;
+        let orders = self.db.sales_orders().list_active_by_ids(&ids, executor).await?;
         if orders.is_empty() {
             return Ok(());
         }

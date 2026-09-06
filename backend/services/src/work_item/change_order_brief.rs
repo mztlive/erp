@@ -82,7 +82,7 @@ impl WorkItemService {
         let changes = self
             .db
             .sales_change_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         if changes.is_empty() {
             return Ok(());
@@ -94,7 +94,7 @@ impl WorkItemService {
         let sales_nos = self
             .db
             .sales_orders()
-            .list_work_item_brief_entities_by_ids(&sales_order_ids, executor)
+            .list_active_by_ids(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -167,7 +167,7 @@ impl WorkItemService {
         let changes = self
             .db
             .purchase_change_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         if changes.is_empty() {
             return Ok(());
@@ -179,7 +179,7 @@ impl WorkItemService {
         let purchase_nos = self
             .db
             .purchase_orders()
-            .list_work_item_brief_entities_by_ids(&purchase_ids, executor)
+            .list_active_by_ids(&purchase_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.purchase_no))
@@ -240,7 +240,7 @@ impl WorkItemService {
         let base_revisions = self
             .db
             .sales_order_revisions()
-            .list_work_item_brief_entities_by_ids(&base_ids, executor)
+            .list_active_by_ids(&base_ids, executor)
             .await?;
         let submission_ids = changes
             .iter()
@@ -249,7 +249,7 @@ impl WorkItemService {
         let submissions = self
             .db
             .sales_change_submissions()
-            .list_work_item_brief_entities_by_ids(
+            .list_active_by_ids(
                 &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )
@@ -309,7 +309,7 @@ impl WorkItemService {
         let base_revisions = self
             .db
             .purchase_order_revisions()
-            .list_work_item_brief_entities_by_ids(&base_ids, executor)
+            .list_active_by_ids(&base_ids, executor)
             .await?;
         let submission_ids = changes
             .iter()
@@ -318,7 +318,7 @@ impl WorkItemService {
         let submissions = self
             .db
             .purchase_change_submissions()
-            .list_work_item_brief_entities_by_ids(
+            .list_active_by_ids(
                 &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )

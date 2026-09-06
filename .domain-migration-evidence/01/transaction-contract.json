@@ -1,0 +1,38 @@
+{
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden"
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden"
+  },
+  "run_audited": {
+    "file": "services/src/transaction.rs",
+    "sha256": "53a2d924d556bb4874499bfa2c4827d88374b7bbfce2c6eed67e88d7d675d804",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true
+  },
+  "source_contains_with_transaction": true,
+  "owned_repositories": {
+    "count": 141,
+    "prepare_at": "database/src/repository/owned",
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true
+  }
+}

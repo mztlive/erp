@@ -1,5 +1,6 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
+use crate::repository::owned::PurchaseOrderRepository;
 use entities::purchase_order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
@@ -10,13 +11,12 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::common::{in_filter, sort_doc, PURCHASE_ORDER_SORT_FIELDS};
-use super::PurchaseOrderRepository;
+use super::PurchaseOrderDomainRepository;
 use crate::repository::extensions::PurchaseOrderExt;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 采购单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,7 +119,7 @@ impl Pagination for PurchaseOrderFilter {
     }
 }
 
-impl<'a> PurchaseOrderRepository<'a> {
+impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单 ID 集合批量读取采购单。
     ///
     /// # 参数
@@ -197,7 +197,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseOrder> {
+impl<'a> PurchaseOrderRepository<'a> {
     /// 分页检索采购单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseOrderRow`] 所需的列表字段，不加载整文档；排序字段
@@ -339,10 +339,11 @@ fn purchase_order_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{active_purchase_order_filter, PurchaseOrderFilter, QueryFilter};
+    use super::{active_purchase_order_filter, PurchaseOrderFilter};
     use entities::purchase_order::PurchaseOrderStatus;
     use erp_core::ids::{SalesOrderId, SupplierAccountId};
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn filter_applies_optional_fields_and_deleted_filter() {

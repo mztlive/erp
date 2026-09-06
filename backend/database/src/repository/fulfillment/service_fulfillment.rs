@@ -1,6 +1,7 @@
 //! `service_fulfillment` 线下服务履约记录仓储：列表投影查询。
 
-use entities::fulfillment::{FulfillmentResult, ServiceFulfillment, ServiceFulfillmentState};
+use crate::repository::owned::ServiceFulfillmentRepository;
+use entities::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
@@ -9,10 +10,9 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 线下服务履约记录排序白名单（查询与测试共用）。
 const SERVICE_FULFILLMENT_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -88,7 +88,7 @@ impl Pagination for ServiceFulfillmentFilter {
     }
 }
 
-impl<'a> Repository<'a, ServiceFulfillment> {
+impl<'a> ServiceFulfillmentRepository<'a> {
     /// 分页检索线下服务履约记录列表（投影查询）。
     ///
     /// 只返回 [`ServiceFulfillmentRow`] 所需的列表字段（交付对象快照、服务

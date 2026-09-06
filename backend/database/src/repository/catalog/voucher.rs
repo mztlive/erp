@@ -1,3 +1,4 @@
+use crate::repository::owned::VoucherCategoryProfileRevisionRepository;
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -9,11 +10,11 @@ use entities::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevisi
 use erp_core::ids::{ProductId, SkuId};
 
 use super::super::extensions::CatalogExt;
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc};
 use super::CatalogRepository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 卡券类目扩展修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -90,7 +91,7 @@ impl Pagination for VoucherCategoryProfileRevisionFilter {
     }
 }
 
-impl<'a> Repository<'a, VoucherCategoryProfileRevision> {
+impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
     /// 分页检索卡券类目扩展修订列表（投影查询）。
     ///
     /// 只返回 [`VoucherCategoryProfileRevisionRow`] 所需的列表字段；排序字段

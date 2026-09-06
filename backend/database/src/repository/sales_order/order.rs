@@ -1,5 +1,6 @@
 //! `sales_order` 与 `sales_order_line` 仓储：主单列表查询、稳定明细维护。
 
+use crate::repository::owned::{SalesOrderLineRepository, SalesOrderRepository};
 use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderId, SalesOrderLine,
 };
@@ -8,11 +9,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::{sort_doc, SalesOrderRepository, SALES_ORDERS};
+use super::{sort_doc, SalesOrderDomainRepository, SALES_ORDERS};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 use std::collections::HashSet;
 
 /// 销售单列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -187,7 +188,7 @@ impl Pagination for SalesOrderFilter {
     }
 }
 
-impl<'a> Repository<'a, SalesOrder> {
+impl<'a> SalesOrderRepository<'a> {
     /// 按销售单 ID 集合批量读取活跃销售单。
     ///
     /// # 参数
@@ -321,7 +322,7 @@ impl<'a> Repository<'a, SalesOrder> {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderLine> {
+impl<'a> SalesOrderLineRepository<'a> {
     /// 列出销售单的全部稳定明细行（按行号升序）。
     ///
     /// # 参数
@@ -358,7 +359,7 @@ impl<'a> Repository<'a, SalesOrderLine> {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {
+impl<'a> SalesOrderDomainRepository<'a> {
     /// 按 ID 集合批量返回存在的未删除销售单 ID（最小存在性事实）。
     ///
     /// 一次 `$in` 查询完成全部存在性装载，查询次数与输入数量无关；空输入

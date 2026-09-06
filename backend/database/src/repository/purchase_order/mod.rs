@@ -10,11 +10,12 @@
 //! - [`revision`]：生效版本与明细批量取回；
 //! - [`allocation`]：采购行↔销售行双向批量查询（§6.6 双向查询索引）；
 //! - [`change`]：采购变更单与变更提交/明细读取；
-//! - [`PurchaseOrderRepository`] 承载跨集合多步骤写入（必须收到事务执行器）。
+//! - [`PurchaseOrderDomainRepository`] 承载跨集合多步骤写入（必须收到事务执行器）。
 //!
 //! 提交/版本/分配是事实或修订类集合，**不提供软删除方法**；采购主表与采购变更单
 //! 是可编辑单据草稿（`StableBase`），可软删除与恢复。
 
+use crate::repository::owned::{PurchaseChangeOrderRepository, PurchaseOrderRepository};
 mod allocation;
 mod center_facts;
 mod change;
@@ -40,7 +41,6 @@ use entities::purchase_order::{
 use mongodb::Database;
 
 use super::extensions::PurchaseOrderExt;
-use crate::Repository;
 use persistence_core::mongo_ops;
 use persistence_core::Executor;
 use persistence_core::Result;
@@ -70,11 +70,11 @@ const PURCHASE_CHANGE_SUBMISSION_LINES: &str =
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的跨集合写入入口，
 /// 由 `PurchaseOrderExt::purchase_order()` 访问。
-pub struct PurchaseOrderRepository<'a> {
+pub struct PurchaseOrderDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> PurchaseOrderRepository<'a> {
+impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 创建域专用仓储。
     ///
     /// # 参数
@@ -127,7 +127,7 @@ impl<'a> PurchaseOrderRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, PURCHASE_ORDERS)
+        PurchaseOrderRepository::new(self.db, PURCHASE_ORDERS)
             .update(order, executor)
             .await?;
         Ok(())
@@ -214,7 +214,7 @@ impl<'a> PurchaseOrderRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, PURCHASE_CHANGE_ORDERS)
+        PurchaseChangeOrderRepository::new(self.db, PURCHASE_CHANGE_ORDERS)
             .update(change_order, executor)
             .await?;
         Ok(())

@@ -4,6 +4,7 @@
 //! 引用不可变变更提交。变更提交/明细**不提供软删除方法**；变更单本身是
 //! 可编辑单据草稿（`StableBase`），可软删除与恢复。
 
+use crate::repository::owned::{PurchaseChangeSubmissionLineRepository, PurchaseChangeSubmissionRepository};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
@@ -13,13 +14,12 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
-use super::{PurchaseOrderRepository, PURCHASE_CHANGE_ORDERS};
-use crate::repository::PageResult;
-use crate::Repository;
+use super::{PurchaseOrderDomainRepository, PURCHASE_CHANGE_ORDERS};
 use persistence_core::Executor;
+use persistence_core::PageResult;
 use persistence_core::{mongo_ops, Result};
 
-impl<'a> PurchaseOrderRepository<'a> {
+impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 分页查询采购变更单，并按创建时间稳定排序。
     ///
     /// # 参数
@@ -183,9 +183,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     }
 }
 
-impl<'a> Repository<'a, PurchaseChangeOrder> {}
-
-impl<'a> Repository<'a, PurchaseChangeSubmission> {
+impl<'a> PurchaseChangeSubmissionRepository<'a> {
     /// 按「变更单 + 提交序号」查找唯一变更提交。
     ///
     /// 唯一性由 `uk_purchase_change_submissions_order_no` 唯一索引保证。
@@ -236,7 +234,7 @@ fn change_order_filter(purchase_order_id: Option<&str>, status: Option<&str>) ->
     filter
 }
 
-impl<'a> Repository<'a, PurchaseChangeSubmissionLine> {
+impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
     /// 批量取回多个变更提交的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于变更提交详情页一次取回行集合；空集合直接返回空结果。

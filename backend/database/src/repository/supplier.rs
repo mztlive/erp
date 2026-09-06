@@ -17,10 +17,9 @@ use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::extensions::SupplierExt;
-use super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -70,7 +69,7 @@ struct SupplierIdRow {
 /// 按供应商子集合条件读取去重后的供应商角色 ID。
 ///
 /// # 参数
-/// * `repository` - 供应商能力或资质集合仓储
+/// * `collection` - 供应商能力或资质集合句柄
 /// * `filter` - 已按业务语义构造的集合查询条件
 /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
 ///
@@ -79,19 +78,15 @@ struct SupplierIdRow {
 ///
 /// # 错误
 /// 当 MongoDB 查询或反序列化失败时返回错误。
-async fn find_supplier_ids<T>(
-    repository: &Repository<'_, T>,
+async fn find_supplier_ids(
+    collection: mongodb::Collection<SupplierIdRow>,
     mut filter: Document,
     executor: &mut dyn Executor,
-) -> Result<Vec<SupplierAccountId>>
-where
-    T: Serialize + DeserializeOwned + Send + Sync,
-{
+) -> Result<Vec<SupplierAccountId>> {
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     let options = FindOptions::builder()
         .projection(doc! { "supplier_id": 1, "_id": 0 })
         .build();
-    let collection = repository.collection().clone_with_type::<SupplierIdRow>();
     let rows = mongo_ops::find_many(&collection, filter, options, executor).await?;
     let mut ids: Vec<SupplierAccountId> = rows.into_iter().map(|row| row.supplier_id).collect();
     ids.sort_by_key(ToString::to_string);

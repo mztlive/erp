@@ -7,7 +7,6 @@ use bpm::model::{
 use mongodb::Database;
 
 use super::super::bpm::BpmWorkflowRepository;
-use crate::Repository;
 
 /// BPM 目标集合仓储访问器。
 ///
@@ -31,44 +30,46 @@ pub trait BpmExt {
     /// 返回流程定义集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalProcessDefinition>`。
-    fn approval_process_definitions(&self) -> Repository<'_, ApprovalProcessDefinition>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalProcessDefinition>`。
+    fn approval_process_definitions(&self) -> persistence_core::Repository<'_, ApprovalProcessDefinition>;
 
     /// 返回节点定义集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalNodeDefinition>`。
-    fn approval_node_definitions(&self) -> Repository<'_, ApprovalNodeDefinition>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalNodeDefinition>`。
+    fn approval_node_definitions(&self) -> persistence_core::Repository<'_, ApprovalNodeDefinition>;
 
     /// 返回连线定义集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalTransitionDefinition>`。
-    fn approval_transition_definitions(&self) -> Repository<'_, ApprovalTransitionDefinition>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalTransitionDefinition>`。
+    fn approval_transition_definitions(
+        &self,
+    ) -> persistence_core::Repository<'_, ApprovalTransitionDefinition>;
 
     /// 返回运行实例集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalProcessInstance>`。
-    fn approval_process_instances(&self) -> Repository<'_, ApprovalProcessInstance>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalProcessInstance>`。
+    fn approval_process_instances(&self) -> persistence_core::Repository<'_, ApprovalProcessInstance>;
 
     /// 返回节点执行集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalNodeExecution>`。
-    fn approval_node_executions(&self) -> Repository<'_, ApprovalNodeExecution>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalNodeExecution>`。
+    fn approval_node_executions(&self) -> persistence_core::Repository<'_, ApprovalNodeExecution>;
 
     /// 返回实例审批人集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalInstanceAssignee>`。
-    fn approval_instance_assignees(&self) -> Repository<'_, ApprovalInstanceAssignee>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalInstanceAssignee>`。
+    fn approval_instance_assignees(&self) -> persistence_core::Repository<'_, ApprovalInstanceAssignee>;
 
     /// 返回命令收据集合仓储。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, ApprovalCommandReceipt>`。
-    fn approval_command_receipts(&self) -> Repository<'_, ApprovalCommandReceipt>;
+    /// 返回 `persistence_core::Repository<'_, ApprovalCommandReceipt>`。
+    fn approval_command_receipts(&self) -> persistence_core::Repository<'_, ApprovalCommandReceipt>;
 
     /// 返回跨 BPM 目标集合的聚合仓储。
     ///
@@ -78,32 +79,34 @@ pub trait BpmExt {
 }
 
 impl BpmExt for Database {
-    fn approval_process_definitions(&self) -> Repository<'_, ApprovalProcessDefinition> {
-        Repository::new(self, Self::APPROVAL_PROCESS_DEFINITIONS)
+    fn approval_process_definitions(&self) -> persistence_core::Repository<'_, ApprovalProcessDefinition> {
+        persistence_core::Repository::new(self, Self::APPROVAL_PROCESS_DEFINITIONS)
     }
 
-    fn approval_node_definitions(&self) -> Repository<'_, ApprovalNodeDefinition> {
-        Repository::new(self, Self::APPROVAL_NODE_DEFINITIONS)
+    fn approval_node_definitions(&self) -> persistence_core::Repository<'_, ApprovalNodeDefinition> {
+        persistence_core::Repository::new(self, Self::APPROVAL_NODE_DEFINITIONS)
     }
 
-    fn approval_transition_definitions(&self) -> Repository<'_, ApprovalTransitionDefinition> {
-        Repository::new(self, Self::APPROVAL_TRANSITION_DEFINITIONS)
+    fn approval_transition_definitions(
+        &self,
+    ) -> persistence_core::Repository<'_, ApprovalTransitionDefinition> {
+        persistence_core::Repository::new(self, Self::APPROVAL_TRANSITION_DEFINITIONS)
     }
 
-    fn approval_process_instances(&self) -> Repository<'_, ApprovalProcessInstance> {
-        Repository::new(self, Self::APPROVAL_PROCESS_INSTANCES)
+    fn approval_process_instances(&self) -> persistence_core::Repository<'_, ApprovalProcessInstance> {
+        persistence_core::Repository::new(self, Self::APPROVAL_PROCESS_INSTANCES)
     }
 
-    fn approval_node_executions(&self) -> Repository<'_, ApprovalNodeExecution> {
-        Repository::new(self, Self::APPROVAL_NODE_EXECUTIONS)
+    fn approval_node_executions(&self) -> persistence_core::Repository<'_, ApprovalNodeExecution> {
+        persistence_core::Repository::new(self, Self::APPROVAL_NODE_EXECUTIONS)
     }
 
-    fn approval_instance_assignees(&self) -> Repository<'_, ApprovalInstanceAssignee> {
-        Repository::new(self, Self::APPROVAL_INSTANCE_ASSIGNEES)
+    fn approval_instance_assignees(&self) -> persistence_core::Repository<'_, ApprovalInstanceAssignee> {
+        persistence_core::Repository::new(self, Self::APPROVAL_INSTANCE_ASSIGNEES)
     }
 
-    fn approval_command_receipts(&self) -> Repository<'_, ApprovalCommandReceipt> {
-        Repository::new(self, Self::APPROVAL_COMMAND_RECEIPTS)
+    fn approval_command_receipts(&self) -> persistence_core::Repository<'_, ApprovalCommandReceipt> {
+        persistence_core::Repository::new(self, Self::APPROVAL_COMMAND_RECEIPTS)
     }
 
     fn bpm_workflow(&self) -> BpmWorkflowRepository<'_> {

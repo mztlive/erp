@@ -3,6 +3,10 @@
 //! 把结算详情固定的四段持久化关联（结算头、明细、差异、差异补证）收敛为一次
 //! 有界批量读取，替代原来散落在 Service 的关系加载与归组。
 
+use crate::repository::owned::{
+    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
+    SupplierSettlementItemRepository, SupplierSettlementStatementRepository,
+};
 use std::collections::BTreeMap;
 
 use entities::supplier_settlement::{
@@ -12,7 +16,6 @@ use entities::supplier_settlement::{
 use mongodb::bson::doc;
 
 use super::super::extensions::SupplierSettlementExt;
-use super::super::Repository;
 use super::SupplierSettlementRepository;
 use persistence_core::Executor;
 use persistence_core::Result;
@@ -65,7 +68,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         statement_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementStatementDetailSnapshot>> {
-        let statement = Repository::new(
+        let statement = SupplierSettlementStatementRepository::new(
             self.db,
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
         )
@@ -74,7 +77,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         let Some(statement) = statement else {
             return Ok(None);
         };
-        let items: Vec<SupplierSettlementItem> = Repository::new(
+        let items: Vec<SupplierSettlementItem> = SupplierSettlementItemRepository::new(
             self.db,
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_ITEMS,
         )
@@ -88,7 +91,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         let differences: Vec<SupplierSettlementDifference> = if item_ids.is_empty() {
             Vec::new()
         } else {
-            Repository::new(
+            SupplierSettlementDifferenceRepository::new(
                 self.db,
                 <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCES,
             )
@@ -106,7 +109,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         let evidence: Vec<SupplierSettlementDifferenceEvidence> = if difference_ids.is_empty() {
             Vec::new()
         } else {
-            Repository::new(
+            SupplierSettlementDifferenceEvidenceRepository::new(
                 self.db,
                 <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE,
             )

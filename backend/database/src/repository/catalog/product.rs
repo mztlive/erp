@@ -1,3 +1,6 @@
+use crate::repository::owned::{
+    ProductRepository, ProductRevisionMediaRepository, ProductRevisionRepository,
+};
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -15,13 +18,13 @@ use erp_core::ids::{FileAssetId, ProductId, ProductRevisionId};
 use erp_core::money::Amount;
 
 use super::super::extensions::{CatalogExt, FileAssetExt};
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::product_pipeline::product_list_pipeline;
 use super::shared::{in_filter, sort_doc, PRODUCT_REVISIONS};
 use super::CatalogRepository;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `product_revision_media` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
@@ -140,7 +143,7 @@ impl Pagination for ProductFilter {
     }
 }
 
-impl<'a> Repository<'a, Product> {
+impl<'a> ProductRepository<'a> {
     /// 按稳定主键批量查询商品。
     ///
     /// # 参数
@@ -252,7 +255,7 @@ impl Pagination for ProductRevisionFilter {
     }
 }
 
-impl<'a> Repository<'a, ProductRevision> {
+impl<'a> ProductRevisionRepository<'a> {
     /// 分页检索商品修订列表（投影查询）。
     ///
     /// 只返回 [`ProductRevisionRow`] 所需的列表字段；排序字段白名单化
@@ -341,7 +344,7 @@ impl<'a> Repository<'a, ProductRevision> {
     }
 }
 
-impl<'a> Repository<'a, ProductRevisionMedia> {
+impl<'a> ProductRevisionMediaRepository<'a> {
     /// 按商品修订 ID 批量读取媒体行。
     ///
     /// # 参数

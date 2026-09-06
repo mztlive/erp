@@ -458,7 +458,7 @@ impl WorkItemService {
         for batch in self
             .db
             .legacy_import_batches()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -486,7 +486,7 @@ impl WorkItemService {
         for task in self
             .db
             .integration_error_tasks()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?
         {
             let owner = task
@@ -518,7 +518,7 @@ impl WorkItemService {
         for difference in self
             .db
             .reconciliation_differences()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?
         {
             let mut fact = ObjectFact::new(
@@ -551,7 +551,7 @@ impl WorkItemService {
         for order in self
             .db
             .supplier_fulfillment_orders()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -588,7 +588,7 @@ impl WorkItemService {
         let offerings = self
             .db
             .supplier_offerings()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let offering_ids = offerings
             .iter()

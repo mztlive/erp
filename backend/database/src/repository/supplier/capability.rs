@@ -1,12 +1,13 @@
+use crate::repository::owned::SupplierCapabilityRepository;
 use entities::supplier::{CapabilityCode, CapabilityStatus, SupplierCapability};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{doc, Document};
 
-use super::super::{Pagination, QueryFilter, Repository};
-use super::{find_supplier_ids, SupplierRepository, SUPPLIER_CAPABILITIES};
+use super::{SupplierRepository, SUPPLIER_CAPABILITIES};
 use persistence_core::Executor;
 use persistence_core::Result;
+use persistence_core::{Pagination, QueryFilter};
 
 /// 供应商能力列表筛选条件。
 #[derive(Debug, Clone)]
@@ -57,7 +58,7 @@ impl Pagination for SupplierCapabilityFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierCapability> {
+impl<'a> SupplierCapabilityRepository<'a> {
     /// 按「供应商 + 能力代码」查找能力（唯一性由
     /// `uk_supplier_capabilities_supplier_code` 保证）。
     ///
@@ -134,8 +135,8 @@ impl<'a> Repository<'a, SupplierCapability> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
         let codes: Vec<&str> = capability_codes.iter().map(CapabilityCode::as_str).collect();
-        find_supplier_ids(
-            self,
+        super::find_supplier_ids(
+            self.collection().clone_with_type(),
             doc! {
                 "capability_code": { "$in": codes },
                 "status": CapabilityStatus::Active.as_str(),
@@ -170,7 +171,7 @@ impl<'a> SupplierRepository<'a> {
         as_of: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        Repository::new(self.db, SUPPLIER_CAPABILITIES)
+        SupplierCapabilityRepository::new(self.db, SUPPLIER_CAPABILITIES)
             .list_supplier_ids_by_active_capability_codes(capability_codes, as_of, executor)
             .await
     }
@@ -191,7 +192,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierCapability>> {
-        Repository::new(self.db, SUPPLIER_CAPABILITIES)
+        SupplierCapabilityRepository::new(self.db, SUPPLIER_CAPABILITIES)
             .find_many_sorted(
                 doc! { "supplier_id": supplier_id.to_string() },
                 doc! { "created_at": 1 },
@@ -203,8 +204,9 @@ impl<'a> SupplierRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{QueryFilter, SupplierCapabilityFilter};
+    use super::SupplierCapabilityFilter;
     use entities::supplier::CapabilityStatus;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn capability_filter_applies_supplier_code_and_status() {

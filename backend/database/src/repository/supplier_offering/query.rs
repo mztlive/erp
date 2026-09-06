@@ -1,14 +1,14 @@
 //! 供给聚合通用查询：稳定身份按 ID 读取与商业条款修订查询。
 
+use crate::repository::owned::{SupplierOfferingRepository, SupplierOfferingRevisionRepository};
 use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
 use mongodb::bson::doc;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, SupplierOffering> {
+impl<'a> SupplierOfferingRepository<'a> {
     /// 按稳定 ID 读取未删除的供给身份。
     ///
     /// 发布与安全暂停流程通过供给稳定 ID 引用供给身份，本方法提供该跨域只读
@@ -35,7 +35,7 @@ impl<'a> Repository<'a, SupplierOffering> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOfferingRevision> {
+impl<'a> SupplierOfferingRevisionRepository<'a> {
     /// 按稳定 ID 读取未删除的供给商业条款修订。
     ///
     /// 发布修订通过供给修订稳定 ID 引用不可变商业条款，本方法提供该跨域只读

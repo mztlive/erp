@@ -1,3 +1,4 @@
+use crate::repository::owned::SupplierCommercialProfileRevisionRepository;
 use entities::supplier::{
     CapabilityCode, QualificationType, SupplierCommercialProfileRevision, SupplierRatingRevision,
 };
@@ -8,13 +9,13 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::Deserialize;
 
-use super::super::{Pagination, QueryFilter, Repository};
 use super::{
     SupplierRepository, SUPPLIER_CAPABILITY_REVISIONS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS,
     SUPPLIER_QUALIFICATION_REVISIONS, SUPPLIER_RATING_REVISIONS,
 };
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Error, Result};
+use persistence_core::{Pagination, QueryFilter};
 
 /// 商务结算版本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -56,7 +57,7 @@ impl Pagination for SupplierCommercialProfileFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierCommercialProfileRevision> {
+impl<'a> SupplierCommercialProfileRevisionRepository<'a> {
     /// 检索某供应商的商务版本历史（按 `revision_no` 升序，§6.2 历史查询）。
     ///
     /// # 参数
@@ -145,7 +146,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierCommercialProfileRevision>> {
-        Repository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
+        SupplierCommercialProfileRevisionRepository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
             .find_many_sorted(
                 doc! { "supplier_id": supplier_id.to_string() },
                 doc! { "revision_no": -1 },
@@ -173,7 +174,7 @@ impl<'a> SupplierRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        Repository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
+        SupplierCommercialProfileRevisionRepository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
             .find_many(doc! { "id": { "$in": revision_ids } }, executor)
             .await
     }
@@ -194,7 +195,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierRatingRevision>> {
-        Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
+        persistence_core::Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
             .find_many_sorted(
                 doc! { "supplier_id": supplier_id.to_string() },
                 doc! { "revision_no": -1 },
@@ -219,7 +220,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierRatingRevision>> {
-        Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
+        persistence_core::Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
             .find_many_sorted(
                 doc! { "supplier_id": supplier_id.to_string() },
                 doc! { "revision_no": 1 },

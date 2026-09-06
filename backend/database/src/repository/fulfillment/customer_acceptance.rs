@@ -1,5 +1,6 @@
 //! `customer_acceptance` 客户验收单仓储：列表投影查询与按验收单号身份查询。
 
+use crate::repository::owned::CustomerAcceptanceRepository;
 use entities::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceState};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
@@ -9,10 +10,9 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 客户验收单排序白名单（查询与测试共用）。
 const CUSTOMER_ACCEPTANCE_SORT_FIELDS: &[&str] = &["accepted_at", "created_at"];
@@ -84,7 +84,7 @@ impl Pagination for CustomerAcceptanceFilter {
     }
 }
 
-impl<'a> Repository<'a, CustomerAcceptance> {
+impl<'a> CustomerAcceptanceRepository<'a> {
     /// 按客户验收单号查询未删除验收单。
     ///
     /// # 参数

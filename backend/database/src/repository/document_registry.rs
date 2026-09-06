@@ -8,6 +8,10 @@
 //!
 //! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
 
+use crate::repository::owned::{
+    BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository,
+    WorkflowActionRepository,
+};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
@@ -21,10 +25,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Error, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -121,7 +125,7 @@ impl Pagination for BusinessDocumentFilter {
     }
 }
 
-impl<'a> Repository<'a, BusinessDocument> {
+impl<'a> BusinessDocumentRepository<'a> {
     /// 在审批启动事务内永久写入注册表启动守卫。
     ///
     /// # 参数
@@ -472,7 +476,7 @@ impl<'a> Repository<'a, BusinessDocument> {
     }
 }
 
-impl<'a> Repository<'a, DocumentRelation> {
+impl<'a> DocumentRelationRepository<'a> {
     /// 单次查询与指定单据相关的全部出向及入向关系。
     ///
     /// # 参数
@@ -498,7 +502,7 @@ impl<'a> Repository<'a, DocumentRelation> {
     }
 }
 
-impl<'a> Repository<'a, DocumentParticipant> {
+impl<'a> DocumentParticipantRepository<'a> {
     /// 按参与人返回去重后的业务单据 ID，仅投影 `document_id`。
     ///
     /// # 参数
@@ -630,7 +634,7 @@ impl Pagination for WorkflowActionFilter {
     }
 }
 
-impl<'a> Repository<'a, WorkflowAction> {
+impl<'a> WorkflowActionRepository<'a> {
     /// 分页检索工作流动作（投影查询）。
     ///
     /// 只返回 [`WorkflowActionRow`] 所需的列表字段，不加载整文档；
@@ -823,7 +827,7 @@ fn workflow_action_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        assign_document_no_pipeline, same_id_registration, sort_doc, BusinessDocumentFilter, QueryFilter,
+        assign_document_no_pipeline, same_id_registration, sort_doc, BusinessDocumentFilter,
         WorkflowActionFilter,
     };
     use crate::repository::bpm::{
@@ -832,6 +836,7 @@ mod tests {
     use entities::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
     use erp_core::common::time::Instant;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn business_document_filter_applies_type_and_no_regex() {

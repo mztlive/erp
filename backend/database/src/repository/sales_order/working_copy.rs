@@ -4,6 +4,7 @@
 //! 有效工作副本」由部分唯一索引 `uk_sales_order_working_copies_active_per_purpose`
 //! 保证（理由与回滚方式见 `indexes::sales_order`）。
 
+use crate::repository::owned::{SalesOrderWorkingCopyLineRepository, SalesOrderWorkingCopyRepository};
 use entities::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, WorkingCopyStatus, WorkingPurpose,
@@ -12,12 +13,13 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesChangeOrderId;
 use mongodb::bson::{doc, Document};
 
-use super::super::{Pagination, QueryFilter, Repository};
 use super::{
-    SalesOrderRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES, SALES_ORDER_WORKING_COPIES,
+    SalesOrderDomainRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES,
+    SALES_ORDER_WORKING_COPIES,
 };
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{Pagination, QueryFilter};
 
 /// 工作副本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -68,7 +70,7 @@ impl Pagination for WorkingCopyFilter {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderWorkingCopy> {
+impl<'a> SalesOrderWorkingCopyRepository<'a> {
     /// 按销售单与编辑目的查找有效工作副本（`Editing`/`Conflict`）。
     ///
     /// 「同一销售单和编辑目的同时最多一个有效工作副本」由部分唯一索引
@@ -175,7 +177,7 @@ impl<'a> Repository<'a, SalesOrderWorkingCopy> {
     }
 }
 
-impl<'a> Repository<'a, SalesOrderWorkingCopyLine> {
+impl<'a> SalesOrderWorkingCopyLineRepository<'a> {
     /// 列出工作副本的全部明细行（按行号升序）。
     ///
     /// # 参数
@@ -212,7 +214,7 @@ impl<'a> Repository<'a, SalesOrderWorkingCopyLine> {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {
+impl<'a> SalesOrderDomainRepository<'a> {
     /// 提交工作副本：把草稿头、行原样复制成不可变提交快照，再锁定草稿。
     ///
     /// 依次写入 `sales_order_submission`、`sales_order_submission_line` 并 CAS
@@ -265,7 +267,7 @@ impl<'a> SalesOrderRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, SALES_ORDER_WORKING_COPIES)
+        SalesOrderWorkingCopyRepository::new(self.db, SALES_ORDER_WORKING_COPIES)
             .update(working_copy, executor)
             .await
     }

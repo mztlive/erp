@@ -5,11 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CatalogExt>::PRODUCT_CATEGORIES` 等值。
 
-use entities::catalog::{
-    Product, ProductBrand, ProductCategory, ProductCategoryAttribute, ProductRevision, ProductRevisionMedia,
-    Sku, SkuAttribute, SkuAttributeValue, SkuRevision, SkuRevisionAttributeValue, UnitOfMeasure,
-    VoucherCategoryProfileRevision,
+use crate::repository::owned::{
+    ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
+    ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
+    SkuAttributeValueRepository, SkuRepository, SkuRevisionRepository, UnitOfMeasureRepository,
+    VoucherCategoryProfileRevisionRepository,
 };
+use entities::catalog::SkuRevisionAttributeValue;
 use mongodb::Database;
 
 use super::super::catalog::{
@@ -18,7 +20,6 @@ use super::super::catalog::{
     SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter,
     VoucherCategoryProfileRevisionFilter,
 };
-use crate::Repository;
 
 /// 域 D10 仓储访问器。
 pub trait CatalogExt {
@@ -94,80 +95,80 @@ pub trait CatalogExt {
     /// 获取 `product_category` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductCategory>`。
-    fn product_categories(&self) -> Repository<'_, ProductCategory>;
+    /// 返回 `ProductCategoryRepository<'_>`。
+    fn product_categories(&self) -> ProductCategoryRepository<'_>;
 
     /// 获取 `product_brand` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductBrand>`。
-    fn product_brands(&self) -> Repository<'_, ProductBrand>;
+    /// 返回 `ProductBrandRepository<'_>`。
+    fn product_brands(&self) -> ProductBrandRepository<'_>;
 
     /// 获取 `unit_of_measure` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::UnitOfMeasure>`。
-    fn unit_of_measures(&self) -> Repository<'_, UnitOfMeasure>;
+    /// 返回 `UnitOfMeasureRepository<'_>`。
+    fn unit_of_measures(&self) -> UnitOfMeasureRepository<'_>;
 
     /// 获取 `sku_attribute` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuAttribute>`。
-    fn sku_attributes(&self) -> Repository<'_, SkuAttribute>;
+    /// 返回 `SkuAttributeRepository<'_>`。
+    fn sku_attributes(&self) -> SkuAttributeRepository<'_>;
 
     /// 获取 `sku_attribute_value` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuAttributeValue>`。
-    fn sku_attribute_values(&self) -> Repository<'_, SkuAttributeValue>;
+    /// 返回 `SkuAttributeValueRepository<'_>`。
+    fn sku_attribute_values(&self) -> SkuAttributeValueRepository<'_>;
 
     /// 获取 `product_category_attribute` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductCategoryAttribute>`。
-    fn product_category_attributes(&self) -> Repository<'_, ProductCategoryAttribute>;
+    /// 返回 `ProductCategoryAttributeRepository<'_>`。
+    fn product_category_attributes(&self) -> ProductCategoryAttributeRepository<'_>;
 
     /// 获取 `product` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::Product>`。
-    fn products(&self) -> Repository<'_, Product>;
+    /// 返回 `ProductRepository<'_>`。
+    fn products(&self) -> ProductRepository<'_>;
 
     /// 获取 `product_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductRevision>`。
-    fn product_revisions(&self) -> Repository<'_, ProductRevision>;
+    /// 返回 `ProductRevisionRepository<'_>`。
+    fn product_revisions(&self) -> ProductRevisionRepository<'_>;
 
     /// 获取 `product_revision_media` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductRevisionMedia>`。
-    fn product_revision_medias(&self) -> Repository<'_, ProductRevisionMedia>;
+    /// 返回 `ProductRevisionMediaRepository<'_>`。
+    fn product_revision_medias(&self) -> ProductRevisionMediaRepository<'_>;
 
     /// 获取 `sku` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::Sku>`。
-    fn skus(&self) -> Repository<'_, Sku>;
+    /// 返回 `SkuRepository<'_>`。
+    fn skus(&self) -> SkuRepository<'_>;
 
     /// 获取 `sku_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuRevision>`。
-    fn sku_revisions(&self) -> Repository<'_, SkuRevision>;
+    /// 返回 `SkuRevisionRepository<'_>`。
+    fn sku_revisions(&self) -> SkuRevisionRepository<'_>;
 
     /// 获取 `sku_revision_attribute_value` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuRevisionAttributeValue>`。
-    fn sku_revision_attribute_values(&self) -> Repository<'_, SkuRevisionAttributeValue>;
+    /// 返回 `persistence_core::Repository<'_, entities::catalog::SkuRevisionAttributeValue>`。
+    fn sku_revision_attribute_values(&self) -> persistence_core::Repository<'_, SkuRevisionAttributeValue>;
 
     /// 获取 `voucher_category_profile_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::VoucherCategoryProfileRevision>`。
-    fn voucher_category_profile_revisions(&self) -> Repository<'_, VoucherCategoryProfileRevision>;
+    /// 返回 `VoucherCategoryProfileRevisionRepository<'_>`。
+    fn voucher_category_profile_revisions(&self) -> VoucherCategoryProfileRevisionRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -195,105 +196,105 @@ impl CatalogExt for Database {
     /// 获取 `product_category` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductCategory>`。
-    fn product_categories(&self) -> Repository<'_, ProductCategory> {
-        Repository::new(self, Self::PRODUCT_CATEGORIES)
+    /// 返回 `ProductCategoryRepository<'_>`。
+    fn product_categories(&self) -> ProductCategoryRepository<'_> {
+        ProductCategoryRepository::new(self, Self::PRODUCT_CATEGORIES)
     }
 
     /// 获取 `product_brand` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductBrand>`。
-    fn product_brands(&self) -> Repository<'_, ProductBrand> {
-        Repository::new(self, Self::PRODUCT_BRANDS)
+    /// 返回 `ProductBrandRepository<'_>`。
+    fn product_brands(&self) -> ProductBrandRepository<'_> {
+        ProductBrandRepository::new(self, Self::PRODUCT_BRANDS)
     }
 
     /// 获取 `unit_of_measure` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::UnitOfMeasure>`。
-    fn unit_of_measures(&self) -> Repository<'_, UnitOfMeasure> {
-        Repository::new(self, Self::UNIT_OF_MEASURES)
+    /// 返回 `UnitOfMeasureRepository<'_>`。
+    fn unit_of_measures(&self) -> UnitOfMeasureRepository<'_> {
+        UnitOfMeasureRepository::new(self, Self::UNIT_OF_MEASURES)
     }
 
     /// 获取 `sku_attribute` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuAttribute>`。
-    fn sku_attributes(&self) -> Repository<'_, SkuAttribute> {
-        Repository::new(self, Self::SKU_ATTRIBUTES)
+    /// 返回 `SkuAttributeRepository<'_>`。
+    fn sku_attributes(&self) -> SkuAttributeRepository<'_> {
+        SkuAttributeRepository::new(self, Self::SKU_ATTRIBUTES)
     }
 
     /// 获取 `sku_attribute_value` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuAttributeValue>`。
-    fn sku_attribute_values(&self) -> Repository<'_, SkuAttributeValue> {
-        Repository::new(self, Self::SKU_ATTRIBUTE_VALUES)
+    /// 返回 `SkuAttributeValueRepository<'_>`。
+    fn sku_attribute_values(&self) -> SkuAttributeValueRepository<'_> {
+        SkuAttributeValueRepository::new(self, Self::SKU_ATTRIBUTE_VALUES)
     }
 
     /// 获取 `product_category_attribute` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductCategoryAttribute>`。
-    fn product_category_attributes(&self) -> Repository<'_, ProductCategoryAttribute> {
-        Repository::new(self, Self::PRODUCT_CATEGORY_ATTRIBUTES)
+    /// 返回 `ProductCategoryAttributeRepository<'_>`。
+    fn product_category_attributes(&self) -> ProductCategoryAttributeRepository<'_> {
+        ProductCategoryAttributeRepository::new(self, Self::PRODUCT_CATEGORY_ATTRIBUTES)
     }
 
     /// 获取 `product` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::Product>`。
-    fn products(&self) -> Repository<'_, Product> {
-        Repository::new(self, Self::PRODUCTS)
+    /// 返回 `ProductRepository<'_>`。
+    fn products(&self) -> ProductRepository<'_> {
+        ProductRepository::new(self, Self::PRODUCTS)
     }
 
     /// 获取 `product_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductRevision>`。
-    fn product_revisions(&self) -> Repository<'_, ProductRevision> {
-        Repository::new(self, Self::PRODUCT_REVISIONS)
+    /// 返回 `ProductRevisionRepository<'_>`。
+    fn product_revisions(&self) -> ProductRevisionRepository<'_> {
+        ProductRevisionRepository::new(self, Self::PRODUCT_REVISIONS)
     }
 
     /// 获取 `product_revision_media` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::ProductRevisionMedia>`。
-    fn product_revision_medias(&self) -> Repository<'_, ProductRevisionMedia> {
-        Repository::new(self, Self::PRODUCT_REVISION_MEDIAS)
+    /// 返回 `ProductRevisionMediaRepository<'_>`。
+    fn product_revision_medias(&self) -> ProductRevisionMediaRepository<'_> {
+        ProductRevisionMediaRepository::new(self, Self::PRODUCT_REVISION_MEDIAS)
     }
 
     /// 获取 `sku` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::Sku>`。
-    fn skus(&self) -> Repository<'_, Sku> {
-        Repository::new(self, Self::SKUS)
+    /// 返回 `SkuRepository<'_>`。
+    fn skus(&self) -> SkuRepository<'_> {
+        SkuRepository::new(self, Self::SKUS)
     }
 
     /// 获取 `sku_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuRevision>`。
-    fn sku_revisions(&self) -> Repository<'_, SkuRevision> {
-        Repository::new(self, Self::SKU_REVISIONS)
+    /// 返回 `SkuRevisionRepository<'_>`。
+    fn sku_revisions(&self) -> SkuRevisionRepository<'_> {
+        SkuRevisionRepository::new(self, Self::SKU_REVISIONS)
     }
 
     /// 获取 `sku_revision_attribute_value` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::SkuRevisionAttributeValue>`。
-    fn sku_revision_attribute_values(&self) -> Repository<'_, SkuRevisionAttributeValue> {
-        Repository::new(self, Self::SKU_REVISION_ATTRIBUTE_VALUES)
+    /// 返回 `persistence_core::Repository<'_, entities::catalog::SkuRevisionAttributeValue>`。
+    fn sku_revision_attribute_values(&self) -> persistence_core::Repository<'_, SkuRevisionAttributeValue> {
+        persistence_core::Repository::new(self, Self::SKU_REVISION_ATTRIBUTE_VALUES)
     }
 
     /// 获取 `voucher_category_profile_revision` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::catalog::VoucherCategoryProfileRevision>`。
-    fn voucher_category_profile_revisions(&self) -> Repository<'_, VoucherCategoryProfileRevision> {
-        Repository::new(self, Self::VOUCHER_CATEGORY_PROFILE_REVISIONS)
+    /// 返回 `VoucherCategoryProfileRevisionRepository<'_>`。
+    fn voucher_category_profile_revisions(&self) -> VoucherCategoryProfileRevisionRepository<'_> {
+        VoucherCategoryProfileRevisionRepository::new(self, Self::VOUCHER_CATEGORY_PROFILE_REVISIONS)
     }
 
     /// 获取承载跨集合事务写入的域专用仓储。

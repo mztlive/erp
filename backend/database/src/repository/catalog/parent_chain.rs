@@ -1,5 +1,6 @@
 //! 商品分类祖先链投影：一次 `$graphLookup` 返回 ID/父 ID 与缺失、成环、截断事实。
 
+use crate::repository::owned::ProductCategoryRepository;
 use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -10,7 +11,6 @@ use serde::Deserialize;
 use entities::catalog::ProductCategory;
 use erp_core::ids::ProductCategoryId;
 
-use super::super::Repository;
 use super::shared::PRODUCT_CATEGORIES;
 use persistence_core::Executor;
 use persistence_core::Result;
@@ -140,7 +140,7 @@ struct ParentChainAggregateRow {
     ancestors: Vec<ParentChainAncestorRow>,
 }
 
-impl<'a> Repository<'a, ProductCategory> {
+impl<'a> ProductCategoryRepository<'a> {
     /// 投影新父分类的祖先链事实。
     ///
     /// 根节点不访问数据库。非根时以一次 `$match` + `$graphLookup` 取回起始父

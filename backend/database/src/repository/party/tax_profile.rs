@@ -1,3 +1,4 @@
+use crate::repository::owned::PartyTaxProfileRepository;
 use entities::party::{EffectiveRecordStatus, PartyTaxProfile};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
@@ -5,10 +6,10 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{active_fact_filter, active_fact_window_filter, sort_doc};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 税务资料列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,7 +83,7 @@ impl Pagination for PartyTaxProfileFilter {
     }
 }
 
-impl<'a> Repository<'a, PartyTaxProfile> {
+impl<'a> PartyTaxProfileRepository<'a> {
     /// 分页检索税务资料列表（投影查询）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`tax_no`/`valid_from`），

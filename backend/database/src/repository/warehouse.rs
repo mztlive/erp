@@ -10,6 +10,9 @@
 //! 筛选/行类型定义在本文件，经 `WarehouseExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{
+    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
+};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -17,10 +20,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::WarehouseExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 use entities::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
 use erp_core::common::time::BusinessDate;
@@ -99,7 +102,7 @@ impl Pagination for WarehouseFilter {
     }
 }
 
-impl<'a> Repository<'a, Warehouse> {
+impl<'a> WarehouseRepository<'a> {
     /// 分页检索仓库列表（投影查询）。
     ///
     /// 只返回 [`WarehouseRow`] 所需的列表字段，不加载整文档；
@@ -207,7 +210,7 @@ impl Pagination for WarehouseRevisionFilter {
     }
 }
 
-impl<'a> Repository<'a, WarehouseRevision> {
+impl<'a> WarehouseRevisionRepository<'a> {
     /// 分页检索仓库修订列表（投影查询）。
     ///
     /// 只返回 [`WarehouseRevisionRow`] 所需的列表字段，**不返回加密地址与
@@ -319,7 +322,7 @@ impl Pagination for WarehouseSkuPolicyFilter {
     }
 }
 
-impl<'a> Repository<'a, WarehouseSkuPolicy> {
+impl<'a> WarehouseSkuPolicyRepository<'a> {
     /// 分页检索仓库-SKU 预警策略列表（投影查询）。
     ///
     /// 只返回 [`WarehouseSkuPolicyRow`] 所需的列表字段（含 Decimal128 预警阈值，
@@ -388,11 +391,11 @@ impl<'a> Repository<'a, WarehouseSkuPolicy> {
 ///
 /// 本类型屏蔽仓库域及其跨域引用的 MongoDB 查询细节，并提供必须由 Service
 /// 传入事务执行器的聚合写入入口，由 `WarehouseExt::warehouse()` 访问。
-pub struct WarehouseRepository<'a> {
+pub struct WarehouseDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> WarehouseRepository<'a> {
+impl<'a> WarehouseDomainRepository<'a> {
     /// 创建域专用仓储。
     ///
     /// # 参数
@@ -656,9 +659,10 @@ fn warehouse_sku_policy_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, WarehouseFilter, WarehouseRevisionFilter};
+    use super::{sort_doc, WarehouseFilter, WarehouseRevisionFilter};
     use entities::warehouse::EnableStatus;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn warehouse_filter_applies_optional_fields_and_deleted_filter() {

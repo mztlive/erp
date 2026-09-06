@@ -165,6 +165,14 @@ where
         }
     }
 
+    /// Returns the MongoDB database handle bound to this repository.
+    ///
+    /// # Returns
+    /// The database handle used to construct this repository.
+    pub fn database(&self) -> &'a Database {
+        self.db
+    }
+
     /// 创建实体。
     ///
     /// # 参数

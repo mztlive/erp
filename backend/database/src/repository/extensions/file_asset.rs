@@ -5,11 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as FileAssetExt>::FILE_ASSETS` 等值。
 
-use entities::file_asset::{DocumentAttachment, FileAsset};
+use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 use mongodb::Database;
 
 use super::super::file_asset::FileAssetFilter;
-use crate::Repository;
 
 /// 域 D05 仓储访问器。
 pub trait FileAssetExt {
@@ -24,24 +23,24 @@ pub trait FileAssetExt {
     /// 获取 `file_asset` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::file_asset::FileAsset>`。
-    fn file_assets(&self) -> Repository<'_, FileAsset>;
+    /// 返回 `FileAssetRepository<'_>`。
+    fn file_assets(&self) -> FileAssetRepository<'_>;
 
     /// 获取 `document_attachment` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::file_asset::DocumentAttachment>`。
-    fn document_attachments(&self) -> Repository<'_, DocumentAttachment>;
+    /// 返回 `DocumentAttachmentRepository<'_>`。
+    fn document_attachments(&self) -> DocumentAttachmentRepository<'_>;
 }
 
 impl FileAssetExt for Database {
     type FileAssetFilter = FileAssetFilter;
 
-    fn file_assets(&self) -> Repository<'_, FileAsset> {
-        Repository::new(self, Self::FILE_ASSETS)
+    fn file_assets(&self) -> FileAssetRepository<'_> {
+        FileAssetRepository::new(self, Self::FILE_ASSETS)
     }
 
-    fn document_attachments(&self) -> Repository<'_, DocumentAttachment> {
-        Repository::new(self, Self::DOCUMENT_ATTACHMENTS)
+    fn document_attachments(&self) -> DocumentAttachmentRepository<'_> {
+        DocumentAttachmentRepository::new(self, Self::DOCUMENT_ATTACHMENTS)
     }
 }

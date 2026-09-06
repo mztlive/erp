@@ -1,3 +1,6 @@
+use crate::repository::owned::{
+    ReceivableEntryOffsetRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
+};
 use entities::receivable::{ReceivableEntry, ReceivableEntryOffset, ReceivableFundsReview};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
@@ -6,7 +9,6 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -20,7 +22,7 @@ struct AccountDueDateRow {
     due_date: BusinessDate,
 }
 
-impl<'a> Repository<'a, ReceivableEntry> {
+impl<'a> ReceivableEntryRepository<'a> {
     /// 按应收账户聚合最早正向分录到期日。
     ///
     /// # 参数
@@ -139,7 +141,7 @@ fn minimum_due_dates_pipeline(account_ids: Vec<String>) -> Vec<Document> {
     ]
 }
 
-impl<'a> Repository<'a, ReceivableEntryOffset> {
+impl<'a> ReceivableEntryOffsetRepository<'a> {
     /// 按减少分录集合批量取回抵销记录。
     ///
     /// # 参数
@@ -219,7 +221,7 @@ impl<'a> Repository<'a, ReceivableEntryOffset> {
     }
 }
 
-impl<'a> Repository<'a, ReceivableFundsReview> {
+impl<'a> ReceivableFundsReviewRepository<'a> {
     /// 按应收子账集合批量取回复核记录。
     ///
     /// # 参数

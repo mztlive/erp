@@ -12,8 +12,11 @@
 //! **不提供**软删除/恢复方法；筛选/行类型定义在本文件，经 `AccessControlExt`
 //! 的关联类型对外暴露。
 
+use crate::repository::owned::{
+    AuditEventRepository, DataScopeRepository, PermissionRepository, UserRoleRepository,
+};
 use entities::access_control::{
-    AuditEvent, AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType, Permission, UserRole,
+    AuditEvent, AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType, UserRole,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -22,10 +25,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::AccessControlExt;
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
@@ -102,7 +105,7 @@ impl Pagination for PermissionFilter {
     }
 }
 
-impl<'a> Repository<'a, Permission> {
+impl<'a> PermissionRepository<'a> {
     /// 分页检索权限定义列表（投影查询，权限目录）。
     ///
     /// 只返回 [`PermissionRow`] 所需的目录字段，不加载整文档；`resource` 按
@@ -140,7 +143,7 @@ impl<'a> Repository<'a, Permission> {
     }
 }
 
-impl<'a> Repository<'a, UserRole> {
+impl<'a> UserRoleRepository<'a> {
     /// 按用户批量取回全部角色绑定（W19：按当前、未来、已过期分开只读展示）。
     ///
     /// # 参数
@@ -230,7 +233,7 @@ impl Pagination for DataScopeFilter {
     }
 }
 
-impl<'a> Repository<'a, DataScope> {
+impl<'a> DataScopeRepository<'a> {
     /// 判断指定主体是否存在至少一个未软删除的数据范围。
     ///
     /// 查询只投影 `_id` 并在首条命中后停止，不反序列化完整范围集合。
@@ -464,7 +467,7 @@ impl Pagination for AuditEventFilter {
     }
 }
 
-impl<'a> Repository<'a, AuditEvent> {
+impl<'a> AuditEventRepository<'a> {
     /// 分页检索审计事件（投影查询）。
     ///
     /// 只返回 [`AuditEventRow`] 所需的审计字段，不加载整文档；`actor_id` /
@@ -628,13 +631,12 @@ fn audit_event_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        data_scope_subjects_filter, sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter,
-        QueryFilter, Repository,
-    };
-    use entities::access_control::{AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType};
+    use super::{data_scope_subjects_filter, sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter};
+    use crate::repository::owned::DataScopeRepository;
+    use entities::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use mongodb::bson::{doc, Bson};
     use persistence_core::NoTransaction;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {
@@ -702,7 +704,7 @@ mod tests {
             .await
             .unwrap();
         let database = client.database("repository_data_scope_empty_subject_ids");
-        let repository = Repository::<DataScope>::new(&database, "data_scopes");
+        let repository = DataScopeRepository::new(&database, "data_scopes");
 
         let scopes = repository
             .list_by_subjects(DataScopeSubjectType::Role, &[], &mut NoTransaction)

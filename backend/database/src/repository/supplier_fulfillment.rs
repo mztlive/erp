@@ -14,6 +14,11 @@
 //! 筛选/行类型定义在本文件，经 `SupplierFulfillmentExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{
+    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOfferingRepository,
+    SupplierOfferingRevisionRepository, SupplierOrderActionLineRepository, SupplierOrderActionRepository,
+    SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository, SupplierRefundFactRepository,
+};
 use erp_core::common::time::Instant;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -23,7 +28,7 @@ use entities::supplier_fulfillment::{
     SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
     SupplierRefundFact,
 };
-use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
+use entities::supplier_offering::SupplierOffering;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{
     SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
@@ -37,10 +42,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::{SupplierFulfillmentExt, SupplierOfferingExt};
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `supplier_fulfillment_order` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_FULFILLMENT_ORDERS: &str =
@@ -151,7 +156,7 @@ impl Pagination for SupplierFulfillmentOrderFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierFulfillmentOrder> {
+impl<'a> SupplierFulfillmentOrderRepository<'a> {
     /// 分页检索供应商履约订单列表（投影查询）。
     ///
     /// 只返回 [`SupplierFulfillmentOrderRow`] 所需的列表字段，不加载整文档；
@@ -231,7 +236,7 @@ impl<'a> Repository<'a, SupplierFulfillmentOrder> {
     }
 }
 
-impl<'a> Repository<'a, SupplierFulfillmentItem> {
+impl<'a> SupplierFulfillmentItemRepository<'a> {
     /// 批量按供应商子订单查询履约明细（`$in` 一次取回，避免 N+1）。
     ///
     /// 明细随子订单同事务创建且创建后不可修改（§6.19），本方法供详情页与
@@ -266,7 +271,7 @@ impl<'a> Repository<'a, SupplierFulfillmentItem> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOrderAction> {
+impl<'a> SupplierOrderActionRepository<'a> {
     /// 按履约订单读取动作，按创建时间和主键倒序排列。
     ///
     /// # 参数
@@ -369,7 +374,7 @@ impl<'a> Repository<'a, SupplierOrderAction> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOrderActionLine> {
+impl<'a> SupplierOrderActionLineRepository<'a> {
     /// 批量按动作头查询动作行（`$in` 一次取回，避免 N+1）。
     ///
     /// 动作行随动作头同事务创建且创建后不可修改（§6.19），本方法供详情页
@@ -404,7 +409,7 @@ impl<'a> Repository<'a, SupplierOrderActionLine> {
     }
 }
 
-impl<'a> Repository<'a, SupplierOrderStatusHistory> {
+impl<'a> SupplierOrderStatusHistoryRepository<'a> {
     /// 按履约订单读取状态历史，按发生时间和主键升序排列。
     ///
     /// # 参数
@@ -461,7 +466,7 @@ impl<'a> Repository<'a, SupplierOrderStatusHistory> {
     }
 }
 
-impl<'a> Repository<'a, SupplierRefundFact> {
+impl<'a> SupplierRefundFactRepository<'a> {
     /// 按「连接 + 外部退款号 + 外部退款版本」查找退款事实头。
     ///
     /// 唯一性由 `uk_supplier_refund_facts_connection_refund` 唯一索引保证
@@ -553,7 +558,7 @@ impl<'a> Repository<'a, SupplierRefundFact> {
     }
 }
 
-impl<'a> Repository<'a, SupplierRefundAllocation> {
+impl<'a> SupplierRefundAllocationRepository<'a> {
     /// 批量按退款事实头查询退款分配行（`$in` 一次取回，避免 N+1）。
     ///
     /// 分配行是正式事实行，创建后不可修改（§6.19）；`validate_allocations` 与
@@ -664,14 +669,14 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             return Ok(HashMap::new());
         }
         let revision_id_strings = revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let revisions = Repository::<SupplierOfferingRevision>::new(self.db, SUPPLIER_OFFERING_REVISIONS)
+        let revisions = SupplierOfferingRevisionRepository::new(self.db, SUPPLIER_OFFERING_REVISIONS)
             .list_by_ids(&revision_id_strings, executor)
             .await?;
         let offering_ids = revisions
             .iter()
             .map(|revision| revision.supplier_offering_id.clone())
             .collect::<Vec<_>>();
-        let offerings = Repository::<SupplierOffering>::new(self.db, SUPPLIER_OFFERINGS)
+        let offerings = SupplierOfferingRepository::new(self.db, SUPPLIER_OFFERINGS)
             .list_by_ids(&offering_ids, executor)
             .await?
             .into_iter()
@@ -847,7 +852,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         order_id: &SupplierFulfillmentOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierRefundFactBundle>> {
-        let facts = Repository::<SupplierRefundFact>::new(self.db, SUPPLIER_REFUND_FACTS)
+        let facts = SupplierRefundFactRepository::new(self.db, SUPPLIER_REFUND_FACTS)
             .find_refund_facts_by_order_ids(std::slice::from_ref(order_id), executor)
             .await?;
         if facts.is_empty() {
@@ -857,7 +862,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             .iter()
             .map(|fact| SupplierRefundFactId::new(fact.base.id.as_str()))
             .collect();
-        let allocations = Repository::<SupplierRefundAllocation>::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
+        let allocations = SupplierRefundAllocationRepository::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
             .find_allocations_by_fact_ids(&fact_ids, executor)
             .await?;
         Ok(group_refund_allocations(facts, allocations))
@@ -1072,10 +1077,11 @@ fn supplier_fulfillment_order_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{order_sort_doc, QueryFilter, SupplierFulfillmentOrderFilter};
+    use super::{order_sort_doc, SupplierFulfillmentOrderFilter};
     use entities::supplier_fulfillment::FulfillmentStatus;
     use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn order_filter_applies_optional_fields_and_deleted_filter() {

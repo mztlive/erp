@@ -9,6 +9,6 @@ pub use repository::{
     ApprovalBindingLookup, BackgroundJobRegistration, CustomerCenterContractRow, CustomerCenterReceivableRow,
     CustomerCenterRelatedRow, CustomerCenterSalesOrderRow, FulfillmentQueueFilter, FulfillmentQueueItemRow,
     FulfillmentQueueMetricRow, FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
-    ProcurementResponsibilityRuleFilter, ReceivableListScope, Repository, ScopedCustomerReceiptQuery,
-    ScopedInvoiceQuery, SeparationAuditFact, SkuRow, SupplierOfferingRow, WorkItemRow,
+    ProcurementResponsibilityRuleFilter, ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery,
+    SeparationAuditFact, SkuRow, SupplierOfferingRow, WorkItemRow,
 };

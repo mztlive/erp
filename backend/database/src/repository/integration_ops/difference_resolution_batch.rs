@@ -6,13 +6,13 @@
 //! 一致（决定序号最大者胜出），无决定行的差异不在结果中，由 Service 解释为
 //! 无状态、版本零。
 
+use crate::repository::owned::ReconciliationDifferenceResolutionRepository;
 use std::collections::{HashMap, HashSet};
 
 use entities::integration_ops::ReconciliationDifferenceResolution;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
-use crate::repository::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -63,7 +63,7 @@ fn latest_batch_filter(ids: &[String]) -> Document {
 
 /// 在内存中按差异取决定序号最大的一条（与单差异查询同序）。
 ///
-/// 最新定义与 [`Repository::<ReconciliationDifferenceResolution>::find_latest_by_difference`]
+/// 最新定义与 [`ReconciliationDifferenceResolutionRepository::find_latest_by_difference`]
 /// 一致：`resolution_no` 最大者胜出；决定序号在同一差异内唯一，无并列。
 /// 无决定行的差异不出现，由 Service 解释为无状态。
 ///
@@ -96,7 +96,7 @@ fn latest_per_difference(
     latest
 }
 
-impl<'a> Repository<'a, ReconciliationDifferenceResolution> {
+impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
     /// 按当前页差异 ID 集合批量读取各差异最新决定（INT-R26）。
     ///
     /// 一次 `$in` 查询装载本页全部决议行，再按单差异查询同序在内存中取每

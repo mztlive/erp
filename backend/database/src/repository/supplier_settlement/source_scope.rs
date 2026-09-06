@@ -1,3 +1,7 @@
+use crate::repository::owned::{
+    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository,
+    SupplierRefundAllocationRepository, SupplierRefundFactRepository,
+};
 use std::collections::BTreeSet;
 
 use entities::supplier_fulfillment::{
@@ -8,7 +12,6 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use mongodb::bson::{doc, Document};
 
-use super::super::Repository;
 use super::{
     SupplierSettlementRepository, SUPPLIER_FULFILLMENT_ITEMS, SUPPLIER_FULFILLMENT_ORDERS,
     SUPPLIER_REFUND_ALLOCATIONS, SUPPLIER_REFUND_FACTS,
@@ -65,13 +68,14 @@ impl<'a> SupplierSettlementRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementSourceScope> {
         let (start_secs, end_secs) = SettlementPeriod::secs_bounds(period_start, period_end);
-        let refund_facts: Vec<SupplierRefundFact> = Repository::new(self.db, SUPPLIER_REFUND_FACTS)
-            .find_many_sorted(
-                refund_fact_scope_filter(supplier_id, start_secs, end_secs),
-                doc! { "id": 1 },
-                executor,
-            )
-            .await?;
+        let refund_facts: Vec<SupplierRefundFact> =
+            SupplierRefundFactRepository::new(self.db, SUPPLIER_REFUND_FACTS)
+                .find_many_sorted(
+                    refund_fact_scope_filter(supplier_id, start_secs, end_secs),
+                    doc! { "id": 1 },
+                    executor,
+                )
+                .await?;
         let mut order_ids = requested_order_ids
             .iter()
             .map(ToString::to_string)
@@ -81,24 +85,26 @@ impl<'a> SupplierSettlementRepository<'a> {
                 .iter()
                 .map(|fact| fact.supplier_fulfillment_order_id.to_string()),
         );
-        let mut orders: Vec<SupplierFulfillmentOrder> = Repository::new(self.db, SUPPLIER_FULFILLMENT_ORDERS)
-            .find_many_sorted(
-                order_scope_filter(supplier_id, &order_ids, start_secs, end_secs),
-                doc! { "id": 1 },
-                executor,
-            )
-            .await?;
+        let mut orders: Vec<SupplierFulfillmentOrder> =
+            SupplierFulfillmentOrderRepository::new(self.db, SUPPLIER_FULFILLMENT_ORDERS)
+                .find_many_sorted(
+                    order_scope_filter(supplier_id, &order_ids, start_secs, end_secs),
+                    doc! { "id": 1 },
+                    executor,
+                )
+                .await?;
         let fetched_order_ids = orders
             .iter()
             .map(|order| order.base.id.clone())
             .collect::<BTreeSet<_>>();
-        let items: Vec<SupplierFulfillmentItem> = Repository::new(self.db, SUPPLIER_FULFILLMENT_ITEMS)
-            .find_many_sorted(
-                item_scope_filter(&fetched_order_ids, requested_item_ids),
-                doc! { "id": 1 },
-                executor,
-            )
-            .await?;
+        let items: Vec<SupplierFulfillmentItem> =
+            SupplierFulfillmentItemRepository::new(self.db, SUPPLIER_FULFILLMENT_ITEMS)
+                .find_many_sorted(
+                    item_scope_filter(&fetched_order_ids, requested_item_ids),
+                    doc! { "id": 1 },
+                    executor,
+                )
+                .await?;
         // 请求按明细主键引用、但订单不在范围集合内的明细（例如只按明细引用
         // 供应商既有订单），其订单仍需取回，保证 Service 的订单归属与来源行
         // 派生可以完成；跨供应商或不存在的订单在此查询下取不回，由 Service
@@ -109,7 +115,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             .filter(|order_id| !fetched_order_ids.contains(order_id))
             .collect::<BTreeSet<_>>();
         if !missing_order_ids.is_empty() {
-            let extra = Repository::new(self.db, SUPPLIER_FULFILLMENT_ORDERS)
+            let extra = SupplierFulfillmentOrderRepository::new(self.db, SUPPLIER_FULFILLMENT_ORDERS)
                 .find_many_sorted(
                     doc! {
                         "supplier_id": supplier_id.to_string(),
@@ -129,7 +135,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         let refund_allocations = if fact_ids.is_empty() {
             Vec::new()
         } else {
-            Repository::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
+            SupplierRefundAllocationRepository::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
                 .find_many_sorted(
                     doc! { "supplier_refund_fact_id": { "$in": fact_ids } },
                     doc! { "id": 1 },

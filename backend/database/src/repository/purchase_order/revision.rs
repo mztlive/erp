@@ -3,6 +3,7 @@
 //! 采购生效版本是不可变修订（§6.6/§4.4）：财务审核通过时由已通过提交原样复制，
 //! 修订一经形成不得修改内容。版本与版本行**不提供软删除方法**。
 
+use crate::repository::owned::PurchaseOrderRevisionLineRepository;
 use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionId};
@@ -10,12 +11,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
-use super::{PurchaseOrderRepository, PURCHASE_ORDER_REVISIONS, PURCHASE_ORDER_REVISION_LINES};
-use crate::Repository;
+use super::{PurchaseOrderDomainRepository, PURCHASE_ORDER_REVISIONS, PURCHASE_ORDER_REVISION_LINES};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
-impl<'a> PurchaseOrderRepository<'a> {
+impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部生效版本，并按版本号升序返回。
     ///
     /// # 参数
@@ -131,9 +131,7 @@ fn revision_lines_filter(revision_id: &PurchaseOrderRevisionId) -> Document {
     }
 }
 
-impl<'a> Repository<'a, PurchaseOrderRevision> {}
-
-impl<'a> Repository<'a, PurchaseOrderRevisionLine> {
+impl<'a> PurchaseOrderRevisionLineRepository<'a> {
     /// 批量取回多个版本的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于版本详情页一次取回行集合；空集合直接返回空结果。

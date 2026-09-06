@@ -39,11 +39,11 @@ const PARTY_REVISIONS: &str = <mongodb::Database as PartyExt>::PARTY_REVISIONS;
 ///
 /// 单一集合 CRUD 使用 [`super::Repository`] 基类；主体当前修订、从属事实和
 /// 跨集合原子写入由本类型收敛，通过 `PartyExt::party()` 访问。
-pub struct PartyRepository<'a> {
+pub struct PartyDomainRepository<'a> {
     db: &'a Database,
 }
 
-impl<'a> PartyRepository<'a> {
+impl<'a> PartyDomainRepository<'a> {
     /// 创建域专用仓储。
     ///
     /// # 参数

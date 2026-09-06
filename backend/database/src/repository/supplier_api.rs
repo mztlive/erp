@@ -8,6 +8,11 @@
 //! 筛选/行类型定义在本文件，经 `SupplierApiExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use crate::repository::owned::{
+    BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
+    SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
+    SupplierHealthCheckRunRepository,
+};
 use entities::bulk_job::BackgroundJob;
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
@@ -24,10 +29,10 @@ use serde::{Deserialize, Serialize};
 use super::extensions::{
     AccessControlExt, BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
 };
-use super::{PageResult, Pagination, QueryFilter, Repository};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 mod capability_change_batch;
 
@@ -129,7 +134,7 @@ impl Pagination for SupplierApiConnectionFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierApiConnection> {
+impl<'a> SupplierApiConnectionRepository<'a> {
     /// 分页检索供应商 API 连接列表（投影查询）。
     ///
     /// 只返回 [`SupplierApiConnectionRow`] 所需的列表字段，不加载整文档，
@@ -233,7 +238,7 @@ impl Pagination for SupplierApiCapabilityFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierApiCapability> {
+impl<'a> SupplierApiCapabilityRepository<'a> {
     /// 按连接 ID 集合批量读取能力声明。
     ///
     /// 列表读模型使用一次查询补齐当前页能力摘要，禁止逐连接读取。
@@ -327,7 +332,7 @@ impl<'a> Repository<'a, SupplierApiCapability> {
     }
 }
 
-impl<'a> Repository<'a, BusinessCapabilityConfirmation> {
+impl<'a> BusinessCapabilityConfirmationRepository<'a> {
     /// 按连接、操作人与幂等摘要查找既有业务确认。
     pub async fn find_business_confirmation_receipt(
         &self,
@@ -362,7 +367,7 @@ impl<'a> Repository<'a, BusinessCapabilityConfirmation> {
     }
 }
 
-impl<'a> Repository<'a, SupplierHealthCheckRun> {
+impl<'a> SupplierHealthCheckRunRepository<'a> {
     /// 按后台任务 ID 查询健康检查运行记录。
     pub async fn find_health_run_by_job(
         &self,
@@ -397,7 +402,7 @@ impl<'a> Repository<'a, SupplierHealthCheckRun> {
     }
 }
 
-impl<'a> Repository<'a, SupplierConnectionCommandReceipt> {
+impl<'a> SupplierConnectionCommandReceiptRepository<'a> {
     /// 按连接、动作、操作人与幂等摘要查询命令回执。
     pub async fn find_command_receipt(
         &self,
@@ -472,7 +477,7 @@ impl<'a> SupplierApiRepository<'a> {
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierApiConnection>> {
-        Repository::new(self.db, SUPPLIER_API_CONNECTIONS)
+        SupplierApiConnectionRepository::new(self.db, SUPPLIER_API_CONNECTIONS)
             .find_by_id(connection_id.as_ref(), executor)
             .await
     }
@@ -495,7 +500,7 @@ impl<'a> SupplierApiRepository<'a> {
         capability_code: SupplierApiCapabilityCode,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierApiCapability>> {
-        Repository::new(self.db, SUPPLIER_API_CAPABILITIES)
+        SupplierApiCapabilityRepository::new(self.db, SUPPLIER_API_CAPABILITIES)
             .find_one(
                 doc! {
                     "connection_id": connection_id.to_string(),
@@ -522,7 +527,7 @@ impl<'a> SupplierApiRepository<'a> {
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierApiCapability>> {
-        Repository::new(self.db, SUPPLIER_API_CAPABILITIES)
+        SupplierApiCapabilityRepository::new(self.db, SUPPLIER_API_CAPABILITIES)
             .find_capabilities_by_connection(connection_id, executor)
             .await
     }
@@ -547,7 +552,7 @@ impl<'a> SupplierApiRepository<'a> {
         idempotency_key_hash: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<BusinessCapabilityConfirmation>> {
-        Repository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
+        BusinessCapabilityConfirmationRepository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
             .find_business_confirmation_receipt(connection_id, confirmed_by, idempotency_key_hash, executor)
             .await
     }
@@ -568,7 +573,7 @@ impl<'a> SupplierApiRepository<'a> {
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<BusinessCapabilityConfirmation>> {
-        Repository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
+        BusinessCapabilityConfirmationRepository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
             .find_business_confirmations_by_connection(connection_id, executor)
             .await
     }
@@ -589,7 +594,7 @@ impl<'a> SupplierApiRepository<'a> {
         job_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierHealthCheckRun>> {
-        Repository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
+        SupplierHealthCheckRunRepository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
             .find_health_run_by_job(job_id, executor)
             .await
     }
@@ -612,7 +617,7 @@ impl<'a> SupplierApiRepository<'a> {
         limit: i64,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierHealthCheckRun>> {
-        Repository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
+        SupplierHealthCheckRunRepository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
             .find_health_runs_by_connection(connection_id, limit, executor)
             .await
     }
@@ -639,7 +644,7 @@ impl<'a> SupplierApiRepository<'a> {
         idempotency_key_hash: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierConnectionCommandReceipt>> {
-        Repository::new(self.db, SUPPLIER_API_COMMAND_RECEIPTS)
+        SupplierConnectionCommandReceiptRepository::new(self.db, SUPPLIER_API_COMMAND_RECEIPTS)
             .find_command_receipt(connection_id, action, actor_id, idempotency_key_hash, executor)
             .await
     }
@@ -946,12 +951,13 @@ fn supplier_api_capability_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, SupplierApiCapabilityFilter, SupplierApiConnectionFilter};
+    use super::{sort_doc, SupplierApiCapabilityFilter, SupplierApiConnectionFilter};
     use entities::supplier_api::{
         ConnectionEnvironment, SupplierApiCapabilityCode, SupplierApiCapabilityStatus,
         SupplierApiConnectionStatus,
     };
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     #[test]
     fn connection_filter_applies_optional_fields_and_deleted_filter() {

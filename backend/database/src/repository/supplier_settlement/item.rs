@@ -1,13 +1,14 @@
+use crate::repository::owned::SupplierSettlementItemRepository;
 use entities::supplier_settlement::SupplierSettlementItem;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{item_sort_doc, supplier_settlement_item_projection};
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商结算明细列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -87,7 +88,7 @@ impl Pagination for SupplierSettlementItemFilter {
     }
 }
 
-impl<'a> Repository<'a, SupplierSettlementItem> {
+impl<'a> SupplierSettlementItemRepository<'a> {
     /// 按结算单读取全部冻结明细，按创建时间和主键升序排列。
     ///
     /// # 参数

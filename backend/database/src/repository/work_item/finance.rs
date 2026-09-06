@@ -1,13 +1,13 @@
+use crate::repository::owned::{FinanceResponsibilityRuleRepository, WorkItemRepository};
 use entities::work_item::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemType,
 };
 use mongodb::bson::doc;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 查询应付子账全部付款执行任务并把最新任务排在前面。
     ///
     /// # 参数
@@ -65,7 +65,7 @@ impl<'a> Repository<'a, WorkItem> {
     }
 }
 
-impl<'a> Repository<'a, FinanceResponsibilityRule> {
+impl<'a> FinanceResponsibilityRuleRepository<'a> {
     /// 查询全部未删除财务责任规则。
     ///
     /// # 返回

@@ -2,7 +2,8 @@
 //!
 //! `$match` 前缀命中 `uk_receivable_accounts_sales_order`（`sales_order_id + account_seq`）。
 
-use entities::receivable::{ReceivableAccount, SalesOrderReceivableAmountSummary};
+use crate::repository::owned::ReceivableAccountRepository;
+use entities::receivable::SalesOrderReceivableAmountSummary;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesOrderId;
 use erp_core::money::Amount;
@@ -10,7 +11,6 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -27,7 +27,7 @@ struct SalesOrderAmountSummaryRow {
     gross_total: Amount,
 }
 
-impl<'a> Repository<'a, ReceivableAccount> {
+impl<'a> ReceivableAccountRepository<'a> {
     /// 按销售单聚合已核销、已开票与含税应收合计。
     ///
     /// # 参数

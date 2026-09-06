@@ -1,15 +1,16 @@
+use crate::repository::owned::WorkItemRepository;
 use std::num::NonZeroU32;
 
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use super::super::{QueryFilter, Repository};
 use super::{WorkItemFilter, WorkItemRow};
 use persistence_core::Executor;
+use persistence_core::QueryFilter;
 use persistence_core::{mongo_ops, Result};
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 按固定批次读取队列候选任务投影。
     ///
     /// 本方法不执行未授权候选总数统计；Service 必须逐批加载权威

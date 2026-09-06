@@ -37,7 +37,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .receivable_accounts()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         if accounts.is_empty() {
             return Ok(());
@@ -228,7 +228,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .payable_accounts()
-            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .list_active_by_ids(&ids, executor)
             .await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;

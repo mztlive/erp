@@ -1,3 +1,4 @@
+use crate::repository::owned::PartyRepository;
 use entities::party::{Party, PartyKind, PartyStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
@@ -5,11 +6,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 主体列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -79,7 +80,7 @@ impl Pagination for PartyFilter {
     }
 }
 
-impl<'a> Repository<'a, Party> {
+impl<'a> PartyRepository<'a> {
     /// 按主体 ID 集合批量读取活跃主体。
     ///
     /// # 参数
@@ -248,8 +249,9 @@ fn party_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{PartyFilter, QueryFilter};
+    use super::PartyFilter;
     use entities::party::{PartyKind, PartyStatus};
+    use persistence_core::QueryFilter;
 
     #[test]
     fn party_filter_applies_keyword_regex_and_status() {

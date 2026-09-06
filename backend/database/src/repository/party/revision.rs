@@ -1,3 +1,4 @@
+use crate::repository::owned::PartyRevisionRepository;
 use entities::party::PartyRevision;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
@@ -5,11 +6,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::sort_doc;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 主体修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,7 +79,7 @@ impl Pagination for PartyRevisionFilter {
     }
 }
 
-impl<'a> Repository<'a, PartyRevision> {
+impl<'a> PartyRevisionRepository<'a> {
     /// 按修订 ID 集合批量读取主体修订。
     ///
     /// # 参数

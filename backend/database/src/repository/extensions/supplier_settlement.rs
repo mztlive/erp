@@ -5,9 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS` 等值。
 
-use entities::supplier_settlement::{
-    SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
-    SupplierSettlementSourceEvidence, SupplierSettlementStatement,
+use crate::repository::owned::{
+    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
+    SupplierSettlementItemRepository, SupplierSettlementSourceEvidenceRepository,
+    SupplierSettlementStatementRepository,
 };
 use mongodb::Database;
 
@@ -15,7 +16,6 @@ use super::super::supplier_settlement::{
     SupplierSettlementDifferenceFilter, SupplierSettlementItemFilter, SupplierSettlementRepository,
     SupplierSettlementStatementFilter,
 };
-use crate::Repository;
 
 /// 域 D33 仓储访问器。
 pub trait SupplierSettlementExt {
@@ -42,27 +42,26 @@ pub trait SupplierSettlementExt {
     /// 获取 `supplier_settlement_statement` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_settlement::SupplierSettlementStatement>`。
-    fn supplier_settlement_statements(&self) -> Repository<'_, SupplierSettlementStatement>;
+    /// 返回 `SupplierSettlementStatementRepository<'_>`。
+    fn supplier_settlement_statements(&self) -> SupplierSettlementStatementRepository<'_>;
 
     /// 获取 `supplier_settlement_item` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_settlement::SupplierSettlementItem>`。
-    fn supplier_settlement_items(&self) -> Repository<'_, SupplierSettlementItem>;
+    /// 返回 `SupplierSettlementItemRepository<'_>`。
+    fn supplier_settlement_items(&self) -> SupplierSettlementItemRepository<'_>;
 
     /// 获取 `supplier_settlement_difference` 集合的 Repository。
     ///
     /// # 返回
-    /// 返回 `Repository<'_, entities::supplier_settlement::SupplierSettlementDifference>`。
-    fn supplier_settlement_differences(&self) -> Repository<'_, SupplierSettlementDifference>;
+    /// 返回 `SupplierSettlementDifferenceRepository<'_>`。
+    fn supplier_settlement_differences(&self) -> SupplierSettlementDifferenceRepository<'_>;
 
     /// 获取不可变结算来源证据批次 Repository。
-    fn supplier_settlement_source_evidence(&self) -> Repository<'_, SupplierSettlementSourceEvidence>;
+    fn supplier_settlement_source_evidence(&self) -> SupplierSettlementSourceEvidenceRepository<'_>;
 
     /// 获取不可变结算差异补证 Repository。
-    fn supplier_settlement_difference_evidence(&self)
-        -> Repository<'_, SupplierSettlementDifferenceEvidence>;
+    fn supplier_settlement_difference_evidence(&self) -> SupplierSettlementDifferenceEvidenceRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
@@ -76,26 +75,27 @@ impl SupplierSettlementExt for Database {
     type SupplierSettlementItemFilter = SupplierSettlementItemFilter;
     type SupplierSettlementDifferenceFilter = SupplierSettlementDifferenceFilter;
 
-    fn supplier_settlement_statements(&self) -> Repository<'_, SupplierSettlementStatement> {
-        Repository::new(self, Self::SUPPLIER_SETTLEMENT_STATEMENTS)
+    fn supplier_settlement_statements(&self) -> SupplierSettlementStatementRepository<'_> {
+        SupplierSettlementStatementRepository::new(self, Self::SUPPLIER_SETTLEMENT_STATEMENTS)
     }
 
-    fn supplier_settlement_items(&self) -> Repository<'_, SupplierSettlementItem> {
-        Repository::new(self, Self::SUPPLIER_SETTLEMENT_ITEMS)
+    fn supplier_settlement_items(&self) -> SupplierSettlementItemRepository<'_> {
+        SupplierSettlementItemRepository::new(self, Self::SUPPLIER_SETTLEMENT_ITEMS)
     }
 
-    fn supplier_settlement_differences(&self) -> Repository<'_, SupplierSettlementDifference> {
-        Repository::new(self, Self::SUPPLIER_SETTLEMENT_DIFFERENCES)
+    fn supplier_settlement_differences(&self) -> SupplierSettlementDifferenceRepository<'_> {
+        SupplierSettlementDifferenceRepository::new(self, Self::SUPPLIER_SETTLEMENT_DIFFERENCES)
     }
 
-    fn supplier_settlement_source_evidence(&self) -> Repository<'_, SupplierSettlementSourceEvidence> {
-        Repository::new(self, Self::SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE)
+    fn supplier_settlement_source_evidence(&self) -> SupplierSettlementSourceEvidenceRepository<'_> {
+        SupplierSettlementSourceEvidenceRepository::new(self, Self::SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE)
     }
 
-    fn supplier_settlement_difference_evidence(
-        &self,
-    ) -> Repository<'_, SupplierSettlementDifferenceEvidence> {
-        Repository::new(self, Self::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE)
+    fn supplier_settlement_difference_evidence(&self) -> SupplierSettlementDifferenceEvidenceRepository<'_> {
+        SupplierSettlementDifferenceEvidenceRepository::new(
+            self,
+            Self::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE,
+        )
     }
 
     fn supplier_settlement(&self) -> SupplierSettlementRepository<'_> {

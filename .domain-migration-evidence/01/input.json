@@ -1,0 +1,29 @@
+{
+  "phase": "01",
+  "slice": "owned",
+  "recorded_at": "2026-09-06T06:54:48+00:00",
+  "evidence_dir": ".domain-migration-evidence/01",
+  "input_head": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
+  "branch_head_before_owned_slice": "531267d2ea36a486252a25446203860c767282ed",
+  "branch": "chore/domain-crate-01-foundations",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_00_status": "本地门禁通过",
+  "owned_repository_count": 141,
+  "note": "Phase 01 owned slice: create 141 owned <Entity>Repository at database/src/repository/owned, rewrite inherent impls, factories, delete duplicate database Repository. Foundations crates already present from prior commit on this branch. 真实数据库运行未验证."
+}

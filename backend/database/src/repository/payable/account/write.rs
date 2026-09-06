@@ -1,12 +1,11 @@
-use entities::payable::PayableAccount;
+use crate::repository::owned::PayableAccountRepository;
 use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
-use super::super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::Result;
 
-impl<'a> Repository<'a, PayableAccount> {
+impl<'a> PayableAccountRepository<'a> {
     /// 执行单文档条件更新（管道形态）。
     ///
     /// 直接按执行器会话语义执行：带会话时加入调用方事务，否则自动提交；

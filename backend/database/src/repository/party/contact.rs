@@ -1,3 +1,4 @@
+use crate::repository::owned::PartyContactRepository;
 use entities::party::{EffectiveRecordStatus, PartyContact};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
@@ -5,11 +6,11 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{active_fact_filter, sort_doc};
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
+use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 联系人列表投影行。
 ///
@@ -103,7 +104,7 @@ impl Pagination for PartyContactFilter {
     }
 }
 
-impl<'a> Repository<'a, PartyContact> {
+impl<'a> PartyContactRepository<'a> {
     /// 分页检索联系人列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`contact_name`/`valid_from`），

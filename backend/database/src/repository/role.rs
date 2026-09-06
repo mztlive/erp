@@ -1,11 +1,11 @@
-use super::Repository;
+use crate::repository::owned::RoleRepository;
 use entities::Role;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
 use persistence_core::Result;
 use persistence_core::{mongo_ops, Executor};
 
-impl<'a> Repository<'a, Role> {
+impl<'a> RoleRepository<'a> {
     /// 判断指定角色 ID 是否对应未软删除记录。
     ///
     /// 本方法不把 `disabled` 解释为不存在；只用于种子过程区分已软删除身份，

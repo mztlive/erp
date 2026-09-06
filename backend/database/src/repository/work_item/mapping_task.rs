@@ -1,9 +1,9 @@
+use crate::repository::owned::WorkItemRepository;
 use entities::work_item::{WorkItem, WorkItemType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use super::super::Repository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -50,7 +50,7 @@ fn master_mapping_task_unique_options() -> FindOptions {
         .build()
 }
 
-impl<'a> Repository<'a, WorkItem> {
+impl<'a> WorkItemRepository<'a> {
     /// 查询映射任务关联的正式责任任务，按创建时间稳定排序。
     ///
     /// # 参数

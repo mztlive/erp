@@ -1,10 +1,10 @@
+use crate::repository::owned::SupplierAccountRepository;
 use std::collections::HashSet;
 
 use entities::supplier::{CapabilityCode, QualificationType, SupplierQualification};
 use erp_core::ids::{PartyId, SupplierAccountId};
 
 use super::super::super::extensions::PartyExt;
-use super::super::super::Repository;
 use super::super::account::SupplierAccountFilter;
 use super::super::{SupplierRepository, SUPPLIER_ACCOUNTS};
 use super::{
@@ -154,7 +154,7 @@ impl<'a> SupplierRepository<'a> {
             sort_by: input.sort_by.clone(),
             sort_ascending: input.sort_ascending,
         };
-        let page = Repository::new(self.db, SUPPLIER_ACCOUNTS)
+        let page = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .search_supplier_accounts(&filter, executor)
             .await?;
         let party_ids: Vec<PartyId> = page.items.iter().map(|row| PartyId::new(&row.party_id)).collect();

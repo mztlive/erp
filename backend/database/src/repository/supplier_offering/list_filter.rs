@@ -16,9 +16,9 @@ use entities::supplier_offering::{
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
-use super::super::PageResult;
-use super::{SupplierOfferingFilter, SupplierOfferingRepository, SupplierOfferingRow};
+use super::{SupplierOfferingDomainRepository, SupplierOfferingFilter, SupplierOfferingRow};
 use persistence_core::Executor;
+use persistence_core::PageResult;
 use persistence_core::Result;
 
 /// 供给列表的高层查询条件。
@@ -79,7 +79,7 @@ pub struct SupplierOfferingListBundle {
     pub party_revisions: Vec<PartyRevision>,
 }
 
-impl<'a> SupplierOfferingRepository<'a> {
+impl<'a> SupplierOfferingDomainRepository<'a> {
     /// 将高层列表查询解析为分页前生效的持久化过滤。
     ///
     /// # 参数

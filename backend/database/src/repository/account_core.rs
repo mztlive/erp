@@ -1,8 +1,8 @@
 //! AccountCore实体的特化方法
 
+use crate::repository::owned::AccountCoreRepository;
 use std::collections::HashMap;
 
-use super::Repository;
 use entities::AccountCore;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::AccountKind;
@@ -11,7 +11,7 @@ use mongodb::options::FindOptions;
 use persistence_core::Result;
 use persistence_core::{mongo_ops, Executor};
 
-impl<'a> Repository<'a, AccountCore> {
+impl<'a> AccountCoreRepository<'a> {
     /// 按账号 ID 查找未删除统一账号。
     ///
     /// # 参数

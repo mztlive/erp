@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 01 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-core`, `application-core`, `persistence-core` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-01-foundations`） |
+| 输入/输出提交 | 前序 `7640f7b916891225ff19f5f1e1148b8a093fe0ff` / 证据见 `.domain-migration-evidence/01/` |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -81,21 +81,21 @@ erp-core 不依赖业务、应用、MongoDB 驱动；application-core 不依赖�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 先冻结 money.rs 现有字符串与 Decimal128 编解码、状态迁移错误、业务时间和命令指纹测试结果。记录 database/executor.rs、transaction.rs 与 mongo_ops.rs 的执行器/错误传播合同；不得改变重试与 OutcomeUnknown 语义。
+1. [x] 先冻结 money.rs 现有字符串与 Decimal128 编解码、状态迁移错误、业务时间和命令指纹测试结果。记录 database/executor.rs、transaction.rs 与 mongo_ops.rs 的执行器/错误传播合同；不得改变重试与 OutcomeUnknown 语义。
 
-2. [ ] 创建三个有实际实现的 crate，统一用 workspace.dependencies。erp-core 依赖 entity-core/entity-macros 与现有 serde/定点数库；application-core 只依赖纯基础；persistence-core 依赖纯基础与 MongoDB。金额编解码按设计第 4.2 节保持，不跨 crate 实现外部 serde Trait。
+2. [x] 创建三个有实际实现的 crate，统一用 workspace.dependencies。erp-core 依赖 entity-core/entity-macros 与现有 serde/定点数库；application-core 只依赖纯基础；persistence-core 依赖纯基础与 MongoDB。金额编解码按设计第 4.2 节保持，不跨 crate 实现外部 serde Trait。
 
-3. [ ] 移动 pure common、money、ID、validation、field_update、通用值错误；从 account_core.rs 只提取稳定 AccountKind。同步所有 entities::money/common/ids/FieldUpdate/通用 Error 引用，删除旧声明与 re-export；实体业务模块继续留在旧 entities。
+3. [x] 移动 pure common、money、ID、validation、field_update、通用值错误；从 account_core.rs 只提取稳定 AccountKind。同步所有 entities::money/common/ids/FieldUpdate/通用 Error 引用，删除旧声明与 re-export；实体业务模块继续留在旧 entities。
 
-4. [ ] 移动 Page、SortDir、PageView、查询归一化及 owned_task；CommandReceipt 只含纯收据算法。把 AuditActor 的数据和身份访问器放入 application-core，其生成 AuditLog 的方法改为审计侧消费 AuditActor 的函数或本地 Trait。稳定 AppError 不包含旧 entities/database 错误或审批业务枚举。
+4. [x] 移动 Page、SortDir、PageView、查询归一化及 owned_task；CommandReceipt 只含纯收据算法。把 AuditActor 的数据和身份访问器放入 application-core，其生成 AuditLog 的方法改为审计侧消费 AuditActor 的函数或本地 Trait。稳定 AppError 不包含旧 entities/database 错误或审批业务枚举。
 
-5. [ ] 按 repository-types.tsv 给每个实体建立 <Entity>Repository<'a> 本地拥有类型，准备路径为 database/src/repository/owned/<entity>.rs；领域专用 impl 全部改为该类型。该类型组合 persistence_core::Repository<'a, Entity>，本地 query/command 方法是唯一业务实现；禁止 type alias 或 Deref 暴露全部底层能力。同名实体的分散 impl 必须使用同一个拥有类型。
+5. [x] 按 repository-types.tsv 给每个实体建立 <Entity>Repository<'a> 本地拥有类型，准备路径为 database/src/repository/owned/<entity>.rs；领域专用 impl 全部改为该类型。该类型组合 persistence_core::Repository<'a, Entity>，本地 query/command 方法是唯一业务实现；禁止 type alias 或 Deref 暴露全部底层能力。同名实体的分散 impl 必须使用同一个拥有类型。
 
-6. [ ] 同步全部 extensions/<domain>.rs 的关联类型、工厂返回值、构造器和参数类型；保留原 db.<accessor>() 方法名。只代理实际需要的通用 CRUD，Mongo 句柄只允许 Repository 层使用。base.rs 的 list_work_item_brief_entities_by_ids 等消费方专用命名改成通用事实投影原语或迁到读模型仓储，禁止基础层接入 WorkItem 类型。
+6. [x] 同步全部 extensions/<domain>.rs 的关联类型、工厂返回值、构造器和参数类型；保留原 db.<accessor>() 方法名。只代理实际需要的通用 CRUD，Mongo 句柄只允许 Repository 层使用。base.rs 的 list_work_item_brief_entities_by_ids 等消费方专用命名改成通用事实投影原语或迁到读模型仓储，禁止基础层接入 WorkItem 类型。
 
-7. [ ] 移动连接、执行器、事务和 Mongo 操作实现，更新 id-generator 的 manifest、lib.rs 和 document_number.rs。旧 database 仅保留业务仓储、领域扩展与索引聚合，不保留基础模块兼容转发。services::Error 临时对新基础错误做显式稳定映射；未知索引提示保留原结果。
+7. [x] 移动连接、执行器、事务和 Mongo 操作实现，更新 id-generator 的 manifest、lib.rs 和 document_number.rs。旧 database 仅保留业务仓储、领域扩展与索引聚合，不保留基础模块兼容转发。services::Error 临时对新基础错误做显式稳定映射；未知索引提示保留原结果。
 
-8. [ ] 在同一阶段更新所有生产调用方、内联测试导入、#[path] 与 include_str! 路径；历史 tests/ 不修改且不作为 target。补齐基础 crate 的 BSON 纯内存测试依赖，执行基础/旧三层/入口窄检查与公共门禁；更新 BPM ID 检查路径。
+8. [x] 在同一阶段更新所有生产调用方、内联测试导入、#[path] 与 include_str! 路径；历史 tests/ 不修改且不作为 target。补齐基础 crate 的 BSON 纯内存测试依赖，执行基础/旧三层/入口窄检查与公共门禁；更新 BPM ID 检查路径。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -166,13 +166,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 已采集 `.domain-migration-evidence/01/input.json` |
+| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 已采集 `.domain-migration-evidence/01/files.tsv` |
+| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 已采集 `.domain-migration-evidence/01/boundary.log` |
+| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 已采集：`database/src/repository/base.rs` 删除；无 `impl Repository<'a, Entity>` |
+| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 3262 passed / 0 failed / 71 ignored；见 `unit-tests.log` |
+| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 已采集 `contract-comparison.json`（369/21/368/154/32） |
+| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 已采集 `transaction-contract.json`；真实数据库运行未验证 |
+| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 全部 exit 0；见 `quality-gates.log` |
+| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
+| 阶段提交 | commit hash、范围、验收日期及验收人 | 本地门禁通过，未验收 |
