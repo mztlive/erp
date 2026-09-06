@@ -1,362 +1,362 @@
 action	path	note
-add	.domain-migration-evidence/03/boundary.log	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/contract-comparison.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/files.tsv	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/input.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/metadata.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/quality-gates.log	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/transaction-contract.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/unit-tests.log	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/boundary.log	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/contract-comparison.json	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/files.tsv	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/input.json	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/metadata.json	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/quality-gates.log	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/transaction-contract.json	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/unit-tests.log	阶段 03 验收证据；review_approved=false；状态阻塞；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.lock	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/app_state.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/errors.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/approval_instance/error.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/approval_instance/http.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/approval_instance/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/approval_process/http.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/approval_process/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/customer/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/document_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/fulfillment/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/inventory/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/party/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/payable/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/purchase_order/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/receivable/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/returns/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/sales_order/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/sales_review/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/source_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/supplier/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/warehouse/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/work_item/finance_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/core/handler/work_item/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/apps/web-api/src/main.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/approval_dispatch/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/approval_dispatch/object_read.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/approval_dispatch/sales_subject.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/audit/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/audit/transaction.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/catalog.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/customer.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/lib.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/party.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/source_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/supplier.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/warehouse.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/customer_center/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/customer_center/repository/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/customer_center/repository/related.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/customer_center/service.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/fulfillment_queue/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/lib.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/access.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/change_order_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/dto/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/dto/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/dto/status.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/dto/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/dto/view.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/facts.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/party_names.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/presentation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/procurement_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/sales_order_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-read-models/src/workbench/stats.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/approval.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/work_item/command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/work_item/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/work_item/status.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/dto/work_item/view.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/approval_integration/action_policy.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/approval_integration/identity.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/approval_integration/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/approval_integration/notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/approval_integration/subject_snapshot.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/document_registry/business_document.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/document_registry/document_participant.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/document_registry/document_relation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/document_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/document_registry/workflow_action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/card_funds_command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/due.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity/approval.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity/permissions.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity/status.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity/types.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/entity/validation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/finance_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/finance_task.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/fulfillment_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/entity/work_item/queue_context.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/error.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/indexes/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/indexes/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/indexes/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/indexes/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/indexes/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/lib.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/audit.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/authorization.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/object_facts.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/object_read.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/ports/upgrade_subject.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/cas.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/definition_command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/definition_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/execution_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/instance_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/mongo_catalog_and_published.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/runtime_write.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/bpm/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/extensions/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/extensions/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/extensions/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/extensions/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/extensions/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/approval_notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/approval_subject_snapshot.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/business_document.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/document_participant.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/document_relation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/finance_responsibility_rule.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/owned/workflow_action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/approval.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/finance.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/fulfillment.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/integration_task_binding.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/mapping_task.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/repository/work_item/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/bind.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/revalidate.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/types.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/binding/upgrade.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/business_adapter.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/create.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/mapping.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/publish.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/replace.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition/retire.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition_assignees.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/definition_dto.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/apply_plan.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/authorization.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/cancel.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/decision.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/idempotency.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/notification_worker.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/resume.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_history.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_persistence_contract.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/cancel_blocked.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/decision_apply.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/notifications.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/read_auth.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/tasks.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/upgrade.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/start.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/store.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/execution/view.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/policy.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/process_kind.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/scope.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/approval/upgrade_subject.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/document_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/access.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/close.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/finance_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/presentation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/query_support.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/reassign.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-workflow/src/service/work_item/write.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/Cargo.toml	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/app_state.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/errors.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/approval_instance/error.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/approval_instance/http.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/approval_instance/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/approval_process/http.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/approval_process/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/customer/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/document_registry/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/fulfillment/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/inventory/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/party/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/payable/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/purchase_order/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/receivable/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/returns/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/sales_order/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/sales_review/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/source_registry/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/supplier/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/warehouse/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/work_item/finance_responsibility.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/work_item/mod.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/main.rs	入口/调用方导入与类型接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/Cargo.toml	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/approval_dispatch/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/approval_dispatch/object_read.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/approval_dispatch/sales_subject.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/audit/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/audit/transaction.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/catalog.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/customer.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/lib.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/party.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/source_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/supplier.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/warehouse.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/Cargo.toml	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/customer_center/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/customer_center/repository/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/customer_center/repository/related.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/customer_center/service.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/fulfillment_queue/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/lib.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/access.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/change_order_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/dto/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/dto/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/dto/status.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/dto/tests.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/dto/view.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/facts.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/party_names.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/presentation.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/procurement_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/sales_order_brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-read-models/src/workbench/stats.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/Cargo.toml	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/approval.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/document_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/work_item/command.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/work_item/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/work_item/status.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/dto/work_item/view.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/approval_integration/action_policy.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/approval_integration/identity.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/approval_integration/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/approval_integration/notification_outbox.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/approval_integration/subject_snapshot.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/document_registry/business_document.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/document_registry/document_participant.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/document_registry/document_relation.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/document_registry/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/document_registry/workflow_action.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/card_funds_command.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/due.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity/approval.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity/permissions.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity/status.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity/types.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/entity/validation.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/finance_responsibility.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/finance_task.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/fulfillment_responsibility.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/entity/work_item/queue_context.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/error.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/indexes/approval_integration.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/indexes/bpm.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/indexes/document_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/indexes/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/indexes/work_item.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/lib.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/audit.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/authorization.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/object_facts.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/object_read.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/ports/upgrade_subject.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/approval_integration.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/cas.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/definition_command.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/definition_query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/execution_query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/instance_query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/mongo_catalog_and_published.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/runtime_write.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/bpm/tests.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/document_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/extensions/approval_integration.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/extensions/bpm.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/extensions/document_registry.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/extensions/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/extensions/work_item.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/approval_notification_outbox.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/approval_subject_snapshot.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/business_document.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/document_participant.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/document_relation.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/finance_responsibility_rule.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/work_item.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/owned/workflow_action.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/approval.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/finance.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/fulfillment.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/integration_task_binding.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/mapping_task.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/repository/work_item/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/action.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/bind.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/revalidate.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/tests.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/types.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/binding/upgrade.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/business_adapter.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/command.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/create.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/mapping.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/publish.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/replace.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition/retire.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition_assignees.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/definition_dto.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/apply_plan.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/authorization.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/cancel.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/decision.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/idempotency.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/notification_outbox.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/notification_worker.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/resume.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_history.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_persistence_contract.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/cancel_blocked.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/decision_apply.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/notifications.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/query.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/read_auth.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/tasks.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/runtime_service/upgrade.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/start.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/store.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/execution/view.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/policy.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/process_kind.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/scope.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/approval/upgrade_subject.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/document_registry/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/access.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/brief.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/close.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/finance_responsibility.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/mod.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/presentation.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/query_support.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/reassign.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-workflow/src/service/work_item/write.rs	迁入 erp-workflow/erp-processes/erp-read-models；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/approval_integration.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/bpm.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/document_registry.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/indexes/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/indexes/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/work_item.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/lib.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/cas.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/definition_command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/definition_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/execution_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/instance_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/mongo_catalog_and_published.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/runtime_write.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/bpm/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/customer_center_related.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/approval_integration.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/bpm.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/document_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/approval_integration.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/cas.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/definition_command.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/definition_query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/execution_query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/instance_query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/mongo_catalog_and_published.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/runtime_write.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bpm/tests.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/customer_center_related.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/document_registry.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/approval_integration.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/bpm.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/document_registry.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/extensions/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/extensions/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/work_item.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/inventory/aggregate.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/legacy_import/supersede_batch.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/approval_notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/approval_subject_snapshot.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/business_document.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/document_participant.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/document_relation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/finance_responsibility_rule.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/approval_notification_outbox.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/approval_subject_snapshot.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/business_document.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/document_participant.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/document_relation.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/finance_responsibility_rule.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/owned/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/owned/workflow_action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/approval.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/finance.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/fulfillment.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/integration_task_binding.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/mapping_task.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/work_item_fulfillment_queue.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/03-workflow-composition.md	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/work_item.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/workflow_action.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/approval.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/finance.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/fulfillment.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/integration_task_binding.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/mapping_task.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item/query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/work_item_fulfillment_queue.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/03-workflow-composition.md	阶段 03 状态记录；review_approved=false；状态阻塞；禁止标记已验收
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 03 状态记录；review_approved=false；状态阻塞；禁止标记已验收
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	阶段 03 状态记录；review_approved=false；状态阻塞；禁止标记已验收
 modify	backend/entities/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/approval_integration/action_policy.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/approval_integration/identity.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/approval_integration/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/approval_integration/notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/approval_integration/subject_snapshot.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/document_registry/business_document.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/document_registry/document_participant.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/document_registry/document_relation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/document_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/document_registry/workflow_action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/approval_integration/action_policy.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/approval_integration/identity.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/approval_integration/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/approval_integration/notification_outbox.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/approval_integration/subject_snapshot.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/document_registry/business_document.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/document_registry/document_participant.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/document_registry/document_relation.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/document_registry/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/document_registry/workflow_action.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/integration_ops/w29_work_items.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/inventory/approval_snapshot.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/legacy_import/confirmation_factories.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/lib.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/card_funds_command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/due.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity/approval.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity/permissions.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity/status.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity/types.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/entity/validation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/finance_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/finance_task.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/fulfillment_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/work_item/queue_context.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/card_funds_command.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/due.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity/approval.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity/permissions.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity/status.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity/types.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/entity/validation.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/finance_responsibility.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/finance_task.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/fulfillment_responsibility.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/work_item/queue_context.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/scripts/check-bpm-boundaries.sh	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/scripts/domain-boundary-fixtures/graph_positive.json	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/scripts/domain_boundaries.py	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/Cargo.toml	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/action.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/bind.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/revalidate.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/types.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/binding/upgrade.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/business_adapter.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/create.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/mapping.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/publish.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/replace.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition/retire.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition_assignees.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/definition_dto.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/dto.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/apply_plan.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/authorization.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/cancel.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/decision.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/idempotency.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/notification_outbox.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/notification_worker.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/resume.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_history.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_persistence_contract.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/cancel_blocked.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/decision_apply.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/notifications.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/read_auth.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/resume_apply.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/tasks.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/runtime_service/upgrade.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/start.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/store.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/execution/view.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/policy.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/process_kind.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/scope.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval/upgrade_subject.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/approval_action_registry.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/action.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/bind.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/revalidate.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/tests.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/types.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/binding/upgrade.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/business_adapter.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/command.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/create.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/mapping.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/publish.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/replace.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition/retire.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition_assignees.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/definition_dto.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/dto.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/apply_plan.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/authorization.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/cancel.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/decision.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/idempotency.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/notification_outbox.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/notification_worker.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/resume.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_history.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_persistence_contract.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/cancel_blocked.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/decision_apply.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/notifications.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/read_auth.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/resume_apply.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/tasks.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/runtime_service/upgrade.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/start.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/store.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/execution/view.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/policy.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/process_kind.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/scope.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval/upgrade_subject.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/approval_action_registry.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/bulk_job/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/catalog/attribute.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/catalog/category.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/catalog/unit.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/catalog/voucher_defaults.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/customer/center.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/customer/center.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/customer/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/document_registry/dto.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/document_registry/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/document_registry/dto.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/document_registry/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/errors.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/file_asset/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/fulfillment/customer_acceptance.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
@@ -487,21 +487,21 @@ modify	backend/services/src/supplier_settlement/dto/review.rs	阶段 03 unique-c
 modify	backend/services/src/supplier_settlement/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/supplier_settlement/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/supplier_settlement/review.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/transaction.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/transaction.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/warehouse/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/access.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/access.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/change_order_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/close.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/command.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/mod.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/status.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/tests.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/dto/view.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/close.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/command.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/mod.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/status.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/tests.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/dto/view.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/facts.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/finance_responsibility.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/finance_responsibility.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/fulfillment_operation_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/fulfillment_queue.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/fulfillment_queue.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/funds_document_brief/account.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/funds_document_brief/payment.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/funds_document_brief/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
@@ -512,8 +512,9 @@ modify	backend/services/src/work_item/party_names.rs	阶段 03 unique-cut；禁�
 modify	backend/services/src/work_item/presentation.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/procurement_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/purchase_review_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/query.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/reassign.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/query.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/reassign.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/sales_order_brief.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/stats.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/work_item/write.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/stats.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/work_item/write.rs	unique-cut 删除旧双份实现；禁止标记已验收；真实数据库运行未验证
+add	backend/services/src/workflow_compose.rs	阶段 03 unique-cut；禁止标记已验收；真实数据库运行未验证

@@ -1,3 +1,21 @@
+phase: 03
+status: 阻塞
+review_approved: false
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+cwd: backend/
+ERP_TEST_MONGO_URI: unset
+mongodb_started: false
+include_ignored: false
+exit: 0
+passed: 3313
+failed: 0
+ignored: 71
+crates: 20
+recorded_at: 2026-09-06T16:06:32Z
+source_log: logs/phase-03-qg-run/04-test-lib.log
+
    Compiling erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
    Compiling entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
    Compiling database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
@@ -3513,3 +3531,6 @@ test core::handler::auth::login::tests::token_payload_should_keep_account_kind .
 
 test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
 
+summary: 3313 passed; 0 failed; 71 ignored; exit 0; mongodb_started=false
+status: 阻塞 because review_approved=false
+disclaimer: 真实数据库运行未验证

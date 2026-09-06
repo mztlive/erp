@@ -1,8 +1,102 @@
 phase: 03
+status: 阻塞
+review_approved: false
+never_mark: 已验收
 disclaimer: 真实数据库运行未验证
+cwd: backend/
+recorded_at: 2026-09-06T16:06:32Z
+implement_commit: b98b8984da241591f2c5316b5e29762fd8847c60
+input_head: fead5bad842092ddbdcbf598ab7b3d00384ff226
+previous_evidence_head: 5c0984507a72bdc32a9507248e2feb8f537c56e8
+
+=== cargo metadata ===
+command: cargo metadata --no-deps --format-version 1
+workspace_members: 21
+members: application-core, bpm, cli, config, database, entities, entity-core, entity-macros, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-workflow, id-generator, permission-macros, persistence-core, services, storage, test-support, web-api
+kind=test: 0
+autotests: false on erp-workflow, erp-processes, erp-read-models and remaining members
+instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-workflow, persistence-core
+forbidden-edge contract: loaded
+old-source clearance: loaded, not applied as 已验收 (phase 00/01/02 are 本地门禁通过)
+exit: 0
+
+=== cargo tree erp-workflow -e normal,build,dev --depth 1 --locked ===
+erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── entity-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/entity-macros)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── futures-util v0.3.34
+├── hex v0.4.3
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── regex v1.13.1
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── sha2 v0.11.0
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+note: erp-workflow has no erp-processes / erp-read-models / entities / database / services / test-support edge
+
+=== cargo tree erp-processes -e normal,build,dev --depth 1 --locked ===
+erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── serde v1.0.229
+├── services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+note: composition layer may depend on old three-layer; services has no erp-processes / erp-read-models edge
+
+=== cargo tree erp-read-models -e normal,build,dev --depth 1 --locked ===
+erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── chrono v0.4.45
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── futures-util v0.3.34
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── regex v1.13.1
+├── rust_decimal v1.42.1
+├── serde v1.0.229
+├── services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+note: composition/read-models may depend on old three-layer; erp-workflow must not depend on erp-read-models
+
+=== ./scripts/check-domain-boundaries.sh ===
 command: ./scripts/check-domain-boundaries.sh
 cwd: backend/
-
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -10,8 +104,25 @@ cwd: backend/
   说明: cargo metadata 无 kind=test 集成目标
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+exit: 0
 
-cargo metadata workspace members:
-members 21
-packages ['cli', 'config', 'database', 'application-core', 'erp-core', 'entity-core', 'entity-macros', 'bpm', 'entities', 'erp-audit', 'id-generator', 'persistence-core', 'erp-identity', 'erp-workflow', 'test-support', 'services', 'web-api', 'erp-processes', 'erp-read-models', 'permission-macros', 'storage']
-kind=test []
+=== owned repositories moved (owner_phase=03) ===
+count: 8
+types: ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository, BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository, FinanceResponsibilityRuleRepository, WorkItemRepository, WorkflowActionRepository
+compose: persistence_core::Repository
+no_deref: True
+no_type_alias: True
+no_inherent_impl_on_foreign_repository: True
+owned_read_model_repositories: CustomerCenterRepository, FulfillmentQueueRepository
+no_workflow_to_processes_edge: True
+no_workflow_to_read_models_edge: True
+no_workflow_to_old_three_layer_edge: True
+no_services_to_processes_edge: True
+no_services_to_read_models_edge: True
+
+=== old production path clearance ===
+unique-cut deleted owned dual copies of approval execution, approval_integration entities, document_registry, work_item command/query façades, and database owned/extension trees.
+historical tests/ archives retain old path text and were not modified (byte-for-byte vs fead5bad).
+domain-boundary old-source clearance is loaded and not applied because no phase is 已验收.
+
+disclaimer: 真实数据库运行未验证

@@ -1,4 +1,8 @@
 {
+  "phase": "03",
+  "status": "阻塞",
+  "review_approved": false,
+  "never_mark": "已验收",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "mongodb_started": false,
@@ -73,5 +77,6 @@
     "no_deref": true,
     "no_type_alias": true,
     "no_inherent_impl_on_foreign_repository": true
-  }
+  },
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 WorkflowAuditPort 同一 Executor。真实数据库运行未验证。"
 }

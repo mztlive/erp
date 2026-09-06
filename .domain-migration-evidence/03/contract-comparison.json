@@ -1,5 +1,8 @@
 {
   "phase": "03",
+  "status": "阻塞",
+  "review_approved": false,
+  "never_mark": "已验收",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "versus_phase_02": {
