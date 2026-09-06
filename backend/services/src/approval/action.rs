@@ -483,7 +483,15 @@ mod tests {
             assert!(!source.contains(&format!("pub {field}")), "{field} 不得公开");
         }
         assert!(!include_str!("execution/runtime_service.rs").contains("ApprovalActionContext {"));
-        assert!(!include_str!("binding.rs").contains("ApprovalActionContext {"));
+        assert!(![
+            include_str!("binding/mod.rs"),
+            include_str!("binding/types.rs"),
+            include_str!("binding/bind.rs"),
+            include_str!("binding/upgrade.rs"),
+            include_str!("binding/revalidate.rs"),
+        ]
+        .concat()
+        .contains("ApprovalActionContext {"));
         assert!(!include_str!("definition.rs").contains("ApprovalActionContext {"));
     }
 
