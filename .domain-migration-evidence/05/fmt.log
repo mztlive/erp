@@ -1,0 +1,6 @@
+=== fmt ===
+command: cargo fmt --all -- --check
+cwd: /Users/huangjiajiang/Development/erp/backend
+started: 2026-09-06T20:20:20Z
+fmt_exit=0
+finished: 2026-09-06T20:20:22Z

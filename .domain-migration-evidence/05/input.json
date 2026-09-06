@@ -1,0 +1,80 @@
+{
+  "phase": "05",
+  "recorded_at": "2026-09-06T20:36:16Z",
+  "evidence_dir": ".domain-migration-evidence/05",
+  "input_head": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
+  "implement_commits": [
+    "9838c29b26521e78c4d7405b7db9071b1ad9dc66"
+  ],
+  "implement_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "integrator_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "head": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "branch": "chore/domain-crate-05-party-customer-supplier",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/_phase03_fix_uses.py",
+      "backend/scripts/_phase03_integrate.py",
+      "backend/scripts/_phase03_qg_fix.py",
+      "backend/scripts/_phase03_read_models_fix.py",
+      "backend/scripts/_phase03_repair_blockers.py",
+      "backend/scripts/_phase03_repair_blockers2.py",
+      "backend/scripts/_phase03_transform.py",
+      "backend/scripts/_phase05_integrate.py",
+      "backend/scripts/__pycache__/"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_04_status": "本地门禁通过",
+  "verify_plan_sources_after_move": "expected fail: --sources is planning snapshot, not post-move gate; 前序阶段未验收 is a human gate",
+  "source_map_phase_05_rows": 92,
+  "repository_types_owner_phase_05": 15,
+  "repository_owned_types_moved": [
+    "CustomerAccountRepository",
+    "CustomerAssignmentRepository",
+    "CustomerProfileCommandRepository",
+    "PartyRepository",
+    "PartyAddressRepository",
+    "PartyBankAccountRepository",
+    "PartyContactRepository",
+    "PartyRevisionRepository",
+    "PartyTaxProfileRepository",
+    "SupplierAccountRepository",
+    "SupplierCapabilityRepository",
+    "SupplierCommercialProfileRevisionRepository",
+    "SupplierProfileCommandRepository",
+    "SupplierQualificationRepository",
+    "SupplierQualificationCapabilityRepository"
+  ],
+  "section_6_callers": [
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/handler/customer/mod.rs",
+    "apps/web-api/src/core/handler/party/mod.rs",
+    "apps/web-api/src/core/handler/supplier/mod.rs",
+    "apps/web-api/src/core/routes/customer.rs",
+    "apps/web-api/src/core/routes/party.rs",
+    "apps/web-api/src/core/routes/supplier.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
+  "section_6_callers_still_bind_old_services": false,
+  "workspace_member_count": 25,
+  "kind_test_targets": 0,
+  "historical_tests_archives_byte_for_byte": true,
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "compile_measurement": "completed: .domain-migration-evidence/05/compile/",
+  "note": "前序输入为阶段 04 本地门禁通过提交 c2ceb82eb893191cd0a3bf518bfb9c58d5748a15，不是已验收。实现/集成提交 9838c29b26521e78c4d7405b7db9071b1ad9dc66。review_approved=true。公共门禁全部 exit 0（3281 lib tests, 0 failed, 62 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
+}

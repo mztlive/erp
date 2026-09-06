@@ -1,0 +1,9 @@
+=== clippy ===
+command: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cwd: /Users/huangjiajiang/Development/erp/backend
+started: 2026-09-06T20:20:33Z
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+clippy_exit=0
+finished: 2026-09-06T20:20:34Z

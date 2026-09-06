@@ -1,0 +1,111 @@
+{
+  "phase": "05",
+  "revision": "candidate",
+  "implement_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "isolated_worktree": "/private/tmp/erp-domain-crate-05-measure",
+  "baseline": {
+    "phase": "00",
+    "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+    "customer_check_median_seconds": 4.020657874993049,
+    "customer_build_median_seconds": 9.451421375037171,
+    "source": ".domain-migration-evidence/00/compile/baseline-summary.json"
+  },
+  "performance_threshold_applies_at": "17",
+  "note": "阶段 05 中间复测。Customer 探针已在 erp-customer。旧 entities/database/services 仍在反向依赖闭包中重编译，耗时回退是中间态事实，不得冒充最终 Sales/Finance 隔离达标。erp-party 与 erp-supplier 在 Customer 探针下保持 Fresh。真实数据库运行未验证。",
+  "disclaimer": "真实数据库运行未验证",
+  "never_mark": "已验收",
+  "groups": [
+    {
+      "scenario": "customer",
+      "mode": "check",
+      "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+      "valid_samples": 5,
+      "seconds": [
+        6.211803791928105,
+        6.078319833963178,
+        6.054578749928623,
+        6.0447684589307755,
+        6.069613792002201
+      ],
+      "median_seconds": 6.069613792002201,
+      "baseline_median_seconds": 4.020657874993049,
+      "improvement_percent": -50.96071291598505,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "database",
+        "entities",
+        "erp-customer",
+        "erp-processes",
+        "erp-read-models",
+        "services",
+        "web-api"
+      ],
+      "fresh_business_on_sample_01": [
+        "application-core",
+        "erp-audit",
+        "erp-core",
+        "erp-identity",
+        "erp-party",
+        "erp-supplier",
+        "erp-support",
+        "erp-workflow",
+        "persistence-core",
+        "web-api"
+      ],
+      "selected_package": "erp-customer",
+      "probe_path": "crates/erp-customer/src/service/customer/profile/validation.rs",
+      "output": ".domain-migration-evidence/05/compile/customer-check"
+    },
+    {
+      "scenario": "customer",
+      "mode": "build",
+      "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+      "valid_samples": 5,
+      "seconds": [
+        11.750413457979448,
+        11.899478832958266,
+        12.56223174999468,
+        11.976208916981705,
+        11.89933749998454
+      ],
+      "median_seconds": 11.899478832958266,
+      "baseline_median_seconds": 9.451421375037171,
+      "improvement_percent": -25.901474082901814,
+      "noop_all_business_units_fresh": true,
+      "measurement_passed": true,
+      "source_restored": true,
+      "dirty_on_sample_01": [
+        "database",
+        "entities",
+        "erp-customer",
+        "erp-processes",
+        "erp-read-models",
+        "services",
+        "web-api"
+      ],
+      "fresh_business_on_sample_01": [
+        "application-core",
+        "erp-audit",
+        "erp-core",
+        "erp-identity",
+        "erp-party",
+        "erp-supplier",
+        "erp-support",
+        "erp-workflow",
+        "persistence-core",
+        "web-api"
+      ],
+      "selected_package": "erp-customer",
+      "probe_path": "crates/erp-customer/src/service/customer/profile/validation.rs",
+      "output": ".domain-migration-evidence/05/compile/customer-build"
+    }
+  ],
+  "structure": {
+    "customer_edit_keeps_party_fresh": true,
+    "customer_edit_keeps_supplier_fresh": true,
+    "old_three_layer_still_dirty": true,
+    "note": "中间态：erp-party/erp-supplier Fresh；entities/database/services/erp-processes/erp-read-models/web-api Dirty。"
+  }
+}

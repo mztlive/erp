@@ -1,0 +1,33 @@
+{
+  "workspace_root": "/private/tmp/erp-domain-crate-05-measure/backend",
+  "target_directory_default": "/Volumes/Kingston/rust-build-target",
+  "target_directory_measured": "/Volumes/Kingston/erp-domain-crate-05-target-customer-build",
+  "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "packages": [
+    "application-core",
+    "bpm",
+    "cli",
+    "config",
+    "database",
+    "entities",
+    "entity-core",
+    "entity-macros",
+    "erp-audit",
+    "erp-core",
+    "erp-customer",
+    "erp-identity",
+    "erp-party",
+    "erp-processes",
+    "erp-read-models",
+    "erp-supplier",
+    "erp-support",
+    "erp-workflow",
+    "id-generator",
+    "permission-macros",
+    "persistence-core",
+    "services",
+    "storage",
+    "test-support",
+    "web-api"
+  ]
+}

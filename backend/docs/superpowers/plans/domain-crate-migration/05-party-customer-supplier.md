@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 05 |
-| 状态 | 执行中 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-party`, `erp-customer`, `erp-supplier` |
 | 执行负责人 | chore/domain-crate-05-party-customer-supplier integrator |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 输入/输出提交 | c2ceb82eb893191cd0a3bf518bfb9c58d5748a15 / 9838c29b26521e78c4d7405b7db9071b1ad9dc66 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -93,7 +93,7 @@ party/customer/supplier 三者互不依赖；processes 的 customer_profile/supp
 
 6. [x] 更新 party/customer/supplier Handler、旧采购/应付/供应链调用方、AppState 注入与索引注册。删除旧同名三层实现，复核 customer/profile 的任何实际写入只有一个定义源。
 
-7. [ ] 按 compile-measurement.md 对 Customer 的目标内部实现复测 check/build，与阶段 00 相同语义补丁比较。保留中间态旧大 crate 被重编译的真实清单；不得将本阶段结果冒充最终 Sales/Finance 隔离达标。
+7. [x] 按 compile-measurement.md 对 Customer 的目标内部实现复测 check/build，与阶段 00 相同语义补丁比较。保留中间态旧大 crate 被重编译的真实清单；不得将本阶段结果冒充最终 Sales/Finance 隔离达标。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 

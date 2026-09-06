@@ -1,0 +1,27 @@
+{
+  "scenario": "customer",
+  "mode": "build",
+  "revision": "candidate",
+  "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "valid_samples": 5,
+  "seconds": [
+    11.750413457979448,
+    11.899478832958266,
+    12.56223174999468,
+    11.976208916981705,
+    11.89933749998454
+  ],
+  "median_seconds": 11.899478832958266,
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "measurement_passed": true,
+  "selected_package": "erp-customer",
+  "probe_path": "crates/erp-customer/src/service/customer/profile/validation.rs",
+  "warmup_untimed": true,
+  "restore_self_test": {
+    "passed": true,
+    "temporary_workspace": true,
+    "simulated_failure_restored": true,
+    "recovery_json_restore": true
+  }
+}

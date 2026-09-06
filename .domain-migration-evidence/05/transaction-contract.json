@@ -1,0 +1,101 @@
+{
+  "phase": "05",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false,
+    "unchanged_versus_phase_04": true
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden",
+    "unchanged_versus_phase_04": true
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "sha256": "daae5edfd64c4e70bd11e28abb80d400e7da03f8c49114ff426bf3377ed67fb7",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true,
+    "note": "run_audited 仅在 erp-processes。customer_profile/supplier_profile 根命令使用 DatabaseExt::with_transaction 同一 session。真实数据库运行未验证"
+  },
+  "customer_profile": {
+    "process": "crates/erp-processes/src/customer_profile/",
+    "create": "crates/erp-processes/src/customer_profile/create.rs",
+    "update": "crates/erp-processes/src/customer_profile/update.rs",
+    "create_sha256": "6d2e91873d84169e23526d888debf364fc638466ecbf04ecd92053e8db94dd1c",
+    "update_sha256": "28881010c5755378b3066d8e995aa6e3ebe77d887ed5767bf65467a8754dff03",
+    "root_transaction": "DatabaseExt::with_transaction; persist uses caller session",
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "domain_methods_open_nested_txn": false,
+    "external_io_outside_session": true,
+    "party_port": "crates/erp-customer/src/ports/party.rs",
+    "audit_port": "crates/erp-customer/src/ports/audit.rs",
+    "account_port": "crates/erp-customer/src/ports/account.rs",
+    "adapters": "crates/erp-processes/src/adapters/customer.rs and adapters/party.rs",
+    "note": "CustomerProfile 根用例持有事务；erp-customer 账户/分配方法接收传入 Executor。"
+  },
+  "supplier_profile": {
+    "process": "crates/erp-processes/src/supplier_profile/",
+    "create": "crates/erp-processes/src/supplier_profile/create.rs",
+    "update": "crates/erp-processes/src/supplier_profile/update.rs",
+    "create_sha256": "015bf04c29d3064780a4866fe058b8b7199a8aacd7e7311c90db1b781f760e4c",
+    "update_sha256": "65a5dce4b05e755da2f8a172e30e2c1b57aa10f5e94199a02ae1fc0f97fa29e7",
+    "root_transaction": "DatabaseExt::with_transaction; persist uses caller session",
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "attachments": "PendingAttachmentBatch persist in same business transaction; S3 outside session",
+    "party_port": "crates/erp-supplier/src/ports/party.rs",
+    "file_asset_port": "crates/erp-supplier/src/ports/file_asset.rs",
+    "sensitive_port": "crates/erp-supplier/src/ports/sensitive.rs",
+    "adapters": "crates/erp-processes/src/adapters/supplier.rs and adapters/party.rs",
+    "note": "SupplierProfile 根用例持有事务；附件确认在事务内、上传在事务外。"
+  },
+  "owned_repositories_moved": {
+    "count": 15,
+    "types": [
+      "CustomerAccountRepository",
+      "CustomerAssignmentRepository",
+      "CustomerProfileCommandRepository",
+      "PartyRepository",
+      "PartyAddressRepository",
+      "PartyBankAccountRepository",
+      "PartyContactRepository",
+      "PartyRevisionRepository",
+      "PartyTaxProfileRepository",
+      "SupplierAccountRepository",
+      "SupplierCapabilityRepository",
+      "SupplierCommercialProfileRevisionRepository",
+      "SupplierProfileCommandRepository",
+      "SupplierQualificationRepository",
+      "SupplierQualificationCapabilityRepository"
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true,
+    "no_entity_bson": true
+  },
+  "source_contains_with_transaction": true,
+  "real_database_rollback_concurrency": "未验证",
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、customer_profile/supplier_profile 同一 Executor。真实数据库运行未验证",
+  "recorded_at": "2026-09-06T20:36:16Z"
+}
