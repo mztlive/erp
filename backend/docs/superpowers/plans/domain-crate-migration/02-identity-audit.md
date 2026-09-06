@@ -10,7 +10,7 @@
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-identity`, `erp-audit` |
 | 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-02-identity-audit`） |
-| 输入/输出提交 | 前序 `b399b662226064bd1fee36df026c461dd75066fd` / 本阶段提交见 `.domain-migration-evidence/02/metadata.json` |
+| 输入/输出提交 | 前序 `b399b662226064bd1fee36df026c461dd75066fd` / 实现提交 `543c4bea33ed667b2b99448933c94006b6de052b`（证据见 `.domain-migration-evidence/02/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -166,13 +166,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序本地门禁通过 `b399b662226064bd1fee36df026c461dd75066fd`；分支 `chore/domain-crate-02-identity-audit`；source-map phase=02 行 46；owned types 7 | 已采集 `.domain-migration-evidence/02/input.json` |
+| 文件与符号 | 相对输入 398 路径变化（83 add / 55 delete / 260 modify）；7 owned EntityRepository 迁入 erp-identity/erp-audit；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/02/files.tsv` |
+| 依赖 | 18 个成员；无 kind=test；erp-identity 与 erp-audit 双向均无直接依赖，也不回到旧三层 | 已采集 `.domain-migration-evidence/02/boundary.log` |
+| 旧实现清零 | 旧 `services::iam/auth/audit` 生产路径删除；无 façade；历史 tests/ 档案未改 | 已采集：见 `boundary.log` / `files.tsv` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3264 passed / 0 failed / 71 ignored；exit 0 | 已执行 `.domain-migration-evidence/02/unit-tests.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 01 哈希相等 | 已采集 `.domain-migration-evidence/02/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、run_audited 与 IdentityAuditPort 同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/02/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `.domain-migration-evidence/02/quality-gates.log` |
+| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
+| 阶段提交 | 实现提交 `543c4bea33ed667b2b99448933c94006b6de052b`；证据目录 `.domain-migration-evidence/02/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/02/metadata.json` |

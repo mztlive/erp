@@ -1,3 +1,105 @@
+phase: 02
+status: 本地门禁通过
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+cwd: backend/
+recorded_at: 2026-09-06T08:41:55Z
+implement_commit: 543c4bea33ed667b2b99448933c94006b6de052b
+head: 7b734435d7027a1445c0d8705916204474326987
+input_head: b399b662226064bd1fee36df026c461dd75066fd
+
+=== cargo metadata ===
+command: cargo metadata --no-deps --format-version 1
+workspace_members: 18
+members: application-core, bpm, cli, config, database, entities, entity-core, entity-macros, erp-audit, erp-core, erp-identity, id-generator, permission-macros, persistence-core, services, storage, test-support, web-api
+kind=test: 0
+autotests: false on erp-identity, erp-audit and remaining members
+instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, persistence-core
+forbidden-edge contract: loaded
+old-source clearance: loaded, not applied as 已验收 (phase 00/01 are 本地门禁通过)
+exit: 0
+
+=== cargo tree erp-identity -e normal,build,dev --depth 1 --locked ===
+erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── argon2 v0.5.3
+├── async-trait v0.1.92 (proc-macro)
+├── casbin v2.20.0
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── entity-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/entity-macros)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── futures-util v0.3.34
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── md5 v0.8.1
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── regex v1.13.1
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+note: erp-identity has no erp-audit / entities / database / services / test-support edge
+
+=== cargo tree erp-audit -e normal,build,dev --depth 1 --locked ===
+erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── entity-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/entity-macros)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+note: erp-audit has no erp-identity / entities / database / services / test-support edge
+
+=== owned repositories moved (owner_phase=02) ===
+count: 7
+types: AccountCoreRepository, RoleRepository, PermissionRepository, DataScopeRepository, UserRoleRepository, AuditEventRepository, AuditLogRepository
+compose: persistence_core::Repository
+no_deref: True
+no_type_alias: True
+no_inherent_impl_on_foreign_repository: True
+no_identity_audit_crate_edge: True
+
+=== old production path clearance ===
+services::iam / services::auth / services::audit production imports: none (comment-only historical wording remains in migrated docs)
+entities::account_core production imports: none
+database::casbin_adapter production imports: none
+historical tests/ archives retain old path text and were not modified
+
+=== bpm ===
+=== ./scripts/check-bpm-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
+检查 BPM crate 与成员 manifest…
+检查 bpm 依赖图…
+检查 bpm 源码边界…
+检查 ID 定义源…
+检查 id_type 过程宏定义源…
+检查 DocumentType -> ProcessKind 映射入口…
+BPM 边界检查通过。
+exit: 0
+
+=== service ===
+=== ./scripts/check-service-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
+Service 边界检查通过；当前基线共 0 个受控命中。
+exit: 0
+
+=== domain ===
+=== ./scripts/check-domain-boundaries.sh ===
+cwd: /Users/huangjiajiang/Development/erp/backend
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -5,3 +107,6 @@
   说明: cargo metadata 无 kind=test 集成目标
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+exit: 0
+
+disclaimer: 真实数据库运行未验证

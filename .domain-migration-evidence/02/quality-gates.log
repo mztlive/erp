@@ -1,19 +1,106 @@
-=== cargo fmt --all -- --check ===
-exit 0
-=== cargo check --workspace --locked ===
-exit 0
-=== cargo clippy --workspace --all-targets --all-features --locked -- -D warnings ===
-exit 0
-=== env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked ===
-exit 0; passed=3264 failed=0 ignored=71 crates=17
-=== ./scripts/check-bpm-boundaries.sh ===
-exit 0
-=== ./scripts/check-service-boundaries.sh ===
-exit 0
-=== ./scripts/check-domain-boundaries.sh ===
-exit 0
-=== ./scripts/check-permissions-drift.sh ===
-exit 0
-=== git diff --check ===
-exit 0
+phase: 02
+status: 本地门禁通过
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+implement_commit: 543c4bea33ed667b2b99448933c94006b6de052b
+head: 7b734435d7027a1445c0d8705916204474326987
+input_head: b399b662226064bd1fee36df026c461dd75066fd
+cwd: backend/
+quality_source: quality JSON from public-gate run; evidence recapture of fmt/bpm/service/domain/permissions/git-diff-check
+recorded_at: 2026-09-06T08:41:55Z
+quality_passed: true
+unit_tests_passed: true
+files_changed_by_quality: none
+mongodb_started: false
+include_ignored: false
+ERP_TEST_MONGO_URI: unset
+
+toolchain:
+rustc 1.97.0 (2d8144b78 2026-07-07)
+binary: rustc
+commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+commit-date: 2026-07-07
+host: aarch64-apple-darwin
+release: 1.97.0
+LLVM version: 22.1.6
+cargo 1.97.0 (c980f4866 2026-06-30)
+release: 1.97.0
+commit-hash: c980f4866141969fab6254a680546a277789d6f0
+commit-date: 2026-06-30
+host: aarch64-apple-darwin
+
+=== fmt ===
+command: cargo fmt --all -- --check
+cwd: /Users/huangjiajiang/Development/erp/backend
+(empty output)
+exit: 0
+
+=== check ===
+command: cargo check --workspace --locked
+cwd: /Users/huangjiajiang/Development/erp/backend
+exit: 0
+note: recorded from quality JSON; no lockfile or business-code changes
+
+=== clippy ===
+command: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cwd: /Users/huangjiajiang/Development/erp/backend
+exit: 0
+note: recorded from quality JSON; no files changed
+
+=== unit-tests ===
+command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+cwd: /Users/huangjiajiang/Development/erp/backend
+ERP_TEST_MONGO_URI=<unset>
+exit: 0
+passed: 3264
+failed: 0
+ignored: 71
+crates: 17
+log: .domain-migration-evidence/02/unit-tests.log
+mongodb_started: false
+include_ignored: false
+
+=== bpm ===
+command: ./scripts/check-bpm-boundaries.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+检查 BPM crate 与成员 manifest…
+检查 bpm 依赖图…
+检查 bpm 源码边界…
+检查 ID 定义源…
+检查 id_type 过程宏定义源…
+检查 DocumentType -> ProcessKind 映射入口…
+BPM 边界检查通过。
+exit: 0
+
+=== service ===
+command: ./scripts/check-service-boundaries.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+Service 边界检查通过；当前基线共 0 个受控命中。
+exit: 0
+
+=== domain ===
+command: ./scripts/check-domain-boundaries.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+领域边界检查
+夹具: errors=0
+工作区: errors=0
+  说明: instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, persistence-core
+  说明: cargo metadata 无 kind=test 集成目标
+  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
+领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+exit: 0
+
+=== permissions ===
+command: ./scripts/check-permissions-drift.sh
+cwd: /Users/huangjiajiang/Development/erp/backend
+权限生成物无漂移。
+permissions_generated_sha256: 84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96
+exit: 0
+
+=== git-diff-check ===
+command: git diff --check
+(empty output)
+exit: 0
+
+summary: All phase 02 public gates from backend/ exited 0. Domain boundary script is present. Lib unit tests passed without Mongo. No fmt/lockfile/business-code changes.
 disclaimer: 真实数据库运行未验证

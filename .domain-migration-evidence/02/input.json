@@ -1,8 +1,14 @@
 {
   "phase": "02",
-  "recorded_at": "2026-09-06T08:22:49Z",
+  "recorded_at": "2026-09-06T08:41:55Z",
   "evidence_dir": ".domain-migration-evidence/02",
   "input_head": "b399b662226064bd1fee36df026c461dd75066fd",
+  "implement_commits": [
+    "543c4bea33ed667b2b99448933c94006b6de052b",
+    "7b734435d7027a1445c0d8705916204474326987"
+  ],
+  "implement_commit": "543c4bea33ed667b2b99448933c94006b6de052b",
+  "head": "7b734435d7027a1445c0d8705916204474326987",
   "branch": "chore/domain-crate-02-identity-audit",
   "status": "本地门禁通过",
   "never_mark": "已验收",
@@ -10,8 +16,7 @@
   "real_database_verified": false,
   "git_at_start": {
     "unrelated_untracked_not_committed": [
-      ".grok/workflows/migrate-domain-crates.rhai",
-      "backend/scripts/__pycache__/"
+      ".grok/workflows/migrate-domain-crates.rhai"
     ],
     "actions_not_taken": [
       "stash",
@@ -26,10 +31,33 @@
   "verify_plan_sources_at_implement_start": "failed as expected after phase 01 moves; 前序阶段未验收 is a human gate",
   "source_map_phase_02_rows": 46,
   "repository_types_owner_phase_02": 7,
+  "repository_owned_types_moved": [
+    "AccountCoreRepository",
+    "RoleRepository",
+    "PermissionRepository",
+    "DataScopeRepository",
+    "UserRoleRepository",
+    "AuditEventRepository",
+    "AuditLogRepository"
+  ],
+  "section_6_callers": [
+    "apps/cli/src/main.rs",
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/handler/access_control/mod.rs",
+    "apps/web-api/src/core/handler/admin/account.rs",
+    "apps/web-api/src/core/handler/admin/audit_log.rs",
+    "apps/web-api/src/core/handler/admin/role.rs",
+    "apps/web-api/src/core/handler/auth/login.rs",
+    "apps/web-api/src/core/handler/auth/mod.rs",
+    "apps/web-api/src/core/handler/auth/profile.rs",
+    "apps/web-api/src/core/routes/access_control.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
   "workspace_member_count": 18,
   "kind_test_targets": 0,
   "historical_tests_archives_byte_for_byte": true,
   "quality_passed": true,
   "unit_tests_passed": true,
-  "note": "前序输入为阶段 01 本地门禁通过提交 b399b662。真实数据库运行未验证。"
+  "note": "前序输入为阶段 01 本地门禁通过提交 b399b662，不是已验收。实现提交 543c4bea（identity-audit），HEAD 7b734435（drop accidental pycache）。公共门禁全部 exit 0（3264 lib tests, 0 failed）。真实数据库运行未验证。"
 }

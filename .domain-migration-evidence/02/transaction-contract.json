@@ -3,23 +3,64 @@
   "disclaimer": "真实数据库运行未验证",
   "mongodb_started": false,
   "erp_test_mongo_uri": "unset",
-  "identity_cross_domain_audit": {
-    "prepare_before_transaction": true,
-    "persist_via_IdentityAuditPort_same_executor": true,
-    "no_nested_transaction": true,
-    "external_io_holds_session": false
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden"
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden"
   },
   "run_audited": {
     "file": "services/src/transaction.rs",
+    "sha256": "d15282091f3f3c880a9551a13718210eaf4a67c7bb78c2b23cd7afd700a308c9",
     "order": [
       "write(db, session)",
       "audit_logs().create(&audit, session)"
     ],
+    "external_io_in_write": "forbidden",
     "same_executor": true
+  },
+  "identity_cross_domain_audit": {
+    "prepare_before_transaction": true,
+    "port": "erp_identity::IdentityAuditPort",
+    "adapter": "services/src/identity_audit.rs MongoIdentityAudit",
+    "adapter_sha256": "9eb01d6746d5533e607649ac4ba18d0ca8bd58d0c4c7e8ccf7bcdf9286ee0223",
+    "audit_port_sha256": "9d2fa19facfcd59422c63336e30c0c37c515380f4d1619c194423f74802a9151",
+    "persist_via_IdentityAuditPort_same_executor": true,
+    "no_nested_transaction": true,
+    "external_io_holds_session": false,
+    "identity_does_not_depend_on_erp_audit": true
   },
   "rbac_policy_transaction": {
     "file": "crates/erp-identity/src/service/iam/rbac/transaction.rs",
+    "sha256": "4a8340679abf2c3a910c788259d6866ed3615e818ee8d2c1684ad1fca0235c12",
     "generic_error_from_identity": true,
-    "same_session": true
+    "same_session": true,
+    "nested_transactions": "forbidden"
+  },
+  "source_contains_with_transaction": true,
+  "owned_repositories_moved": {
+    "count": 7,
+    "types": [
+      "AccountCoreRepository",
+      "RoleRepository",
+      "PermissionRepository",
+      "DataScopeRepository",
+      "UserRoleRepository",
+      "AuditEventRepository",
+      "AuditLogRepository"
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true
   }
 }

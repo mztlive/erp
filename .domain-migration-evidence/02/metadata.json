@@ -5,13 +5,19 @@
   "branch": "chore/domain-crate-02-identity-audit",
   "evidence_dir": ".domain-migration-evidence/02",
   "input_head": "b399b662226064bd1fee36df026c461dd75066fd",
+  "implement_commits": [
+    "543c4bea33ed667b2b99448933c94006b6de052b",
+    "7b734435d7027a1445c0d8705916204474326987"
+  ],
+  "implement_commit": "543c4bea33ed667b2b99448933c94006b6de052b",
+  "head": "7b734435d7027a1445c0d8705916204474326987",
   "unique_integration_owner": "chore/domain-crate-02-identity-audit implementer",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
-  "files_tsv_rows": 316,
+  "files_tsv_rows": 400,
   "owned_repositories_moved": [
     "AccountCoreRepository",
     "RoleRepository",
@@ -22,10 +28,11 @@
     "AuditLogRepository"
   ],
   "no_identity_audit_crate_edge": true,
+  "no_e0116": true,
   "autotests": false,
   "workspace_members": 18,
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T08:22:49Z",
+  "recorded_at": "2026-09-06T08:41:55Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
@@ -48,12 +55,16 @@
     "permissions": 0,
     "git-diff-check": 0,
     "all_exit_0": true,
-    "log": ".domain-migration-evidence/02/quality-gates.log"
+    "files_changed": [],
+    "log": ".domain-migration-evidence/02/quality-gates.log",
+    "summary": "All phase 02 public gates from backend/ exited 0. Domain boundary script is present. Lib unit tests passed without Mongo. No fmt/lockfile/business-code changes."
   },
   "contracts": {
     "admin_routes": 369,
+    "error_codes": 21,
     "indexes": 368,
     "versus_phase_01_permissions_equal": true,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
     "comparison": ".domain-migration-evidence/02/contract-comparison.json",
     "transaction": ".domain-migration-evidence/02/transaction-contract.json"
   },
@@ -67,9 +78,5 @@
     "host": "aarch64-apple-darwin",
     "profile": "dev"
   },
-  "implement_summary": "Phase 02 identity-audit complete: erp-identity and erp-audit are wired; 7 owned repositories moved; CLI talks to identity use cases; AuthorizationPort at web-api composition root; IdentityAuditPort adapter in remaining services. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证.",
-  "implement_commit": "543c4bea",
-  "implement_commits": [
-    "543c4bea"
-  ]
+  "implement_summary": "Phase 02 identity-audit is complete on chore/domain-crate-02-identity-audit (HEAD 7b734435, implement 543c4bea). erp-identity and erp-audit are wired with 7 owned repositories; no identity↔audit crate edge; CLI uses identity use cases; AuthorizationPort is at the web-api composition root. Public gates passed (3264 lib tests, 0 failed). Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
 }
