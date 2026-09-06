@@ -10,7 +10,7 @@
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-import` |
 | 执行负责人 | chore/domain-crate-07-import integrator |
-| 输入/输出提交 | 前序 `2f77816b06145648ecb11dbe4f151b914457c267` / 本阶段实现提交见 `.domain-migration-evidence/07/metadata.json` |
+| 输入/输出提交 | 前序 `2f77816b06145648ecb11dbe4f151b914457c267` / 实现提交 `8911cb1f466130b565868a8ec9daf087997a6eb3`（证据见 `.domain-migration-evidence/07/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -160,4 +160,4 @@ git diff --check
 | 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/07/transaction-contract.json` |
 | 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 已执行 `.domain-migration-evidence/07/quality-gates.log` |
 | 编译收益 | 阶段 07 不执行编译收益复测；阈值在阶段 17 判定 | 不适用 |
-| 阶段提交 | 实现提交见 metadata.json；证据目录 `.domain-migration-evidence/07/`；禁止标记已验收 | 待写入 commit hash |
+| 阶段提交 | 实现提交 `8911cb1f466130b565868a8ec9daf087997a6eb3`；证据目录 `.domain-migration-evidence/07/`；禁止标记已验收 | 已写入 `.domain-migration-evidence/07/metadata.json` |

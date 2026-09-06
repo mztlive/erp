@@ -6,6 +6,12 @@
   "branch": "chore/domain-crate-07-import",
   "evidence_dir": ".domain-migration-evidence/07",
   "input_head": "2f77816b06145648ecb11dbe4f151b914457c267",
+  "implement_commits": [
+    "8911cb1f466130b565868a8ec9daf087997a6eb3"
+  ],
+  "implement_commit": "8911cb1f466130b565868a8ec9daf087997a6eb3",
+  "integrator_commit": "8911cb1f466130b565868a8ec9daf087997a6eb3",
+  "head": "8911cb1f466130b565868a8ec9daf087997a6eb3",
   "unique_integration_owner": "chore/domain-crate-07-import integrator",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
@@ -78,7 +84,8 @@
     {
       "shard": "all",
       "branch": "chore/domain-crate-07-import",
-      "committed": false,
+      "committed": true,
+      "commit_sha": "8911cb1f466130b565868a8ec9daf087997a6eb3",
       "summary": "Solo integrator created erp-import (autotests=false) with batch/row/confirmation state, three owned repositories, and query service via BulkJobFactsPort. apply/execute/complete/create_confirmation/supersede live in erp-processes/import_apply sharing one Executor; WorkItem construction is in process factories; WorkItem writes go through workflow. Old services/entities/database legacy_import modules deleted with no façade. Public gates passed (3308 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
     }
   ],

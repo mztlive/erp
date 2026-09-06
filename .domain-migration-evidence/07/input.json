@@ -3,6 +3,12 @@
   "recorded_at": "2026-09-07T00:00:00Z",
   "evidence_dir": ".domain-migration-evidence/07",
   "input_head": "2f77816b06145648ecb11dbe4f151b914457c267",
+  "implement_commits": [
+    "8911cb1f466130b565868a8ec9daf087997a6eb3"
+  ],
+  "implement_commit": "8911cb1f466130b565868a8ec9daf087997a6eb3",
+  "integrator_commit": "8911cb1f466130b565868a8ec9daf087997a6eb3",
+  "head": "8911cb1f466130b565868a8ec9daf087997a6eb3",
   "branch": "chore/domain-crate-07-import",
   "status": "本地门禁通过",
   "never_mark": "已验收",
