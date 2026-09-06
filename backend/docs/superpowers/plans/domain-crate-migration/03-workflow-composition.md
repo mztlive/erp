@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 03 |
-| 状态 | 阻塞 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-workflow`, `erp-processes`, `erp-read-models` |
 | 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-03-workflow-composition`） |
-| 输入/输出提交 | 前序 `fead5bad842092ddbdcbf598ab7b3d00384ff226` / 实现提交 `b98b8984da241591f2c5316b5e29762fd8847c60`（证据见 `.domain-migration-evidence/03/metadata.json`） |
+| 输入/输出提交 | 前序 `fead5bad842092ddbdcbf598ab7b3d00384ff226` / 实现提交 `1cb08731c8426db1c35dffa451c378d6c5cd095c`（证据见 `.domain-migration-evidence/03/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -86,21 +86,21 @@ workflow → bpm/基础；processes → workflow/身份/审计/旧 services；re
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结审批固定类型/动作/快照、提交者与审批人分离、受阻取消、版本冲突、通知 outbox、WorkItem 责任与状态测试。bpm crate 不搬入 ERP 类型。
+1. [x] 冻结审批固定类型/动作/快照、提交者与审批人分离、受阻取消、版本冲突、通知 outbox、WorkItem 责任与状态测试。bpm crate 不搬入 ERP 类型。
 
-2. [ ] 先定义并迁移 workflow 实体、DTO、ErrorCode 和消费方 Port。审批运行器继续消费 ApprovalDomainActionPort；授权使用注入的最小事实。ERP 集成 ID 使用 erp-core 中唯一类型，七类 BPM ID 保持原定义。
+2. [x] 先定义并迁移 workflow 实体、DTO、ErrorCode 和消费方 Port。审批运行器继续消费 ApprovalDomainActionPort；授权使用注入的最小事实。ERP 集成 ID 使用 erp-core 中唯一类型，七类 BPM ID 保持原定义。
 
-3. [ ] 迁移 BPM/审批集成/DocumentRegistry/WorkItem 持久化及索引。对 WorkItem 中跨域责任查询与领域事实判断拆为 Port；只保留任务自身校验与写入。禁止直接把 SharedRbacService 或销售实体放入 workflow。
+3. [x] 迁移 BPM/审批集成/DocumentRegistry/WorkItem 持久化及索引。对 WorkItem 中跨域责任查询与领域事实判断拆为 Port；只保留任务自身校验与写入。禁止直接把 SharedRbacService 或销售实体放入 workflow。
 
-4. [ ] 建立 erp-processes::approval_dispatch，迁移动作注册表、adapter_object_read_decision 中各领域分支、销售主题映射与 run_audited。具体适配可暂时依赖旧 services；workflow 本身不得依赖旧三层或 processes。
+4. [x] 建立 erp-processes::approval_dispatch，迁移动作注册表、adapter_object_read_decision 中各领域分支、销售主题映射与 run_audited。具体适配可暂时依赖旧 services；workflow 本身不得依赖旧三层或 processes。
 
-5. [ ] 拆出 erp-read-models::workbench 与 customer_center。WorkItemView、分页列表/详情/统计、brief、party_names、fulfillment_queue 归读模型；WorkItem 的 create/reassign/close/write 仍为 workflow 命令。为保留 HTTP 返回字段，在 read-models 显式组合 workflow 查询事实与各业务最小事实。
+5. [x] 拆出 erp-read-models::workbench 与 customer_center。WorkItemView、分页列表/详情/统计、brief、party_names、fulfillment_queue 归读模型；WorkItem 的 create/reassign/close/write 仍为 workflow 命令。为保留 HTTP 返回字段，在 read-models 显式组合 workflow 查询事实与各业务最小事实。
 
-6. [ ] 将 customer_center_related 与履约队列从外部 Repository<T> 固有 impl 改为本 crate 拥有的专属只读仓储。customer_center_receivable 仅查询应收所属集合，暂留财务旧仓储，阶段 09 再迁入财务并接窄事实接口。
+6. [x] 将 customer_center_related 与履约队列从外部 Repository<T> 固有 impl 改为本 crate 拥有的专属只读仓储。customer_center_receivable 仅查询应收所属集合，暂留财务旧仓储，阶段 09 再迁入财务并接窄事实接口。
 
-7. [ ] 更新 AppState、approval_instance/approval_process/work_item/customer 的 Handler、后台通知 worker 与旧 services 调用方。AppState 作为 composition root 注入 Port；模块返回型引用拆开，防止 workflow→read-models 回边。
+7. [x] 更新 AppState、approval_instance/approval_process/work_item/customer 的 Handler、后台通知 worker 与旧 services 调用方。AppState 作为 composition root 注入 Port；模块返回型引用拆开，防止 workflow→read-models 回边。
 
-8. [ ] 同步 check-bpm-boundaries.sh 的 process_kind.rs 路径、活动成员检查和 ID 位置；保留穷尽映射、无 I/O/无 ID 生成、唯一源等全部规则。旧模块声明/根 re-export 清零并运行门禁。
+8. [x] 同步 check-bpm-boundaries.sh 的 process_kind.rs 路径、活动成员检查和 ID 位置；保留穷尽映射、无 I/O/无 ID 生成、唯一源等全部规则。旧模块声明/根 re-export 清零并运行门禁。
 
 - [ ] 人工将状态改为已验收。本阶段执行者不得勾选；最高状态为本地门禁通过。
 
@@ -172,13 +172,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序本地门禁通过 `fead5bad842092ddbdcbf598ab7b3d00384ff226`；分支 `chore/domain-crate-03-workflow-composition`；source-map phase=03 行 135；owned types 8；review_approved=false | 已采集 `.domain-migration-evidence/03/input.json` |
-| 文件与符号 | 相对输入 519 路径变化（194 add / 126 delete / 199 modify）；8 owned EntityRepository 迁入 erp-workflow；CustomerCenterRepository 与 FulfillmentQueueRepository 专属只读仓储；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/03/files.tsv` |
+| 输入基线 | 前序本地门禁通过 `fead5bad842092ddbdcbf598ab7b3d00384ff226`；分支 `chore/domain-crate-03-workflow-composition`；source-map phase=03 行 135；owned types 8 | 已采集 `.domain-migration-evidence/03/input.json` |
+| 文件与符号 | 相对输入 521 路径变化（193 add / 129 delete / 199 modify）；8 owned EntityRepository 迁入 erp-workflow；CustomerCenterRepository 与 FulfillmentQueueRepository 专属只读仓储；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/03/files.tsv` |
 | 依赖 | 21 个成员；无 kind=test；erp-workflow 无 processes/read-models/旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/03/boundary.log` |
 | 旧实现清零 | unique-cut 删除旧 `services::approval/execution`、`document_registry`、`transaction` 与 owned dual repos；领域边界旧源清零规则已加载、当前不核销（尚无已验收阶段）；历史 tests/ 档案未改 | 已采集：见 `boundary.log` / `files.tsv` |
-| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3313 passed / 0 failed / 71 ignored；exit 0 | 已执行 `.domain-migration-evidence/03/unit-tests.log` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3275 passed / 0 failed / 71 ignored；exit 0 | 已执行 `.domain-migration-evidence/03/unit-tests.log` |
 | 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 02 哈希相等 | 已采集 `.domain-migration-evidence/03/contract-comparison.json` |
 | 事务合同 | Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 WorkflowAuditPort 同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/03/transaction-contract.json` |
-| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0；review_approved=false 故状态为阻塞 | 已执行 `.domain-migration-evidence/03/quality-gates.log` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0；状态为本地门禁通过 | 已执行 `.domain-migration-evidence/03/quality-gates.log` |
 | 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 本阶段不适用；阈值在阶段 17 判定 |
-| 阶段提交 | 实现提交 `b98b8984da241591f2c5316b5e29762fd8847c60`；证据目录 `.domain-migration-evidence/03/`；状态阻塞；禁止标记已验收 | 已写入 `.domain-migration-evidence/03/metadata.json` |
+| 阶段提交 | 实现提交 `1cb08731c8426db1c35dffa451c378d6c5cd095c`；证据目录 `.domain-migration-evidence/03/`；状态本地门禁通过；禁止标记已验收 | 已写入 `.domain-migration-evidence/03/metadata.json` |

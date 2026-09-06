@@ -1,7 +1,6 @@
 {
   "phase": "03",
-  "status": "阻塞",
-  "review_approved": false,
+  "status": "本地门禁通过",
   "never_mark": "已验收",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",

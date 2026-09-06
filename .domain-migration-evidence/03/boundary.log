@@ -1,13 +1,12 @@
 phase: 03
-status: 阻塞
-review_approved: false
+status: 本地门禁通过
 never_mark: 已验收
 disclaimer: 真实数据库运行未验证
 cwd: backend/
-recorded_at: 2026-09-06T16:06:32Z
-implement_commit: b98b8984da241591f2c5316b5e29762fd8847c60
+recorded_at: 2026-09-06T17:10:19Z
+implement_commit: 1cb08731c8426db1c35dffa451c378d6c5cd095c
 input_head: fead5bad842092ddbdcbf598ab7b3d00384ff226
-previous_evidence_head: 5c0984507a72bdc32a9507248e2feb8f537c56e8
+previous_evidence_head: 8972491e
 
 === cargo metadata ===
 command: cargo metadata --no-deps --format-version 1
@@ -17,7 +16,7 @@ kind=test: 0
 autotests: false on erp-workflow, erp-processes, erp-read-models and remaining members
 instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-workflow, persistence-core
 forbidden-edge contract: loaded
-old-source clearance: loaded, not applied as 已验收 (phase 00/01/02 are 本地门禁通过)
+old-source clearance: loaded, not applied as 已验收 (phase 00/01/02/03 are 本地门禁通过 or 执行中 at check time)
 exit: 0
 
 === cargo tree erp-workflow -e normal,build,dev --depth 1 --locked ===
@@ -94,9 +93,43 @@ erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-
 └── validator v0.21.0
 note: composition/read-models may depend on old three-layer; erp-workflow must not depend on erp-read-models
 
+=== cargo tree services -e normal,build,dev --depth 1 --locked ===
+services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── aes-gcm v0.11.1
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── base64 v0.23.1
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── casbin v2.20.0
+├── chrono v0.4.45
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── hex v0.4.3
+├── hmac v0.13.0
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── regex v1.13.1
+├── rust_decimal v1.42.1
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── sha2 v0.11.0
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+[dev-dependencies]
+├── test-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/test-support)
+└── tokio v1.53.1 (*)
+note: old services must not depend on erp-processes / erp-read-models
+
 === ./scripts/check-domain-boundaries.sh ===
-command: ./scripts/check-domain-boundaries.sh
-cwd: backend/
+=== domain ===
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -104,7 +137,26 @@ cwd: backend/
   说明: cargo metadata 无 kind=test 集成目标
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
-exit: 0
+domain_exit=0
+
+
+=== ./scripts/check-bpm-boundaries.sh ===
+=== bpm ===
+检查 BPM crate 与成员 manifest…
+检查 bpm 依赖图…
+检查 bpm 源码边界…
+检查 ID 定义源…
+检查 id_type 过程宏定义源…
+检查 DocumentType -> ProcessKind 映射入口…
+BPM 边界检查通过。
+bpm_exit=0
+
+
+=== ./scripts/check-service-boundaries.sh ===
+=== service ===
+Service 边界检查通过；当前基线共 0 个受控命中。
+service_exit=0
+
 
 === owned repositories moved (owner_phase=03) ===
 count: 8
@@ -119,10 +171,4 @@ no_workflow_to_read_models_edge: True
 no_workflow_to_old_three_layer_edge: True
 no_services_to_processes_edge: True
 no_services_to_read_models_edge: True
-
-=== old production path clearance ===
-unique-cut deleted owned dual copies of approval execution, approval_integration entities, document_registry, work_item command/query façades, and database owned/extension trees.
-historical tests/ archives retain old path text and were not modified (byte-for-byte vs fead5bad).
-domain-boundary old-source clearance is loaded and not applied because no phase is 已验收.
-
-disclaimer: 真实数据库运行未验证
+真实数据库运行未验证

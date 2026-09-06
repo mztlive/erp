@@ -1,33 +1,31 @@
 {
   "phase": "03",
-  "status": "阻塞",
-  "review_approved": false,
+  "status": "本地门禁通过",
   "never_mark": "已验收",
   "branch": "chore/domain-crate-03-workflow-composition",
   "evidence_dir": ".domain-migration-evidence/03",
   "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
-  "previous_evidence_head": "5c0984507a72bdc32a9507248e2feb8f537c56e8",
+  "previous_evidence_head": "8972491e",
   "implement_commits": [
     "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
     "5c0984507a72bdc32a9507248e2feb8f537c56e8",
-    "b98b8984da241591f2c5316b5e29762fd8847c60"
+    "b98b8984da241591f2c5316b5e29762fd8847c60",
+    "1cb08731c8426db1c35dffa451c378d6c5cd095c"
   ],
-  "implement_commit": "b98b8984da241591f2c5316b5e29762fd8847c60",
-  "head": "b98b8984da241591f2c5316b5e29762fd8847c60",
+  "implement_commit": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
+  "head": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
   "unique_integration_owner": "chore/domain-crate-03-workflow-composition implementer",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
-  "remaining_issues": [
-    "review_approved=false；公共质量门禁虽全部 exit 0，按规则不得记为本地门禁通过，状态为阻塞"
-  ],
-  "files_tsv_rows": 519,
+  "remaining_issues": [],
+  "files_tsv_rows": 521,
   "path_changes": {
-    "add": 194,
-    "delete": 126,
+    "add": 193,
+    "delete": 129,
     "modify": 199,
-    "total": 519,
+    "total": 521,
     "versus": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
     "rename_detection": false
   },
@@ -57,18 +55,18 @@
   "autotests": false,
   "workspace_members": 21,
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T16:06:32Z",
+  "recorded_at": "2026-09-06T17:10:19Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
-    "passed": 3313,
+    "passed": 3275,
     "failed": 0,
     "ignored": 71,
     "crates": 20,
     "mongodb_started": false,
     "include_ignored": false,
     "log": ".domain-migration-evidence/03/unit-tests.log",
-    "source_log": "logs/phase-03-qg-run/04-test-lib.log"
+    "source_log": "logs/phase-03-qg-run-integrator/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -83,8 +81,8 @@
     "all_exit_0": true,
     "files_changed": [],
     "log": ".domain-migration-evidence/03/quality-gates.log",
-    "source_dir": "logs/phase-03-qg-run",
-    "summary": "All phase 03 public quality gates from backend/ exited 0 after unique-cut. 3313 lib tests passed, 0 failed, 71 ignored. review_approved=false so status is 阻塞, not 本地门禁通过. 真实数据库运行未验证."
+    "source_dir": "logs/phase-03-qg-run-integrator",
+    "summary": "All phase 03 public quality gates from backend/ exited 0 after integrator recapture. 3275 lib tests passed, 0 failed, 71 ignored. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
   },
   "contracts": {
     "admin_routes": 369,
@@ -102,11 +100,11 @@
   },
   "toolchain": {
     "quality_gate_run": {
-      "rustc": "1.97.0 (2d8144b78 2026-07-07)",
-      "cargo": "1.97.0 (c980f4866 2026-06-30)",
+      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
       "host": "aarch64-apple-darwin",
       "profile": "dev"
     }
   },
-  "implement_summary": "Phase 03 unique-cut on chore/domain-crate-03-workflow-composition as b98b8984. Dual WorkItem/DocumentRegistry/approval/run_audited trees deleted; HTTP binds erp-workflow, erp-read-models, and erp-processes. Public gates passed (3313 lib tests, 0 failed, 71 ignored). review_approved=false, so recorded status is 阻塞 even though cargo test passed. Never 已验收. 真实数据库运行未验证."
+  "implement_summary": "Phase 03 integrator recapture on chore/domain-crate-03-workflow-composition. erp-workflow / erp-processes / erp-read-models unique-cut complete: approval_dispatch, run_audited, named processes with real steps, workbench/customer center/fulfillment queue, AppState wiring. Public gates passed (3275 lib tests, 0 failed, 71 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
 }

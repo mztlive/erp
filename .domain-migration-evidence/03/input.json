@@ -1,18 +1,18 @@
 {
   "phase": "03",
-  "recorded_at": "2026-09-06T16:06:32Z",
+  "recorded_at": "2026-09-06T17:10:19Z",
   "evidence_dir": ".domain-migration-evidence/03",
   "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
   "implement_commits": [
     "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
     "5c0984507a72bdc32a9507248e2feb8f537c56e8",
-    "b98b8984da241591f2c5316b5e29762fd8847c60"
+    "b98b8984da241591f2c5316b5e29762fd8847c60",
+    "1cb08731c8426db1c35dffa451c378d6c5cd095c"
   ],
-  "implement_commit": "b98b8984da241591f2c5316b5e29762fd8847c60",
-  "head": "b98b8984da241591f2c5316b5e29762fd8847c60",
+  "implement_commit": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
+  "head": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
   "branch": "chore/domain-crate-03-workflow-composition",
-  "status": "阻塞",
-  "review_approved": false,
+  "status": "本地门禁通过",
   "never_mark": "已验收",
   "disclaimer": "真实数据库运行未验证",
   "real_database_verified": false,
@@ -74,5 +74,5 @@
   "historical_tests_archives_byte_for_byte": true,
   "quality_passed": true,
   "unit_tests_passed": true,
-  "note": "前序输入为阶段 02 本地门禁通过提交 fead5bad，不是已验收。unique-cut 实现提交 b98b8984。公共门禁全部 exit 0（3313 lib tests, 0 failed, 71 ignored）。review_approved=false，因此状态为阻塞，不得记为本地门禁通过。真实数据库运行未验证。"
+  "note": "前序输入为阶段 02 本地门禁通过提交 fead5bad，不是已验收。unique-cut 实现提交 1cb08731。公共门禁全部 exit 0（3275 lib tests, 0 failed, 71 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证。"
 }

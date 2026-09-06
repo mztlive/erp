@@ -1,0 +1,10 @@
+gate	exit
+fmt	0
+check	0
+clippy	0
+unit-tests	0
+bpm	0
+service	0
+domain	0
+permissions	0
+git-diff-check	0

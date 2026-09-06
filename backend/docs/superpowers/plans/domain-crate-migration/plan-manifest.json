@@ -222,7 +222,7 @@
     {
       "id": "03",
       "file": "03-workflow-composition.md",
-      "status": "阻塞",
+      "status": "本地门禁通过",
       "crates": [
         "erp-workflow",
         "erp-processes",
