@@ -1,6 +1,7 @@
 //! Cross-domain processes: approval dispatch, audited transactions and named use cases.
 
 pub mod approval_dispatch;
+pub mod attachments;
 pub mod audit;
 pub mod catalog;
 pub mod customer;
@@ -10,6 +11,11 @@ pub mod supplier;
 pub mod warehouse;
 
 pub use approval_dispatch::ApprovalActionRegistry;
+pub use attachments::{
+    commit_supplier_payment_with_assets, confirm_service_fulfillment_with_assets,
+    product_brand_create_with_assets, product_brand_update_with_assets, product_create_with_assets,
+    product_update_with_assets, supplier_profile_create_with_assets, supplier_profile_update_with_assets,
+};
 pub use audit::run_audited;
 pub use catalog::{
     create_product_category, create_sku_attribute, create_sku_attribute_value, create_unit_of_measure,

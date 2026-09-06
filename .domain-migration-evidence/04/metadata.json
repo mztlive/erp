@@ -1,0 +1,133 @@
+{
+  "workspace_members": [
+    "application-core",
+    "bpm",
+    "cli",
+    "config",
+    "database",
+    "entities",
+    "entity-core",
+    "entity-macros",
+    "erp-audit",
+    "erp-core",
+    "erp-identity",
+    "erp-processes",
+    "erp-read-models",
+    "erp-support",
+    "erp-workflow",
+    "id-generator",
+    "permission-macros",
+    "persistence-core",
+    "services",
+    "storage",
+    "test-support",
+    "web-api"
+  ],
+  "erp-support_dependencies": [
+    {
+      "name": "application-core",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "async-trait",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "chrono",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "entity-core",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "entity-macros",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "erp-core",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "hmac",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "id-generator",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "mongodb",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "persistence-core",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "serde",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "serde_json",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "sha2",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "thiserror",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "tokio",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "tracing",
+      "kind": "normal",
+      "optional": false
+    },
+    {
+      "name": "validator",
+      "kind": "normal",
+      "optional": false
+    }
+  ],
+  "kind_test_targets": 0,
+  "lockfile_third_party_versions_unchanged": true,
+  "lockfile_note": "Cargo.lock only added path crate erp-support",
+  "instantiated_planned_crates": [
+    "application-core",
+    "erp-audit",
+    "erp-core",
+    "erp-identity",
+    "erp-processes",
+    "erp-read-models",
+    "erp-support",
+    "erp-workflow",
+    "persistence-core"
+  ],
+  "unit_tests": {
+    "passed": 3277,
+    "failed": 0,
+    "ignored": 71
+  },
+  "disclaimer": "真实数据库运行未验证"
+}

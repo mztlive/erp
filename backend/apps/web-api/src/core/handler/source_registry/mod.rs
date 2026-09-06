@@ -8,10 +8,9 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::source_registry::{
+use erp_support::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
-    ExternalIdentityMapView, PageView, SourceRegistryService, SourceSystemListParams, SourceSystemView,
-    UpdateSourceSystemRequest,
+    ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
 };
 
 use crate::{
@@ -38,7 +37,8 @@ pub async fn source_system_list(
     State(state): State<AppState>,
     Query(params): Query<SourceSystemListParams>,
 ) -> Result<PageView<SourceSystemView>> {
-    let page = SourceRegistryService::new(state.db())
+    let page = state
+        .source_registry_service()
         .source_system_list(&params)
         .await?;
 
@@ -94,7 +94,8 @@ pub async fn source_system_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSourceSystemRequest>,
 ) -> Result<SourceSystemView> {
-    let view = SourceRegistryService::new(state.db())
+    let view = state
+        .source_registry_service()
         .update_source_system(&id, req, &actor)
         .await?;
 
@@ -120,7 +121,8 @@ pub async fn external_identity_map_list(
     State(state): State<AppState>,
     Query(params): Query<ExternalIdentityMapListParams>,
 ) -> Result<PageView<ExternalIdentityMapView>> {
-    let page = SourceRegistryService::new(state.db())
+    let page = state
+        .source_registry_service()
         .external_identity_map_list(&params)
         .await?;
 
@@ -148,7 +150,8 @@ pub async fn external_identity_map_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateExternalIdentityMapRequest>,
 ) -> Result<ExternalIdentityMapView> {
-    let view = SourceRegistryService::new(state.db())
+    let view = state
+        .source_registry_service()
         .create_external_identity_map(req, &actor)
         .await?;
 

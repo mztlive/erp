@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use database::CatalogExt;
 use entities::catalog::product::{Product, ProductData};
@@ -15,6 +16,7 @@ use entities::catalog::{
 };
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -28,8 +30,6 @@ use crate::catalog::dto::{
     UpdateProductRequest,
 };
 use crate::errors::{Error, Result};
-use crate::file_asset::PendingFileAssetRequest;
-use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -83,7 +83,8 @@ impl CatalogService {
     /// * `BusinessLogicError` - 分类不允许商品类型、规格不适用于分类、条码冲突等
     /// * `ConflictError` - 唯一约束冲突或并发事务冲突
     pub async fn product_create(&self, req: CreateProductRequest, actor: &AuditActor) -> Result<ProductView> {
-        self.product_create_with_assets(req, Vec::new(), actor).await
+        self.product_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
+            .await
     }
 
     /// 创建商品，并把同一次 multipart 命令携带的文件资产与商品聚合原子登记。
@@ -101,11 +102,10 @@ impl CatalogService {
     pub async fn product_create_with_assets(
         &self,
         mut req: CreateProductRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductView> {
         req.validate()?;
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let used = resolve_product_file_references(
             &mut req.carousel_media,
             &mut req.detail_media,
@@ -143,7 +143,8 @@ impl CatalogService {
         req: UpdateProductRequest,
         actor: &AuditActor,
     ) -> Result<ProductView> {
-        self.product_update_with_assets(id, req, Vec::new(), actor).await
+        self.product_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
+            .await
     }
 
     /// 编辑商品，并把同一次 multipart 命令携带的文件资产与新修订原子登记。
@@ -163,11 +164,10 @@ impl CatalogService {
         &self,
         id: &str,
         mut req: UpdateProductRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductView> {
         req.validate()?;
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let used = resolve_product_file_references(
             &mut req.carousel_media,
             &mut req.detail_media,
@@ -280,7 +280,7 @@ impl CatalogService {
         &self,
         req: CreateProductRequest,
         actor: &AuditActor,
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<ProductDraft> {
         self.ensure_product_dictionaries(
             &req.category_id,
@@ -379,7 +379,7 @@ impl CatalogService {
         brand_id: &ProductBrandId,
         skus: &[ProductSkuInput],
         product_kind: ProductKind,
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<()> {
         let unit_ids = skus
             .iter()
@@ -435,7 +435,7 @@ impl CatalogService {
         revision_id: &ProductRevisionId,
         inputs: &[ProductMediaInput],
         role: MediaRole,
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<Vec<ProductRevisionMedia>> {
         let asset_ids = inputs
             .iter()
@@ -489,7 +489,7 @@ impl CatalogService {
         &self,
         draft: ProductDraft,
         actor: &AuditActor,
-        pending_assets: PendingFileAssets,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Product> {
         let ProductDraft {
             change_reason,
@@ -542,7 +542,7 @@ impl CatalogService {
         product: &mut Product,
         req: UpdateProductRequest,
         actor: &AuditActor,
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<SpecEditPlan> {
         self.ensure_product_dictionaries(
             &req.category_id,
@@ -678,7 +678,7 @@ impl CatalogService {
         &self,
         plan: SpecEditPlan,
         actor: &AuditActor,
-        pending_assets: PendingFileAssets,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Product> {
         let SpecEditPlan {
             change_reason,
@@ -795,7 +795,7 @@ fn resolve_product_file_references(
     carousel_media: &mut [ProductMediaInput],
     detail_media: &mut [ProductMediaInput],
     skus: &mut [ProductSkuInput],
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
 ) -> Result<HashSet<String>> {
     let mut used = HashSet::new();
     for media in carousel_media.iter_mut().chain(detail_media.iter_mut()) {

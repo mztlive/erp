@@ -1,9 +1,9 @@
 //! 供应商付款单查询、银行回单与过账编排。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
-use database::{FileAssetExt, PartyExt, PayableExt, SupplierExt};
-use entities::file_asset::BankReceiptEvidencePolicy;
+use database::{PartyExt, PayableExt, SupplierExt};
 use entities::party::PartyBankAccount;
 use entities::payable::{
     AllocationAction, PayableAccount, PayableEntry, PaymentAllocation, PaymentAllocationLedger,
@@ -17,6 +17,9 @@ use erp_core::ids::{
     SupplierAccountId, SupplierPaymentId,
 };
 use erp_core::money::Amount;
+use erp_support::{
+    BankReceiptEvidencePolicy, EmptyPendingAttachments, FileAssetExt, FileAssetView, PendingAttachmentBatch,
+};
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
@@ -32,8 +35,6 @@ use super::mapping::{payment_recipient_view, resolve_current_payment_recipient, 
 use super::payment_task;
 use super::{PayableService, SupplierPaymentFilter, SupplierPaymentWithAssetsResult};
 use crate::errors::{Error, Result};
-use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
-use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -146,7 +147,7 @@ impl PayableService {
         actor: &AuditActor,
     ) -> Result<SupplierPaymentView> {
         Ok(self
-            .commit_supplier_payment_with_assets(req, Vec::new(), actor)
+            .commit_supplier_payment_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
             .await?
             .view)
     }
@@ -171,7 +172,7 @@ impl PayableService {
     pub async fn commit_supplier_payment_with_assets(
         &self,
         mut req: CommitSupplierPaymentRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierPaymentWithAssetsResult> {
         req.validate()?;
@@ -189,18 +190,8 @@ impl PayableService {
                 assets_committed: false,
             });
         }
-        for request in &asset_requests {
-            BankReceiptEvidencePolicy::validate(
-                &request.registration.content_type,
-                request.registration.sensitivity_class,
-                request.registration.retention_class,
-                false,
-            )
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        }
-        let has_pending_assets = !asset_requests.is_empty();
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
-        let used_assets = resolve_payment_receipt_references(&mut req, &pending_assets)?;
+        let has_pending_assets = !pending_assets.is_empty();
+        let used_assets = resolve_payment_receipt_references(&mut req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used_assets)?;
         let expected_task_version =
             erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
@@ -592,7 +583,7 @@ impl PayableService {
             .file_assets()
             .find_by_ids(&asset_ids, &mut NoTransaction)
             .await?;
-        let assets_by_id: HashMap<&str, &entities::file_asset::FileAsset> = assets
+        let assets_by_id: HashMap<&str, &erp_support::FileAsset> = assets
             .iter()
             .map(|asset| (asset.base.id.as_str(), asset))
             .collect();
@@ -801,7 +792,7 @@ fn payment_recipient_lock_error(error: persistence_core::Error) -> Error {
 /// 解析本次付款字段中的临时回单引用。
 fn resolve_payment_receipt_references(
     req: &mut CommitSupplierPaymentRequest,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
 ) -> Result<HashSet<String>> {
     let mut used = HashSet::new();
     pending_assets.resolve_id(&mut req.payment.bank_receipt_asset_id, &mut used)?;
@@ -816,7 +807,7 @@ fn resolve_payment_receipt_references(
 async fn ensure_bank_receipt_asset_in_transaction(
     db: &Database,
     asset_id: &FileAssetId,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
     session: &mut ClientSession,
 ) -> Result<()> {
     if pending_assets.contains_id(asset_id) {

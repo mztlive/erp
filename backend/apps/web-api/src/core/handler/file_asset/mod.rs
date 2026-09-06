@@ -18,12 +18,12 @@ use axum::{
     response::Response,
     Extension, Json,
 };
-use serde::de::DeserializeOwned;
-use services::file_asset::{
+use erp_support::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
-    FileAssetListParams, FileAssetService, FileAssetView, MarkScanResultRequest, PageView,
-    PendingFileAssetRequest, RegisterFileAssetRequest,
+    FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
+    RegisterFileAssetRequest,
 };
+use serde::de::DeserializeOwned;
 use tracing::error;
 
 use crate::{
@@ -54,7 +54,7 @@ pub async fn file_asset_list(
     State(state): State<AppState>,
     Query(params): Query<FileAssetListParams>,
 ) -> Result<PageView<FileAssetListItemView>> {
-    let page = FileAssetService::new(state.db()).file_asset_list(&params).await?;
+    let page = state.file_asset_service().file_asset_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -78,7 +78,7 @@ pub async fn file_asset_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<FileAssetView> {
-    let mut view = FileAssetService::new(state.db()).file_asset_detail(&id).await?;
+    let mut view = state.file_asset_service().file_asset_detail(&id).await?;
     prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -99,9 +99,7 @@ pub async fn file_asset_preview(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
-    let view = FileAssetService::new(state.db())
-        .file_asset_preview(&id, &actor)
-        .await?;
+    let view = state.file_asset_service().file_asset_preview(&id, &actor).await?;
     if !matches!(
         view.content_type.as_str(),
         "image/jpeg" | "image/png" | "image/webp" | "application/pdf"
@@ -110,8 +108,7 @@ pub async fn file_asset_preview(
     }
     if matches!(
         view.security_scan_status,
-        entities::file_asset::SecurityScanStatus::Rejected
-            | entities::file_asset::SecurityScanStatus::Quarantined
+        erp_support::SecurityScanStatus::Rejected | erp_support::SecurityScanStatus::Quarantined
     ) {
         return Err(Error::Unprocessable("文件未通过安全检查，不能预览".to_string()));
     }
@@ -177,7 +174,7 @@ pub async fn file_asset_upload(
         reference: "file-upload".to_string(),
         registration: request.clone(),
     }];
-    let service = FileAssetService::new(state.db());
+    let service = state.file_asset_service();
     let result = match fields.document_id {
         Some(document_id) => {
             service
@@ -189,6 +186,7 @@ pub async fn file_asset_upload(
     let mut asset = match result {
         Ok(asset) => asset,
         Err(error) => {
+            let error = services::Error::from(error);
             if should_compensate_pending_assets(&error) {
                 delete_pending_asset_objects(&state, &cleanup).await;
             }
@@ -224,7 +222,7 @@ fn build_public_url(state: &AppState, storage_object_key: &str) -> String {
 
 /// 仅普通资产暴露公开访问信息；敏感资产的底层对象键不进入 HTTP 响应。
 fn prepare_asset_response(state: &AppState, view: &mut FileAssetView) {
-    if view.sensitivity_class == entities::file_asset::SensitivityClass::General {
+    if view.sensitivity_class == erp_support::SensitivityClass::General {
         view.public_url = Some(build_public_url(state, &view.storage_object_key));
         return;
     }
@@ -255,7 +253,8 @@ pub async fn file_asset_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = FileAssetService::new(state.db())
+    let mut view = state
+        .file_asset_service()
         .register_file_asset(req, &actor)
         .await?;
     prepare_asset_response(&state, &mut view);
@@ -284,9 +283,7 @@ pub async fn document_attachment_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AttachToDocumentRequest>,
 ) -> Result<DocumentAttachmentView> {
-    let view = FileAssetService::new(state.db())
-        .attach_to_document(req, &actor)
-        .await?;
+    let view = state.file_asset_service().attach_to_document(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -310,7 +307,8 @@ pub async fn document_attachment_list(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentAttachmentView>> {
-    let items = FileAssetService::new(state.db())
+    let items = state
+        .file_asset_service()
         .document_attachment_list(&erp_core::ids::BusinessDocumentId::new(id))
         .await?;
 
@@ -340,7 +338,8 @@ pub async fn file_asset_scan_result(
     Path(id): Path<String>,
     Json(req): Json<MarkScanResultRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = FileAssetService::new(state.db())
+    let mut view = state
+        .file_asset_service()
         .mark_scan_result(&id, req, &actor)
         .await?;
     prepare_asset_response(&state, &mut view);
@@ -371,7 +370,8 @@ pub async fn file_asset_destroy(
     Path(id): Path<String>,
     Json(req): Json<DestroyFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = FileAssetService::new(state.db())
+    let mut view = state
+        .file_asset_service()
         .destroy_file_asset(&id, req, &actor)
         .await?;
     prepare_asset_response(&state, &mut view);
@@ -473,7 +473,7 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
 pub(crate) async fn store_pending_asset_files(
     state: &AppState,
     files: Vec<PendingAssetFile>,
-    sensitivity_for: impl Fn(&str) -> entities::file_asset::SensitivityClass,
+    sensitivity_for: impl Fn(&str) -> erp_support::SensitivityClass,
 ) -> std::result::Result<Vec<PendingFileAssetRequest>, Error> {
     let mut requests = Vec::with_capacity(files.len());
     for pending in files {
@@ -481,7 +481,7 @@ pub(crate) async fn store_pending_asset_files(
             state,
             pending.file,
             sensitivity_for(&pending.reference),
-            entities::file_asset::RetentionClass::LongTerm,
+            erp_support::RetentionClass::LongTerm,
             None,
         )
         .await
@@ -601,8 +601,8 @@ pub(crate) async fn extract_asset_file_with_limit(
 pub(crate) async fn store_asset_file(
     state: &AppState,
     file: AssetFile,
-    sensitivity_class: entities::file_asset::SensitivityClass,
-    retention_class: entities::file_asset::RetentionClass,
+    sensitivity_class: erp_support::SensitivityClass,
+    retention_class: erp_support::RetentionClass,
     expires_at: Option<u64>,
 ) -> std::result::Result<RegisterFileAssetRequest, Error> {
     let config = state.config_snapshot();
@@ -616,7 +616,7 @@ pub(crate) async fn store_asset_file(
             Error::Internal("Object storage operation failed".to_string())
         })?;
     let content_hmac =
-        entities::file_asset::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
+        erp_support::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
     Ok(RegisterFileAssetRequest {
         storage_object_key: unique_name,
         file_name: file.file_name,
@@ -659,26 +659,26 @@ fn validate_asset_file(file: AssetFile) -> std::result::Result<AssetFile, Error>
 #[derive(Debug)]
 pub(crate) struct FileAssetFormFields {
     /// 敏感级别。
-    pub sensitivity_class: entities::file_asset::SensitivityClass,
+    pub sensitivity_class: erp_support::SensitivityClass,
     /// 保留策略。
-    pub retention_class: entities::file_asset::RetentionClass,
+    pub retention_class: erp_support::RetentionClass,
     /// 到期时间（秒级时间戳）。
     pub expires_at: Option<u64>,
     /// 业务单据 ID（携带时同事务建立附件关联）。
     pub document_id: Option<erp_core::ids::BusinessDocumentId>,
     /// 附件用途。
-    pub usage: entities::file_asset::AttachmentUsage,
+    pub usage: erp_support::AttachmentUsage,
 }
 
 impl Default for FileAssetFormFields {
     /// 提供安全默认值（表单未携带治理字段时兜底；业务侧由调用方保证显式指定）。
     fn default() -> Self {
         Self {
-            sensitivity_class: entities::file_asset::SensitivityClass::General,
-            retention_class: entities::file_asset::RetentionClass::LongTerm,
+            sensitivity_class: erp_support::SensitivityClass::General,
+            retention_class: erp_support::RetentionClass::LongTerm,
             expires_at: None,
             document_id: None,
-            usage: entities::file_asset::AttachmentUsage::Attachment,
+            usage: erp_support::AttachmentUsage::Attachment,
         }
     }
 }

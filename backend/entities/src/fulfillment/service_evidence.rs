@@ -11,8 +11,8 @@
 //!
 //! 错误信息为固定文案，不携带地点明文或文件敏感元数据。
 
-use crate::file_asset::{RetentionClass, SensitivityClass};
 use erp_core::{Error, Result};
+use erp_support::{RetentionClass, SensitivityClass};
 
 /// 采购审核草稿使用的服务地点占位值；确认时必须替换为实际地点。
 pub const SERVICE_LOCATION_PLACEHOLDER: &str = "待填写";
@@ -105,7 +105,7 @@ impl ServiceEvidencePolicy {
 #[cfg(test)]
 mod tests {
     use super::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
-    use crate::file_asset::{RetentionClass, SensitivityClass};
+    use erp_support::{RetentionClass, SensitivityClass};
 
     /// 合法地点去除首尾空白并稳定保留内部字符。
     #[test]

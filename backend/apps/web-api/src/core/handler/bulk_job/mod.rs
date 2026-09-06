@@ -8,8 +8,8 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::bulk_job::{
-    BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkJobService, BulkSelectionItemView,
+use erp_support::{
+    BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelBackgroundJobRequest,
     ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobRequest, CreateBulkSelectionSnapshotRequest,
     ExpireBulkSelectionSnapshotRequest, PageView,
@@ -39,7 +39,8 @@ pub async fn bulk_selection_snapshot_list(
     State(state): State<AppState>,
     Query(params): Query<BulkSelectionSnapshotListParams>,
 ) -> Result<PageView<BulkSelectionSnapshotView>> {
-    let page = BulkJobService::new(state.db())
+    let page = state
+        .bulk_job_service()
         .bulk_selection_snapshot_list(&params)
         .await?;
 
@@ -67,7 +68,8 @@ pub async fn bulk_selection_snapshot_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = BulkJobService::new(state.db())
+    let view = state
+        .bulk_job_service()
         .create_bulk_selection_snapshot(req, &actor)
         .await?;
 
@@ -97,7 +99,8 @@ pub async fn bulk_selection_snapshot_confirm(
     Path(id): Path<String>,
     Json(req): Json<ConfirmBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = BulkJobService::new(state.db())
+    let view = state
+        .bulk_job_service()
         .confirm_bulk_selection_snapshot(&id, req, &actor)
         .await?;
 
@@ -127,7 +130,8 @@ pub async fn bulk_selection_snapshot_expire(
     Path(id): Path<String>,
     Json(req): Json<ExpireBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = BulkJobService::new(state.db())
+    let view = state
+        .bulk_job_service()
         .expire_bulk_selection_snapshot(&id, req, &actor)
         .await?;
 
@@ -155,7 +159,8 @@ pub async fn bulk_selection_item_list(
     Path(id): Path<String>,
     Query(query): Query<BulkSelectionItemListQuery>,
 ) -> Result<PageView<BulkSelectionItemView>> {
-    let page = BulkJobService::new(state.db())
+    let page = state
+        .bulk_job_service()
         .bulk_selection_item_list(&id, query.result_status, query.page, query.page_size)
         .await?;
 
@@ -181,9 +186,7 @@ pub async fn background_job_list(
     State(state): State<AppState>,
     Query(params): Query<BackgroundJobListParams>,
 ) -> Result<PageView<BackgroundJobView>> {
-    let page = BulkJobService::new(state.db())
-        .background_job_list(&params)
-        .await?;
+    let page = state.bulk_job_service().background_job_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -207,7 +210,7 @@ pub async fn background_job_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<BackgroundJobView> {
-    let view = BulkJobService::new(state.db()).background_job_detail(&id).await?;
+    let view = state.bulk_job_service().background_job_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -233,7 +236,8 @@ pub async fn background_job_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateBackgroundJobRequest>,
 ) -> Result<BackgroundJobView> {
-    let view = BulkJobService::new(state.db())
+    let view = state
+        .bulk_job_service()
         .create_background_job(req, &actor)
         .await?;
 
@@ -263,7 +267,8 @@ pub async fn background_job_cancel(
     Path(id): Path<String>,
     Json(req): Json<CancelBackgroundJobRequest>,
 ) -> Result<BackgroundJobView> {
-    let view = BulkJobService::new(state.db())
+    let view = state
+        .bulk_job_service()
         .cancel_background_job(&id, req, &actor)
         .await?;
 
@@ -291,7 +296,8 @@ pub async fn background_job_item_list(
     Path(id): Path<String>,
     Query(query): Query<BackgroundJobItemListQuery>,
 ) -> Result<PageView<BackgroundJobItemView>> {
-    let page = BulkJobService::new(state.db())
+    let page = state
+        .bulk_job_service()
         .background_job_item_list(&id, query.status, query.page, query.page_size)
         .await?;
 
@@ -305,7 +311,7 @@ pub async fn background_job_item_list(
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct BulkSelectionItemListQuery {
     /// 逐项执行结果筛选。
-    pub result_status: Option<entities::bulk_job::SelectionItemStatus>,
+    pub result_status: Option<erp_support::SelectionItemStatus>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -319,7 +325,7 @@ pub struct BulkSelectionItemListQuery {
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct BackgroundJobItemListQuery {
     /// 逐项执行结果筛选。
-    pub status: Option<entities::bulk_job::ItemStatus>,
+    pub status: Option<erp_support::ItemStatus>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。

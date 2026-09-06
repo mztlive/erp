@@ -9,7 +9,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use entities::file_asset::SensitivityClass;
+use erp_support::SensitivityClass;
 use services::fulfillment::{
     AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
     ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
@@ -514,9 +514,14 @@ pub async fn service_fulfillment_confirm(
         extract_command_with_asset_files::<ConfirmServiceFulfillmentRequest>(&mut multipart).await?;
     validate_service_evidence_upload(&req, &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = service(&state)
-        .confirm_service_fulfillment_with_assets(&id, req, pending.clone(), &actor)
-        .await;
+    let result = erp_processes::confirm_service_fulfillment_with_assets(
+        service(&state),
+        id,
+        req,
+        pending.clone(),
+        actor,
+    )
+    .await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(service_error) => {

@@ -8,7 +8,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use entities::file_asset::SensitivityClass;
+use erp_support::SensitivityClass;
 use services::supplier::{
     profile::SupplierProfileService, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
     SupplierDetailView, SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView,
@@ -61,9 +61,14 @@ pub async fn supplier_profile_create_with_assets(
 ) -> Result<SupplierProfileMutationView> {
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
-    let result = SupplierProfileService::new(state.db(), state.sensitive_data())
-        .create_with_assets(req, pending.clone(), &actor)
-        .await;
+    let result = erp_processes::supplier_profile_create_with_assets(
+        state.db(),
+        state.sensitive_data(),
+        req,
+        pending.clone(),
+        actor,
+    )
+    .await;
     match result {
         Ok(result) => {
             if !result.assets_committed {
@@ -116,9 +121,15 @@ pub async fn supplier_profile_update_with_assets(
 ) -> Result<SupplierProfileMutationView> {
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
-    let result = SupplierProfileService::new(state.db(), state.sensitive_data())
-        .update_with_assets(&id, req, pending.clone(), &actor)
-        .await;
+    let result = erp_processes::supplier_profile_update_with_assets(
+        state.db(),
+        state.sensitive_data(),
+        id,
+        req,
+        pending.clone(),
+        actor,
+    )
+    .await;
     match result {
         Ok(result) => {
             if !result.assets_committed {

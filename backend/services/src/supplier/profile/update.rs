@@ -27,11 +27,11 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
-use crate::{
-    errors::{Error, Result},
-    file_asset::PendingFileAssetRequest,
-    pending_file_assets::PendingFileAssets,
-};
+use std::sync::Arc;
+
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
+
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -53,7 +53,7 @@ impl SupplierProfileService {
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
         Ok(self
-            .update_with_assets(supplier_id, req, Vec::new(), actor)
+            .update_with_assets(supplier_id, req, Arc::new(EmptyPendingAttachments), actor)
             .await?
             .view)
     }
@@ -66,7 +66,7 @@ impl SupplierProfileService {
         &self,
         supplier_id: &str,
         mut req: SaveSupplierProfileRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
         req.validate_contract()?;
@@ -80,8 +80,7 @@ impl SupplierProfileService {
                 assets_committed: false,
             });
         }
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
-        let used = resolve_supplier_file_references(&mut req, &pending_assets)?;
+        let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
@@ -122,7 +121,7 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         request_fingerprint: String,
         actor: &AuditActor,
-        pending_assets: PendingFileAssets,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<PreparedUpdate> {
         let mut supplier = self.load_supplier_for_update(supplier_id, &req).await?;
         let mut party = self.load_party_for_update(&supplier, &req).await?;
@@ -790,7 +789,7 @@ struct PreparedUpdate {
     command: SupplierProfileCommand,
     audit: erp_audit::AuditLog,
     result: SupplierProfileMutationView,
-    pending_assets: PendingFileAssets,
+    pending_assets: Arc<dyn PendingAttachmentBatch>,
 }
 
 impl PreparedUpdate {
@@ -822,7 +821,7 @@ impl PreparedUpdate {
         effective_from: erp_core::common::time::BusinessDate,
         change_reason: String,
         actor: &AuditActor,
-        pending_assets: PendingFileAssets,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Self> {
         let PreparedUpdateContext {
             party,

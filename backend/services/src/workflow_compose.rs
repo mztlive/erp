@@ -816,7 +816,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        use database::SourceRegistryExt;
+        use erp_support::SourceRegistryExt;
         Ok(self
             .db()
             .external_identity_maps()

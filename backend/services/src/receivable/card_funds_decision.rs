@@ -5,12 +5,12 @@
 //! 枚举的映射、批量文件资产的仓储读取结果到 `validate_assets` 的转交，以及 canonical
 //! 证据与工作流意见的唯一生成入口。Service 仍保留批量读取、当前时间注入、授权与审批提交。
 
-use entities::file_asset::FileAsset;
 use entities::receivable::{
     EntityCardFundsReviewConclusion, EntityCardFundsReviewResult, EntityCardFundsReviewType,
     ValidatedCardFundsReviewDecision, ValidatedCardFundsReviewDecisionParams,
 };
 use erp_core::common::time::Instant;
+use erp_support::FileAsset;
 
 use super::dto::{
     CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewResult, CardFundsReviewType,

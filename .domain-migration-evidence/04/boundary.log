@@ -1,0 +1,43 @@
+=== check-bpm-boundaries ===
+检查 BPM crate 与成员 manifest…
+检查 bpm 依赖图…
+检查 bpm 源码边界…
+检查 ID 定义源…
+检查 id_type 过程宏定义源…
+检查 DocumentType -> ProcessKind 映射入口…
+BPM 边界检查通过。
+bpm_exit=0
+=== check-service-boundaries ===
+Service 边界检查通过；当前基线共 0 个受控命中。
+svc_exit=0
+=== check-domain-boundaries ===
+领域边界检查
+夹具: errors=0
+工作区: errors=0
+  说明: instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-support, erp-workflow, persistence-core
+  说明: cargo metadata 无 kind=test 集成目标
+  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
+领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
+dom_exit=0
+=== check-permissions-drift ===
+重新构建 web-api 以生成权限定义…
+   Compiling erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+   Compiling entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+   Compiling database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+   Compiling services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+   Compiling erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
+   Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
+   Compiling web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `web-api` (bin "web-api") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 17s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+检查生成物: /Users/huangjiajiang/Development/erp/erp-client/lib/permissions.generated.ts
+权限生成物无漂移。
+perm_exit=0
+=== git diff --check ===
+diffcheck_exit=0

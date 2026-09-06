@@ -3,19 +3,14 @@
 use std::collections::HashSet;
 
 use database::{PartyExt, SupplierExt};
-use entities::{
-    file_asset::SensitivityClass,
-    supplier::{
-        validate_profile_selection, QualificationAttachmentSensitivity, SupplierQualificationSelection,
-    },
+use entities::supplier::{
+    validate_profile_selection, QualificationAttachmentSensitivity, SupplierQualificationSelection,
 };
 use erp_core::ids::PartyId;
+use erp_support::{PendingAttachmentBatch, SensitivityClass};
 use persistence_core::NoTransaction;
 
-use crate::{
-    errors::{Error, Result},
-    pending_file_assets::PendingFileAssets,
-};
+use crate::errors::{Error, Result};
 
 use super::super::{
     SaveSupplierProfileRequest, SupplierProfileMutationView, SupplierProfileQualificationInput,
@@ -93,7 +88,7 @@ impl SupplierProfileService {
     pub(super) async fn ensure_attachment_references(
         &self,
         qualifications: &[SupplierProfileQualificationInput],
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<()> {
         for qualification in qualifications {
             let Some(attachment_id) = qualification.attachment_id.as_ref() else {
@@ -155,7 +150,7 @@ impl SupplierProfileService {
 /// 解析供应商根命令中的临时资质文件引用。
 pub(super) fn resolve_supplier_file_references(
     req: &mut SaveSupplierProfileRequest,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
 ) -> Result<HashSet<String>> {
     let mut used = HashSet::new();
     for qualification in &mut req.qualifications {

@@ -3,12 +3,10 @@
 //!
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
-mod bulk_job;
 mod catalog;
 mod contract;
 mod cost;
 mod customer;
-mod file_asset;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
@@ -21,7 +19,6 @@ mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
-mod source_registry;
 mod supplier;
 mod supplier_api;
 mod supplier_fulfillment;
@@ -40,12 +37,11 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     erp_identity::indexes::ensure(db).await?;
     erp_audit::indexes::ensure(db).await?;
     erp_workflow::indexes::ensure(db).await?;
-    bulk_job::ensure(db).await?;
+    erp_support::indexes::ensure(db).await?;
     catalog::ensure(db).await?;
     contract::ensure(db).await?;
     cost::ensure(db).await?;
     customer::ensure(db).await?;
-    file_asset::ensure(db).await?;
     fulfillment::ensure(db).await?;
     integration_ops::ensure(db).await?;
     inventory::ensure(db).await?;
@@ -58,7 +54,6 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     returns::ensure(db).await?;
     sales_order::ensure(db).await?;
     sales_review::ensure(db).await?;
-    source_registry::ensure(db).await?;
     supplier::ensure(db).await?;
     supplier_api::ensure(db).await?;
     supplier_offering::ensure(db).await?;

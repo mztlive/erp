@@ -14,7 +14,7 @@ use axum::{
     response::Response,
     Extension, Json,
 };
-use entities::file_asset::{SecurityScanStatus, SensitivityClass};
+use erp_support::{SecurityScanStatus, SensitivityClass};
 use services::payable::{
     CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
     PayableAccountSummaryView, PayableAccountView, PayableService, PaymentRecipientRevealView,
@@ -230,10 +230,14 @@ pub async fn supplier_payment_commit(
         extract_command_with_asset_files::<CommitSupplierPaymentRequest>(&mut multipart).await?;
     validate_bank_receipt_upload(&req, &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .commit_supplier_payment_with_assets(req, pending.clone(), &actor)
-        .await;
+    let result = erp_processes::commit_supplier_payment_with_assets(
+        state.db(),
+        state.approval_object_read(),
+        req,
+        pending.clone(),
+        actor,
+    )
+    .await;
     match result {
         Ok(result) => {
             if !result.assets_committed {

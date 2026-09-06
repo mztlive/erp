@@ -10,10 +10,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::file_asset::FileAsset;
 use erp_core::common::time::Instant;
 use erp_core::ids::FileAssetId;
 use erp_core::{Error, Result};
+use erp_support::FileAsset;
 
 /// 受控驳回原因白名单（与 Service 原 `validate_card_funds_decision` 完全一致）。
 const ALLOWED_REASON_CODES: &[&str] = &[
@@ -485,9 +485,9 @@ impl ValidatedCardFundsReviewDecision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_asset::{ContentHmac, FileAsset, FileAssetData, RetentionClass, SensitivityClass};
     use erp_core::common::time::Instant;
     use erp_core::ids::FileAssetId;
+    use erp_support::{ContentHmac, FileAsset, FileAssetData, RetentionClass, SensitivityClass};
 
     fn decision_ids() -> Vec<FileAssetId> {
         vec![FileAssetId::new("file-1")]
@@ -526,7 +526,7 @@ mod tests {
         .unwrap();
         if passed {
             asset
-                .mark_scan_result(crate::file_asset::SecurityScanStatus::Passed)
+                .mark_scan_result(erp_support::SecurityScanStatus::Passed)
                 .unwrap();
         }
         if destroyed {

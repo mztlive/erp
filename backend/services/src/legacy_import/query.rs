@@ -1,5 +1,6 @@
-use database::{BulkJobExt, LegacyImportExt};
+use database::LegacyImportExt;
 use entities::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
+use erp_support::BulkJobExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

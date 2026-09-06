@@ -3,12 +3,10 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod bulk_job;
 mod catalog;
 mod contract;
 mod cost;
 mod customer;
-mod file_asset;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
@@ -21,7 +19,6 @@ mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
-mod source_registry;
 mod supplier;
 mod supplier_api;
 mod supplier_fulfillment;
@@ -29,12 +26,10 @@ mod supplier_offering;
 mod supplier_settlement;
 mod warehouse;
 
-pub use bulk_job::BulkJobExt;
 pub use catalog::CatalogExt;
 pub use contract::ContractExt;
 pub use cost::CostExt;
 pub use customer::CustomerExt;
-pub use file_asset::FileAssetExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 pub use inventory::InventoryExt;
@@ -47,7 +42,6 @@ pub use receivable::ReceivableExt;
 pub use returns::ReturnsExt;
 pub use sales_order::SalesOrderExt;
 pub use sales_review::SalesReviewExt;
-pub use source_registry::SourceRegistryExt;
 pub use supplier::SupplierExt;
 pub use supplier_api::SupplierApiExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
@@ -64,13 +58,13 @@ pub trait DatabaseExt:
     + erp_audit::AuditExt
     + erp_workflow::ApprovalIntegrationExt
     + erp_workflow::BpmExt
-    + BulkJobExt
+    + erp_support::BulkJobExt
     + CatalogExt
     + ContractExt
     + CostExt
     + CustomerExt
     + erp_workflow::DocumentRegistryExt
-    + FileAssetExt
+    + erp_support::FileAssetExt
     + FulfillmentExt
     + IntegrationOpsExt
     + InventoryExt
@@ -83,7 +77,7 @@ pub trait DatabaseExt:
     + ReturnsExt
     + SalesOrderExt
     + SalesReviewExt
-    + SourceRegistryExt
+    + erp_support::SourceRegistryExt
     + SupplierExt
     + SupplierApiExt
     + SupplierOfferingExt
@@ -99,13 +93,13 @@ impl<
             + erp_audit::AuditExt
             + erp_workflow::ApprovalIntegrationExt
             + erp_workflow::BpmExt
-            + BulkJobExt
+            + erp_support::BulkJobExt
             + CatalogExt
             + ContractExt
             + CostExt
             + CustomerExt
             + erp_workflow::DocumentRegistryExt
-            + FileAssetExt
+            + erp_support::FileAssetExt
             + FulfillmentExt
             + IntegrationOpsExt
             + InventoryExt
@@ -118,7 +112,7 @@ impl<
             + ReturnsExt
             + SalesOrderExt
             + SalesReviewExt
-            + SourceRegistryExt
+            + erp_support::SourceRegistryExt
             + SupplierExt
             + SupplierApiExt
             + SupplierOfferingExt

@@ -2,7 +2,9 @@
 
 use std::collections::HashSet;
 
-use database::{FileAssetExt, FulfillmentExt, PurchaseOrderExt};
+use std::sync::Arc;
+
+use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     ActualServiceLocation, ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
     ServiceFulfillmentConfirmationParams,
@@ -10,14 +12,13 @@ use entities::fulfillment::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
+use erp_support::{EmptyPendingAttachments, FileAssetExt, PendingAttachmentBatch};
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::file_asset::PendingFileAssetRequest;
 use crate::party::SensitiveDataCodec;
-use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -46,7 +47,7 @@ impl FulfillmentService {
         req: ConfirmServiceFulfillmentRequest,
         actor: &AuditActor,
     ) -> Result<ServiceFulfillmentView> {
-        self.confirm_service_fulfillment_with_assets(id, req, Vec::new(), actor)
+        self.confirm_service_fulfillment_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
             .await
     }
 
@@ -82,12 +83,10 @@ impl FulfillmentService {
         &self,
         id: &str,
         mut req: ConfirmServiceFulfillmentRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ServiceFulfillmentView> {
         req.validate()?;
-        validate_service_evidence_pending_requests(&asset_requests)?;
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let evidence_attachment_id = resolve_service_evidence_id(&mut req, &pending_assets)?;
         let confirmation = service_confirmation_from_request(
             &req,
@@ -168,7 +167,7 @@ async fn persist_confirmed_service_fulfillment(
     record_id: ServiceFulfillmentId,
     expected_version: u64,
     confirmation: ServiceFulfillmentConfirmation,
-    pending_assets: PendingFileAssets,
+    pending_assets: Arc<dyn PendingAttachmentBatch>,
     actor: AuditActor,
 ) -> Result<ServiceFulfillmentView> {
     let db = db.clone();
@@ -213,7 +212,7 @@ async fn confirm_service_fulfillment_in_transaction(
     record_id: &ServiceFulfillmentId,
     expected_version: u64,
     confirmation: ServiceFulfillmentConfirmation,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
     actor: &AuditActor,
     session: &mut ClientSession,
 ) -> Result<ServiceFulfillment> {
@@ -276,32 +275,6 @@ async fn confirm_service_fulfillment_in_transaction(
     Ok(record)
 }
 
-/// 校验本次待登记图片凭证的类型、敏感级别和保留策略。
-///
-/// 元数据规则由领域 [`ServiceEvidencePolicy`] 独占；待登记与既有资产两条
-/// 路径必须使用同一策略，本函数只是按批次逐项应用。
-///
-/// # 参数
-/// * `requests` - 待登记文件资产
-///
-/// # 返回
-/// 全部合法或列表为空时返回 `Ok(())`。
-///
-/// # 错误
-/// 图片类型、敏感级别或保留策略不满足时返回校验错误。
-fn validate_service_evidence_pending_requests(requests: &[PendingFileAssetRequest]) -> Result<()> {
-    for request in requests {
-        ServiceEvidencePolicy::validate(
-            &request.registration.content_type,
-            request.registration.sensitivity_class,
-            request.registration.retention_class,
-            false,
-        )
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
-    }
-    Ok(())
-}
-
 /// 把确认命令中的临时凭证引用替换为本批次正式资产 ID。
 ///
 /// # 参数
@@ -315,7 +288,7 @@ fn validate_service_evidence_pending_requests(requests: &[PendingFileAssetReques
 /// 引用了未上传文件或存在未被引用的上传文件时返回校验错误。
 fn resolve_service_evidence_id(
     req: &mut ConfirmServiceFulfillmentRequest,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
 ) -> Result<FileAssetId> {
     let mut used = HashSet::new();
     pending_assets.resolve_id(&mut req.evidence_attachment_id, &mut used)?;
@@ -342,7 +315,7 @@ fn resolve_service_evidence_id(
 async fn ensure_service_evidence_asset_in_transaction(
     db: &Database,
     asset_id: &FileAssetId,
-    pending_assets: &PendingFileAssets,
+    pending_assets: &dyn PendingAttachmentBatch,
     session: &mut ClientSession,
 ) -> Result<()> {
     if pending_assets.contains_id(asset_id) {

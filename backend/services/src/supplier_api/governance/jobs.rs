@@ -1,10 +1,6 @@
 use std::time::Instant as MonotonicInstant;
 
-use database::{BulkJobExt, IntegrationOpsExt, SupplierApiExt};
-use entities::bulk_job::{
-    BackgroundJob, JobStatus, SupplierGovernanceJobKind, SupplierGovernanceJobSpec,
-    SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
-};
+use database::{IntegrationOpsExt, SupplierApiExt};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData};
 use entities::supplier_api::{
     CapabilityVersionSnapshot, HealthCheckResult, SupplierApiConnection, SupplierCommandOutcome,
@@ -14,6 +10,11 @@ use entities::supplier_api::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BackgroundJobId, IntegrationErrorTaskId, SupplierApiConnectionId};
+use erp_support::BulkJobExt;
+use erp_support::{
+    BackgroundJob, JobStatus, SupplierGovernanceJobKind, SupplierGovernanceJobSpec,
+    SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
+};
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};

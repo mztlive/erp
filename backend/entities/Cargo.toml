@@ -14,6 +14,7 @@ erp-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
 erp-workflow = { workspace = true }
+erp-support = { workspace = true }
 argon2 = { workspace = true }
 md5 = { workspace = true }
 regex = { workspace = true }

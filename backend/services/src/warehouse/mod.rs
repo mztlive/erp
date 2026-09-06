@@ -10,12 +10,11 @@
 //! 业务规则来自 entities（`Warehouse::new`/`WarehouseRevision::new` 完成校验与
 //! 规范化，`WarehouseSkuPolicy` 封装生效区间与重叠规则，`SensitiveText` 封装
 //! 敏感列），Service 只编排字典存在性校验、修订序号查询与事务写入。地址/联系人指纹复用
-//! `entities::file_asset::content_fingerprint`（数据模型 §4.5.5 唯一实现）；
+//! `erp_support::content_fingerprint`（数据模型 §4.5.5 唯一实现）；
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
 use database::WarehouseExt;
-use entities::file_asset::content_fingerprint;
 use entities::warehouse::status::EnableStatus;
 use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use entities::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
@@ -25,6 +24,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::WarehouseId;
 use erp_core::ids::WarehouseRevisionId;
 use erp_identity::AccessControlExt;
+use erp_support::content_fingerprint;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};

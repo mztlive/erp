@@ -207,17 +207,15 @@ mod supplier_payment_execution_tests {
             .split("#[cfg(test)]")
             .next()
             .expect("生产代码");
-        let pending_path = production
-            .split("BankReceiptEvidencePolicy::validate(")
-            .nth(1)
-            .expect("待登记校验入口");
-        assert!(pending_path.contains("request.registration.content_type"));
-        assert!(pending_path.contains("request.registration.sensitivity_class"));
-        assert!(pending_path.contains("request.registration.retention_class"));
+        let process = include_str!("../../../crates/erp-processes/src/attachments/payable.rs");
+        assert!(process.contains("request.registration.content_type"));
+        assert!(process.contains("request.registration.sensitivity_class"));
+        assert!(process.contains("request.registration.retention_class"));
+        assert!(process.contains("BankReceiptEvidencePolicy::validate("));
 
         let stored_path = production
             .split("BankReceiptEvidencePolicy::validate(")
-            .nth(2)
+            .nth(1)
             .expect("已落库校验入口");
         assert!(stored_path.contains("asset.content_type"));
         assert!(stored_path.contains("asset.sensitivity_class"));

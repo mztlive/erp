@@ -5,13 +5,14 @@
 
 use std::collections::HashMap;
 
-use database::{BulkJobExt, LegacyImportExt, PartyExt};
+use database::{LegacyImportExt, PartyExt};
 use entities::legacy_import::{
     ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportBatch,
     LegacyImportRow,
 };
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_support::BulkJobExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -135,10 +136,7 @@ impl LegacyImportService {
     ///
     /// # 错误
     /// 任务缺失或尚未启动时返回错误。
-    async fn load_running_import_job(
-        &self,
-        batch: &LegacyImportBatch,
-    ) -> Result<entities::bulk_job::BackgroundJob> {
+    async fn load_running_import_job(&self, batch: &LegacyImportBatch) -> Result<erp_support::BackgroundJob> {
         let job = self
             .db
             .background_jobs()
@@ -147,7 +145,7 @@ impl LegacyImportService {
             .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
         if !matches!(
             job.status,
-            entities::bulk_job::JobStatus::Running | entities::bulk_job::JobStatus::PartiallySucceeded
+            erp_support::JobStatus::Running | erp_support::JobStatus::PartiallySucceeded
         ) {
             return Err(Error::BusinessLogicError(
                 "后台应用尚未由 START_APPLY 启动".to_string(),
@@ -214,7 +212,7 @@ impl LegacyImportService {
     async fn persist_apply_batch(
         &self,
         batch: LegacyImportBatch,
-        job: entities::bulk_job::BackgroundJob,
+        job: erp_support::BackgroundJob,
         deltas: ApplyBatchDeltas,
         all_terminal: bool,
         actor: &AuditActor,
@@ -502,7 +500,7 @@ struct PersistApplyWrite<'a> {
     /// 批次。
     batch: &'a mut LegacyImportBatch,
     /// 后台任务。
-    job: &'a mut entities::bulk_job::BackgroundJob,
+    job: &'a mut erp_support::BackgroundJob,
     /// 审计日志。
     audit: &'a erp_audit::AuditLog,
     /// 本批成功数。
@@ -827,8 +825,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn persist_rolls_back_when_later_row_cas_fails() {
-        use database::{ensure_indexes, BulkJobExt, LegacyImportExt};
-        use entities::bulk_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
+        use database::{ensure_indexes, LegacyImportExt};
         use entities::legacy_import::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
         use erp_audit::AuditExt;
         use erp_audit::AuditLog;
@@ -836,6 +833,8 @@ mod tests {
         use erp_core::common::time::{BusinessDate, Instant};
         use erp_core::ids::{BackgroundJobId, LegacyImportBatchId, SourceSystemId};
         use erp_core::AccountKind;
+        use erp_support::BulkJobExt;
+        use erp_support::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
         use persistence_core::{NoTransaction, Transactional};
         use test_support::{require_mongo, TestDb};
 

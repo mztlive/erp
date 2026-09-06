@@ -1,14 +1,14 @@
 use crate::repository::owned::{SupplierQualificationCapabilityRepository, SupplierQualificationRepository};
-use entities::file_asset::FileAsset;
 use entities::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
+use erp_support::FileAsset;
 use mongodb::bson::{doc, Document};
 
-use super::super::extensions::FileAssetExt;
 use super::{SupplierRepository, SUPPLIER_QUALIFICATIONS};
+use erp_support::FileAssetExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 use persistence_core::{Pagination, QueryFilter};

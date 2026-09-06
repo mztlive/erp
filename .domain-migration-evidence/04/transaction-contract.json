@@ -1,0 +1,11 @@
+{
+  "same_executor": true,
+  "no_nested_transactions": true,
+  "external_io_outside_session": true,
+  "pending_file_assets": "prepare constructs FileAsset+AuditLog before txn; persist uses caller Executor in the existing business transaction",
+  "with_assets_outer_use_cases": "HTTP handlers call erp-processes::attachments; old services keep inner methods taking PendingAttachmentBatch",
+  "s3": "upload/store_pending_asset_files remain HTTP-layer, outside Mongo session",
+  "source_registry_create": "create_source_system remains run_audited one Executor",
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_rollback_concurrency": "未验证"
+}

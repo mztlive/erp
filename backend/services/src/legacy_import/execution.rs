@@ -1,5 +1,4 @@
-use database::{BulkJobExt, LegacyImportExt};
-use entities::bulk_job::{BackgroundJob, JobStatus};
+use database::LegacyImportExt;
 use entities::legacy_import::{
     ImportStatus, LegacyImportBatch, LegacyImportBatchStatus, LegacyImportCommandIdentity,
     LegacyImportConfirmation, LegacyImportRow,
@@ -7,6 +6,8 @@ use entities::legacy_import::{
 use erp_audit::AuditExt;
 use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
+use erp_support::BulkJobExt;
+use erp_support::{BackgroundJob, JobStatus};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use std::collections::BTreeSet;
@@ -238,8 +239,8 @@ async fn execute_import_command_transaction(
 
 /// 核对批次与后台任务的稳定关联和计数。
 fn validate_import_background_job(batch: &LegacyImportBatch, job: &BackgroundJob) -> Result<()> {
-    let matches = job.job_type == entities::bulk_job::JobType::Import
-        && job.domain_job_type.as_deref() == Some(entities::bulk_job::LEGACY_IMPORT_DOMAIN_JOB_TYPE)
+    let matches = job.job_type == erp_support::JobType::Import
+        && job.domain_job_type.as_deref() == Some(erp_support::LEGACY_IMPORT_DOMAIN_JOB_TYPE)
         && job.domain_job_id.as_deref() == Some(batch.base.id.as_str())
         && job.request_id == batch.batch_no
         && job.total_count == batch.total_rows;
@@ -646,8 +647,8 @@ mod tests {
     ///
     /// # 返回
     /// 返回新建的后台任务实体。
-    fn test_background_job(batch: &LegacyImportBatch, actor: &str) -> entities::bulk_job::BackgroundJob {
-        entities::bulk_job::BackgroundJob::for_legacy_import(
+    fn test_background_job(batch: &LegacyImportBatch, actor: &str) -> erp_support::BackgroundJob {
+        erp_support::BackgroundJob::for_legacy_import(
             erp_core::ids::BackgroundJobId::new(format!("job-{}", batch.batch_no)),
             &batch.batch_no,
             &batch.base.id,

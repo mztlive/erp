@@ -151,6 +151,13 @@ impl From<erp_workflow::Error> for Error {
     }
 }
 
+impl From<erp_support::Error> for Error {
+    /// 将支撑领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_support::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<services::Error> for Error {
     /// 从给定值构建实例。
     ///

@@ -4,13 +4,13 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；业务日期 `baseline_date`
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
-use entities::bulk_job::JobStatus;
 use entities::legacy_import::{
     ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
+use erp_support::JobStatus;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -1151,7 +1151,7 @@ mod tests {
 
     #[test]
     fn background_job_no_is_prefixed_and_unique() {
-        assert_eq!(entities::bulk_job::legacy_import_job_no("IMP-1"), "BJ-IMP-1");
+        assert_eq!(erp_support::legacy_import_job_no("IMP-1"), "BJ-IMP-1");
     }
 
     #[test]

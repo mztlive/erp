@@ -1,9 +1,11 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
-use database::{CatalogExt, FileAssetExt};
+use database::CatalogExt;
 use entities::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
 use entities::catalog::{EnableStatus, ProductBrandId};
 use erp_audit::AuditExt;
+use erp_support::{EmptyPendingAttachments, FileAssetExt, PendingAttachmentBatch};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -15,8 +17,6 @@ use crate::catalog::dto::{
     UpdateProductBrandRequest,
 };
 use crate::errors::Result;
-use crate::file_asset::PendingFileAssetRequest;
-use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -92,7 +92,7 @@ impl CatalogService {
         req: CreateProductBrandRequest,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
-        self.product_brand_create_with_assets(req, Vec::new(), actor)
+        self.product_brand_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
             .await
     }
 
@@ -111,11 +111,10 @@ impl CatalogService {
     pub async fn product_brand_create_with_assets(
         &self,
         mut req: CreateProductBrandRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
         req.validate()?;
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let mut used = HashSet::new();
         if let Some(asset_id) = req.logo_file_asset_id.as_mut() {
             pending_assets.resolve_id(asset_id, &mut used)?;
@@ -172,7 +171,7 @@ impl CatalogService {
         req: UpdateProductBrandRequest,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
-        self.product_brand_update_with_assets(id, req, Vec::new(), actor)
+        self.product_brand_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
             .await
     }
 
@@ -193,11 +192,10 @@ impl CatalogService {
         &self,
         id: &str,
         mut req: UpdateProductBrandRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
         req.validate()?;
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let mut used = HashSet::new();
         if let Some(Some(asset_id)) = req.logo_file_asset_id.as_mut() {
             pending_assets.resolve_id(asset_id, &mut used)?;
@@ -241,7 +239,7 @@ impl CatalogService {
     async fn ensure_brand_logo_exists(
         &self,
         asset_id: Option<&erp_core::ids::FileAssetId>,
-        pending_assets: &PendingFileAssets,
+        pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<()> {
         let Some(asset_id) = asset_id else {
             return Ok(());

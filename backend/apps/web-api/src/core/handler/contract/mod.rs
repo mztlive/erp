@@ -8,7 +8,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use entities::file_asset::{RetentionClass, SensitivityClass};
+use erp_support::{RetentionClass, SensitivityClass};
 use services::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractService, ContractView,
     CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest, UploadContractView,

@@ -1,6 +1,6 @@
 //! W13 卡券票款正式复核命令、岗位分离与复核链匹配。
 
-use database::{FileAssetExt, ReceivableExt};
+use database::ReceivableExt;
 use entities::receivable::{
     AccountReviewStatus, CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
     CustomerReceiptStatus, EntityCardFundsReviewConclusion, EntityCardFundsReviewResult,
@@ -10,6 +10,7 @@ use entities::receivable::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ReceivableAccountId, ReceivableFundsReviewId, WorkflowActionId};
+use erp_support::FileAssetExt;
 use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::DocumentRegistryExt;
@@ -780,11 +781,11 @@ fn map_entity_conclusion(conclusion: CardFundsReviewConclusion) -> EntityCardFun
 
 #[cfg(test)]
 mod card_funds_review_tests {
-    use entities::file_asset::{
-        ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::{FileAssetId, ReceivableAccountId};
+    use erp_support::{
+        ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
+    };
 
     use super::super::card_funds_decision::{
         canonical_evidence, validate_evidence_assets, validated_from_dto,

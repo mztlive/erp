@@ -17,7 +17,9 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, ProductId, ProductRevisionId};
 use erp_core::money::Amount;
 
-use super::super::extensions::{CatalogExt, FileAssetExt};
+use erp_support::FileAssetExt;
+
+use super::super::extensions::CatalogExt;
 use super::product_pipeline::product_list_pipeline;
 use super::shared::{in_filter, sort_doc, PRODUCT_REVISIONS};
 use super::CatalogRepository;

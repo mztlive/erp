@@ -12,7 +12,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use entities::file_asset::SensitivityClass;
+use erp_support::SensitivityClass;
 use services::catalog::{
     CatalogService, CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, MoveProductCategoryRequest, PageView,
@@ -243,9 +243,8 @@ pub async fn product_brand_create_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = CatalogService::new(state.db())
-        .product_brand_create_with_assets(req, pending.clone(), &actor)
-        .await;
+    let result =
+        erp_processes::product_brand_create_with_assets(state.db(), req, pending.clone(), actor).await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {
@@ -303,9 +302,8 @@ pub async fn product_brand_update_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = CatalogService::new(state.db())
-        .product_brand_update_with_assets(&id, req, pending.clone(), &actor)
-        .await;
+    let result =
+        erp_processes::product_brand_update_with_assets(state.db(), id, req, pending.clone(), actor).await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {

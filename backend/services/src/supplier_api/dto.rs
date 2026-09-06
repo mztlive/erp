@@ -514,7 +514,7 @@ pub struct SupplierConnectionJobView {
     pub job_id: String,
     pub job_no: String,
     pub action: String,
-    pub status: entities::bulk_job::JobStatus,
+    pub status: erp_support::JobStatus,
     pub total: u64,
     pub processed: u64,
     pub succeeded: u64,

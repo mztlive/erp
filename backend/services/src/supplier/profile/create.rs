@@ -28,11 +28,11 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 
-use crate::{
-    errors::{Error, Result},
-    file_asset::PendingFileAssetRequest,
-    pending_file_assets::PendingFileAssets,
-};
+use std::sync::Arc;
+
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
+
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -52,7 +52,10 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
-        Ok(self.create_with_assets(req, Vec::new(), actor).await?.view)
+        Ok(self
+            .create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
+            .await?
+            .view)
     }
 
     /// 创建完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
@@ -62,7 +65,7 @@ impl SupplierProfileService {
     pub async fn create_with_assets(
         &self,
         mut req: SaveSupplierProfileRequest,
-        asset_requests: Vec<PendingFileAssetRequest>,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
         req.validate_contract()?;
@@ -81,8 +84,7 @@ impl SupplierProfileService {
                 assets_committed: false,
             });
         }
-        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
-        let used = resolve_supplier_file_references(&mut req, &pending_assets)?;
+        let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
         let party_no =
             SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
@@ -128,7 +130,7 @@ impl SupplierProfileService {
         supplier_no: String,
         request_fingerprint: String,
         actor: &AuditActor,
-        pending_assets: PendingFileAssets,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<PreparedCreate> {
         let party_id = PartyId::new(next_id());
         let supplier_id = SupplierAccountId::new(next_id());
@@ -303,7 +305,7 @@ struct PreparedCreate {
     command: SupplierProfileCommand,
     audit: erp_audit::AuditLog,
     result: SupplierProfileMutationView,
-    pending_assets: PendingFileAssets,
+    pending_assets: Arc<dyn PendingAttachmentBatch>,
 }
 
 impl PreparedCreate {

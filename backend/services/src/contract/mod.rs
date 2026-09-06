@@ -11,14 +11,15 @@
 //! 审计写入复用 `audit::AuditActor::resource_log` + `AccessControlExt::audit_logs`，
 //! 与既有 `source_registry` 模板一致。
 
-use database::{ContractExt, CustomerExt, FileAssetExt};
+use database::{ContractExt, CustomerExt};
 use entities::contract::{
     ArchiveSource, Contract, ContractData, ContractId, ContractRevision, ContractRevisionData,
     ContractRevisionId,
 };
-use entities::file_asset::FileAsset;
 use erp_audit::AuditExt;
 use erp_core::ids::FileAssetId;
+use erp_support::FileAsset;
+use erp_support::FileAssetExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
@@ -37,7 +38,7 @@ pub use self::dto::{
     ContractRevisionView, ContractView, CreateContractRequest, PageView, TerminateContractRequest,
     UploadContractRequest, UploadContractView,
 };
-use crate::file_asset::RegisterFileAssetRequest;
+use erp_support::RegisterFileAssetRequest;
 
 /// 合同服务。
 ///

@@ -13,7 +13,6 @@ use crate::repository::owned::{
     SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
     SupplierHealthCheckRunRepository,
 };
-use entities::bulk_job::BackgroundJob;
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
     SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionId,
@@ -21,12 +20,15 @@ use entities::supplier_api::{
     SupplierConnectionCommandReceipt, SupplierHealthCheckRun,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_support::BackgroundJob;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt};
+use erp_support::BulkJobExt;
+
+use super::extensions::{SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use erp_audit::AuditExt;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;

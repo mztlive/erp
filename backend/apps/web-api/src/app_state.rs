@@ -2,6 +2,7 @@ use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::ApprovalActionRegistry;
+use erp_support::{BulkJobService, FileAssetService, SourceRegistryService};
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
 use mongodb::Database;
@@ -209,6 +210,32 @@ impl AppState {
     /// 返回共享 RBAC 服务。
     pub fn rbac(&self) -> SharedRbacService {
         Arc::clone(&self.rbac)
+    }
+
+    /// Support-domain file asset service with audit and document-registry adapters.
+    pub fn file_asset_service(&self) -> FileAssetService {
+        FileAssetService::new(
+            self.db(),
+            services::support_audit::MongoSupportAudit::shared(self.db()),
+            services::support_documents::MongoBusinessDocument::shared(self.db()),
+        )
+    }
+
+    /// Support-domain bulk job service with audit and document-registry adapters.
+    pub fn bulk_job_service(&self) -> BulkJobService {
+        BulkJobService::new(
+            self.db(),
+            services::support_audit::MongoSupportAudit::shared(self.db()),
+            services::support_documents::MongoBusinessDocument::shared(self.db()),
+        )
+    }
+
+    /// Support-domain source registry service with the audit adapter.
+    pub fn source_registry_service(&self) -> SourceRegistryService {
+        SourceRegistryService::new(
+            self.db(),
+            services::support_audit::MongoSupportAudit::shared(self.db()),
+        )
     }
 
     /// Composition-root object-read port for approval binding.

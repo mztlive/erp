@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 04 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-support` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-04-support`） |
+| 输入/输出提交 | 前序 `56ff3eb8` / 本阶段实现提交见 `.domain-migration-evidence/04/` |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -79,17 +79,17 @@ support 只依赖基础、必要技术库；领域的附件能力走 Port，具�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固定文件引用确认/清理、银行回单证据政策、bulk selection 快照及外部身份唯一约束测试。
+1. [x] 固定文件引用确认/清理、银行回单证据政策、bulk selection 快照及外部身份唯一约束测试。
 
-2. [ ] 迁入三类实体、DTO、拥有仓储、extensions 和 indexes；support 不依赖业务领域或旧三层。
+2. [x] 迁入三类实体、DTO、拥有仓储、extensions 和 indexes；support 不依赖业务领域或旧三层。
 
-3. [ ] 将跨领域文件引用提交移入 processes::attachments；消费方以附件 ID、状态和最小校验结果访问 Port，不能接收 FileAsset 实体或 S3 客户端。
+3. [x] 将跨领域文件引用提交移入 processes::attachments；消费方以附件 ID、状态和最小校验结果访问 Port，不能接收 FileAsset 实体或 S3 客户端。
 
-4. [ ] 把涉及业务集合事务与 S3 的操作按原先意图提交/事务外 I/O/结果写入步骤保持；不新建消息总线，不改变清理或重试行为。
+4. [x] 把涉及业务集合事务与 S3 的操作按原先意图提交/事务外 I/O/结果写入步骤保持；不新建消息总线，不改变清理或重试行为。
 
-5. [ ] 更新 upload、file_asset、bulk_job、source_registry Handler、AppState 及旧 supplier/catalog/payable 等消费者；业务原子附件确认继续复用根 Executor。
+5. [x] 更新 upload、file_asset、bulk_job、source_registry Handler、AppState 及旧 supplier/catalog/payable 等消费者；业务原子附件确认继续复用根 Executor。
 
-6. [ ] 删除旧声明及已迁移实现；补纯替身的成功/失败清理验证，运行新 support 与直接入口检查及公共门禁。
+6. [x] 删除旧声明及已迁移实现；补纯替身的成功/失败清理验证，运行新 support 与直接入口检查及公共门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 

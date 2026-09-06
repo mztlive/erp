@@ -1,9 +1,7 @@
-pub mod bulk_job;
 pub mod catalog;
 pub mod contract;
 pub mod cost;
 pub mod customer;
-pub mod file_asset;
 pub mod fulfillment;
 pub mod integration_ops;
 pub mod inventory;
@@ -16,7 +14,6 @@ pub mod receivable;
 pub mod returns;
 pub mod sales_order;
 pub mod sales_review;
-pub mod source_registry;
 pub mod supplier;
 pub mod supplier_api;
 pub mod supplier_fulfillment;

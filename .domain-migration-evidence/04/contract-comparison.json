@@ -1,0 +1,13 @@
+{
+  "http_paths_methods": "unchanged",
+  "dto_fields_serde": "unchanged; support DTOs moved to erp-support with original field names",
+  "error_codes_status": "unchanged; From<erp_support::Error> maps to services/web-api with original classes",
+  "rbac_permissions": "check-permissions-drift.sh passed; generated permissions file unchanged",
+  "data_scope": "unchanged",
+  "collection_names": "unchanged; FileAssetExt/BulkJobExt/SourceRegistryExt association constants preserved",
+  "bson_types": "unchanged; repository BSON mapping stayed in support repositories",
+  "index_names_keys_uniqueness": "unchanged; indexes moved to erp-support/src/indexes",
+  "money_qty_time": "not in support domain",
+  "idempotency_keys_receipts": "unchanged for payment/supplier profile commands",
+  "disclaimer": "真实数据库运行未验证"
+}

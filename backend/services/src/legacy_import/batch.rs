@@ -1,10 +1,11 @@
-use database::{BulkJobExt, FileAssetExt, LegacyImportExt};
-use entities::bulk_job::BackgroundJob;
+use database::LegacyImportExt;
 use entities::legacy_import::{
     LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportRow, LegacyImportRowId,
 };
 use erp_audit::AuditExt;
 use erp_core::ids::BackgroundJobId;
+use erp_support::BackgroundJob;
+use erp_support::{BulkJobExt, FileAssetExt};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

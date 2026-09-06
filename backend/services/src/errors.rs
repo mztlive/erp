@@ -53,6 +53,26 @@ impl From<erp_workflow::Error> for Error {
     }
 }
 
+impl From<erp_support::Error> for Error {
+    /// 将支撑领域错误映射为服务错误。
+    fn from(error: erp_support::Error) -> Self {
+        match error {
+            erp_support::Error::Internal(message) => Self::Internal(message),
+            erp_support::Error::NotFound(message) => Self::NotFound(message),
+            erp_support::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_support::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_support::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_support::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_support::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_support::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_support::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_support::Error::Logic(error) => Self::Logic(error),
+            erp_support::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_support::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_audit::Error> for Error {
     /// 将审计领域错误映射为服务错误。
     fn from(error: erp_audit::Error) -> Self {

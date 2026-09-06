@@ -1,12 +1,12 @@
 //! Named source-registry processes that own audited outer transactions.
 
 use application_core::AuditActor;
-use database::SourceRegistryExt;
-use entities::source_registry::{SourceSystem, SourceSystemId};
 use erp_audit::AuditActorLogs;
+use erp_support::SourceRegistryExt;
+use erp_support::{CreateSourceSystemRequest, SourceSystemView};
+use erp_support::{SourceSystem, SourceSystemId};
 use id_generator::next_id;
 use mongodb::Database;
-use services::source_registry::{CreateSourceSystemRequest, SourceSystemView};
 use services::Result;
 use validator::Validate;
 
