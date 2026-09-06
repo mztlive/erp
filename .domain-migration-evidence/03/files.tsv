@@ -1,12 +1,13 @@
 action	path	note
-add	.domain-migration-evidence/03/boundary.log	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/contract-comparison.json	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/files.tsv	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/input.json	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/metadata.json	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/quality-gates.log	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/transaction-contract.json	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
-add	.domain-migration-evidence/03/unit-tests.log	阶段 03 验收证据；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/boundary.log	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/contract-comparison.json	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/files.tsv	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/input.json	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/metadata.json	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/quality-gates.log	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/quality-gates.tsv	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/transaction-contract.json	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/03/unit-tests.log	阶段 03 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.lock	阶段 03 unique-cut / 组合接线；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.toml	阶段 03 unique-cut / 组合接线；禁止标记已验收；真实数据库运行未验证
 modify	backend/apps/web-api/Cargo.toml	阶段 03 unique-cut / 组合接线；禁止标记已验收；真实数据库运行未验证

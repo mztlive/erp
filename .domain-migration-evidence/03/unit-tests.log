@@ -1,6 +1,7 @@
 phase: 03
 status: 本地门禁通过
 never_mark: 已验收
+review_approved: true
 disclaimer: 真实数据库运行未验证
 command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 cwd: backend/
@@ -13,7 +14,7 @@ failed: 0
 ignored: 71
 crates: 20
 note: unique-cut 去掉 workbench 双实现后内联测试 3275 passed / 0 failed / 71 ignored（此前 dual 计数 3313）。不是漏跑。真实数据库运行未验证。
-recorded_at: 2026-09-06T17:10:19Z
+recorded_at: 2026-09-06T17:30:28Z
 
 === unit-tests ===
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s

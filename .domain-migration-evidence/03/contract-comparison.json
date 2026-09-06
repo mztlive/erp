@@ -2,6 +2,7 @@
   "phase": "03",
   "status": "本地门禁通过",
   "never_mark": "已验收",
+  "review_approved": true,
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "versus_phase_02": {
@@ -49,7 +50,9 @@
       "ApprovalGenericWorkItemMutationForbidden",
       "ApprovalIdempotencyPayloadConflict"
     ],
+    "workflow_error_code_variants_equal": true,
     "services_errors_sha256": "505e260e70b4dee22bfefd37b76df9ab0aec3e481a28c61a8d100e5e12120c4d",
+    "workflow_errors_sha256": "63fe39952aca61e1b56d288cc4522da37e36e7c68bde54a4c6f240548745ac83",
     "http_errors_sha256": "9baaa953e8f90f4384c55e6f89d7a3dfc81e2e42179c7d5ab5a06e24c0d57c2c"
   },
   "indexes": {

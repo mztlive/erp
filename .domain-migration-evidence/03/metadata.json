@@ -2,6 +2,7 @@
   "phase": "03",
   "status": "本地门禁通过",
   "never_mark": "已验收",
+  "review_approved": true,
   "branch": "chore/domain-crate-03-workflow-composition",
   "evidence_dir": ".domain-migration-evidence/03",
   "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
@@ -10,22 +11,24 @@
     "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
     "5c0984507a72bdc32a9507248e2feb8f537c56e8",
     "b98b8984da241591f2c5316b5e29762fd8847c60",
-    "1cb08731c8426db1c35dffa451c378d6c5cd095c"
+    "1cb08731c8426db1c35dffa451c378d6c5cd095c",
+    "74d6d0be96dc837405b12db77ca8dd16455eb342"
   ],
   "implement_commit": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
-  "head": "1cb08731c8426db1c35dffa451c378d6c5cd095c",
+  "integrator_commit": "74d6d0be96dc837405b12db77ca8dd16455eb342",
+  "head": "74d6d0be96dc837405b12db77ca8dd16455eb342",
   "unique_integration_owner": "chore/domain-crate-03-workflow-composition implementer",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
-  "files_tsv_rows": 521,
+  "files_tsv_rows": 522,
   "path_changes": {
-    "add": 193,
+    "add": 194,
     "delete": 129,
     "modify": 199,
-    "total": 521,
+    "total": 522,
     "versus": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
     "rename_detection": false
   },
@@ -55,7 +58,7 @@
   "autotests": false,
   "workspace_members": 21,
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T17:10:19Z",
+  "recorded_at": "2026-09-06T17:30:28Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
@@ -82,7 +85,7 @@
     "files_changed": [],
     "log": ".domain-migration-evidence/03/quality-gates.log",
     "source_dir": "logs/phase-03-qg-run-integrator",
-    "summary": "All phase 03 public quality gates from backend/ exited 0 after integrator recapture. 3275 lib tests passed, 0 failed, 71 ignored. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+    "summary": "All phase 03 public quality gates from backend/ exited 0. Fmt check, locked cargo check, clippy -D warnings, lib unit tests without MongoDB, BPM/service/domain boundary scripts, permissions drift, and git diff --check all passed. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
   },
   "contracts": {
     "admin_routes": 369,
@@ -106,5 +109,5 @@
       "profile": "dev"
     }
   },
-  "implement_summary": "Phase 03 integrator recapture on chore/domain-crate-03-workflow-composition. erp-workflow / erp-processes / erp-read-models unique-cut complete: approval_dispatch, run_audited, named processes with real steps, workbench/customer center/fulfillment queue, AppState wiring. Public gates passed (3275 lib tests, 0 failed, 71 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+  "implement_summary": "Phase 03 evidence recapture after unique-cut 1cb08731 and integrator 74d6d0be. erp-workflow / erp-processes / erp-read-models unique-cut complete. Public gates passed (3275 lib tests, 0 failed, 71 ignored). review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
 }
