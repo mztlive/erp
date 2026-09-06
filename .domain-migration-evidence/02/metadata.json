@@ -67,5 +67,9 @@
     "host": "aarch64-apple-darwin",
     "profile": "dev"
   },
-  "implement_summary": "Phase 02 identity-audit complete: erp-identity and erp-audit are wired; 7 owned repositories moved; CLI talks to identity use cases; AuthorizationPort at web-api composition root; IdentityAuditPort adapter in remaining services. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
+  "implement_summary": "Phase 02 identity-audit complete: erp-identity and erp-audit are wired; 7 owned repositories moved; CLI talks to identity use cases; AuthorizationPort at web-api composition root; IdentityAuditPort adapter in remaining services. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证.",
+  "implement_commit": "543c4bea",
+  "implement_commits": [
+    "543c4bea"
+  ]
 }
