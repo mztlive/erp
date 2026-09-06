@@ -33,20 +33,22 @@ use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
-use database::{AccessControlExt, CustomerExt, DocumentRegistryExt, ReceivableExt, ReturnsExt};
+use application_core::CommandReceipt;
+use database::{CustomerExt, DocumentRegistryExt, ReceivableExt, ReturnsExt};
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
+use erp_audit::AuditActorLogs;
+use erp_audit::AuditExt;
+use erp_audit::CommandReceiptServiceExt as _;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CustomerAccountId, CustomerReceiptId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId,
     ReceivableEntryOffsetId,
 };
+use erp_identity::SharedRbacService;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use entities::receivable::{

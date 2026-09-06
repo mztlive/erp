@@ -1,9 +1,10 @@
-use database::{AccessControlExt, SupplierFulfillmentExt};
+use database::SupplierFulfillmentExt;
 use entities::supplier_fulfillment::{
     FulfillmentStatus, SupplierCallbackParams, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderActionUpdate,
     SupplierOrderStatusHistory, SupplierOrderStatusHistoryData,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderStatusHistoryId;
 use id_generator::next_id;
@@ -12,9 +13,9 @@ use validator::Validate;
 
 use super::dto::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierFulfillmentService {
     /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`，§6.19）。

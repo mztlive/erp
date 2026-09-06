@@ -4,9 +4,9 @@ use id_generator::next_id;
 use persistence_core::NoTransaction;
 
 use super::CatalogService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl CatalogService {
     /// 确保共用卡券根分类存在。

@@ -4,18 +4,19 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
-use database::{AccessControlExt, SalesOrderExt, WorkItemExt};
+use database::{SalesOrderExt, WorkItemExt};
 use entities::sales_order::{BusinessType, SalesOrder};
 use entities::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use entities::{Permission, PermissionSet};
 use erp_core::ids::SalesOrderId;
+use erp_identity::AccessControlExt;
+use erp_identity::{Permission, PermissionSet};
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 const OBJECT_TYPE: &str = "sales_order";
 const OWNER_ROLE: &str = "sales_order_owner";
@@ -107,7 +108,7 @@ async fn create_customer_acceptance_task(
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let owner_user_id = order.stable.created_by.clone();
-    let rbac = crate::iam::shared_rbac_service(db.clone());
+    let rbac = crate::identity_compose::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
     let task = WorkItem::new_with_responsibility_key(
         erp_core::ids::WorkItemId::new(next_id()),
@@ -240,7 +241,7 @@ async fn ensure_current_owner_execution_access(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let rbac = crate::iam::shared_rbac_service(db.clone());
+    let rbac = crate::identity_compose::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
     if task.owner_user_id.as_deref() == Some(actor_id) {
         return Ok(());

@@ -5,7 +5,7 @@
 use bpm::ProcessKind;
 pub use entities::approval_integration::ApprovalDomainAction;
 use entities::document_registry::DocumentType;
-use entities::Permission;
+use erp_identity::Permission;
 
 use crate::errors::{Error, ErrorCode, Result};
 

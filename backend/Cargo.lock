@@ -1069,6 +1069,8 @@ dependencies = [
  "clap",
  "config",
  "database",
+ "erp-audit",
+ "erp-identity",
  "persistence-core",
  "rpassword",
  "services",
@@ -1420,7 +1422,9 @@ dependencies = [
  "chrono",
  "entities",
  "entity-core",
+ "erp-audit",
  "erp-core",
+ "erp-identity",
  "futures-util",
  "mongodb",
  "persistence-core",
@@ -1610,7 +1614,9 @@ dependencies = [
  "chrono",
  "entity-core",
  "entity-macros",
+ "erp-audit",
  "erp-core",
+ "erp-identity",
  "hex",
  "hmac 0.13.0",
  "md5",
@@ -1647,6 +1653,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "erp-audit"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-core"
 version = "0.1.0"
 dependencies = [
@@ -1659,6 +1686,32 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "validator",
+]
+
+[[package]]
+name = "erp-identity"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "argon2",
+ "async-trait",
+ "casbin",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "id-generator",
+ "md5",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
  "validator",
 ]
 
@@ -4049,13 +4102,17 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "application-core",
+ "async-trait",
  "base64 0.23.1",
  "bpm",
  "casbin",
  "chrono",
  "database",
  "entities",
+ "entity-core",
+ "erp-audit",
  "erp-core",
+ "erp-identity",
  "hex",
  "hmac 0.13.0",
  "id-generator",
@@ -4384,6 +4441,7 @@ dependencies = [
  "chrono",
  "entities",
  "erp-core",
+ "erp-identity",
  "hmac 0.12.1",
  "jwt",
  "mongodb",
@@ -5211,12 +5269,15 @@ name = "web-api"
 version = "0.1.0"
 dependencies = [
  "application-core",
+ "async-trait",
  "axum",
  "chrono",
  "config",
  "database",
  "entities",
+ "erp-audit",
  "erp-core",
+ "erp-identity",
  "hmac 0.12.1",
  "id-generator",
  "jwt",

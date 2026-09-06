@@ -83,13 +83,16 @@ pub(crate) async fn ensure_card_funds_review_task(
             return Err(Error::Internal("票款复核任务种类与待复核状态不一致".to_string()));
         }
     };
-    let responsibility = WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .resolve_finance_responsibility(
-            FinanceResponsibilityOperation::CardFundsReview,
-            account.customer_id.as_ref(),
-            executor,
-        )
-        .await?;
+    let responsibility = WorkItemService::new(
+        db.clone(),
+        crate::identity_compose::shared_rbac_service(db.clone()),
+    )
+    .resolve_finance_responsibility(
+        FinanceResponsibilityOperation::CardFundsReview,
+        account.customer_id.as_ref(),
+        executor,
+    )
+    .await?;
     let task = new_card_funds_task(
         WorkItemId::new(next_id()),
         CardFundsTaskSpec {

@@ -28,8 +28,8 @@ use super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 pub use query::{
     RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListPage, RuntimeInstanceListQuery,

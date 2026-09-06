@@ -19,14 +19,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use crate::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 use erp_core::common::time::Instant;
 #[cfg(test)]
 use erp_core::ids::WorkItemId;
 #[cfg(test)]
 use erp_core::AccountKind;
 use erp_core::{Error, Result};
+#[cfg(test)]
+use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
 use super::FulfillmentResponsibilityKey;
 

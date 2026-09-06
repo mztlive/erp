@@ -1,8 +1,9 @@
-use database::{AccessControlExt, ContractExt, CustomerExt, DocumentRegistryExt, SalesOrderExt};
+use database::{ContractExt, CustomerExt, DocumentRegistryExt, SalesOrderExt};
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
 use entities::sales_order::{SalesOrder, SalesOrderData};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
 use id_generator::next_id;
@@ -32,9 +33,9 @@ use super::identity::{
 };
 use super::submit::ensure_unified_start_command;
 use crate::approval::execution::prepare_start;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SalesOrderService {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。

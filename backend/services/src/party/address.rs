@@ -5,10 +5,11 @@
 //! 允许切换启停状态、结束有效期与调整默认标记；同一主体默认地址唯一
 //! （跨行约束，事务内校验，§6.2）。
 
-use database::{AccessControlExt, PartyExt};
+use database::PartyExt;
 use entities::party::{
     EffectiveRecordStatus, PartyAddress, PartyAddressData, PartyAddressId, PartyAddressUpdate, PartyId,
 };
+use erp_audit::AuditExt;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
@@ -16,9 +17,9 @@ use persistence_core::{NoTransaction, Transactional};
 use std::sync::Arc;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::dto::{
     normalize_sort, CreatePartyAddressRequest, PageView, PartyAddressListParams, PartyAddressView, SortDir,

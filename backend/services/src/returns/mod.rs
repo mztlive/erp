@@ -29,7 +29,8 @@ mod start_approval;
 mod supplier_refund;
 mod version_conflict;
 
-use database::{AccessControlExt, ReturnsExt};
+use database::ReturnsExt;
+use erp_audit::AuditExt;
 use persistence_core::Executor;
 
 use entities::document_registry::DocumentType;
@@ -53,11 +54,12 @@ pub use self::dto::{
     SubmitPaymentReversalRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
     SupplierRefundView,
 };
-use crate::audit::AuditActorLogs;
 use crate::{
     errors::{Error, Result},
-    iam::{self, SharedRbacService},
+    identity_compose::shared_rbac_service,
 };
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 /// 退货退款服务。
 ///
@@ -112,7 +114,7 @@ impl ReturnsService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        let rbac = iam::shared_rbac_service(db.clone());
+        let rbac = shared_rbac_service(db.clone());
         Self { db, rbac }
     }
 }

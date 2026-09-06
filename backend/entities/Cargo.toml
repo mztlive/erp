@@ -11,6 +11,8 @@ bpm = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-audit = { workspace = true }
 argon2 = { workspace = true }
 md5 = { workspace = true }
 regex = { workspace = true }

@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
 use entities::document_registry::DocumentType;
 use entities::inventory::{
     MovementDirection, ReservationEntryType, StockAdjustment, StockAdjustmentLine, StockMovement,
     StockMovementData, StockReservationEntry, StockReservationEntryData,
 };
 use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockMovementId, StockReservationEntryId};
@@ -16,9 +17,9 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::approval::ApprovalActionContext;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use super::approval_query::load_approval_binding;

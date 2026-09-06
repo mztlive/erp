@@ -1,6 +1,6 @@
 //! 发票列表、详情、草稿创建、销项提交与过账编排。
 
-use database::{AccessControlExt, PayableExt, ReceivableExt};
+use database::{PayableExt, ReceivableExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::payable::PurchaseInvoiceAllocation;
@@ -8,6 +8,7 @@ use entities::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceStatus, ReceivableAccount,
     SalesInvoiceAllocation,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
 use erp_core::money::Amount;
 use id_generator::next_id;
@@ -30,12 +31,13 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use application_core::CommandReceipt;
+use erp_audit::AuditActorLogs;
+use erp_audit::CommandReceiptServiceExt as _;
+use erp_identity::SharedRbacService;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------

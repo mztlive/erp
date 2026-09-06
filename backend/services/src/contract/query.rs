@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, ContractExt, CustomerExt};
+use database::{ContractExt, CustomerExt};
 use entities::customer::AssignmentRole;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
+use erp_identity::AccessControlExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

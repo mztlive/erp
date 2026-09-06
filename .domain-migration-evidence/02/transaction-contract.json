@@ -1,0 +1,25 @@
+{
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "identity_cross_domain_audit": {
+    "prepare_before_transaction": true,
+    "persist_via_IdentityAuditPort_same_executor": true,
+    "no_nested_transaction": true,
+    "external_io_holds_session": false
+  },
+  "run_audited": {
+    "file": "services/src/transaction.rs",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "same_executor": true
+  },
+  "rbac_policy_transaction": {
+    "file": "crates/erp-identity/src/service/iam/rbac/transaction.rs",
+    "generic_error_from_identity": true,
+    "same_session": true
+  }
+}

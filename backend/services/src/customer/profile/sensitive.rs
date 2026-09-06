@@ -1,18 +1,19 @@
 //! 客户资料敏感字段令牌、归属校验与解密。
 
-use database::{AccessControlExt, PartyExt};
+use database::PartyExt;
 use entities::party::{PartyAddress, PartyBankAccount, PartyContact, PartyOwned};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::PartyId;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::{
     errors::{Error, Result},
     party::SensitiveFieldKind,
 };
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
 use super::CustomerProfileService;

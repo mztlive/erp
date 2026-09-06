@@ -5,8 +5,8 @@
 
 use std::{future::Future, pin::Pin};
 
-use database::AccessControlExt;
-use entities::AuditLog;
+use erp_audit::AuditExt;
+use erp_audit::AuditLog;
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 

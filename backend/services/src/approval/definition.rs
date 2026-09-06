@@ -4,7 +4,7 @@
 
 use mongodb::Database;
 
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 mod command;
 mod create;

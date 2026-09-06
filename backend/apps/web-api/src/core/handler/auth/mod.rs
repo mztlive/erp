@@ -1,7 +1,7 @@
 pub mod login;
 pub mod profile;
 
-use entities::LoginAccount;
+use erp_identity::LoginAccount;
 use std::net::IpAddr;
 
 const MAX_LOGIN_RATE_KEY_CHARS: usize = 64;

@@ -3,7 +3,6 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod access_control;
 mod approval_integration;
 mod bpm;
 mod bulk_job;
@@ -34,7 +33,6 @@ mod supplier_settlement;
 mod warehouse;
 mod work_item;
 
-pub use access_control::AccessControlExt;
 pub use approval_integration::ApprovalIntegrationExt;
 pub use bpm::BpmExt;
 pub use bulk_job::BulkJobExt;
@@ -70,7 +68,8 @@ pub use work_item::WorkItemExt;
 /// 各域在 `extensions/<domain>.rs` 中扩展自己的访问器方法；调用点（`db.accounts()` 等）
 /// 签名保持不变。
 pub trait DatabaseExt:
-    AccessControlExt
+    erp_identity::AccessControlExt
+    + erp_audit::AuditExt
     + ApprovalIntegrationExt
     + BpmExt
     + BulkJobExt
@@ -104,7 +103,8 @@ pub trait DatabaseExt:
 }
 
 impl<
-        T: AccessControlExt
+        T: erp_identity::AccessControlExt
+            + erp_audit::AuditExt
             + ApprovalIntegrationExt
             + BpmExt
             + BulkJobExt

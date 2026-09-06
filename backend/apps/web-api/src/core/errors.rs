@@ -130,6 +130,20 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl From<erp_identity::Error> for Error {
+    /// 将身份领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_identity::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
+impl From<erp_audit::Error> for Error {
+    /// 将审计领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_audit::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<services::Error> for Error {
     /// 从给定值构建实例。
     ///

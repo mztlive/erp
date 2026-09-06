@@ -1,9 +1,10 @@
-use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
+use database::{IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     error_work_item_type, IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference,
     ReconciliationDifferenceId, ReconciliationDifferenceResolution, ResolutionVersionCheck,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_audit::AuditExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::{de::DeserializeOwned, Serialize};

@@ -2,24 +2,26 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, CustomerExt, SupplierExt, WorkItemExt};
+use database::{CustomerExt, SupplierExt, WorkItemExt};
 use entities::catalog::EnableStatus;
 use entities::work_item::{
     AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule,
     FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
-use entities::{Permission, PermissionSet};
+use erp_audit::AuditExt;
 use erp_core::ids::{CustomerAccountId, SupplierAccountId};
 use erp_core::AccountKind;
+use erp_identity::AccessControlExt;
+use erp_identity::{Permission, PermissionSet};
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::WorkItemService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -600,14 +602,14 @@ fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Re
 mod tests {
     use super::required_finance_permissions;
     use entities::work_item::FinanceResponsibilityOperation;
-    use entities::Permission;
+    use erp_identity::Permission;
 
     #[test]
     fn operation_permissions_cover_formal_execution_actions() {
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)
                 .unwrap()
-                .covers(&entities::PermissionSet::new(vec![Permission::parse(
+                .covers(&erp_identity::PermissionSet::new(vec![Permission::parse(
                     "supplier_payment:commit"
                 )
                 .unwrap(),]))
@@ -615,7 +617,7 @@ mod tests {
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)
                 .unwrap()
-                .covers(&entities::PermissionSet::new(vec![Permission::parse(
+                .covers(&erp_identity::PermissionSet::new(vec![Permission::parse(
                     "invoice:post"
                 )
                 .unwrap(),]))
@@ -623,7 +625,7 @@ mod tests {
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview)
                 .unwrap()
-                .covers(&entities::PermissionSet::new(vec![Permission::parse(
+                .covers(&erp_identity::PermissionSet::new(vec![Permission::parse(
                     "receivable_funds_review:complete"
                 )
                 .unwrap(),]))

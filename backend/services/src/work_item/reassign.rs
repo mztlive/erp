@@ -4,27 +4,26 @@ use std::collections::HashSet;
 
 use application_core::CommandReceipt;
 use database::{
-    AccessControlExt, InventoryExt, MongoCasbinAdapter, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
-    SalesReviewExt, SupplierSettlementExt, WorkItemExt,
+    InventoryExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt, SupplierSettlementExt,
+    WorkItemExt,
 };
-use entities::{
-    work_item::{
-        AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
-        WorkItemType,
-    },
-    Permission,
+use entities::work_item::{
+    AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
+    WorkItemType,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_identity::AccessControlExt;
+use erp_identity::MongoCasbinAdapter;
+use erp_identity::Permission;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
-use crate::{
-    errors::{Error, Result},
-    iam::SharedRbacService,
-};
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 use super::access::{
     active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ensure_managed_access,
@@ -1296,7 +1295,7 @@ fn optional_actors<const N: usize>(actors: [Option<String>; N]) -> Vec<String> {
 pub(super) fn audited_fact_operator_actors(
     resource_type: &str,
     resource_ids: &HashSet<String>,
-    audits: &[entities::AuditLog],
+    audits: &[erp_audit::AuditLog],
     operator_actions: &[&str],
     formal_actions: &[&str],
 ) -> Result<Vec<String>> {

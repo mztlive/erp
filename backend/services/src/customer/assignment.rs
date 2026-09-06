@@ -6,20 +6,22 @@
 //! - 同一客户同一时点恰好一个 `OWNER`；
 //! - 同一客户、用户、角色的有效期不得重叠。
 
-use database::{AccessControlExt, CustomerExt};
+use database::CustomerExt;
 use entities::customer::{
     AssignCustomerAssignment, CustomerAssignment, CustomerAssignmentCommand, CustomerAssignmentId,
     EndCustomerAssignment,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::CustomerAccountId;
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::dto::{
     normalize_sort, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,

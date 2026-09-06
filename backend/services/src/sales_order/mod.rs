@@ -20,11 +20,12 @@
 //! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
-use database::{AccessControlExt, SalesOrderExt};
+use database::SalesOrderExt;
+use erp_audit::AuditActorLogs;
+use erp_audit::AuditExt;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 

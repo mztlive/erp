@@ -72,7 +72,7 @@ impl IntegrationOpsService {
         actor: AuditActor,
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskCompletionResult> {
-        let rbac = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac = crate::identity_compose::shared_rbac_service(self.db.clone());
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         self.run_audited(move |db, session| {
             Box::pin(async move {

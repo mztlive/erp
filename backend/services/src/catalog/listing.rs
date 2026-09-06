@@ -5,20 +5,21 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, CatalogExt};
+use database::CatalogExt;
 use entities::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
+use erp_audit::AuditExt;
 use erp_core::ids::ProductId;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
-use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     ProductListingView, ProductView, SkuView, UpdateProductListingRequest, UpdateSkuListingRequest,
 };
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;

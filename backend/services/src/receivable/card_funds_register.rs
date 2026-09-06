@@ -1,6 +1,6 @@
 //! W13 当前责任任务内的历史回款/销项发票原子登记。
 
-use database::{AccessControlExt, ReceivableExt, WorkItemExt};
+use database::{ReceivableExt, WorkItemExt};
 use entities::document_registry::DocumentType;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CardFundsRegistrationAllocationInput,
@@ -11,6 +11,7 @@ use entities::receivable::{
     CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
 };
 use entities::work_item::WorkItemType;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId,
@@ -40,12 +41,12 @@ use super::mapping::{
 use super::{invoice_task, ReceivableService};
 use crate::approval::binding::BindPublishedDefinitionCommand;
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 impl ReceivableService {
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。

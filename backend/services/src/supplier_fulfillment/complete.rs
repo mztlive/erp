@@ -1,9 +1,10 @@
-use database::{AccessControlExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{SupplierFulfillmentExt, WorkItemExt};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus,
     SupplierOrderActionType,
 };
 use entities::work_item::WorkItemStatus;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderActionId;
 use persistence_core::{NoTransaction, Transactional};
@@ -22,10 +23,10 @@ use super::receipt::{
     stable_digest, stable_evidence_id, stable_internal_idempotency_key, CompletionReceipt,
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const COMPLETION_EVIDENCE_SCHEMA: &str = "W26_TASK_COMPLETION_V1";
 const COMPLETION_AUDIT_PREFIX: &str = "w26-completion-";
@@ -72,7 +73,7 @@ impl SupplierFulfillmentService {
         let completion_idempotency_key = stable_internal_idempotency_key("w26c", &audit_id);
         let actor_id = actor.id().to_string();
         let actor_for_tx = actor.clone();
-        let rbac_for_tx = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::identity_compose::shared_rbac_service(self.db.clone());
         let command_for_tx = command.clone();
         let db = self.db.clone();
         let client = db.client().clone();

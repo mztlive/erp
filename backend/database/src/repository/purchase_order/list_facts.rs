@@ -13,7 +13,8 @@ use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrd
 use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
-use crate::repository::extensions::{AccessControlExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::PageResult;
 use persistence_core::Result;

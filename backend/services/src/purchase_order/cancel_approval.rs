@@ -3,9 +3,10 @@
 use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use database::{AccessControlExt, BpmExt, PurchaseOrderExt, WorkItemExt};
+use database::{BpmExt, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::PurchaseOrder;
 use entities::work_item::WorkItem;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -27,11 +28,11 @@ use crate::approval::execution::{
     PreparedExecution,
 };
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_audit::AuditActorLogs;
 use validator::Validate;
 
 impl PurchaseOrderService {
@@ -336,7 +337,7 @@ pub(super) struct PurchaseOrderCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回采购单。

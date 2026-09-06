@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, ProcurementResponsibilityExt};
+use database::ProcurementResponsibilityExt;
 use entities::catalog::{Product, ProductCategory, ProductRevision, Sku};
 use entities::procurement_responsibility::{
     build_catalog_facts, EligibleProcurementOwner, ProcurementResponsibilityContext,
@@ -10,14 +10,15 @@ use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRuleSet,
     ProcurementResponsibilityRuleType,
 };
-use entities::{AccountCore, Permission};
 use erp_core::AccountKind;
+use erp_identity::AccessControlExt;
+use erp_identity::{AccountCore, Permission};
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto::ProcurementResponsibilityResolutionView;
 use super::ProcurementResponsibilityService;
 use crate::errors::{Error, Result};
-use crate::iam::subject;
+use erp_identity::subject;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -564,7 +565,7 @@ fn eligible_owner(account: &AccountCore) -> Result<EligibleProcurementOwner> {
 /// # 错误
 /// 权限解析、Casbin 判定失败或账号缺少权限时返回错误。
 async fn ensure_purchase_create_permission(
-    rbac: &crate::iam::SharedRbacService,
+    rbac: &erp_identity::SharedRbacService,
     owner: &EligibleProcurementOwner,
 ) -> Result<()> {
     let permission = purchase_create_permission()?;

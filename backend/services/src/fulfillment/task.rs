@@ -4,7 +4,7 @@
 //! 责任人或仓库分操作经办人。任务创建、活动记录和完成必须复用调用方事务，
 //! 禁止责任池、创建人或任意默认仓库回退。
 
-use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt, WarehouseExt, WorkItemExt};
+use database::{PurchaseOrderExt, SalesOrderExt, WarehouseExt, WorkItemExt};
 use entities::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
@@ -12,12 +12,13 @@ use entities::warehouse::WarehouseFulfillmentOperation;
 use entities::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use entities::{Permission, PermissionSet};
+use erp_identity::AccessControlExt;
+use erp_identity::{Permission, PermissionSet};
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 const PURCHASE_ORDER_OWNER_ROLE: &str = "purchase_order_owner";
 const WAREHOUSE_INBOUND_ROLE: &str = "warehouse_inbound_handler";
@@ -179,7 +180,7 @@ pub(crate) async fn ensure_fulfillment_task(
     }
 
     let owner = resolve_task_owner(db, &object, executor).await?;
-    let rbac = crate::iam::shared_rbac_service(db.clone());
+    let rbac = crate::identity_compose::shared_rbac_service(db.clone());
     ensure_fulfillment_owner_eligible(
         db,
         &rbac,
@@ -507,7 +508,7 @@ async fn ensure_current_owner_execution_access(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let rbac = crate::iam::shared_rbac_service(db.clone());
+    let rbac = crate::identity_compose::shared_rbac_service(db.clone());
     ensure_fulfillment_owner_eligible(db, &rbac, actor_id, &task.business_object_type, executor).await
 }
 

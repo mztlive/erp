@@ -1,7 +1,8 @@
-use database::{AccessControlExt, SalesOrderExt};
+use database::SalesOrderExt;
 use entities::sales_order::{
     SalesContentHash, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
 use persistence_core::{NoTransaction, Transactional};
@@ -10,9 +11,9 @@ use validator::Validate;
 use super::super::dto::{SaveWorkingCopyRequest, WorkingCopyView};
 use super::super::mapper::{build_working_copy_lines, header_snapshot};
 use super::super::SalesOrderService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SalesOrderService {
     /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁语义）。

@@ -1,11 +1,12 @@
 //! 人工保存采购草稿。
 
-use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     validate_draft_line_edits, DraftLineEditViolation, LegacyReceiptIdScheme, PurchaseCommandReceipt,
     PurchaseCommandReceiptError, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
     PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SalesProcurementCoverage, SubmissionStatus,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::PurchaseOrderSubmissionId;
 use erp_core::money::Amount;
 use id_generator::next_id;
@@ -23,9 +24,9 @@ use super::dto::{
 use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const SAVE_PERMISSION: &str = "purchase_order:update";
 const SAVE_RECEIPT_PREFIX: &str = "purchase-order-save-draft-command-";

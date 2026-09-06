@@ -21,9 +21,9 @@ use super::mapping::{item_view, refund_fact_view};
 use super::place::ensure_capability;
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use crate::work_item::{WorkItemAllowedAction, WorkItemService};
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
 type FulfillmentOrderFilter = <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;

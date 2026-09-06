@@ -10,11 +10,12 @@
 //! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
 //! `CostExt` 直接写入）。
 
-use database::{AccessControlExt, CostExt, SalesOrderExt};
+use database::{CostExt, SalesOrderExt};
 use entities::cost::{
     CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
     CostScope,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
 use mongodb::Database;
@@ -22,9 +23,9 @@ use persistence_core::{NoTransaction, Transactional};
 use std::collections::{HashMap, HashSet};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 mod dto;
 

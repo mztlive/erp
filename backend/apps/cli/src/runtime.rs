@@ -1,5 +1,6 @@
 use config::Config;
-use services::iam::{shared_rbac_service, AdminService};
+use erp_identity::AdminService;
+use services::identity_compose::shared_rbac_service;
 
 use crate::error::Result;
 

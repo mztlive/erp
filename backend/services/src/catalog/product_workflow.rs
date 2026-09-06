@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, CatalogExt};
+use database::CatalogExt;
 use entities::catalog::product::{Product, ProductData};
 use entities::catalog::product_revision::{ProductRevision, ProductRevisionData};
 use entities::catalog::product_revision_media::{
@@ -13,6 +13,7 @@ use entities::catalog::{
     ProductRevisionId, ProductRevisionMediaId, SkuId, SkuRevisionId, SpecificationSignatureSet,
     UnitOfMeasure, UnitOfMeasureId,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -22,7 +23,6 @@ use super::sku_edit::{
     existing_sku_edit_identity, map_sku_edit_error, specification_signature_for, NewSkuContext, SkuEditItem,
 };
 use super::CatalogService;
-use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateProductRequest, DisableProductRequest, ProductMediaInput, ProductSkuInput, ProductView,
     UpdateProductRequest,
@@ -31,6 +31,7 @@ use crate::errors::{Error, Result};
 use crate::file_asset::PendingFileAssetRequest;
 use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
 struct ProductDraft {

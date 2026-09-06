@@ -1,9 +1,10 @@
-use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt};
+use database::{FulfillmentExt, InventoryExt, PurchaseOrderExt};
 use entities::fulfillment::{Delivery, DeliveryLine, DeliveryState, DeliveryType};
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, StockMovement, StockMovementData,
     StockReservationEntry, StockReservationEntryData,
 };
+use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{DeliveryId, StockMovementId, StockReservationEntryId};
@@ -12,9 +13,9 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
 use super::{DeliveryView, FulfillmentService, PostDeliveryRequest};

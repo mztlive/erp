@@ -3,7 +3,7 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use services::iam::{AdminItem, AdminService, CreateAdminParams, UpdateAdminParams, UpdateAdminRoleParams};
+use erp_identity::{AdminItem, AdminService, CreateAdminParams, UpdateAdminParams, UpdateAdminRoleParams};
 
 use crate::{
     app_state::AppState,

@@ -1,8 +1,8 @@
 use config::{Config, SafeConfig};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use serde::Serialize;
 use services::approval::execution::ApprovalRuntimeService;
-use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
 use services::supplier_api::{
     SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
@@ -151,7 +151,7 @@ impl AppState {
         let sensitive_data = Arc::new(SensitiveDataCodec::from_secret(
             config.snapshot().app.secret.as_bytes(),
         ));
-        let rbac = services::iam::shared_rbac_service(db.clone());
+        let rbac = services::identity_compose::shared_rbac_service(db.clone());
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_action_port(
             db.clone(),

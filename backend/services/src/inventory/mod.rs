@@ -15,7 +15,7 @@
 
 use mongodb::Database;
 
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 mod adapter;
 mod adjustment_command;

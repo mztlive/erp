@@ -1,9 +1,10 @@
-use database::{AccessControlExt, IntegrationOpsExt, SupplierFulfillmentExt};
+use database::{IntegrationOpsExt, SupplierFulfillmentExt};
 use entities::integration_ops::{InboxMessage, InboxMessageData, InboxMessageStatus, MessageType};
 use entities::supplier_fulfillment::{
     RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierRefundAllocation,
     SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierRefundAllocationId, SupplierRefundFactId};
 use id_generator::next_id;
@@ -13,9 +14,9 @@ use validator::Validate;
 use super::dto::{RecordRefundResultRequest, SupplierRefundFactView};
 use super::mapping::refund_fact_view;
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierFulfillmentService {
     /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,

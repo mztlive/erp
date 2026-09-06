@@ -14,7 +14,7 @@
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
-use database::{AccessControlExt, CatalogExt, WarehouseExt};
+use database::{CatalogExt, WarehouseExt};
 use entities::file_asset::content_fingerprint;
 use entities::warehouse::status::EnableStatus;
 use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
@@ -22,21 +22,24 @@ use entities::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, 
 use entities::warehouse::warehouse_sku_policy::{
     WarehouseSkuPolicy, WarehouseSkuPolicyData, WarehouseSkuPolicyUpdate,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::WarehouseId;
 use erp_core::ids::{WarehouseRevisionId, WarehouseSkuPolicyId};
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::{self, SharedRbacService};
+use crate::identity_compose::shared_rbac_service;
 use application_core::AuditActor;
 use entities::work_item::{AvailableWorkItemAccount, WorkItemType};
-use entities::Permission;
+use erp_audit::AuditActorLogs;
 use erp_core::AccountKind;
+use erp_identity::Permission;
+use erp_identity::SharedRbacService;
 
 mod dto;
 
@@ -76,7 +79,7 @@ impl WarehouseService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        let rbac = iam::shared_rbac_service(db.clone());
+        let rbac = shared_rbac_service(db.clone());
         Self { db, rbac }
     }
 

@@ -5,19 +5,18 @@
 
 use std::collections::HashSet;
 
-use database::{AccessControlExt, FileAssetExt};
-use entities::{
-    file_asset::{FileAsset, PendingFileReference, PendingFileReferenceSet, SensitivityClass},
-    AuditLog,
-};
+use database::FileAssetExt;
+use entities::file_asset::{FileAsset, PendingFileReference, PendingFileReferenceSet, SensitivityClass};
+use erp_audit::AuditExt;
+use erp_audit::AuditLog;
 use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::{errors::Result, file_asset::PendingFileAssetRequest};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 已完成实体构造、等待随业务聚合一起持久化的文件资产集合。
 pub(crate) struct PendingFileAssets {

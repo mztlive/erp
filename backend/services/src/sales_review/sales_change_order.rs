@@ -2,7 +2,7 @@
 // 销售变更单（W05 变更轨；§8.1.3 本批部分）
 // ---------------------------------------------------------------------
 
-use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
+use database::{DocumentRegistryExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
 use entities::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
@@ -11,6 +11,7 @@ use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
     SalesChangeSubmissionLine,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, ReceivableAccountId, SalesChangeOrderId, SalesChangeSubmissionId,
@@ -53,11 +54,11 @@ use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 impl SalesReviewService {
     /// 分页查询销售变更单。
@@ -869,7 +870,7 @@ struct CreatedChangeOrderPersistInput {
     /// 发布定义绑定命令。
     bind_command: BindPublishedDefinitionCommand,
     /// 已构造审计。
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     /// 审计操作人。
     actor: AuditActor,
 }
@@ -1132,7 +1133,7 @@ struct EffectiveChangeWrite {
         entities::receivable::ReceivableAccount,
         entities::receivable::ReceivableEntry,
     )>,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
 }
 
 /// 持久化生效修订、应收差额与变更单状态。

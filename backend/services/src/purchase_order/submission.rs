@@ -1,11 +1,12 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
     PurchaseOrderSubmissionLine, PurchaseReceiptWire,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
@@ -31,10 +32,10 @@ use super::start_approval::{
 use super::PurchaseOrderService;
 use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 
@@ -611,7 +612,8 @@ mod tests {
     use entities::purchase_order::{
         LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     };
-    use entities::{AuditLog, AuditLogData};
+    use erp_audit::AuditLog;
+    use erp_audit::AuditLogData;
     use erp_core::AccountKind;
     use sha2::{Digest, Sha256};
 

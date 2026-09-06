@@ -2,23 +2,24 @@
 
 use std::collections::HashSet;
 
-use database::{AccessControlExt, FileAssetExt, FulfillmentExt, PurchaseOrderExt};
+use database::{FileAssetExt, FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     ActualServiceLocation, ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
     ServiceFulfillmentConfirmationParams,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::file_asset::PendingFileAssetRequest;
 use crate::party::SensitiveDataCodec;
 use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::{ConfirmServiceFulfillmentRequest, FulfillmentService, ServiceFulfillmentView};

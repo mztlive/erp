@@ -1,4 +1,4 @@
-use database::{AccessControlExt, SupplierApiExt};
+use database::SupplierApiExt;
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, CapabilityChangeInput,
     CapabilityChangeSet, CapabilityChangeSetRejection, ClassifiedCapabilityChangeSet,
@@ -7,15 +7,16 @@ use entities::supplier_api::{
     SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction,
     SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData, SupplierConnectionGovernance,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::dto::{
     ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,

@@ -1,8 +1,9 @@
 //! 采购草稿作废与采购覆盖释放。
 
-use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
+use erp_audit::AuditExt;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
@@ -12,9 +13,9 @@ use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAut
 use super::dto::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult, VOID_ACTION};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const VOID_PERMISSION: &str = "purchase_order:delete";
 const VOID_RECEIPT_PREFIX: &str = "purchase-order-void-command-";

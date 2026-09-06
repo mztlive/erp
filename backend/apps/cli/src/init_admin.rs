@@ -1,4 +1,4 @@
-use services::iam::{InitializeSuperAdminParams, InitializeSuperAdminResult};
+use erp_identity::{InitializeSuperAdminParams, InitializeSuperAdminResult};
 use tracing::info;
 
 use crate::args::InitAdminArgs;

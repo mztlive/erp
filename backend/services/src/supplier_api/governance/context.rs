@@ -4,13 +4,13 @@ use entities::supplier_api::{
     SupplierCommandShapeRejection, SupplierConnectionAction, SupplierGovernanceBlocker,
     SupplierHealthCheckRun,
 };
-use entities::Permission;
 use erp_core::ids::SupplierApiConnectionId;
+use erp_identity::Permission;
 use sha2::{Digest, Sha256};
 
 use crate::errors::{Error, Result};
-use crate::iam::subject;
 use application_core::AuditActor;
+use erp_identity::subject;
 
 use super::super::dto::{RelatedImpactView, SafeReferenceView, SupplierActionBlockerView};
 use super::super::SupplierApiService;
@@ -72,8 +72,9 @@ impl SupplierApiService {
             return Ok(false);
         };
         let permission = Permission::parse(permission)?;
-        rbac.enforce(&subject(actor.kind(), actor.id()), &permission)
-            .await
+        Ok(rbac
+            .enforce(&subject(actor.kind(), actor.id()), &permission)
+            .await?)
     }
 
     pub(super) async fn load_connection(

@@ -10,8 +10,8 @@ use persistence_core::Executor;
 use crate::approval::policy::ApprovalDomainAction;
 use crate::approval::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 /// 审批强类型领域动作注册表。
 pub struct ApprovalActionRegistry {

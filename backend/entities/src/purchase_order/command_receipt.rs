@@ -8,7 +8,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::audit_log::AuditLog;
+use erp_audit::AuditLog;
 use erp_core::{Error, Result};
 
 /// 收据消息的前缀；历史持久化形态，禁止变更。
@@ -417,7 +417,7 @@ mod tests {
         digest_parts, payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt,
         PurchaseCommandReceiptError, PurchaseReceiptWire,
     };
-    use crate::audit_log::{AuditLog, AuditLogData};
+    use erp_audit::{AuditLog, AuditLogData};
     use erp_core::AccountKind;
     use erp_core::Result;
 

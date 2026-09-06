@@ -2,7 +2,7 @@ use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ModelError;
 use bpm::model::{ApprovalCommandReceipt, Timestamp};
 use database::repository::bpm::DefinitionGraph;
-use database::{AccessControlExt, BpmExt, DocumentRegistryExt};
+use database::{BpmExt, DocumentRegistryExt};
 use entities::document_registry::business_document::{
     ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
 };
@@ -10,14 +10,15 @@ use entities::document_registry::workflow_action::ApprovalBindingActionContext;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 use super::super::execution::idempotency::{payload_conflict_error, ReceiptBranch};
 use super::super::execution::{
@@ -469,7 +470,7 @@ fn upgraded_binding_audit(
     facts: &ApprovalUpgradeSubjectFacts,
     previous: &ApprovalDefinitionBinding,
     action: &WorkflowAction,
-) -> Result<entities::AuditLog> {
+) -> Result<erp_audit::AuditLog> {
     let context = action
         .approval_binding_context
         .as_ref()
@@ -484,12 +485,15 @@ fn upgraded_binding_audit(
         context.current_definition_version,
         action.base.id,
     );
-    actor.clone().resource_log_with_message(
-        DEFINITION_UPGRADED_AUDIT_ACTION,
-        "business_document",
-        facts.document_id.clone(),
-        Some(message),
-    )
+    actor
+        .clone()
+        .resource_log_with_message(
+            DEFINITION_UPGRADED_AUDIT_ACTION,
+            "business_document",
+            facts.document_id.clone(),
+            Some(message),
+        )
+        .map_err(Into::into)
 }
 
 /// 从收据指向的动作严格证明并重建绑定升级结果。

@@ -35,7 +35,7 @@
 //! - `document_attachment` → `DocumentAttachmentId`
 //!
 //! D06 `access_control`：
-//! - `role` → 沿用 `entities::rbac::RoleId`（P0 前已存在且带解析校验，本模块不重复定义）
+//! - `role` → 沿用 `erp_identity::RoleId`（P0 前已存在且带解析校验，本模块不重复定义）
 //! - `permission` → `PermissionId`
 //! - `user_role` → `UserRoleId`
 //! - `data_scope` → `DataScopeId`

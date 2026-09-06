@@ -22,8 +22,9 @@ use std::sync::Arc;
 
 use mongodb::Database;
 
-use crate::iam::{self, SharedRbacService};
+use crate::identity_compose::shared_rbac_service;
 use crate::party::SensitiveDataCodec;
+use erp_identity::SharedRbacService;
 
 mod acceptance_eligibility;
 mod customer_acceptance;
@@ -85,7 +86,7 @@ impl FulfillmentService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, fingerprint_key: Vec<u8>, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        let rbac = iam::shared_rbac_service(db.clone());
+        let rbac = shared_rbac_service(db.clone());
         Self {
             db,
             fingerprint_key,

@@ -6,9 +6,7 @@ use bpm::ids::{
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, PurchaseOrderExt, WorkItemExt,
-};
+use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, PurchaseOrderExt, WorkItemExt};
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
@@ -18,6 +16,7 @@ use entities::purchase_order::{
 };
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
@@ -380,7 +379,7 @@ pub(super) struct PurchaseOrderStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计（结果消息留空，事务内任务写入后回填）。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
     /// 采购提交收据：请求指纹与结果载荷；任务身份在事务内回填后编码进审计消息。
     pub receipt: Option<(String, super::submission::PurchaseSubmitReceipt)>,
 }

@@ -1,6 +1,6 @@
 //! 供应商资料创建用例与事务载荷。
 
-use database::{AccessControlExt, PartyExt, SupplierExt};
+use database::{PartyExt, SupplierExt};
 use entities::{
     party::{
         AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
@@ -17,6 +17,7 @@ use entities::{
         SupplierQualificationCapability, SupplierQualificationRevision, SupplierRatingRevision,
     },
 };
+use erp_audit::AuditExt;
 use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
@@ -27,13 +28,13 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 
-use crate::audit::AuditActorLogs;
 use crate::{
     errors::{Error, Result},
     file_asset::PendingFileAssetRequest,
     pending_file_assets::PendingFileAssets,
 };
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::{SaveSupplierProfileRequest, SupplierProfileMutationView};
 use super::{
@@ -300,7 +301,7 @@ struct PreparedCreate {
     qualification_links: Vec<SupplierQualificationCapability>,
     rating: Option<SupplierRatingRevision>,
     command: SupplierProfileCommand,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     result: SupplierProfileMutationView,
     pending_assets: PendingFileAssets,
 }

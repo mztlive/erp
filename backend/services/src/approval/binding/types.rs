@@ -93,7 +93,7 @@ pub enum BindingDecision {
 
 /// 单个实际授权角色的范围事实。
 #[derive(Debug)]
-pub(super) struct RoleScopeFacts(pub(super) Vec<entities::access_control::DataScope>);
+pub(super) struct RoleScopeFacts(pub(super) Vec<erp_identity::access_control::DataScope>);
 
 /// 同一事务快照内已重验的升级上下文。
 pub(super) struct AuthorizedUpgradeContext {

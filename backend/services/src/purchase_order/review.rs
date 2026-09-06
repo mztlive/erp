@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::{AccessControlExt, CostExt, FulfillmentExt, PayableExt, PurchaseOrderExt};
+use database::{CostExt, FulfillmentExt, PayableExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
@@ -14,6 +14,7 @@ use entities::purchase_order::{
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use entities::work_item::WorkItemStatus;
+use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -28,9 +29,9 @@ use super::allocation_maintenance::{persist_current_sales_allocations, prepare_c
 use super::dto::PurchaseReviewResult;
 use super::shared::{zero_amount, zero_rate};
 use super::PurchaseOrderService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl PurchaseOrderService {
     /// 最终通过并生效：形成采购版本、应付与成本事实。

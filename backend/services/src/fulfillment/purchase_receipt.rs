@@ -1,9 +1,10 @@
-use database::{AccessControlExt, FulfillmentExt};
+use database::FulfillmentExt;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::PurchaseReceiptId;
 use id_generator::next_id;
 use mongodb::Database;
@@ -16,11 +17,11 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 use super::dto::SortDir;
 use super::purchase_receipt_lines::receipt_line_specs;

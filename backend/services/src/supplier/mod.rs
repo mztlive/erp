@@ -13,10 +13,10 @@ use mongodb::Database;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::party::{SensitiveDataCodec, SensitiveFieldKind};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 mod dto;
 pub(crate) mod eligibility;

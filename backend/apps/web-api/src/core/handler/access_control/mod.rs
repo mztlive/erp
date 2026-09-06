@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::access_control::{
+use erp_identity::{
     AccessControlService, AssignUserRoleRequest, AuditEventListParams, AuditEventView,
     CreateDataScopeRequest, CreatePermissionRequest, DataScopeListParams, DataScopeView, PageView,
     PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,

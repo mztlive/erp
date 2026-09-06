@@ -42,8 +42,8 @@ pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
         ///
         /// # 返回
         /// 返回该处理器绑定的权限键。
-        pub fn #permission_fn_ident() -> entities::Permission {
-            entities::Permission::parse(concat!(#resource, ":", #action))
+        pub fn #permission_fn_ident() -> erp_identity::Permission {
+            erp_identity::Permission::parse(concat!(#resource, ":", #action))
                 .expect(concat!("invalid permission key for handler ", #handler_name))
         }
     };

@@ -1,7 +1,7 @@
 //! W29 异常任务受控关闭。
 
 use application_core::{CommandFingerprint, CommandReceipt};
-use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
+use database::{IntegrationOpsExt, WorkItemExt};
 use entities::{
     integration_ops::{
         ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
@@ -9,16 +9,15 @@ use entities::{
     },
     work_item::{WorkItem, WorkItemCloseData, WorkItemType},
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use crate::{
-    audit::CommandReceiptServiceExt as _,
-    errors::{Error, Result},
-};
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::CommandReceiptServiceExt as _;
 
 use super::access::{ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ActorAccess};
 use super::dto;

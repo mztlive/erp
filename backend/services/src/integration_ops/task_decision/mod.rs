@@ -8,20 +8,20 @@ mod guard;
 #[cfg(test)]
 mod tests;
 
-use database::AccessControlExt;
 use entities::integration_ops::{
     IntegrationCommandIdentity, ReconciliationDifference, ReconciliationDifferenceId,
     ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId, ResolutionAction,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::{ControlledEvidenceRef, DirectReconciliationStatus, IntegrationActionOutcome};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 #[cfg(test)]
 use self::action::next_allowed_actions;

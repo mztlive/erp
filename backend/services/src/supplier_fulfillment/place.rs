@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
 use entities::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
@@ -13,6 +13,7 @@ use entities::supplier_fulfillment::{
     SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderActionUpdate,
 };
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, WorkItemId};
 use id_generator::next_id;
@@ -22,9 +23,9 @@ use validator::Validate;
 use super::dto::{PlaceFulfillmentOrderRequest, SupplierFulfillmentOrderView};
 use super::gateway::DispatchOutcome;
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const W26_OWNER_ROLE: &str = "role-procurement";
 const W26_OWNER_ORGANIZATION: &str = "company";

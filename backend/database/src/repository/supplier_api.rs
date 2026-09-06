@@ -26,9 +26,8 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{
-    AccessControlExt, BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
-};
+use super::extensions::{BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt};
+use erp_audit::AuditExt;
 use persistence_core::insert_literal_regex_filter;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
@@ -683,7 +682,7 @@ impl<'a> SupplierApiRepository<'a> {
         &self,
         audit_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<entities::AuditLog>> {
+    ) -> Result<Option<erp_audit::AuditLog>> {
         self.db.audit_logs().find_by_id(audit_id, executor).await
     }
 

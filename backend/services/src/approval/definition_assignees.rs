@@ -1,7 +1,7 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScope。
 
-use database::AccessControlExt;
 use entities::document_registry::DocumentType;
+use erp_identity::AccessControlExt;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 

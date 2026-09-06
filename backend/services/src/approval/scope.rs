@@ -2,20 +2,15 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, MongoCasbinAdapter};
-use entities::{
-    access_control::{DataScope, DataScopeSubjectType, DataScopeType},
-    document_registry::DocumentType,
-    work_item::WorkItemType,
-    AccountCore, Permission,
-};
+use entities::{document_registry::DocumentType, work_item::WorkItemType};
+use erp_identity::access_control::{DataScope, DataScopeSubjectType, DataScopeType};
+use erp_identity::AccessControlExt;
+use erp_identity::MongoCasbinAdapter;
+use erp_identity::{AccountCore, Permission, RbacService};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::{
-    errors::{Error, Result},
-    iam::RbacService,
-};
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
 
 use super::dto::ApprovalRecoveryAuthorization;
@@ -850,11 +845,11 @@ mod tests {
         scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
     };
     use application_core::AuditActor;
-    use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::document_registry::DocumentType;
-    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
     use erp_core::ids::DataScopeId;
     use erp_core::AccountKind;
+    use erp_identity::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
+    use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
     fn account(id: &str, status: AccountStatus) -> AccountCore {
         AccountCore::new(

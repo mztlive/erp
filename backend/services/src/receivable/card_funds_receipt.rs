@@ -4,12 +4,12 @@
 //! encode/decode 与 fingerprint 规则源；本文件只做审计 I/O、错误映射和 HTTP View
 //! 装配。legacy WorkItem 补建仍由调用方执行。
 
-use database::AccessControlExt;
 use entities::receivable::{
     CardFundsCommandReceipt, CardFundsCommandReceiptError, CardFundsRegistrationKind,
     CardFundsRegistrationReceipt, CardFundsRegistrationReceiptError, EntityCardFundsReviewConclusion,
     EntityCardFundsReviewResult,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;

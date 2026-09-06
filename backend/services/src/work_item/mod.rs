@@ -27,7 +27,7 @@ mod write;
 use database::WorkItemExt;
 use mongodb::Database;
 
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -106,15 +106,15 @@ mod tests {
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use crate::errors::{Error, ErrorCode};
-    use entities::{
-        work_item::{
-            AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
-            WorkItemStatus, WorkItemType,
-        },
-        AuditLog, AuditLogData, Permission,
+    use entities::work_item::{
+        AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
+        WorkItemStatus, WorkItemType,
     };
+    use erp_audit::AuditLog;
+    use erp_audit::AuditLogData;
     use erp_core::common::time::Instant;
     use erp_core::{ids::WorkItemId, AccountKind};
+    use erp_identity::Permission;
     use std::collections::{HashMap, HashSet};
 
     /// 验证工作项管理员转交的授权提交栅栏。

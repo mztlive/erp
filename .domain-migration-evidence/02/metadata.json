@@ -1,0 +1,71 @@
+{
+  "phase": "02",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "branch": "chore/domain-crate-02-identity-audit",
+  "evidence_dir": ".domain-migration-evidence/02",
+  "input_head": "b399b662226064bd1fee36df026c461dd75066fd",
+  "unique_integration_owner": "chore/domain-crate-02-identity-audit implementer",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "remaining_issues": [],
+  "files_tsv_rows": 316,
+  "owned_repositories_moved": [
+    "AccountCoreRepository",
+    "RoleRepository",
+    "PermissionRepository",
+    "DataScopeRepository",
+    "UserRoleRepository",
+    "AuditEventRepository",
+    "AuditLogRepository"
+  ],
+  "no_identity_audit_crate_edge": true,
+  "autotests": false,
+  "workspace_members": 18,
+  "kind_test_targets": 0,
+  "recorded_at": "2026-09-06T08:22:49Z",
+  "unit_tests": {
+    "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+    "exit_code": 0,
+    "passed": 3264,
+    "failed": 0,
+    "ignored": 71,
+    "crates": 17,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "log": ".domain-migration-evidence/02/unit-tests.log"
+  },
+  "quality_gates": {
+    "fmt": 0,
+    "check": 0,
+    "clippy": 0,
+    "unit-tests": 0,
+    "bpm": 0,
+    "service": 0,
+    "domain": 0,
+    "permissions": 0,
+    "git-diff-check": 0,
+    "all_exit_0": true,
+    "log": ".domain-migration-evidence/02/quality-gates.log"
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "indexes": 368,
+    "versus_phase_01_permissions_equal": true,
+    "comparison": ".domain-migration-evidence/02/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/02/transaction-contract.json"
+  },
+  "compile_baseline": {
+    "applicable": false,
+    "reason": "阶段 02 不要求编译收益复测；阈值在阶段 17 判定。"
+  },
+  "toolchain": {
+    "rustc": "1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "1.97.0 (c980f4866 2026-06-30)",
+    "host": "aarch64-apple-darwin",
+    "profile": "dev"
+  },
+  "implement_summary": "Phase 02 identity-audit complete: erp-identity and erp-audit are wired; 7 owned repositories moved; CLI talks to identity use cases; AuthorizationPort at web-api composition root; IdentityAuditPort adapter in remaining services. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
+}

@@ -1,8 +1,8 @@
 //! 工作项执行权限与可用账号身份。
 
-use crate::{AccountCore, Permission, PermissionSet};
 use erp_core::AccountKind;
 use erp_core::{Error, Result};
+use erp_identity::{AccountCore, Permission, PermissionSet};
 
 use super::WorkItemType;
 

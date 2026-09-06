@@ -5,11 +5,9 @@ use database::WorkItemExt;
 use entities::work_item::WorkItem;
 use persistence_core::NoTransaction;
 
-use crate::{
-    audit::CommandReceiptServiceExt as _,
-    errors::{Error, Result},
-};
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::CommandReceiptServiceExt as _;
 
 use super::access::detail_scope;
 use super::query::single_item_context_id;

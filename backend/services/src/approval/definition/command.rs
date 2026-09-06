@@ -10,17 +10,18 @@ use bpm::model::{
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
 use database::repository::bpm::{CasWriteOutcome, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX};
-use database::{AccessControlExt, BpmExt};
+use database::BpmExt;
 use entities::document_registry::DocumentType;
+use erp_audit::AuditExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 use super::super::definition_dto::{DefinitionDetailView, DefinitionNodeRequest, DraftSource};
 use super::super::policy::{require_process_required, ProcessRequiredApprovalPolicy};

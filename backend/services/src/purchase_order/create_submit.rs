@@ -20,10 +20,10 @@ use super::start_approval::{
 };
 use crate::approval::execution::prepare_start;
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 创建并提交后的正式号与乐观锁版本。
 pub(super) struct SubmittedCreatedOrder {
@@ -482,14 +482,17 @@ async fn persist_frozen_created_order_start(
 ///
 /// # 关键业务约束
 /// 主键按采购单稳定，不复用独立提交接口的收据格式。
-fn create_submit_audit(actor: &AuditActor, order: &PurchaseOrder) -> Result<entities::AuditLog> {
-    actor.clone().resource_log_with_id(
-        format!("purchase-create-submit-{}", order.base.id),
-        "purchase_order.submit",
-        "purchase_order",
-        order.base.id.clone(),
-        Some(format!("create_and_submit;purchase_no={}", order.purchase_no)),
-    )
+fn create_submit_audit(actor: &AuditActor, order: &PurchaseOrder) -> Result<erp_audit::AuditLog> {
+    actor
+        .clone()
+        .resource_log_with_id(
+            format!("purchase-create-submit-{}", order.base.id),
+            "purchase_order.submit",
+            "purchase_order",
+            order.base.id.clone(),
+            Some(format!("create_and_submit;purchase_no={}", order.purchase_no)),
+        )
+        .map_err(Into::into)
 }
 
 /// 回读提交后的采购单正式号与版本。

@@ -4,8 +4,8 @@
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
 use bpm::ProcessKind;
-use entities::access_control::{DataScope, DataScopeType};
 use entities::document_registry::DocumentType;
+use erp_identity::access_control::{DataScope, DataScopeType};
 
 use crate::errors::{Error, Result};
 
@@ -367,7 +367,7 @@ pub fn revalidate_assignee_binding_access(
 mod tests {
     use super::*;
     use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
-    use entities::access_control::DataScopeSubjectType;
+    use erp_identity::access_control::DataScopeSubjectType;
 
     /// 11 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
@@ -606,7 +606,7 @@ mod tests {
     ) -> DataScope {
         DataScope::new(
             erp_core::ids::DataScopeId::new(id),
-            entities::access_control::DataScopeData {
+            erp_identity::access_control::DataScopeData {
                 subject_type,
                 subject_id: subject_id.to_string(),
                 scope_type,

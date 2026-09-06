@@ -17,8 +17,8 @@ use crate::approval::{
     approval_document_read_scope_with_executor,
 };
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
 pub async fn ensure_return_start_actor_active(

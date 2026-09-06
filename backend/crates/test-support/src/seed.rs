@@ -5,7 +5,7 @@
 //! `database/src/casbin_adapter.rs` 中的 `CasbinRule` 完全一致
 //! （`_id` 为 `sec\u{1f}ptype\u{1f}values 拼接` 的字符串）。
 
-use entities::{Role, RoleData};
+use erp_identity::{Role, RoleData};
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
 

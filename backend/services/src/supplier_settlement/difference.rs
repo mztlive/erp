@@ -1,8 +1,9 @@
-use database::{AccessControlExt, SupplierSettlementExt};
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::{
     SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementStatus,
     SupplierSettlementDifference, SupplierSettlementStatement, SupplierSettlementStatementUpdate,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -15,10 +16,10 @@ use super::{
     command_audit_id, digest_parts, dto, ensure_audit_resource, ensure_same_id, parse_receipt_number,
     receipt_result, SupplierSettlementService, COMMAND_FINGERPRINT_PREFIX,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::supplier_fulfillment::dto::SortDir;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 结算差异列表筛选条件类型。
 type DifferenceFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementDifferenceFilter;

@@ -15,10 +15,10 @@ use super::super::SalesOrderService;
 use super::submit::latest_submission_no;
 use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::prepare_cancel;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SalesOrderService {
     /// 撤回审批中的销售单，回到可修正草稿。

@@ -1,0 +1,35 @@
+{
+  "phase": "02",
+  "recorded_at": "2026-09-06T08:22:49Z",
+  "evidence_dir": ".domain-migration-evidence/02",
+  "input_head": "b399b662226064bd1fee36df026c461dd75066fd",
+  "branch": "chore/domain-crate-02-identity-audit",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/__pycache__/"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_01_status": "本地门禁通过",
+  "verify_plan_sources_at_implement_start": "failed as expected after phase 01 moves; 前序阶段未验收 is a human gate",
+  "source_map_phase_02_rows": 46,
+  "repository_types_owner_phase_02": 7,
+  "workspace_member_count": 18,
+  "kind_test_targets": 0,
+  "historical_tests_archives_byte_for_byte": true,
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "note": "前序输入为阶段 01 本地门禁通过提交 b399b662。真实数据库运行未验证。"
+}

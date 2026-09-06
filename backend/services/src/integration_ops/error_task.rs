@@ -3,11 +3,12 @@
 //! 人工业务动作只通过 `task_decision` 的 W29 强命令；责任退回、转交和关闭只通过
 //! W02 责任 API。本模块不保留旧动作入口。
 
-use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
+use database::{IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     error_owner_role, error_terminal_policy, project_error_actions, ErrorActionProjection,
     IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
 };
+use erp_audit::AuditExt;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -21,9 +22,9 @@ use super::{
     ActionBlockerView, CreateErrorTaskRequest, ErrorTaskDetailView, ErrorTaskFilter, ErrorTaskListParams,
     ErrorTaskView, IntegrationOpsService, PageView,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl IntegrationOpsService {
     /// 登记集成错误任务。

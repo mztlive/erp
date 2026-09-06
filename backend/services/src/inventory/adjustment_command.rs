@@ -1,10 +1,11 @@
-use database::{AccessControlExt, InventoryExt, WarehouseExt};
+use database::{InventoryExt, WarehouseExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::inventory::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentUpdate,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
 use id_generator::next_id;
@@ -16,11 +17,11 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 use super::adapter::document_approval_view_with_history;
 use super::authorization::inventory_authorization_with_executor;
@@ -231,7 +232,7 @@ struct CreatedAdjustmentPersist {
     /// 发布定义绑定命令。
     bind_command: BindPublishedDefinitionCommand,
     /// 已构造审计。
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     /// 审计操作人。
     actor: AuditActor,
     /// 用户发起时所依据的库存余额行。

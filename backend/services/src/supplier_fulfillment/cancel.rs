@@ -1,10 +1,11 @@
-use database::{AccessControlExt, IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
+use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
 use entities::integration_ops::InboxMessageStatus;
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     CancelStatus, RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionData, SupplierOrderActionLine, SupplierOrderActionLineData, SupplierOrderActionType,
 };
+use erp_audit::AuditExt;
 use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -14,9 +15,9 @@ use super::dto::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use super::mapping::action_line_view;
 use super::place::{build_action_message, ensure_capability};
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierFulfillmentService {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。

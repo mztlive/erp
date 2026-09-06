@@ -1,12 +1,13 @@
 //! 客户回款单查询、创建、提交审批、撤回与过账编排。
 
-use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt};
+use database::{DocumentRegistryExt, ReceivableExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::receivable::{
     AllocationAction, CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus, ReceiptAllocation,
     ReceivableAccount, ReceivableEntry, ReceivableFundsLedger,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, SalesOrderId,
@@ -51,12 +52,13 @@ use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use application_core::CommandReceipt;
+use erp_audit::AuditActorLogs;
+use erp_audit::CommandReceiptServiceExt as _;
+use erp_identity::SharedRbacService;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------

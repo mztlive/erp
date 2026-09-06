@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt, WorkItemExt};
+use database::{CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt, WorkItemExt};
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
@@ -14,6 +14,7 @@ use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
     SupplierOfferingRevision,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
@@ -24,13 +25,14 @@ use persistence_core::{NoTransaction, Transactional};
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use application_core::CommandReceipt;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_audit::AuditActorLogs;
+use erp_audit::CommandReceiptServiceExt as _;
 
 mod dto;
 
@@ -475,7 +477,7 @@ impl SupplierOfferingService {
 
         let db = self.db.clone();
         let client = db.client().clone();
-        let rbac = crate::iam::shared_rbac_service(db.clone());
+        let rbac = crate::identity_compose::shared_rbac_service(db.clone());
         let actor_for_tx = actor.clone();
         let req_for_tx = req.clone();
         let receipt_for_tx = receipt.clone();

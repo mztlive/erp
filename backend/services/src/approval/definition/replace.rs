@@ -5,15 +5,16 @@ use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTr
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
 use bpm::ParticipantId;
 use database::repository::bpm::CasWriteOutcome;
-use database::{AccessControlExt, BpmExt};
-use entities::{AccountCore, Permission};
+use database::BpmExt;
+use erp_identity::AccessControlExt;
+use erp_identity::{AccountCore, Permission};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use crate::errors::{Error, ErrorCode, Result};
-use crate::iam::{subject, SharedRbacService};
 use application_core::AuditActor;
+use erp_identity::{subject, SharedRbacService};
 
 use super::super::definition_dto::{
     DefinitionDetailView, DefinitionNodeRequest, ReplaceDefinitionNodesRequest,

@@ -7,10 +7,10 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use database::repository::bpm::ApprovalInstanceSummary;
-use database::AccessControlExt;
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
+use erp_identity::AccessControlExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -23,8 +23,8 @@ use crate::approval::policy::{policy_of, DocumentApprovalPolicy, SeparationOfDut
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{approval_decide_scope_with_executor, approval_document_read_scope_with_executor};
 use crate::errors::{Error, ErrorCode, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 /// 单实例读取授权所需的持久化事实。
 pub(super) struct RuntimeReadSubject {

@@ -9,17 +9,16 @@ use super::dto::{
 use super::resolver::{load_owner_account, ResolutionInput};
 use super::rule_list::{apply_rule_list_facts, to_rule_list_views};
 use super::ProcurementResponsibilityService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use database::{
-    AccessControlExt, CatalogExt, ProcurementResponsibilityExt, ProcurementResponsibilityRuleFilter,
-};
+use database::{CatalogExt, ProcurementResponsibilityExt, ProcurementResponsibilityRuleFilter};
 use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
     ProcurementResponsibilityRuleData, ProcurementResponsibilitySelectorReference,
 };
-use entities::AuditLog;
+use erp_audit::AuditActorLogs;
+use erp_audit::AuditExt;
+use erp_audit::AuditLog;
 use erp_core::ids::ProcurementResponsibilityRuleId;
 use persistence_core::{Executor, NoTransaction};
 

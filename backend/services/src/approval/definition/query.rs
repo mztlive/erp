@@ -5,8 +5,8 @@ use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use crate::errors::Result;
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem};
 use super::super::policy::{policy_of, require_process_required, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};

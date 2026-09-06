@@ -1,7 +1,8 @@
-use database::{AccessControlExt, CostExt, PayableExt, PurchaseOrderExt, SalesOrderExt};
+use database::{CostExt, PayableExt, PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
+use erp_audit::AuditExt;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -14,9 +15,9 @@ use super::super::dto::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult}
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::super::PurchaseOrderService;
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl PurchaseOrderService {
     /// 最终通过并生效：改写采购单并同步履约影响。
@@ -409,7 +410,7 @@ async fn write_effective_change_in_transaction(
 async fn persist_effective_writes(
     db: &mongodb::Database,
     write: EffectiveChangeWrite,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     actor_id: &str,
     session: &mut ClientSession,
 ) -> Result<u64> {

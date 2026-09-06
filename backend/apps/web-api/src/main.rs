@@ -123,8 +123,8 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     persistence_core::ensure_transaction_support(&state.db()).await?;
     database::ensure_indexes(&state.db()).await?;
     ensure_registered_approval_policies()?;
-    services::iam::ensure_root_role(&state.rbac()).await?;
-    services::iam::ensure_predefined_roles(&state.rbac()).await?;
+    erp_identity::ensure_root_role(&state.rbac()).await?;
+    erp_identity::ensure_predefined_roles(&state.rbac()).await?;
 
     spawn_config_watcher(
         state.clone(),

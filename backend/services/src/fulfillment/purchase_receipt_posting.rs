@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt};
+use database::{FulfillmentExt, InventoryExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
 };
@@ -11,6 +11,7 @@ use entities::inventory::{
     StockMovement, StockMovementData, StockReservation, StockReservationData, StockReservationEntry,
     StockReservationEntryData, StockReservationSourceType,
 };
+use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -24,9 +25,9 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
 use super::{FulfillmentService, PostPurchaseReceiptRequest, PurchaseReceiptView};

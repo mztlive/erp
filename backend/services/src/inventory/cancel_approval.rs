@@ -7,7 +7,7 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
 };
@@ -15,6 +15,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use entities::inventory::StockAdjustment;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
 use id_generator::next_id;
@@ -44,10 +45,10 @@ use crate::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
     ApprovalActionContext,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
 const STOCK_ADJUSTMENT_AUDIT_RESOURCE: &str = "stock_adjustment";

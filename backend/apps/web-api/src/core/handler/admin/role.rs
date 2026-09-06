@@ -3,7 +3,7 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use services::iam::{CreateRoleParams, RoleItem, UpdateRoleParams};
+use erp_identity::{CreateRoleParams, RoleItem, UpdateRoleParams};
 use validator::Validate;
 
 use crate::{

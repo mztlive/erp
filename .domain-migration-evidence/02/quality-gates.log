@@ -1,0 +1,19 @@
+=== cargo fmt --all -- --check ===
+exit 0
+=== cargo check --workspace --locked ===
+exit 0
+=== cargo clippy --workspace --all-targets --all-features --locked -- -D warnings ===
+exit 0
+=== env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked ===
+exit 0; passed=3264 failed=0 ignored=71 crates=17
+=== ./scripts/check-bpm-boundaries.sh ===
+exit 0
+=== ./scripts/check-service-boundaries.sh ===
+exit 0
+=== ./scripts/check-domain-boundaries.sh ===
+exit 0
+=== ./scripts/check-permissions-drift.sh ===
+exit 0
+=== git diff --check ===
+exit 0
+disclaimer: 真实数据库运行未验证

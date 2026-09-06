@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post, put},
     Router,
 };
-use services::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 
 use crate::{
     app_state::AppState,

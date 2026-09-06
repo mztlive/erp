@@ -3,13 +3,14 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, SupplierSettlementExt};
+use database::SupplierSettlementExt;
 use entities::supplier_fulfillment::AllocationAction;
 use entities::supplier_settlement::{
     SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
     SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
     SupplierSettlementSourceEvidenceLine, SupplierSettlementSourceEvidenceLineData, SETTLEMENT_TIMEZONE,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::{line_amounts, Amount};
 use id_generator::next_id;
@@ -20,10 +21,10 @@ use super::{
     digest_parts, RecordSettlementSourceEvidenceRequest, SupplierSettlementService,
     SupplierSettlementSourceEvidenceQuery,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::supplier_settlement::SupplierSettlementSourceEvidenceView;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierSettlementService {
     /// 查询供应商与周期下最新的完整来源证据批次。

@@ -1,15 +1,15 @@
 use std::collections::HashSet;
 
-use database::{AccessControlExt, CatalogExt, FileAssetExt};
+use database::{CatalogExt, FileAssetExt};
 use entities::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
 use entities::catalog::{EnableStatus, ProductBrandId};
+use erp_audit::AuditExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
-use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateProductBrandRequest, PageView, ProductBrandListParams, ProductBrandView, SortDir,
     UpdateProductBrandRequest,
@@ -18,6 +18,7 @@ use crate::errors::Result;
 use crate::file_asset::PendingFileAssetRequest;
 use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 商品品牌列表筛选条件类型。
 type ProductBrandFilter = <mongodb::Database as CatalogExt>::ProductBrandFilter;

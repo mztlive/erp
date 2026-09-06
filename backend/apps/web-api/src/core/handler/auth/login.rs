@@ -4,9 +4,9 @@ use axum::{
     extract::{ConnectInfo, Extension, State},
     Json,
 };
-use entities::AuditLogData;
-use services::audit::AuditLogService;
-use services::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
+use erp_audit::AuditLogData;
+use erp_audit::AuditLogService;
+use erp_identity::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
 use tracing::{info, instrument, warn};
 
 use crate::app_state::AppState;
@@ -36,10 +36,10 @@ pub(crate) async fn login(
         .await;
     let identity = match authentication {
         Ok(identity) => identity,
-        Err(services::Error::Unauthenticated(_)) => {
+        Err(erp_identity::Error::Unauthenticated(_)) => {
             return handle_login_failure(&state, &request).await;
         }
-        Err(services::Error::ValidationError(message)) => {
+        Err(erp_identity::Error::ValidationError(message)) => {
             return Err(Error::BadRequest(message));
         }
         Err(error) => {
@@ -113,9 +113,9 @@ async fn record_login_audit(
 #[cfg(test)]
 mod tests {
     use super::token_payload_for_identity;
-    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
     use erp_core::AccountKind;
-    use services::auth::BackofficeAuthResult;
+    use erp_identity::BackofficeAuthResult;
+    use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
     fn identity(kind: AccountKind) -> BackofficeAuthResult {
         let account = AccountCore::new(

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt, SalesOrderExt, WorkItemExt};
+use database::{DocumentRegistryExt, ReceivableExt, SalesOrderExt, WorkItemExt};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
@@ -14,6 +14,7 @@ use entities::sales_order::{
     SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId,
@@ -28,13 +29,13 @@ use super::adapter::{ensure_final_approve_formalize, sales_order_responsible_org
 use super::dto::SalesOrderDetailView;
 use super::procurement::submission_procurement_inputs;
 use super::SalesOrderService;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::procurement_responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
 };
 use crate::purchase_order::sync_procurement_tasks_for_sales_order;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 struct ProcurementFormalizationPlan {
@@ -45,14 +46,14 @@ struct ProcurementFormalizationPlan {
 /// 销售形式化事务需要一次性消费的完整写入上下文。
 struct FormalizedSubmissionWrite {
     db: Database,
-    rbac: crate::iam::SharedRbacService,
+    rbac: erp_identity::SharedRbacService,
     order_id: String,
     order: SalesOrder,
     submission: SalesOrderSubmission,
     aggregate: SalesOrderRevisionAggregate,
     procurement: Option<ProcurementFormalizationPlan>,
     procurement_items: Vec<WorkItem>,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     now: Instant,
 }
 
@@ -221,7 +222,7 @@ async fn load_latest_submission(
 /// 状态不允许、采购授权版本变化、行字段缺失或写入失败时返回错误。
 async fn persist_formalized_submission(
     db: &Database,
-    rbac: crate::iam::SharedRbacService,
+    rbac: erp_identity::SharedRbacService,
     order: &mut SalesOrder,
     submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
@@ -252,7 +253,7 @@ async fn persist_formalized_submission(
 /// 状态、版本或任务字段不合法时返回错误。
 fn prepare_formalized_submission_write(
     db: &Database,
-    rbac: crate::iam::SharedRbacService,
+    rbac: erp_identity::SharedRbacService,
     order: &mut SalesOrder,
     mut submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,

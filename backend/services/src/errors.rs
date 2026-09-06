@@ -10,6 +10,47 @@ impl From<application_core::Error> for Error {
     }
 }
 
+impl From<erp_identity::Error> for Error {
+    /// 将身份领域错误映射为服务错误。
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Internal(message) => Self::Internal(message),
+            erp_identity::Error::NotFound(message) => Self::NotFound(message),
+            erp_identity::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_identity::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_identity::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_identity::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_identity::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_identity::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_identity::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_identity::Error::Logic(error) => Self::Logic(error),
+            erp_identity::Error::Rbac(message) => Self::Rbac(message),
+            erp_identity::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_identity::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
+impl From<erp_audit::Error> for Error {
+    /// 将审计领域错误映射为服务错误。
+    fn from(error: erp_audit::Error) -> Self {
+        match error {
+            erp_audit::Error::Internal(message) => Self::Internal(message),
+            erp_audit::Error::NotFound(message) => Self::NotFound(message),
+            erp_audit::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_audit::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_audit::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_audit::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_audit::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_audit::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_audit::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_audit::Error::Logic(error) => Self::Logic(error),
+            erp_audit::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_audit::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]

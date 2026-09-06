@@ -6,9 +6,10 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{AccessControlExt, BpmExt, SalesOrderExt, WorkItemExt};
+use database::{BpmExt, SalesOrderExt, WorkItemExt};
 use entities::sales_order::SalesOrder;
 use entities::work_item::WorkItem;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -179,7 +180,7 @@ pub(super) struct SalesOrderCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回销售单。

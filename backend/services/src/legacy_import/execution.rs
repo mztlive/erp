@@ -1,19 +1,20 @@
-use database::{AccessControlExt, BulkJobExt, LegacyImportExt};
+use database::{BulkJobExt, LegacyImportExt};
 use entities::bulk_job::{BackgroundJob, JobStatus};
 use entities::legacy_import::{
     ImportStatus, LegacyImportBatch, LegacyImportBatchStatus, LegacyImportCommandIdentity,
     LegacyImportConfirmation, LegacyImportRow,
 };
-use entities::AuditLog;
+use erp_audit::AuditExt;
+use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use std::collections::BTreeSet;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::dto::{
     ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,

@@ -1,9 +1,10 @@
-use database::{AccessControlExt, DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use database::{DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseOrder,
     PurchaseOrderRevision,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::PurchaseChangeOrderId;
 use id_generator::next_id;
@@ -40,11 +41,11 @@ use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 impl PurchaseOrderService {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -701,7 +702,7 @@ async fn persist_created_change_order(
     change_order: PurchaseChangeOrder,
     mut document: BusinessDocument,
     bind_command: BindPublishedDefinitionCommand,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     actor: AuditActor,
 ) -> Result<()> {
     let db = db.clone();

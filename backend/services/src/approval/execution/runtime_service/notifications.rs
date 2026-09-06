@@ -3,10 +3,11 @@
 use std::collections::HashSet;
 
 use bpm::model::ApprovalNodeExecution;
-use database::{AccessControlExt, ApprovalIntegrationExt};
+use database::ApprovalIntegrationExt;
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
 use erp_core::common::time::Instant;
+use erp_identity::AccessControlExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -17,8 +18,8 @@ use crate::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
 };
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
 pub(super) struct DecisionNotificationFacts<'a> {

@@ -231,9 +231,12 @@ pub(crate) async fn authorize_payment_execution(
             "当前账号不是开放付款任务的当前责任人".to_string(),
         ));
     }
-    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .ensure_domain_decision_access(actor, &task, executor)
-        .await?;
+    WorkItemService::new(
+        db.clone(),
+        crate::identity_compose::shared_rbac_service(db.clone()),
+    )
+    .ensure_domain_decision_access(actor, &task, executor)
+    .await?;
     Ok((task, account))
 }
 
@@ -376,13 +379,16 @@ async fn resolve_payment_responsibility(
     account: &PayableAccount,
     executor: &mut dyn Executor,
 ) -> Result<crate::work_item::ResolvedFinanceResponsibility> {
-    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .resolve_finance_responsibility(
-            FinanceResponsibilityOperation::SupplierPayment,
-            account.supplier_id.as_ref(),
-            executor,
-        )
-        .await
+    WorkItemService::new(
+        db.clone(),
+        crate::identity_compose::shared_rbac_service(db.clone()),
+    )
+    .resolve_finance_responsibility(
+        FinanceResponsibilityOperation::SupplierPayment,
+        account.supplier_id.as_ref(),
+        executor,
+    )
+    .await
 }
 
 /// 返回开放任务重复的稳定业务错误。

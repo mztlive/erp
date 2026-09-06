@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use database::{AccessControlExt, CostExt, PayableExt, SupplierSettlementExt, WorkItemExt};
+use database::{CostExt, PayableExt, SupplierSettlementExt, WorkItemExt};
 use entities::cost::CostEntry;
 use entities::payable::{
     EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
@@ -13,6 +13,7 @@ use entities::supplier_settlement::{
 use entities::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PayableAccountId, PayableEntryId, WorkItemId};
 use erp_core::money::Amount;
@@ -28,10 +29,10 @@ use super::{
     SupplierSettlementService, COMMAND_FINGERPRINT_PREFIX, SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID,
     SETTLEMENT_REVIEW_OWNER_ROLE,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierSettlementService {
     /// 提交冻结结算主题并原子创建唯一财务复核任务。
@@ -259,7 +260,7 @@ impl SupplierSettlementService {
         let client = db.client().clone();
         let actor_id = actor.id().to_string();
         let audit_actor = actor.clone();
-        let rbac_for_tx = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::identity_compose::shared_rbac_service(self.db.clone());
         let operation_id = req.decision.operation_id.clone();
         let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();

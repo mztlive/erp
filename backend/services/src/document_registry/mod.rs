@@ -10,20 +10,21 @@
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
 //! 已登记（读取对方仓储，不经过对方 Service）。
 
-use database::{AccessControlExt, ApprovalBindingLookup, DocumentRegistryExt, SourceRegistryExt};
+use database::{ApprovalBindingLookup, DocumentRegistryExt, SourceRegistryExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, BusinessDocumentId, DocumentParticipant, DocumentRelation,
     DocumentRelationId, DocumentType, WorkflowAction, WorkflowActionId,
 };
+use erp_audit::AuditExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 mod dto;
 

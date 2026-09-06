@@ -6,8 +6,8 @@ use mongodb::Database;
 use persistence_core::Transactional;
 
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 use super::super::definition_dto::{DefinitionDetailView, RetireDefinitionRequest};
 use super::super::policy::ProcessRequiredApprovalPolicy;

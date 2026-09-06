@@ -11,22 +11,24 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, CustomerExt, PartyExt};
+use database::{CustomerExt, PartyExt};
 use entities::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
 use erp_core::ids::PartyId;
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 pub mod assignment;
 mod center;

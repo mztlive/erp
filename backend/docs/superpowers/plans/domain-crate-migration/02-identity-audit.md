@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 02 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-identity`, `erp-audit` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | 本阶段唯一集成负责人（分支 `chore/domain-crate-02-identity-audit`） |
+| 输入/输出提交 | 前序 `b399b662226064bd1fee36df026c461dd75066fd` / 本阶段提交见 `.domain-migration-evidence/02/metadata.json` |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -84,17 +84,19 @@ erp-identity、erp-audit 仅依赖基础及实际技术库；共享 Actor 使用
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 为登录失败分类、密码验证、账号启停、超级管理员保护、角色覆盖/数据范围和审计收据固定纯测试结果；不打印凭据。
+1. [x] 为登录失败分类、密码验证、账号启停、超级管理员保护、角色覆盖/数据范围和审计收据固定纯测试结果；不打印凭据。
 
-2. [ ] 在两个目标 crate 落实实体、DTO、错误及已在阶段 01 创建的拥有仓储类型；迁移 identity/audit 索引定义，旧 database 索引注册临时显式调用其公开索引接口。
+2. [x] 在两个目标 crate 落实实体、DTO、错误及已在阶段 01 创建的拥有仓储类型；迁移 identity/audit 索引定义，旧 database 索引注册临时显式调用其公开索引接口。
 
-3. [ ] 迁移 IAM/Auth/AccessControl 用例、Casbin 适配与账号 helper。为调用方定义的 AuthorizationPort 提供组合根适配；返回权限判定/最小组织范围事实，不返回 RbacService、AccountCore 或完整 Role。
+3. [x] 迁移 IAM/Auth/AccessControl 用例、Casbin 适配与账号 helper。为调用方定义的 AuthorizationPort 提供组合根适配；返回权限判定/最小组织范围事实，不返回 RbacService、AccountCore 或完整 Role。
 
-4. [ ] 拆开 AuditActor 数据与审计实体构造。AuditLogService 负责日志/收据事实持久化；跨领域原子审计由组合用例传入同一 Executor。erp-audit 获取操作人事实只依赖基础上下文，禁止反向依赖 erp-identity。
+4. [x] 拆开 AuditActor 数据与审计实体构造。AuditLogService 负责日志/收据事实持久化；跨领域原子审计由组合用例传入同一 Executor。erp-audit 获取操作人事实只依赖基础上下文，禁止反向依赖 erp-identity。
 
-5. [ ] 更新 apps/web-api 的 auth、中间件、admin/account、admin/role、admin/audit_log、access_control，以及 apps/cli；旧 services 消费新身份/审计公开 API，不保留旧 services::iam/auth/audit 路径转发。
+5. [x] 更新 apps/web-api 的 auth、中间件、admin/account、admin/role、admin/audit_log、access_control，以及 apps/cli；旧 services 消费新身份/审计公开 API，不保留旧 services::iam/auth/audit 路径转发。
 
-6. [ ] 更新 test-support 的实际类型导入；erp-identity/erp-audit 的纯内联测试不得依赖 test-support。相应旧 entities/database/services 模块、extensions、索引声明及根 re-export 清零，运行窄检查和公共门禁。
+6. [x] 更新 test-support 的实际类型导入；erp-identity/erp-audit 的纯内联测试不得依赖 test-support。相应旧 entities/database/services 模块、extensions、索引声明及根 re-export 清零，运行窄检查和公共门禁。
+
+- [ ] 人工将状态改为已验收。本阶段执行者不得勾选；最高状态为本地门禁通过。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 

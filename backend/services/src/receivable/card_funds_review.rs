@@ -1,6 +1,6 @@
 //! W13 卡券票款正式复核命令、岗位分离与复核链匹配。
 
-use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt, ReceivableExt, WorkItemExt};
+use database::{DocumentRegistryExt, FileAssetExt, ReceivableExt, WorkItemExt};
 use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use entities::receivable::{
     AccountReviewStatus, CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
@@ -9,6 +9,7 @@ use entities::receivable::{
     ReceivableFundsReviewChain, ReceivableFundsReviewData, ReviewResult, CARD_FUNDS_REVIEW_ACTION,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ReceivableAccountId, ReceivableFundsReviewId, WorkflowActionId};
 use id_generator::next_id;
@@ -34,10 +35,10 @@ use super::mapping::{
     parse_task_version, CardFundsSnapshot,
 };
 use super::{card_funds_task, ReceivableService};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl ReceivableService {
     /// 以 W13 强类型领域命令完成卡券票款正式复核。
@@ -610,7 +611,7 @@ pub(super) async fn validate_card_funds_reviewer_separation(
         .audit_logs()
         .list_separation_facts_by_resources(&pairs, executor)
         .await?;
-    let mut by_resource: HashMap<(String, String), Vec<&database::SeparationAuditFact>> = HashMap::new();
+    let mut by_resource: HashMap<(String, String), Vec<&erp_audit::SeparationAuditFact>> = HashMap::new();
     for fact in &facts {
         if let Some(resource_id) = fact.resource_id.as_deref() {
             by_resource
@@ -652,7 +653,7 @@ pub(super) async fn validate_card_funds_reviewer_separation(
 /// 失败事件（调用方批量查询已限定成功）不算证据。SoD 规则、当前 actor、
 /// 拒绝文案与授权决定保留 Service，不得下沉。
 fn check_fact_separation(
-    facts: &[&database::SeparationAuditFact],
+    facts: &[&erp_audit::SeparationAuditFact],
     actor_id: &str,
     operator_actions: &[&str],
     formal_actions: &[&str],
@@ -1025,7 +1026,7 @@ mod card_funds_review_tests {
 #[cfg(test)]
 mod fact_separation_tests {
     use super::check_fact_separation;
-    use database::SeparationAuditFact;
+    use erp_audit::SeparationAuditFact;
 
     fn fact(actor: &str, action: &str) -> SeparationAuditFact {
         SeparationAuditFact {

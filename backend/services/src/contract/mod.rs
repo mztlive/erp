@@ -11,21 +11,22 @@
 //! 审计写入复用 `audit::AuditActor::resource_log` + `AccessControlExt::audit_logs`，
 //! 与既有 `source_registry` 模板一致。
 
-use database::{AccessControlExt, ContractExt, CustomerExt, FileAssetExt};
+use database::{ContractExt, CustomerExt, FileAssetExt};
 use entities::contract::{
     ArchiveSource, Contract, ContractData, ContractId, ContractRevision, ContractRevisionData,
     ContractRevisionId,
 };
 use entities::file_asset::FileAsset;
+use erp_audit::AuditExt;
 use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 mod dto;
 mod query;

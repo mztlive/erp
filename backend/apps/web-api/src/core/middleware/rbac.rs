@@ -4,14 +4,14 @@ use std::{
     task::{Context, Poll},
 };
 
+use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::Request,
     response::{IntoResponse, Response},
     routing::MethodRouter,
 };
-use entities::Permission;
-use services::iam::SharedRbacService;
+use erp_identity::{AuthorizationPort, OrganizationScopeFact, Permission, SharedRbacService};
 use tower::{Layer, Service};
 use tracing::{error, warn};
 
@@ -20,7 +20,29 @@ use crate::{
     core::{middleware::RbacSubject, response::ApiResponse},
 };
 
+/// Composition-root adapter: expose authorization facts without leaking RbacService.
+struct RbacAuthorizationPort(SharedRbacService);
+
+#[async_trait]
+impl AuthorizationPort for RbacAuthorizationPort {
+    async fn allows(&self, subject: &str, permission: &Permission) -> erp_identity::Result<bool> {
+        self.0.enforce(subject, permission).await
+    }
+
+    async fn organization_scope(
+        &self,
+        _subject: &str,
+    ) -> erp_identity::Result<Option<OrganizationScopeFact>> {
+        Ok(None)
+    }
+}
+
 /// 为路由附加统一的 Casbin RBAC 权限校验。
+///
+/// # 参数
+/// * `route` - 待保护路由
+/// * `rbac_service` - 共享 RBAC 服务；中间件只通过 AuthorizationPort 读取判定事实
+/// * `permission` - 所需权限
 ///
 /// # 返回值
 /// 返回带权限校验层的路由。
@@ -29,19 +51,22 @@ pub fn with_permission(
     rbac_service: &SharedRbacService,
     permission: Permission,
 ) -> MethodRouter<AppState> {
-    route.route_layer(RbacAuthorizeLayer::new(rbac_service.clone(), permission))
+    route.route_layer(RbacAuthorizeLayer::new(
+        std::sync::Arc::new(RbacAuthorizationPort(rbac_service.clone())),
+        permission,
+    ))
 }
 
 #[derive(Clone)]
 struct RbacAuthorizeLayer {
-    rbac_service: SharedRbacService,
+    authorization: std::sync::Arc<dyn AuthorizationPort>,
     permission: Permission,
 }
 
 impl RbacAuthorizeLayer {
-    fn new(rbac_service: SharedRbacService, permission: Permission) -> Self {
+    fn new(authorization: std::sync::Arc<dyn AuthorizationPort>, permission: Permission) -> Self {
         Self {
-            rbac_service,
+            authorization,
             permission,
         }
     }
@@ -53,7 +78,7 @@ impl<Inner> Layer<Inner> for RbacAuthorizeLayer {
     fn layer(&self, inner: Inner) -> Self::Service {
         RbacAuthorizeService {
             inner,
-            rbac_service: self.rbac_service.clone(),
+            authorization: self.authorization.clone(),
             permission: self.permission.clone(),
         }
     }
@@ -62,7 +87,7 @@ impl<Inner> Layer<Inner> for RbacAuthorizeLayer {
 #[derive(Clone)]
 struct RbacAuthorizeService<Inner> {
     inner: Inner,
-    rbac_service: SharedRbacService,
+    authorization: std::sync::Arc<dyn AuthorizationPort>,
     permission: Permission,
 }
 
@@ -81,7 +106,7 @@ where
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
         let mut inner = self.inner.clone();
-        let rbac_service = self.rbac_service.clone();
+        let authorization = self.authorization.clone();
         let permission = self.permission.clone();
         let subject = request.extensions().get::<RbacSubject>().cloned();
 
@@ -91,7 +116,7 @@ where
                 return Ok(ApiResponse::<()>::unauthorized().into_response());
             };
 
-            match rbac_service.enforce(&subject.0, &permission).await {
+            match authorization.allows(&subject.0, &permission).await {
                 Ok(true) => {
                     poll_fn(|context| inner.poll_ready(context)).await?;
                     inner.call(request).await

@@ -5,9 +5,7 @@ use bpm::model::types::{
     ApprovalProcessInstanceStatus,
 };
 use bpm::model::ApprovalNodeExecution;
-use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, InventoryExt, WorkItemExt,
-};
+use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, InventoryExt, WorkItemExt};
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
@@ -16,6 +14,7 @@ use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
@@ -33,11 +32,11 @@ use super::prepare::{
 use crate::approval::execution::apply_plan::PlannedWrites;
 use crate::approval::execution::map_receipt_first_write_error;
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 /// 库存调整启动事务写入集合。
 ///

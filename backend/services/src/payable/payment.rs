@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, FileAssetExt, PartyExt, PayableExt, SupplierExt};
+use database::{FileAssetExt, PartyExt, PayableExt, SupplierExt};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::file_asset::BankReceiptEvidencePolicy;
 use entities::party::PartyBankAccount;
@@ -11,6 +11,7 @@ use entities::payable::{
     PendingPaymentAllocation, SupplierPayment, SupplierPaymentData, SupplierPaymentStatus,
 };
 use entities::supplier::SupplierAccount;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     FileAssetId, PartyBankAccountId, PayableAccountId, PayableEntryId, PaymentAllocationId,
@@ -34,14 +35,15 @@ use crate::approval::binding::{
     bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
-use crate::iam::SharedRbacService;
 use crate::pending_file_assets::PendingFileAssets;
 use application_core::AuditActor;
+use application_core::CommandReceipt;
+use erp_audit::AuditActorLogs;
+use erp_audit::CommandReceiptServiceExt as _;
+use erp_identity::SharedRbacService;
 
 impl PayableService {
     // -----------------------------------------------------------------------

@@ -1,4 +1,4 @@
-use services::iam::{ResetAdminPasswordParams, ResetAdminPasswordResult};
+use erp_identity::{ResetAdminPasswordParams, ResetAdminPasswordResult};
 use tracing::info;
 
 use crate::args::ResetPasswordArgs;

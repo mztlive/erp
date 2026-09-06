@@ -4,11 +4,12 @@ use bpm::ids::{
 };
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt};
+use database::{ApprovalIntegrationExt, BpmExt, InventoryExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
 use erp_core::common::time::Instant;
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -35,9 +36,9 @@ use crate::approval::{
     approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
 };
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_identity::SharedRbacService;
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
 

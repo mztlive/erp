@@ -8,8 +8,8 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use entities::Permission;
 use erp_core::common::time::Instant;
+use erp_identity::Permission;
 use services::customer::{
     assignment::CustomerAssignmentService, profile::CustomerProfileService, CreateCustomerRequest,
     CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,

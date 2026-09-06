@@ -1,6 +1,6 @@
 //! 客户资料详情查询与视图映射。
 
-use database::{AccessControlExt, CustomerExt, PartyExt};
+use database::{CustomerExt, PartyExt};
 use entities::{
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerAssignment,
@@ -9,6 +9,7 @@ use entities::{
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
+use erp_identity::AccessControlExt;
 use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};

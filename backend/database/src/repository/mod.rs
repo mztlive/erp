@@ -2,10 +2,7 @@
 //!
 //! 提供基于MongoDB的数据访问层实现
 
-mod access_control;
-mod account_core;
 pub mod approval_integration;
-mod audit_log;
 pub mod bpm;
 mod bulk_job;
 mod catalog;
@@ -27,7 +24,6 @@ mod procurement_responsibility;
 mod purchase_order;
 mod receivable;
 mod returns;
-mod role;
 mod sales_order;
 mod sales_review;
 mod source_registry;
@@ -40,7 +36,6 @@ mod warehouse;
 mod work_item;
 mod work_item_fulfillment_queue;
 
-pub use audit_log::{AuditLogFilter, SeparationAuditFact};
 pub use bulk_job::BackgroundJobRegistration;
 pub use catalog::SkuRow;
 pub use customer::CustomerAccountRow;

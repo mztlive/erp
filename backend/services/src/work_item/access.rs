@@ -2,12 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, DocumentRegistryExt, MongoCasbinAdapter};
-use entities::{
-    access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage, ResponsibilityScopeSet},
-    work_item::{AvailableWorkItemAccount, WorkItem, WorkItemStatus, WorkItemType},
-    Permission, PermissionSet,
+use database::DocumentRegistryExt;
+use entities::work_item::{AvailableWorkItemAccount, WorkItem, WorkItemStatus, WorkItemType};
+use erp_identity::access_control::{
+    DataScope, DataScopeSubjectType, OrganizationCoverage, ResponsibilityScopeSet,
 };
+use erp_identity::AccessControlExt;
+use erp_identity::MongoCasbinAdapter;
+use erp_identity::{Permission, PermissionSet};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -401,7 +403,7 @@ pub(super) async fn active_role_ids(
     account_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let subject = crate::iam::subject(account_kind, account_id);
+    let subject = erp_identity::subject(account_kind, account_id);
     let mut role_ids = MongoCasbinAdapter::new(db.clone())
         .subject_roles(&subject, executor)
         .await?

@@ -4,11 +4,13 @@ use bpm::engine::{CommitRequired, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::Timestamp;
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
 use entities::work_item::WorkItemStatus;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -40,11 +42,11 @@ use crate::approval::business_adapter::{
 };
 use crate::approval::policy::STATIC_APPROVE_PERMISSION;
 use crate::approval::{approval_recovery_scope, ApprovalResumeCommand};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
-use crate::iam::subject;
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::subject;
+use erp_identity::SharedRbacService;
 
 /// 人员恢复时对旧关闭任务执行的只读并发守卫。
 struct ClosedTaskGuard {
@@ -62,7 +64,7 @@ struct ResumePersistInput<'a> {
     closed_task_guard: Option<&'a ClosedTaskGuard>,
     new_task_ids: &'a [String],
     list_projection: &'a ApprovalInstanceListProjection,
-    audit: &'a entities::audit_log::AuditLog,
+    audit: &'a erp_audit::AuditLog,
     now: Instant,
     owner_role: &'a str,
     owner_organization_id: &'a str,
@@ -123,7 +125,7 @@ impl ApprovalRuntimeService {
             .await?
         {
             Some(account) if account.is_active_backoffice() => {
-                let permission = entities::Permission::parse(STATIC_APPROVE_PERMISSION)
+                let permission = erp_identity::Permission::parse(STATIC_APPROVE_PERMISSION)
                     .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))?;
                 if self
                     .rbac

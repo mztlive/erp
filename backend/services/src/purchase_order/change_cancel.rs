@@ -4,9 +4,10 @@ use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{AccessControlExt, BpmExt, PurchaseOrderExt, WorkItemExt};
+use database::{BpmExt, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::PurchaseChangeOrder;
 use entities::work_item::{WorkItem, WorkItemCloseData};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -201,7 +202,7 @@ pub(super) struct PurchaseChangeCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回变更单。

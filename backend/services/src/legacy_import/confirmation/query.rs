@@ -7,9 +7,9 @@ use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use crate::work_item::{ProcessingState, WorkItemAllowedAction, WorkItemService, WorkItemView};
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
 use super::super::dto::{
     ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationListParams, LegacyImportConfirmationView,

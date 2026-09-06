@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, PartyExt, SupplierExt};
+use database::{PartyExt, SupplierExt};
 use entities::{
     party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile},
     supplier::{
@@ -14,6 +14,7 @@ use entities::{
         SupplierRatingRevisionData,
     },
 };
+use erp_audit::AuditExt;
 use erp_core::{
     field_update::FieldUpdate,
     ids::{
@@ -26,13 +27,13 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
-use crate::audit::AuditActorLogs;
 use crate::{
     errors::{Error, Result},
     file_asset::PendingFileAssetRequest,
     pending_file_assets::PendingFileAssets,
 };
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::{SaveSupplierProfileRequest, SupplierProfileMutationView};
 use super::{
@@ -787,7 +788,7 @@ struct PreparedUpdate {
     qualifications: QualificationChanges,
     ratings: RatingChanges,
     command: SupplierProfileCommand,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     result: SupplierProfileMutationView,
     pending_assets: PendingFileAssets,
 }

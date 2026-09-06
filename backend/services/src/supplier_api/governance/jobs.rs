@@ -1,6 +1,6 @@
 use std::time::Instant as MonotonicInstant;
 
-use database::{AccessControlExt, BulkJobExt, IntegrationOpsExt, SupplierApiExt, WorkItemExt};
+use database::{BulkJobExt, IntegrationOpsExt, SupplierApiExt, WorkItemExt};
 use entities::bulk_job::{
     BackgroundJob, JobStatus, SupplierGovernanceJobKind, SupplierGovernanceJobSpec,
     SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
@@ -11,15 +11,16 @@ use entities::supplier_api::{
     SupplierConnectionAction, SupplierConnectionGovernance, SupplierHealthCheckRun,
     SupplierHealthCheckRunData, SupplierHealthCheckType,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BackgroundJobId, IntegrationErrorTaskId, SupplierApiConnectionId};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::integration_ops::{error_owner_role, error_work_item};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::dto::{SupplierConnectionCommandResult, SupplierConnectionJobView};
 use super::super::{ClassifiedError, SupplierApiService};

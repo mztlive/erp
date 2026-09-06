@@ -138,9 +138,12 @@ pub(crate) async fn record_invoice_execution(
             "当前账号不是开放开票任务的当前责任人".to_string(),
         ));
     }
-    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .ensure_domain_decision_access(actor, &task, executor)
-        .await?;
+    WorkItemService::new(
+        db.clone(),
+        crate::identity_compose::shared_rbac_service(db.clone()),
+    )
+    .ensure_domain_decision_access(actor, &task, executor)
+    .await?;
     if &account.counterparty_party_id != party_id {
         return Err(Error::BusinessLogicError(
             "发票往来主体与当前任务的应收子账不一致".to_string(),
@@ -166,13 +169,16 @@ async fn create_invoice_task(
     reason: SalesInvoiceTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let responsibility = WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .resolve_finance_responsibility(
-            FinanceResponsibilityOperation::SalesInvoice,
-            account.customer_id.as_ref(),
-            executor,
-        )
-        .await?;
+    let responsibility = WorkItemService::new(
+        db.clone(),
+        crate::identity_compose::shared_rbac_service(db.clone()),
+    )
+    .resolve_finance_responsibility(
+        FinanceResponsibilityOperation::SalesInvoice,
+        account.customer_id.as_ref(),
+        executor,
+    )
+    .await?;
     let task = new_sales_invoice_task(
         WorkItemId::new(next_id()),
         SalesInvoiceTaskSpec {

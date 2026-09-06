@@ -1,0 +1,99 @@
+//! Audit-domain application errors with the original audit mapping.
+
+use application_core::ErrorClass;
+
+/// Audit-domain result alias.
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<application_core::Error> for Error {
+    /// 将应用合同错误映射为审计领域错误。
+    fn from(error: application_core::Error) -> Self {
+        match error {
+            application_core::Error::Internal(message) => Self::Internal(message),
+            application_core::Error::ValidationError(message) => Self::ValidationError(message),
+        }
+    }
+}
+
+/// Audit log and command-receipt errors.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("系统内部错误: {0}")]
+    Internal(String),
+
+    #[error("数据不存在: {0}")]
+    NotFound(String),
+
+    #[error("参数验证失败: {0}")]
+    ValidationError(String),
+
+    #[error("业务逻辑错误: {0}")]
+    BusinessLogicError(String),
+
+    #[error("数据冲突: {0}")]
+    ConflictError(String),
+
+    #[error("数据冲突: 数据已存在，请勿重复提交")]
+    ReceiptDuplicate(#[source] persistence_core::Error),
+
+    #[error("数据冲突: 并发事务冲突，请重试")]
+    TransientTransaction(#[source] persistence_core::Error),
+
+    #[error("权限不足: {0}")]
+    Forbidden(String),
+
+    #[error("认证失败: {0}")]
+    Unauthenticated(String),
+
+    #[error(transparent)]
+    Logic(#[from] erp_core::Error),
+
+    #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
+    OutcomeUnknown(#[source] persistence_core::Error),
+
+    #[error("数据库错误：{0}")]
+    RepositoryError(persistence_core::Error),
+}
+
+impl Error {
+    /// Stable error class used by HTTP mapping; do not parse display text.
+    pub fn class(&self) -> ErrorClass {
+        match self {
+            Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
+            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
+                ErrorClass::Conflict
+            }
+            Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
+                ErrorClass::BusinessRule
+            }
+            Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
+            Self::OutcomeUnknown(_) => ErrorClass::Internal,
+        }
+    }
+}
+
+impl From<persistence_core::Error> for Error {
+    /// 将仓储错误转换为审计领域错误。
+    fn from(error: persistence_core::Error) -> Self {
+        match error {
+            _error @ persistence_core::Error::DuplicateKey(_) => {
+                Self::ConflictError("数据已存在，请勿重复提交".to_string())
+            }
+            persistence_core::Error::OptimisticLockingError => {
+                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
+            }
+            error @ persistence_core::Error::TransientTransactionConflict(_) => {
+                Self::TransientTransaction(error)
+            }
+            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
+            other => Self::RepositoryError(other),
+        }
+    }
+}
+
+impl From<validator::ValidationErrors> for Error {
+    /// 从校验错误构建审计领域错误。
+    fn from(err: validator::ValidationErrors) -> Self {
+        Error::ValidationError(err.to_string())
+    }
+}

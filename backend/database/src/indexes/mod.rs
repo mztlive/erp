@@ -3,7 +3,6 @@
 //!
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
-mod access_control;
 mod approval_integration;
 mod bpm;
 mod bulk_job;
@@ -42,7 +41,8 @@ mod work_item;
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {
-    access_control::ensure(db).await?;
+    erp_identity::indexes::ensure(db).await?;
+    erp_audit::indexes::ensure(db).await?;
     approval_integration::ensure(db).await?;
     bpm::ensure(db).await?;
     bulk_job::ensure(db).await?;

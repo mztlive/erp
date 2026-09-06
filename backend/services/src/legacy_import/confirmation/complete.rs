@@ -1,19 +1,20 @@
-use database::{AccessControlExt, DocumentRegistryExt, LegacyImportExt, WorkItemExt};
+use database::{DocumentRegistryExt, LegacyImportExt, WorkItemExt};
 use entities::document_registry::WorkflowActionId;
 use entities::legacy_import::{
     confirmation_workflow_action, ConfirmationDecision, ConfirmationScope, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::dto::{
     CompleteImportBusinessConfirmationCommand, CompleteImportBusinessConfirmationResult,
@@ -69,7 +70,7 @@ impl LegacyImportService {
         let prepared_for_tx = prepared.clone();
         let actor_id = actor.id().to_string();
         let audit_actor = actor.clone();
-        let rbac_for_tx = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::identity_compose::shared_rbac_service(self.db.clone());
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let transaction_result = client

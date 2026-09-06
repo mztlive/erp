@@ -2,15 +2,16 @@ use std::collections::HashMap;
 
 use bpm::model::types::ModelError;
 use database::repository::bpm::DefinitionGraph;
-use database::{AccessControlExt, MongoCasbinAdapter};
 use entities::document_registry::DocumentType;
-use entities::{AccountCore, RoleIdSet};
+use erp_identity::AccessControlExt;
+use erp_identity::MongoCasbinAdapter;
+use erp_identity::{AccountCore, RoleIdSet};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::iam::{subject, SharedRbacService};
 use application_core::AuditActor;
+use erp_identity::{subject, SharedRbacService};
 
 use super::super::business_adapter::{
     adapter_spec_of, assignment_scope_covers_organization, ensure_separation_of_duties,
@@ -142,11 +143,11 @@ async fn load_assignee_scope_sets(
     rbac: &SharedRbacService,
     account: &AccountCore,
     executor: &mut dyn Executor,
-) -> Result<(Vec<entities::access_control::DataScope>, Vec<RoleScopeFacts>)> {
+) -> Result<(Vec<erp_identity::access_control::DataScope>, Vec<RoleScopeFacts>)> {
     let user_scopes = db
         .data_scopes()
         .list_by_subject(
-            entities::access_control::DataScopeSubjectType::User,
+            erp_identity::access_control::DataScopeSubjectType::User,
             &account.base.id,
             executor,
         )
@@ -185,7 +186,7 @@ async fn load_enabled_decide_role_scopes(
     let role_scopes = db
         .data_scopes()
         .list_by_subjects(
-            entities::access_control::DataScopeSubjectType::Role,
+            erp_identity::access_control::DataScopeSubjectType::Role,
             &granting_role_ids,
             executor,
         )
@@ -211,7 +212,7 @@ async fn load_enabled_decide_role_scopes(
 async fn permission_granting_role_ids(
     rbac: &SharedRbacService,
     role_ids: Vec<String>,
-    permission: &entities::Permission,
+    permission: &erp_identity::Permission,
 ) -> Result<Vec<String>> {
     let mut granting = Vec::new();
     for role_id in role_ids {
@@ -256,7 +257,7 @@ pub(super) fn require_granting_role_ids(role_ids: Vec<String>) -> Result<Vec<Str
 /// 每个角色的权限与范围必须保持在同一集合内，不得跨角色拼接。
 pub(super) fn group_role_scope_facts(
     role_ids: &[String],
-    scopes: Vec<entities::access_control::DataScope>,
+    scopes: Vec<erp_identity::access_control::DataScope>,
 ) -> Vec<RoleScopeFacts> {
     let mut scopes_by_role = HashMap::<String, Vec<_>>::new();
     for scope in scopes {
@@ -290,7 +291,7 @@ pub(super) fn group_role_scope_facts(
 /// 权限来自角色 A、范围来自角色 B 时必须失败关闭。
 pub(super) fn revalidate_assignee_binding_access_by_role(
     spec: &super::super::business_adapter::ApprovalAdapterSpec,
-    user_scopes: &[entities::access_control::DataScope],
+    user_scopes: &[erp_identity::access_control::DataScope],
     role_scope_sets: &[RoleScopeFacts],
     context: &BindingRevalidationContext,
     assignee_user_id: &str,
@@ -457,8 +458,8 @@ async fn ensure_static_decide_permission(rbac: &SharedRbacService, account: &Acc
 ///
 /// # 错误
 /// 固定权限常量损坏时返回内部错误。
-fn static_decide_permission() -> Result<entities::Permission> {
-    entities::Permission::parse(STATIC_APPROVE_PERMISSION)
+fn static_decide_permission() -> Result<erp_identity::Permission> {
+    erp_identity::Permission::parse(STATIC_APPROVE_PERMISSION)
         .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))
 }
 

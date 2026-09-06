@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use database::AccessControlExt;
+use erp_identity::AccessControlExt;
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto::WorkItemSummarySection;

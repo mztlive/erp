@@ -1,12 +1,13 @@
-use database::{AccessControlExt, SupplierSettlementExt};
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::SupplierSettlementStatement;
+use erp_audit::AuditExt;
 use persistence_core::Transactional;
 use validator::Validate;
 
 use super::{SupplierSettlementService, SupplierSettlementStatementView, VoidSettlementRequest};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 impl SupplierSettlementService {
     /// 作废尚未提交复核的结算草稿。
@@ -62,7 +63,7 @@ impl SupplierSettlementService {
     async fn update_statement_with_audit(
         &self,
         statement: &mut SupplierSettlementStatement,
-        audit: &entities::AuditLog,
+        audit: &erp_audit::AuditLog,
     ) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();

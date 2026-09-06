@@ -41,7 +41,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | --- | --- | --- | --- |
 | 00 | [基线与执行治理](00-baseline.md) | 治理或最终验收 | 本地门禁通过 |
 | 01 | [公共基础与仓储类型解耦](01-foundations.md) | erp-core, application-core, persistence-core | 本地门禁通过 |
-| 02 | [身份与审计](02-identity-audit.md) | erp-identity, erp-audit | 未开始 |
+| 02 | [身份与审计](02-identity-audit.md) | erp-identity, erp-audit | 本地门禁通过 |
 | 03 | [工作流与组合层](03-workflow-composition.md) | erp-workflow, erp-processes, erp-read-models | 未开始 |
 | 04 | [通用支撑](04-support.md) | erp-support | 未开始 |
 | 05 | [主体、客户与供应商](05-party-customer-supplier.md) | erp-party, erp-customer, erp-supplier | 未开始 |

@@ -1,5 +1,5 @@
 use axum::{extract::State, Extension};
-use services::iam::{AccountProfile, AccountProfileService};
+use erp_identity::{AccountProfile, AccountProfileService};
 
 use crate::{
     app_state::AppState,

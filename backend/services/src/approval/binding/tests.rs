@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
 use database::repository::bpm::DefinitionGraph;
-use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
 use entities::document_registry::workflow_action::ApprovalBindingActionContext;
 use entities::document_registry::{
     BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
     WorkflowActionType,
 };
-use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 use erp_core::ids::DataScopeId;
 use erp_core::AccountKind;
+use erp_identity::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
+use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
 use crate::approval::business_adapter::ensure_runtime_cut_over;
 use crate::approval::execution::upgrade_binding_identity;

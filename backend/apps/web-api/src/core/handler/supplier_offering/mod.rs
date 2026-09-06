@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use entities::Permission;
+use erp_identity::Permission;
 use services::supplier_offering::{
     CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
     CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,

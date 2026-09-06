@@ -9,14 +9,13 @@ use bpm::ids::{
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, WorkItemExt,
-};
+use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, WorkItemExt};
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::document_registry::DocumentType;
 use entities::sales_order::{SalesOrder, SalesOrderLine, SalesOrderWorkingCopyLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
@@ -406,7 +405,7 @@ pub(super) struct SalesOrderStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
     /// 本次提交附带的草稿替换写入计划。
     pub working_copy_plan: SalesOrderWorkingCopyPersistPlan,
     /// 事务内必须重新确认的商品池精确引用。

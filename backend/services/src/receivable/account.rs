@@ -1,15 +1,16 @@
 //! 应收往来子账列表、详情与创建编排。
 
-use database::{AccessControlExt, ReceivableExt, SalesOrderExt, WorkItemExt};
+use database::{ReceivableExt, SalesOrderExt, WorkItemExt};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
 };
 use entities::work_item::{WorkItemStatus, WorkItemType};
-use entities::Permission;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
+use erp_identity::Permission;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -27,11 +28,11 @@ use super::mapping::{
     map_chain_error, receipt_fact_views, zero_amount,
 };
 use super::{card_funds_task, invoice_task, ReceivableAccountFilter, ReceivableService};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::{self, SharedRbacService};
 use crate::work_item::{WorkItemAllowedAction, WorkItemService};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------
@@ -379,7 +380,7 @@ impl ReceivableService {
             }
         }
 
-        let subject = iam::subject(actor.kind(), actor.id());
+        let subject = erp_identity::subject(actor.kind(), actor.id());
         let has_counterparty_name = view
             .counterparty_party_name
             .as_deref()

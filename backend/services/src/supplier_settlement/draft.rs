@@ -2,11 +2,12 @@
 
 use std::str::FromStr;
 
-use database::{AccessControlExt, SupplierSettlementExt};
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::{
     SupplierSettlementDraftSnapshot, SupplierSettlementSnapshotUpdate, SupplierSettlementStatement,
     SupplierSettlementStatementData,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
@@ -20,9 +21,9 @@ use super::{
     RefreshSettlementStatementRequest, SettlementDraftAction, SettlementDraftCommandResult,
     SupplierSettlementService, REVIEW_CUTOFF_POLICY_ID, REVIEW_CUTOFF_POLICY_VERSION,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 /// 刷新命令的持久化幂等收据。
 struct RefreshReceipt {
@@ -490,21 +491,24 @@ fn refresh_audit(
     statement: &SupplierSettlementStatement,
     receipt: &RefreshReceipt,
     actor: &AuditActor,
-) -> Result<entities::AuditLog> {
-    actor.clone().resource_log_with_id(
-        audit_id,
-        "supplier_settlement.refresh",
-        "supplier_settlement_statement",
-        statement.base.id.clone(),
-        Some(format!(
-            "command_sha256={fingerprint};result={}|{}|{}|{}|{}",
-            receipt.request_id,
-            receipt.statement_version,
-            receipt.source_snapshot_hash,
-            receipt.item_count,
-            receipt.difference_count,
-        )),
-    )
+) -> Result<erp_audit::AuditLog> {
+    actor
+        .clone()
+        .resource_log_with_id(
+            audit_id,
+            "supplier_settlement.refresh",
+            "supplier_settlement_statement",
+            statement.base.id.clone(),
+            Some(format!(
+                "command_sha256={fingerprint};result={}|{}|{}|{}|{}",
+                receipt.request_id,
+                receipt.statement_version,
+                receipt.source_snapshot_hash,
+                receipt.item_count,
+                receipt.difference_count,
+            )),
+        )
+        .map_err(Into::into)
 }
 
 fn parse_refresh_receipt(message: &str, fingerprint: &str) -> Result<RefreshReceipt> {

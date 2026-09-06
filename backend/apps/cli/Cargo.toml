@@ -8,6 +8,8 @@ autotests = false
 clap = { workspace = true }
 config = { workspace = true }
 database = { workspace = true }
+erp-identity = { workspace = true }
+erp-audit = { workspace = true }
 persistence-core = { workspace = true }
 rpassword = "7.4.0"
 services = { workspace = true }

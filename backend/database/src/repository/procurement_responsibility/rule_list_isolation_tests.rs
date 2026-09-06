@@ -1,5 +1,5 @@
 use crate::ensure_indexes;
-use crate::{AccessControlExt, CatalogExt, ProcurementResponsibilityExt};
+use crate::{CatalogExt, ProcurementResponsibilityExt};
 use entities::catalog::product_category::ProductCategoryData;
 use entities::catalog::sku::SkuData;
 use entities::catalog::sku_revision::SkuRevisionData;
@@ -7,12 +7,13 @@ use entities::catalog::{EnableStatus, ListingStatus, ProductCategory, Sku, SkuRe
 use entities::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
 };
-use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProcurementResponsibilityRuleId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId,
 };
 use erp_core::AccountKind;
+use erp_identity::AccessControlExt;
+use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 use mongodb::bson::doc;
 use persistence_core::{NoTransaction, Transactional};
 use test_support::{require_mongo, TestDb};

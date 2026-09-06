@@ -1,8 +1,6 @@
-mod casbin_adapter;
 mod indexes;
 pub mod repository;
 
-pub use casbin_adapter::MongoCasbinAdapter;
 pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
 pub use repository::{
@@ -10,5 +8,5 @@ pub use repository::{
     CustomerCenterRelatedRow, CustomerCenterSalesOrderRow, FulfillmentQueueFilter, FulfillmentQueueItemRow,
     FulfillmentQueueMetricRow, FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
     ProcurementResponsibilityRuleFilter, ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery,
-    SeparationAuditFact, SkuRow, SupplierOfferingRow, WorkItemRow,
+    SkuRow, SupplierOfferingRow, WorkItemRow,
 };

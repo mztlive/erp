@@ -163,7 +163,7 @@
     {
       "id": "02",
       "file": "02-identity-audit.md",
-      "status": "未开始",
+      "status": "本地门禁通过",
       "crates": [
         "erp-identity",
         "erp-audit"

@@ -6,9 +6,10 @@ use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use database::{AccessControlExt, BpmExt, WorkItemExt};
+use database::{BpmExt, WorkItemExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -35,10 +36,10 @@ use crate::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
     ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
 };
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 /// 已提交受阻取消的不可变终态事实；先证明原操作人，再允许比较请求摘要。
 pub(super) struct CancelBlockedTerminalFacts {

@@ -16,22 +16,23 @@
 
 use std::collections::HashSet;
 
-use database::{AccessControlExt, BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt};
+use database::{BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt};
 use entities::bulk_job::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
     BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
     BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
 use entities::document_registry::DocumentType;
+use erp_audit::AuditExt;
 use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 mod dto;
 

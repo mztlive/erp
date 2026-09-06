@@ -459,10 +459,10 @@ mod tests {
         account, direct_data, AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData,
         WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
     };
-    use crate::AccountStatus;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
     use erp_core::AccountKind;
+    use erp_identity::AccountStatus;
 
     #[test]
     fn account_and_subject_version_value_objects_fail_closed() {

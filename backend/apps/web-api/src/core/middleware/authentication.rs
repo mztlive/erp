@@ -5,7 +5,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use services::{auth::BackofficeAuthService, iam};
+use erp_identity::BackofficeAuthService;
 use tracing::{error, info, warn};
 
 use crate::{
@@ -67,7 +67,7 @@ async fn validate_current_identity(state: &AppState, payload: &TokenPayload) -> 
         .await
     {
         Ok(_) => Ok(()),
-        Err(services::Error::Unauthenticated(_)) => {
+        Err(erp_identity::Error::Unauthenticated(_)) => {
             warn!("Authorization failed: backoffice account is no longer active");
             Err(ApiResponse::unauthorized())
         }
@@ -105,7 +105,7 @@ fn attach_identity(request: &mut Request, payload: TokenPayload) -> Result<(), A
         .extensions_mut()
         .insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
     request.extensions_mut().insert(account_kind);
-    let rbac_subject = RbacSubject(iam::subject(account_kind, &user_id));
+    let rbac_subject = RbacSubject(erp_identity::subject(account_kind, &user_id));
     request.extensions_mut().insert(UserID(user_id));
     request.extensions_mut().insert(Account(account));
     request.extensions_mut().insert(subject_kind);
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn rbac_subject_should_include_account_kind_and_id() {
-        let subject = RbacSubject(services::iam::subject(AccountKind::Admin, "admin-1"));
+        let subject = RbacSubject(erp_identity::subject(AccountKind::Admin, "admin-1"));
         assert_eq!(subject.0, "user:admin:admin-1");
     }
 

@@ -5,11 +5,11 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
 use database::DocumentRegistryExt;
 use entities::document_registry::BusinessDocument;
 use entities::sales_order::SalesOrder;
+use erp_identity::SharedRbacService;
 use sha2::{Digest, Sha256};
 
 use super::super::adapter::{sales_order_object_readable, sales_order_responsible_org_id};

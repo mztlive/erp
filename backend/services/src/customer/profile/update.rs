@@ -1,6 +1,6 @@
 //! 客户资料修订用例与事务载荷。
 
-use database::{AccessControlExt, CustomerExt, PartyExt};
+use database::{CustomerExt, PartyExt};
 use entities::{
     customer::{
         CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileCommandResultData,
@@ -8,6 +8,7 @@ use entities::{
     },
     party::{Party, PartyRevision, PartyRevisionData, PartyUpdate},
 };
+use erp_audit::AuditExt;
 use erp_core::{
     field_update::FieldUpdate,
     ids::{PartyId, PartyRevisionId},
@@ -16,9 +17,9 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{
@@ -91,7 +92,7 @@ struct PreparedUpdate {
     account: CustomerAccount,
     facts: PartyFactChanges,
     command: CustomerProfileCommand,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     result: CustomerProfileMutationView,
 }
 

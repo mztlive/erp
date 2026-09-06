@@ -6,10 +6,11 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{AccessControlExt, BpmExt, ReturnsExt, WorkItemExt};
+use database::{BpmExt, ReturnsExt, WorkItemExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use entities::work_item::WorkItem;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -178,7 +179,7 @@ pub(super) struct CustomerRefundCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回退款单。
@@ -298,7 +299,7 @@ pub(super) struct SupplierRefundCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回供应商退款单。
@@ -418,7 +419,7 @@ pub(super) struct ReceiptReversalCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回回款冲正单。
@@ -538,7 +539,7 @@ pub(super) struct PaymentReversalCancelPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回付款冲正单。

@@ -7,14 +7,14 @@ use bpm::ids::{
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, SalesReviewExt,
-    WorkItemExt,
+    ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, SalesReviewExt, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::document_registry::DocumentType;
 use entities::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
@@ -363,7 +363,7 @@ pub(super) struct SalesChangeStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: entities::AuditLog,
+    pub audit: erp_audit::AuditLog,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。

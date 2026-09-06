@@ -220,7 +220,7 @@ pub(super) fn parse_receipt_number(value: &str, field: &str) -> Result<u64> {
 }
 
 /// 校验幂等收据仍指向同一成功业务资源。
-pub(super) fn ensure_audit_resource(audit: &entities::AuditLog, resource_id: &str) -> Result<()> {
+pub(super) fn ensure_audit_resource(audit: &erp_audit::AuditLog, resource_id: &str) -> Result<()> {
     if !audit.success || audit.resource_id.as_deref() != Some(resource_id) {
         return Err(Error::ConflictError("幂等收据与当前业务资源不一致".to_string()));
     }

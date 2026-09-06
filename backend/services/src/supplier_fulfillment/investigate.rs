@@ -1,4 +1,4 @@
-use database::{AccessControlExt, SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     FulfillmentStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierFulfillmentOrderUpdate,
@@ -6,6 +6,7 @@ use entities::supplier_fulfillment::{
     SupplierOrderActionUpdate,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderActionId;
 use mongodb::Database;
@@ -27,10 +28,10 @@ use super::receipt::{
     InvestigationReceipt,
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 const INVESTIGATION_EVIDENCE_SCHEMA: &str = "W26_INVESTIGATION_V1";
 const INVESTIGATION_INTENT_SCHEMA: &str = "W26_INVESTIGATION_INTENT_V1";
@@ -219,7 +220,7 @@ impl SupplierFulfillmentService {
         let prepared_for_tx = prepared.clone();
         let actor_id = actor.id().to_string();
         let actor_for_tx = actor.clone();
-        let rbac_for_tx = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::identity_compose::shared_rbac_service(self.db.clone());
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let evidence_id_for_tx = evidence_id.clone();
@@ -406,7 +407,7 @@ impl SupplierFulfillmentService {
         let evidence_idempotency_key = evidence_idempotency_key.to_string();
         let actor = actor.clone();
         let actor_id = actor.id().to_string();
-        let rbac = crate::iam::shared_rbac_service(self.db.clone());
+        let rbac = crate::identity_compose::shared_rbac_service(self.db.clone());
         let db = self.db.clone();
         let client = db.client().clone();
         client

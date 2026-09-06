@@ -5,7 +5,7 @@ mod resolver;
 mod rule_list;
 mod service;
 
-use crate::iam::SharedRbacService;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 
 pub use dto::{

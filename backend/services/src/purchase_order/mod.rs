@@ -19,7 +19,8 @@
 //! - D20 `cost`：`CONFIRMED` 成本事实（审核通过、变更差额）；
 //! - D03 `work_item`：采购审核待办（提交创建、审核完成）。
 
-use database::{AccessControlExt, PurchaseOrderExt};
+use database::PurchaseOrderExt;
+use erp_audit::AuditExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -68,10 +69,10 @@ pub use self::dto::{
 pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 /// 采购单服务。
 ///

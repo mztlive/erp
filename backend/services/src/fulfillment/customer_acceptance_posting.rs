@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, FulfillmentExt, SalesOrderExt};
+use database::{FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
     AcceptanceResult, AllocationAction, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
     CustomerAcceptanceLineData, CustomerAcceptanceUpdate, FulfillmentFactType, ServiceFulfillment,
 };
 use entities::sales_order::BusinessType;
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
@@ -17,10 +18,11 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
-use crate::audit::{CommandReceipt, CommandReceiptServiceExt};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use application_core::CommandReceipt;
+use erp_audit::AuditActorLogs;
+use erp_audit::CommandReceiptServiceExt;
 
 use super::acceptance_eligibility::{build_line_eligibilities, so_line_ids, EligibilityGroupSources};
 use super::customer_acceptance::register_created_customer_acceptance_document;

@@ -1,6 +1,6 @@
 //! 客户资料创建用例与事务载荷。
 
-use database::{AccessControlExt, CustomerExt, PartyExt};
+use database::{CustomerExt, PartyExt};
 use entities::{
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
@@ -9,14 +9,16 @@ use entities::{
     },
     party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus},
 };
+use erp_audit::AuditExt;
 use erp_core::ids::{PartyId, PartyRevisionId};
+use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{
@@ -123,7 +125,7 @@ struct PreparedCreate {
     assignment: CustomerAssignment,
     facts: PartyFacts,
     command: CustomerProfileCommand,
-    audit: entities::AuditLog,
+    audit: erp_audit::AuditLog,
     result: CustomerProfileMutationView,
 }
 

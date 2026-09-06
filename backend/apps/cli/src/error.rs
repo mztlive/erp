@@ -10,6 +10,9 @@ pub enum Error {
     /// 服务编排或领域校验失败。
     #[error(transparent)]
     Service(#[from] services::Error),
+    /// 身份用例失败。
+    #[error(transparent)]
+    Identity(#[from] erp_identity::Error),
     /// 命令行用法或交互输入不合法。
     #[error("{0}")]
     Usage(String),

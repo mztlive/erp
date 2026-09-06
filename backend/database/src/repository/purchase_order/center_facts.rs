@@ -15,9 +15,8 @@ use entities::purchase_order::{
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use mongodb::Database;
 
-use crate::repository::extensions::{
-    AccessControlExt, PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt,
-};
+use crate::repository::extensions::{PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
+use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 

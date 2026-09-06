@@ -18,7 +18,8 @@
 use database::ReceivableExt;
 use mongodb::Database;
 
-use crate::iam::{self, SharedRbacService};
+use crate::identity_compose::shared_rbac_service;
+use erp_identity::SharedRbacService;
 
 mod account;
 mod adapter;
@@ -79,7 +80,7 @@ impl ReceivableService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        let rbac = iam::shared_rbac_service(db.clone());
+        let rbac = shared_rbac_service(db.clone());
         Self { db, rbac }
     }
 }

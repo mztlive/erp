@@ -9,8 +9,9 @@ use bpm::model::types::{
 };
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, IdempotencyKey, ParticipantId, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -43,10 +44,10 @@ use super::{
 use crate::approval::business_adapter::adapter_spec_of;
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{ApprovalActionContext, ApprovalDomainActionPort, DecisionActionParams};
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
-use crate::iam::SharedRbacService;
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_identity::SharedRbacService;
 
 /// 已规范化的审批决定命令；协议字段保持不变，摘要在进入事务前固定。
 #[derive(Debug, Clone)]
@@ -797,7 +798,7 @@ struct PersistDecisionWrites<'a> {
     work_item_id: &'a str,
     new_task_ids: &'a [String],
     list_projection: &'a ApprovalInstanceListProjection,
-    audit: &'a entities::audit_log::AuditLog,
+    audit: &'a erp_audit::AuditLog,
     now: Instant,
     actor_id: &'a str,
     owner_role: &'a str,

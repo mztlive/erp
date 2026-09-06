@@ -3,15 +3,14 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{
-    AccessControlExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt,
-};
+use database::{PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt};
 use entities::sales_order::{
     BusinessType, ReviewStatus, SalesOrderRevision, SalesOrderRevisionLine, SalesOrderSubmissionLine,
     SalesOrderWorkingCopy, WorkingPurpose,
 };
-use entities::Permission;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use erp_identity::AccessControlExt;
+use erp_identity::Permission;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -28,11 +27,9 @@ use super::status::{
 };
 use super::SalesOrderService;
 use crate::document_registry::find_approval_binding;
-use crate::{
-    errors::{Error, Result},
-    iam::subject,
-};
+use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_identity::subject;
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
 type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;

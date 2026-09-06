@@ -5,19 +5,20 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, BulkJobExt, LegacyImportExt, PartyExt};
+use database::{BulkJobExt, LegacyImportExt, PartyExt};
 use entities::legacy_import::{
     ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportBatch,
     LegacyImportRow,
 };
+use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 
 use super::dto::{
     ApplyLegacyImportBatchRequest, ApplyRowOutcome, ApplyRowResult, LegacyImportBatchView,
@@ -503,7 +504,7 @@ struct PersistApplyWrite<'a> {
     /// 后台任务。
     job: &'a mut entities::bulk_job::BackgroundJob,
     /// 审计日志。
-    audit: &'a entities::AuditLog,
+    audit: &'a erp_audit::AuditLog,
     /// 本批成功数。
     success: u64,
     /// 本批跳过数。
@@ -826,10 +827,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn persist_rolls_back_when_later_row_cas_fails() {
-        use database::{ensure_indexes, AccessControlExt, BulkJobExt, LegacyImportExt};
+        use database::{ensure_indexes, BulkJobExt, LegacyImportExt};
         use entities::bulk_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
         use entities::legacy_import::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
-        use entities::{AuditLog, AuditLogData};
+        use erp_audit::AuditExt;
+        use erp_audit::AuditLog;
+        use erp_audit::AuditLogData;
         use erp_core::common::time::{BusinessDate, Instant};
         use erp_core::ids::{BackgroundJobId, LegacyImportBatchId, SourceSystemId};
         use erp_core::AccountKind;
