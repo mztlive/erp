@@ -454,7 +454,7 @@
     {
       "id": "07",
       "file": "07-import.md",
-      "status": "未开始",
+      "status": "本地门禁通过",
       "crates": [
         "erp-import"
       ],

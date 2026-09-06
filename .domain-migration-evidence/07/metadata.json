@@ -1,0 +1,86 @@
+{
+  "phase": "07",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "branch": "chore/domain-crate-07-import",
+  "evidence_dir": ".domain-migration-evidence/07",
+  "input_head": "2f77816b06145648ecb11dbe4f151b914457c267",
+  "unique_integration_owner": "chore/domain-crate-07-import integrator",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "remaining_issues": [],
+  "owned_repositories_moved": [
+    "LegacyImportBatchRepository",
+    "LegacyImportConfirmationRepository",
+    "LegacyImportRowRepository"
+  ],
+  "no_import_to_other_business_domain_edge": true,
+  "no_domain_to_old_three_layer_edge": true,
+  "no_services_to_processes_edge": true,
+  "composition_may_depend_on_old_three_layer": true,
+  "no_e0116": true,
+  "no_deref": true,
+  "no_type_alias": true,
+  "autotests": false,
+  "kind_test_targets": 0,
+  "unit_tests": {
+    "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+    "exit_code": 0,
+    "passed": 3308,
+    "failed": 0,
+    "ignored": 68,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "log": ".domain-migration-evidence/07/unit-tests.log",
+    "source_log": "backend/logs/phase-07-qg-gates/04-test-lib.log"
+  },
+  "quality_gates": {
+    "fmt": 0,
+    "check": 0,
+    "clippy": 0,
+    "unit-tests": 0,
+    "bpm": 0,
+    "service": 0,
+    "domain": 0,
+    "permissions": 0,
+    "git-diff-check": 0,
+    "all_exit_0": true,
+    "log": ".domain-migration-evidence/07/quality-gates.log",
+    "source_dir": "backend/logs/phase-07-qg-gates",
+    "summary": "Phase 07 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-07-qg-gates/. Lib unit tests passed with ERP_TEST_MONGO_URI unset; no MongoDB, crate tests, integration targets, or ignored tests were run. 3308 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "error_codes": 21,
+    "indexes": 368,
+    "versus_phase_06_permissions_equal": true,
+    "versus_phase_06_index_names_keys_unique_equal": true,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "comparison": ".domain-migration-evidence/07/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/07/transaction-contract.json"
+  },
+  "compile": {
+    "applicable": false,
+    "note": "阶段 07 不执行编译收益复测；阈值在阶段 17 判定。真实数据库运行未验证。"
+  },
+  "toolchain": {
+    "quality_gate_run": {
+      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
+      "host": "aarch64-apple-darwin",
+      "profile": "dev"
+    }
+  },
+  "shards": [
+    {
+      "shard": "all",
+      "branch": "chore/domain-crate-07-import",
+      "committed": false,
+      "summary": "Solo integrator created erp-import (autotests=false) with batch/row/confirmation state, three owned repositories, and query service via BulkJobFactsPort. apply/execute/complete/create_confirmation/supersede live in erp-processes/import_apply sharing one Executor; WorkItem construction is in process factories; WorkItem writes go through workflow. Old services/entities/database legacy_import modules deleted with no façade. Public gates passed (3308 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+    }
+  ],
+  "implement_summary": "Phase 07 import unique-cut on chore/domain-crate-07-import. erp-import owns batch/row/confirmation; import_apply holds root txns. Public gates passed (3308 lib tests, 0 failed, 68 ignored). review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+}

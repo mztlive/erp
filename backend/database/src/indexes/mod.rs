@@ -7,7 +7,6 @@ mod cost;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
-mod legacy_import;
 mod payable;
 mod procurement_responsibility;
 mod purchase_order;
@@ -39,7 +38,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     fulfillment::ensure(db).await?;
     integration_ops::ensure(db).await?;
     inventory::ensure(db).await?;
-    legacy_import::ensure(db).await?;
+    erp_import::indexes::ensure(db).await?;
     erp_party::indexes::ensure(db).await?;
     payable::ensure(db).await?;
     procurement_responsibility::ensure(db).await?;

@@ -1,0 +1,52 @@
+{
+  "phase": "07",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false
+  },
+  "import_apply": {
+    "process": "crates/erp-processes/src/import_apply",
+    "modules": [
+      "batch.rs",
+      "create_batch.rs",
+      "execution.rs",
+      "complete.rs",
+      "create_confirmation.rs",
+      "supersede.rs"
+    ],
+    "root_transaction": "Client::with_transaction one Executor",
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "work_item_writes": "erp-workflow WorkItemExt::persist_closed_confirmation_work_items",
+    "confirmation_invalidation": "erp-import LegacyImportConfirmationRepository::persist_invalidated_confirmations",
+    "work_item_construction": "erp-processes/src/import_apply/factories.rs",
+    "port_failure_test": "crates/erp-processes/src/import_apply/port_failure_tests.rs",
+    "note": "apply/execute/complete/create_confirmation 共用传入 session；外部 I/O 不持有 session。真实数据库运行未验证"
+  },
+  "owned_repositories_moved": {
+    "count": 3,
+    "types": [
+      "LegacyImportBatchRepository",
+      "LegacyImportConfirmationRepository",
+      "LegacyImportRowRepository"
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true,
+    "no_entity_bson": true
+  },
+  "source_contains_with_transaction": true,
+  "real_database_rollback_concurrency": "未验证",
+  "note": "静态源码合同：跨域导入应用/确认/替代复用同一个 Executor；WorkItem 写入委托 workflow。真实数据库运行未验证",
+  "recorded_at": "2026-09-06T23:13:28Z"
+}

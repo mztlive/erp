@@ -3,6 +3,7 @@
 mod catalog;
 mod contract;
 mod customer;
+mod import;
 mod party;
 mod supplier;
 mod warehouse;
@@ -10,6 +11,7 @@ mod warehouse;
 pub use catalog::{catalog_service, CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets};
 pub use contract::contract_service;
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
+pub use import::{import_apply_service, legacy_import_service, MongoImportBulkJobs};
 pub use party::{MongoPartyAudit, MongoSupplierRole};
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 pub use warehouse::warehouse_service;

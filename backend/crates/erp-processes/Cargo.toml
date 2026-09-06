@@ -22,12 +22,17 @@ erp-supplier = { workspace = true }
 erp-catalog = { workspace = true }
 erp-warehouse = { workspace = true }
 erp-contract = { workspace = true }
+erp-import = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 services = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+test-support = { workspace = true }

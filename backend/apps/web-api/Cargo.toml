@@ -58,6 +58,7 @@ erp-supplier = { workspace = true }
 erp-catalog = { workspace = true }
 erp-warehouse = { workspace = true }
 erp-contract = { workspace = true }
+erp-import = { workspace = true }
 services = { workspace = true }
 config = { workspace = true }
 permission-macros = { workspace = true }

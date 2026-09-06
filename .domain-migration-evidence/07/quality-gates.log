@@ -1,0 +1,27 @@
+phase: 07
+status: 本地门禁通过
+never_mark: 已验收
+review_approved: true
+disclaimer: 真实数据库运行未验证
+input_head: 2f77816b06145648ecb11dbe4f151b914457c267
+cwd: backend/
+recorded_at: 2026-09-06T23:13:28Z
+quality_passed: true
+unit_tests_passed: true
+files_changed_by_quality: none
+mongodb_started: false
+include_ignored: false
+ERP_TEST_MONGO_URI: unset
+source_dir: backend/logs/phase-07-qg-gates
+summary: Phase 07 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-07-qg-gates/. 3308 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证
+
+commands:
+fmt: cargo fmt --all -- --check  exit 0
+check: cargo check --workspace --locked  exit 0
+clippy: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings  exit 0
+unit-tests: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked  exit 0  passed=3308 failed=0 ignored=68
+bpm: ./scripts/check-bpm-boundaries.sh  exit 0
+service: ./scripts/check-service-boundaries.sh  exit 0
+domain: ./scripts/check-domain-boundaries.sh  exit 0
+permissions: ./scripts/check-permissions-drift.sh  exit 0
+git-diff-check: git diff --check  exit 0

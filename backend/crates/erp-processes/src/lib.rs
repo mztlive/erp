@@ -8,6 +8,7 @@ pub mod catalog;
 pub mod contract;
 pub mod customer;
 pub mod customer_profile;
+pub mod import_apply;
 pub mod party;
 pub mod source_registry;
 pub mod supplier;
@@ -27,6 +28,7 @@ pub use catalog::{
 pub use contract::upload_contract;
 pub use customer::delete_customer;
 pub use customer_profile::CustomerProfileService;
+pub use import_apply::ImportApplyService;
 pub use party::delete_party;
 pub use source_registry::create_source_system;
 pub use supplier::delete_supplier;

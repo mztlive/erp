@@ -1,0 +1,53 @@
+{
+  "phase": "07",
+  "recorded_at": "2026-09-07T00:00:00Z",
+  "evidence_dir": ".domain-migration-evidence/07",
+  "input_head": "2f77816b06145648ecb11dbe4f151b914457c267",
+  "branch": "chore/domain-crate-07-import",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/_phase03_fix_uses.py",
+      "backend/scripts/_phase03_integrate.py",
+      "backend/scripts/_phase03_qg_fix.py",
+      "backend/scripts/_phase03_read_models_fix.py",
+      "backend/scripts/_phase03_repair_blockers.py",
+      "backend/scripts/_phase03_repair_blockers2.py",
+      "backend/scripts/_phase03_transform.py",
+      "backend/scripts/_phase05_integrate.py",
+      "backend/scripts/_phase07_migrate.py",
+      "backend/scripts/__pycache__/"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_06_status": "本地门禁通过",
+  "verify_plan_sources_after_move": "expected fail: --sources is planning snapshot, not post-move gate; 前序阶段未验收 is a human gate",
+  "source_map_phase_07_rows": 25,
+  "repository_types_owner_phase_07": 3,
+  "repository_owned_types_moved": [
+    "LegacyImportBatchRepository",
+    "LegacyImportConfirmationRepository",
+    "LegacyImportRowRepository"
+  ],
+  "section_6_callers": [
+    "apps/web-api/src/app_state.rs",
+    "apps/web-api/src/core/handler/legacy_import/mod.rs",
+    "apps/web-api/src/core/routes/legacy_import.rs",
+    "apps/web-api/src/lib.rs",
+    "apps/web-api/src/main.rs"
+  ],
+  "section_6_callers_still_bind_old_services": false,
+  "note": "前序输入为阶段 06 本地门禁通过提交 2f77816b06145648ecb11dbe4f151b914457c267（证据提交；实现提交 b3f9ea48）。inventory 记载的 b3f9ea48 之后还有证据提交，禁止用较旧 HEAD 覆盖。review_approved=true。公共门禁全部 exit 0（3308 lib tests, 0 failed, 68 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
+}

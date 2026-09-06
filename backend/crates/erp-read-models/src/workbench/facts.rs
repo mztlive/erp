@@ -2,10 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{IntegrationOpsExt, LegacyImportExt, SupplierFulfillmentExt, SupplierOfferingExt};
+use database::{IntegrationOpsExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_core::common::time::Instant;
+use erp_import::LegacyImportExt;
 use erp_workflow::entity::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };

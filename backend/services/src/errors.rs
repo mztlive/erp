@@ -213,6 +213,26 @@ impl From<erp_contract::Error> for Error {
     }
 }
 
+impl From<erp_import::Error> for Error {
+    /// 将导入领域错误映射为服务错误。
+    fn from(error: erp_import::Error) -> Self {
+        match error {
+            erp_import::Error::Internal(message) => Self::Internal(message),
+            erp_import::Error::NotFound(message) => Self::NotFound(message),
+            erp_import::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_import::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_import::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_import::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_import::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_import::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_import::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_import::Error::Logic(error) => Self::Logic(error),
+            erp_import::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_import::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]

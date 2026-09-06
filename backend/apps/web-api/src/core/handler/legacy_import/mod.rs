@@ -1,20 +1,20 @@
 //! 域 D22 `legacy_import` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::legacy_import` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_import` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::legacy_import::{
+use erp_import::{
     ApplyLegacyImportBatchRequest, CompleteImportBusinessConfirmationCommand,
     CompleteImportBusinessConfirmationResult, CreateLegacyImportBatchRequest,
     CreateLegacyImportConfirmationRequest, ImportExecutionCommand, ImportExecutionResult,
     LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchView,
     LegacyImportConfirmationListParams, LegacyImportConfirmationView, LegacyImportRowListParams,
-    LegacyImportRowView, LegacyImportService, PageView,
+    LegacyImportRowView, PageView,
 };
 
 use crate::{
@@ -41,7 +41,7 @@ pub async fn legacy_import_batch_list(
     State(state): State<AppState>,
     Query(params): Query<LegacyImportBatchListParams>,
 ) -> Result<PageView<LegacyImportBatchListItem>> {
-    let page = LegacyImportService::new(state.db()).batch_list(&params).await?;
+    let page = state.legacy_import_service().batch_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -67,9 +67,7 @@ pub async fn legacy_import_batch_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateLegacyImportBatchRequest>,
 ) -> Result<LegacyImportBatchView> {
-    let view = LegacyImportService::new(state.db())
-        .create_batch(req, &actor)
-        .await?;
+    let view = state.import_apply_service().create_batch(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -93,7 +91,7 @@ pub async fn legacy_import_batch_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<LegacyImportBatchView> {
-    let view = LegacyImportService::new(state.db()).batch_detail(&id).await?;
+    let view = state.legacy_import_service().batch_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,9 +119,7 @@ pub async fn legacy_import_batch_apply(
     Path(id): Path<String>,
     Json(req): Json<ApplyLegacyImportBatchRequest>,
 ) -> Result<LegacyImportBatchView> {
-    let view = LegacyImportService::new(state.db())
-        .apply_batch(&id, req, &actor)
-        .await?;
+    let view = state.import_apply_service().apply_batch(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -151,7 +147,8 @@ pub async fn legacy_import_execution_command(
     Path(id): Path<String>,
     Json(command): Json<ImportExecutionCommand>,
 ) -> Result<ImportExecutionResult> {
-    let result = LegacyImportService::new(state.db())
+    let result = state
+        .import_apply_service()
         .execute_import_command(&id, command, &actor)
         .await?;
 
@@ -179,9 +176,7 @@ pub async fn legacy_import_row_list(
     Path(id): Path<String>,
     Query(params): Query<LegacyImportRowListParams>,
 ) -> Result<PageView<LegacyImportRowView>> {
-    let page = LegacyImportService::new(state.db())
-        .row_list(&id, &params)
-        .await?;
+    let page = state.legacy_import_service().row_list(&id, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -207,7 +202,8 @@ pub async fn legacy_import_confirmation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportConfirmationListParams>,
 ) -> Result<PageView<LegacyImportConfirmationView>> {
-    let page = LegacyImportService::new(state.db())
+    let page = state
+        .import_apply_service()
         .confirmation_list(&params, &actor, state.rbac())
         .await?;
 
@@ -235,7 +231,8 @@ pub async fn legacy_import_confirmation_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateLegacyImportConfirmationRequest>,
 ) -> Result<LegacyImportConfirmationView> {
-    let view = LegacyImportService::new(state.db())
+    let view = state
+        .import_apply_service()
         .create_confirmation(req, &actor)
         .await?;
 
@@ -263,7 +260,8 @@ pub async fn legacy_import_confirmation_complete(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CompleteImportBusinessConfirmationCommand>,
 ) -> Result<CompleteImportBusinessConfirmationResult> {
-    let view = LegacyImportService::new(state.db())
+    let view = state
+        .import_apply_service()
         .complete_import_business_confirmation(req, &actor)
         .await?;
 

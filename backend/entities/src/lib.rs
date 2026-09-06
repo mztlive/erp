@@ -2,7 +2,6 @@ pub mod cost;
 pub mod fulfillment;
 pub mod integration_ops;
 pub mod inventory;
-pub mod legacy_import;
 pub mod payable;
 pub mod procurement_responsibility;
 pub mod purchase_order;

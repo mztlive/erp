@@ -7,7 +7,6 @@ mod cost;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
-mod legacy_import;
 mod payable;
 mod procurement_responsibility;
 mod purchase_order;
@@ -24,7 +23,6 @@ pub use cost::CostExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 pub use inventory::InventoryExt;
-pub use legacy_import::LegacyImportExt;
 pub use payable::PayableExt;
 pub use procurement_responsibility::ProcurementResponsibilityExt;
 pub use purchase_order::PurchaseOrderExt;
@@ -56,7 +54,7 @@ pub trait DatabaseExt:
     + FulfillmentExt
     + IntegrationOpsExt
     + InventoryExt
-    + LegacyImportExt
+    + erp_import::LegacyImportExt
     + erp_party::PartyExt
     + PayableExt
     + ProcurementResponsibilityExt
@@ -91,7 +89,7 @@ impl<
             + FulfillmentExt
             + IntegrationOpsExt
             + InventoryExt
-            + LegacyImportExt
+            + erp_import::LegacyImportExt
             + erp_party::PartyExt
             + PayableExt
             + ProcurementResponsibilityExt

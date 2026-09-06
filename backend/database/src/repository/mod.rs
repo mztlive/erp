@@ -7,7 +7,6 @@ pub mod extensions;
 mod fulfillment;
 mod integration_ops;
 mod inventory;
-mod legacy_import;
 pub mod owned;
 mod payable;
 mod procurement_responsibility;

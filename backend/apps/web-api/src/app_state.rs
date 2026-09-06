@@ -376,6 +376,16 @@ impl AppState {
         erp_processes::adapters::contract_service(self.db())
     }
 
+    /// Import-domain query service with bulk-job identity adapter.
+    pub fn legacy_import_service(&self) -> erp_import::LegacyImportService {
+        erp_processes::adapters::legacy_import_service(self.db())
+    }
+
+    /// Import-apply process that owns cross-domain apply/confirmation transactions.
+    pub fn import_apply_service(&self) -> erp_processes::ImportApplyService {
+        erp_processes::adapters::import_apply_service(self.db())
+    }
+
     /// 使 JWT 引擎缓存失效。
     ///
     /// # 返回

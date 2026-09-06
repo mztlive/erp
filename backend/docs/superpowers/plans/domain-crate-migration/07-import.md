@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 07 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-import` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | chore/domain-crate-07-import integrator |
+| 输入/输出提交 | 前序 `2f77816b06145648ecb11dbe4f151b914457c267` / 本阶段实现提交见 `.domain-migration-evidence/07/metadata.json` |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -74,15 +74,15 @@ import 不依赖 workflow/support/业务目标领域；跨域应用和替代事�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固化分行成功/失败、部分失败重试、确认版本、重复回执、批次替代和汇总守恒测试。
+1. [x] 固化分行成功/失败、部分失败重试、确认版本、重复回执、批次替代和汇总守恒测试。
 
-2. [ ] 迁入 import 自身实体/DTO/仓储/索引；将直接返回其他域聚合的 factory 拆成导入事实 DTO 与组合层转换，保持字段与错误相同。
+2. [x] 迁入 import 自身实体/DTO/仓储/索引；将直接返回其他域聚合的 factory 拆成导入事实 DTO 与组合层转换，保持字段与错误相同。
 
-3. [ ] 把 apply_batch、execution 及 confirmation/complete 的跨域写入拆到 processes::import_apply；通过已迁移领域接口或旧 services 的事务内接口复用同一个 Executor。
+3. [x] 把 apply_batch、execution 及 confirmation/complete 的跨域写入拆到 processes::import_apply；通过已迁移领域接口或旧 services 的事务内接口复用同一个 Executor。
 
-4. [ ] supersede_batch.rs 中对 WorkItem 的方法归属 workflow 仓储，由组合层执行，禁止 import 仓储继续直接写任务集合。
+4. [x] supersede_batch.rs 中对 WorkItem 的方法归属 workflow 仓储，由组合层执行，禁止 import 仓储继续直接写任务集合。
 
-5. [ ] 更新 legacy_import Handler、工作台导入摘要和批任务调用方；移除旧源码及模块声明。仅运行纯内联测试和公共门禁。
+5. [x] 更新 legacy_import Handler、工作台导入摘要和批任务调用方；移除旧源码及模块声明。仅运行纯内联测试和公共门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -151,13 +151,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序本地门禁通过 `2f77816b06145648ecb11dbe4f151b914457c267`；分支 `chore/domain-crate-07-import`；source-map phase=07 行 25；owned types 3 | 已采集 `.domain-migration-evidence/07/input.json` |
+| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 已采集 `.domain-migration-evidence/07/files.tsv` |
+| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 已采集 `.domain-migration-evidence/07/boundary.log` |
+| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 已采集 `.domain-migration-evidence/07/boundary.log` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3308 passed / 0 failed / 68 ignored；exit 0 | 已执行 `.domain-migration-evidence/07/unit-tests.log` |
+| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 已采集 `.domain-migration-evidence/07/contract-comparison.json` |
+| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/07/transaction-contract.json` |
+| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 已执行 `.domain-migration-evidence/07/quality-gates.log` |
+| 编译收益 | 阶段 07 不执行编译收益复测；阈值在阶段 17 判定 | 不适用 |
+| 阶段提交 | 实现提交见 metadata.json；证据目录 `.domain-migration-evidence/07/`；禁止标记已验收 | 待写入 commit hash |
