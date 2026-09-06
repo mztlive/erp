@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "contract": "compile-measurement.md",
+  "probes": [
+    {
+      "id": "customer",
+      "baseline_path": "services/src/customer/profile/validation.rs",
+      "final_path": "crates/erp-customer/src/service/customer/profile/validation.rs",
+      "baseline_package": "services",
+      "final_package": "erp-customer",
+      "symbol": "CustomerProfileFactInput for CustomerProfileContactInput::required_value",
+      "before": "self.mobile.as_deref()",
+      "after": "self.mobile.as_ref().map(String::as_str)",
+      "equivalence": "Option<String> 到 Option<&str> 的等价映射；覆盖 None、空串、非空 Unicode；纯校验实现保留在 erp-customer"
+    },
+    {
+      "id": "sales",
+      "baseline_path": "services/src/sales_order/command/identity.rs",
+      "final_path": "crates/erp-sales/src/service/sales_order/command/identity.rs",
+      "baseline_package": "services",
+      "final_package": "erp-sales",
+      "symbol": "sales_submission_fingerprint",
+      "before": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(payload)))",
+      "after": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(&payload)))",
+      "equivalence": "对同一 payload 字节计算相同摘要；传 Vec 与借用 Vec 的输入字节一致；审批绑定方法另行拆出，纯指纹算法保留在 erp-sales"
+    },
+    {
+      "id": "finance",
+      "baseline_path": "services/src/receivable/mapping.rs",
+      "final_path": "crates/erp-finance/src/service/receivable/mapping.rs",
+      "baseline_package": "services",
+      "final_package": "erp-finance",
+      "symbol": "zero_amount",
+      "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+      "after": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
+      "equivalence": "相同 Amount 零值和固定精度；JSON 0.00 与 BSON Decimal128 结果应通过纯内存测试核验"
+    }
+  ]
+}

@@ -1,0 +1,957 @@
+{
+  "schema_version": 1,
+  "prepared_on": "2026-09-06",
+  "inspected_head": "b889b0a9ddca7bd42c135105fc7ab35cb382fbb0",
+  "snapshot_kind": "current working tree; includes existing uncommitted changes; not an execution baseline",
+  "production_source_count": 922,
+  "repository_owned_type_count": 141,
+  "implemented_domain_crates": [
+    "erp-audit",
+    "erp-catalog",
+    "erp-contract",
+    "erp-customer",
+    "erp-finance",
+    "erp-fulfillment",
+    "erp-identity",
+    "erp-import",
+    "erp-integration",
+    "erp-inventory",
+    "erp-party",
+    "erp-procurement",
+    "erp-returns",
+    "erp-sales",
+    "erp-supplier",
+    "erp-supply",
+    "erp-support",
+    "erp-warehouse",
+    "erp-workflow"
+  ],
+  "source_roots": [
+    "entities/src",
+    "database/src",
+    "services/src"
+  ],
+  "phases": [
+    {
+      "id": "00",
+      "file": "00-baseline.md",
+      "status": "未开始",
+      "crates": [],
+      "mappings": [
+        {
+          "source": "AGENTS.md",
+          "symbols": "共享注册文件冻结清单；测试期望",
+          "target": "AGENTS.md",
+          "action": "独立地基修订：登记本迁移专用所有权及统一单元测试边界"
+        },
+        {
+          "source": "Jenkinsfile",
+          "symbols": "P0 质量门禁；P0 集成测试",
+          "target": "Jenkinsfile",
+          "action": "使用 --lib；移除真实 MongoDB 集成阶段；保留其他质量门禁"
+        },
+        {
+          "source": "Cargo.toml",
+          "symbols": "[workspace]；workspace.dependencies；profile.dev",
+          "target": "Cargo.toml",
+          "action": "记录原配置；只登记治理工具，不混入优化参数变化"
+        },
+        {
+          "source": "services/Cargo.toml",
+          "symbols": "package；dev-dependencies",
+          "target": "services/Cargo.toml",
+          "action": "与其他现有成员 manifest 一起关闭集成 target 自动发现"
+        },
+        {
+          "source": "scripts/check-bpm-boundaries.sh",
+          "symbols": "require_single_definition；PROCESS_KIND_FILE",
+          "target": "scripts/check-bpm-boundaries.sh",
+          "action": "记录规则基线；后续阶段只更新实际权威路径"
+        },
+        {
+          "source": "scripts/check-service-boundaries.sh",
+          "symbols": "rules；baseline；negative_samples",
+          "target": "scripts/check-domain-boundaries.sh",
+          "action": "新增领域边界入口；保留旧 Service 检查及其严格度"
+        }
+      ]
+    },
+    {
+      "id": "01",
+      "file": "01-foundations.md",
+      "status": "未开始",
+      "crates": [
+        "erp-core",
+        "application-core",
+        "persistence-core"
+      ],
+      "mappings": [
+        {
+          "source": "entities/src/money.rs",
+          "symbols": "Amount；Quantity；UnitPrice；Rate；MoneyVisitor；D128BytesSeed；line_amounts",
+          "target": "crates/erp-core/src/money.rs",
+          "action": "保留现有 serde、精度、舍入和 Decimal128 实现"
+        },
+        {
+          "source": "entities/src/ids.rs",
+          "symbols": "id_type!",
+          "target": "crates/erp-core/src/ids.rs",
+          "action": "迁入既有稳定 ERP ID；BPM 七类 ID 继续只定义在 bpm"
+        },
+        {
+          "source": "entities/src/common/time.rs",
+          "symbols": "BusinessDate；Instant",
+          "target": "crates/erp-core/src/common/time.rs",
+          "action": "与 common、validation、field_update、通用值错误一起迁移"
+        },
+        {
+          "source": "entities/src/command.rs",
+          "symbols": "CommandFingerprint；CommandIdentity；CommandReceipt；CommandReceiptFact；CommandReceiptMatch",
+          "target": "crates/application-core/src/command.rs",
+          "action": "只迁纯合同；收据持久化留审计/流程适配"
+        },
+        {
+          "source": "entities/src/account_core.rs",
+          "symbols": "AccountKind；InvalidAccountKind",
+          "target": "crates/erp-core/src/identity.rs",
+          "action": "仅拆稳定操作人类别；AccountCore/Secret 不迁入基础层"
+        },
+        {
+          "source": "services/src/audit/mod.rs",
+          "symbols": "AuditActor",
+          "target": "crates/application-core/src/context.rs",
+          "action": "仅迁身份数据、new/id/kind；resource_log 系列留领域审计适配"
+        },
+        {
+          "source": "services/src/page.rs",
+          "symbols": "Page",
+          "target": "crates/application-core/src/page.rs",
+          "action": "连同 query.rs 与 owned_task.rs 迁移"
+        },
+        {
+          "source": "services/src/errors.rs",
+          "symbols": "ErrorClass；Error；ErrorCode；duplicate_index_conflict_message",
+          "target": "crates/application-core/src/error.rs",
+          "action": "仅建立稳定应用分类；数据库来源与领域索引消息不整体上移"
+        },
+        {
+          "source": "database/src/repository/base.rs",
+          "symbols": "Repository；QueryFilter；Pagination；PageResult",
+          "target": "crates/persistence-core/src/repository/base.rs",
+          "action": "泛型机械能力迁移；按类型清单先创建本地领域仓储"
+        },
+        {
+          "source": "database/src/executor.rs",
+          "symbols": "Executor；NoTransaction",
+          "target": "crates/persistence-core/src/executor.rs",
+          "action": "与 connection、transaction、mongo_ops、errors、regex_filter 同阶段迁移"
+        },
+        {
+          "source": "crates/id-generator/src/document_number.rs",
+          "symbols": "DocumentNumberGenerator",
+          "target": "crates/id-generator/src/document_number.rs",
+          "action": "使用 persistence-core 执行器与原取号算法"
+        },
+        {
+          "source": "scripts/check-bpm-boundaries.sh",
+          "symbols": "ApprovalSubjectSnapshotId；ApprovalNotificationOutboxId",
+          "target": "scripts/check-bpm-boundaries.sh",
+          "action": "ID 权威路径更新到 erp-core；同阶段更新所有编译调用方"
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "file": "02-identity-audit.md",
+      "status": "未开始",
+      "crates": [
+        "erp-identity",
+        "erp-audit"
+      ],
+      "mappings": [
+        {
+          "source": "entities/src/account_core.rs",
+          "symbols": "AccountCore；AccountCoreData；AccountStatus",
+          "target": "crates/erp-identity/src/entity/account_core.rs",
+          "action": "与 auth、role、rbac、access_control 实体迁移"
+        },
+        {
+          "source": "services/src/iam/rbac/mod.rs",
+          "symbols": "RbacService",
+          "target": "crates/erp-identity/src/service/iam/rbac/mod.rs",
+          "action": "与 IAM 账号、角色、策略、SharedRbacService 定义迁移"
+        },
+        {
+          "source": "database/src/casbin_adapter.rs",
+          "symbols": "MongoCasbinAdapter",
+          "target": "crates/erp-identity/src/repository/casbin_adapter.rs",
+          "action": "保持 Casbin 授权与事务策略"
+        },
+        {
+          "source": "entities/src/audit_log.rs",
+          "symbols": "AuditLog；AuditLogData",
+          "target": "crates/erp-audit/src/entity/audit_log.rs",
+          "action": "使用稳定操作人类别和收据事实"
+        },
+        {
+          "source": "services/src/audit/mod.rs",
+          "symbols": "AuditLogService；CommandReceiptServiceExt；resource_log_with_id",
+          "target": "crates/erp-audit/src/service/audit/mod.rs",
+          "action": "审计日志构造与收据查询归审计；不让其他领域依赖审计实体"
+        },
+        {
+          "source": "services/src/account_support.rs",
+          "symbols": "account_of_kind",
+          "target": "crates/erp-identity/src/service/account_support.rs",
+          "action": "随账号用例迁移"
+        },
+        {
+          "source": "crates/test-support/src/seed.rs",
+          "symbols": "seed_admin_account",
+          "target": "crates/test-support/src/seed.rs",
+          "action": "更新 Role/RoleData 导入；不运行数据库种子"
+        },
+        {
+          "source": "apps/cli/src/main.rs",
+          "symbols": "main",
+          "target": "apps/cli/src/main.rs",
+          "action": "CLI 直接接身份用例；禁止依赖 web-api"
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "file": "03-workflow-composition.md",
+      "status": "未开始",
+      "crates": [
+        "erp-workflow",
+        "erp-processes",
+        "erp-read-models"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/approval/execution/runtime_service.rs",
+          "symbols": "ApprovalRuntimeService",
+          "target": "crates/erp-workflow/src/service/approval/execution/runtime_service.rs",
+          "action": "保留注入 ApprovalDomainActionPort 的执行方式"
+        },
+        {
+          "source": "services/src/approval_action_registry.rs",
+          "symbols": "ApprovalActionRegistry；execute",
+          "target": "crates/erp-processes/src/approval_dispatch/action_registry.rs",
+          "action": "保留现有动作枚举映射和 Executor"
+        },
+        {
+          "source": "services/src/approval/business_adapter.rs",
+          "symbols": "adapter_object_read_decision；require_wired_object_read",
+          "target": "crates/erp-processes/src/approval_dispatch/object_read.rs",
+          "action": "具体领域读取判定迁出；纯规格校验留 workflow"
+        },
+        {
+          "source": "entities/src/approval_integration/identity.rs",
+          "symbols": "document_type_of_sales_business；subject_ref_for_sales_business",
+          "target": "crates/erp-processes/src/approval_dispatch/sales_subject.rs",
+          "action": "销售 BusinessType 适配迁出；通用 DocumentType↔ProcessKind 留 workflow"
+        },
+        {
+          "source": "services/src/transaction.rs",
+          "symbols": "run_audited",
+          "target": "crates/erp-processes/src/audit/transaction.rs",
+          "action": "具体审计写入归组合层；基础事务保持通用"
+        },
+        {
+          "source": "services/src/work_item/query.rs",
+          "symbols": "work_item_list；work_item_detail",
+          "target": "crates/erp-read-models/src/workbench/query.rs",
+          "action": "授权后的分页与 brief 组装；保留已有过滤/游标算法"
+        },
+        {
+          "source": "services/src/work_item/mod.rs",
+          "symbols": "WorkItemService",
+          "target": "crates/erp-workflow/src/service/work_item/mod.rs",
+          "action": "命令服务留 workflow；查询服务拆为 WorkbenchReadService"
+        },
+        {
+          "source": "services/src/work_item/dto/view.rs",
+          "symbols": "WorkItemView",
+          "target": "crates/erp-read-models/src/workbench/dto/view.rs",
+          "action": "跨领域视图迁出；命令 DTO 仍在 workflow"
+        },
+        {
+          "source": "services/src/customer/center.rs",
+          "symbols": "CustomerCenterReadService",
+          "target": "crates/erp-read-models/src/customer_center/service.rs",
+          "action": "此阶段先迁组合；后续 05/09 替换其旧领域供应方"
+        },
+        {
+          "source": "database/src/repository/customer_center_related.rs",
+          "symbols": "customer_center_related",
+          "target": "crates/erp-read-models/src/customer_center/repository/related.rs",
+          "action": "由专属 CustomerCenterRepository 拥有跨域只读聚合"
+        },
+        {
+          "source": "database/src/repository/work_item_fulfillment_queue.rs",
+          "symbols": "FulfillmentQueueFilter",
+          "target": "crates/erp-read-models/src/fulfillment_queue/repository.rs",
+          "action": "跨域队列查询归读模型仓储"
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "file": "04-support.md",
+      "status": "未开始",
+      "crates": [
+        "erp-support"
+      ],
+      "mappings": [
+        {
+          "source": "entities/src/file_asset/entity.rs",
+          "symbols": "FileAsset",
+          "target": "crates/erp-support/src/entity/file_asset/entity.rs",
+          "action": "保持对象键、大小、摘要、状态与引用合同"
+        },
+        {
+          "source": "services/src/file_asset/mod.rs",
+          "symbols": "FileAssetService",
+          "target": "crates/erp-support/src/service/file_asset/mod.rs",
+          "action": "保留文件事实单域命令"
+        },
+        {
+          "source": "services/src/pending_file_assets.rs",
+          "symbols": "PendingFileAssets",
+          "target": "crates/erp-processes/src/attachments/pending.rs",
+          "action": "业务写入与附件确认的组合逻辑"
+        },
+        {
+          "source": "services/src/bulk_job/mod.rs",
+          "symbols": "BulkJobService",
+          "target": "crates/erp-support/src/service/bulk_job/mod.rs",
+          "action": "保留选择快照、任务状态和逐项结果"
+        },
+        {
+          "source": "services/src/source_registry/mod.rs",
+          "symbols": "SourceRegistryService",
+          "target": "crates/erp-support/src/service/source_registry/mod.rs",
+          "action": "来源/外部身份映射随所属仓储迁移"
+        },
+        {
+          "source": "apps/web-api/src/core/handler/upload.rs",
+          "symbols": "upload",
+          "target": "apps/web-api/src/core/handler/upload.rs",
+          "action": "使用既有 storage 与新文件资产用例"
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "file": "05-party-customer-supplier.md",
+      "status": "未开始",
+      "crates": [
+        "erp-party",
+        "erp-customer",
+        "erp-supplier"
+      ],
+      "mappings": [
+        {
+          "source": "entities/src/party/entity.rs",
+          "symbols": "Party",
+          "target": "crates/erp-party/src/entity/party/entity.rs",
+          "action": "主体及地址/联系人/税务/账户/修订整体迁移"
+        },
+        {
+          "source": "services/src/customer/profile.rs",
+          "symbols": "CustomerProfileService",
+          "target": "crates/erp-processes/src/customer_profile/mod.rs",
+          "action": "跨 Party/Customer/审计的根用例迁出"
+        },
+        {
+          "source": "services/src/customer/profile/create.rs",
+          "symbols": "create",
+          "target": "crates/erp-processes/src/customer_profile/create.rs",
+          "action": "根事务编排；客户角色写入委托 erp-customer"
+        },
+        {
+          "source": "services/src/customer/mod.rs",
+          "symbols": "CustomerService",
+          "target": "crates/erp-customer/src/service/customer/mod.rs",
+          "action": "只保留客户账户、分配、单域规则"
+        },
+        {
+          "source": "services/src/supplier/profile/mod.rs",
+          "symbols": "SupplierProfileService",
+          "target": "crates/erp-processes/src/supplier_profile/mod.rs",
+          "action": "主体、资质与附件组合"
+        },
+        {
+          "source": "services/src/party/sensitive.rs",
+          "symbols": "SensitiveDataCodec",
+          "target": "crates/erp-party/src/service/party/sensitive.rs",
+          "action": "能力由消费方 Port 使用，不把密钥/完整银行实体放公共层"
+        },
+        {
+          "source": "database/src/repository/party/record.rs",
+          "symbols": "Party",
+          "target": "crates/erp-party/src/repository/party/record.rs",
+          "action": "使用阶段 01 拥有仓储；当前文件为 record.rs"
+        },
+        {
+          "source": "database/src/repository/customer.rs",
+          "symbols": "CustomerAccount",
+          "target": "crates/erp-customer/src/repository/customer.rs",
+          "action": "与 CustomerProfileCommand、CustomerAssignment 所属方法迁移"
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "file": "06-catalog-warehouse-contract.md",
+      "status": "未开始",
+      "crates": [
+        "erp-catalog",
+        "erp-warehouse",
+        "erp-contract"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/catalog/sellable.rs",
+          "symbols": "sellable",
+          "target": "crates/erp-catalog/src/service/catalog/sellable.rs",
+          "action": "保留公司商品池查询与服务端分页"
+        },
+        {
+          "source": "services/src/catalog/product_workflow.rs",
+          "symbols": "Product",
+          "target": "crates/erp-catalog/src/service/catalog/product_workflow.rs",
+          "action": "商品修订规则留本域；附件原子编排迁 processes"
+        },
+        {
+          "source": "database/src/repository/catalog/sellable.rs",
+          "symbols": "sellable",
+          "target": "crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "action": "保留管道、规格过滤与排序"
+        },
+        {
+          "source": "services/src/warehouse/mod.rs",
+          "symbols": "WarehouseService",
+          "target": "crates/erp-warehouse/src/service/warehouse/mod.rs",
+          "action": "仓库与履约责任配置使用身份事实 Port"
+        },
+        {
+          "source": "services/src/contract/mod.rs",
+          "symbols": "ContractService",
+          "target": "crates/erp-contract/src/service/contract/mod.rs",
+          "action": "合同主体与附件事实通过 Port"
+        },
+        {
+          "source": "entities/src/catalog/specification.rs",
+          "symbols": "compute_specification_signature",
+          "target": "crates/erp-catalog/src/entity/catalog/specification.rs",
+          "action": "规格签名与精确匹配保持原算法"
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "file": "07-import.md",
+      "status": "未开始",
+      "crates": [
+        "erp-import"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/legacy_import/mod.rs",
+          "symbols": "LegacyImportService",
+          "target": "crates/erp-import/src/service/legacy_import/mod.rs",
+          "action": "批次和行状态管理"
+        },
+        {
+          "source": "services/src/legacy_import/apply_batch.rs",
+          "symbols": "apply",
+          "target": "crates/erp-processes/src/import_apply/batch.rs",
+          "action": "跨领域事实写入与工作项推进"
+        },
+        {
+          "source": "services/src/legacy_import/confirmation/complete.rs",
+          "symbols": "complete",
+          "target": "crates/erp-processes/src/import_apply/confirmation.rs",
+          "action": "确认完成的原子编排"
+        },
+        {
+          "source": "entities/src/legacy_import/import_row_factory.rs",
+          "symbols": "Import",
+          "target": "crates/erp-import/src/entity/legacy_import/import_row_factory.rs",
+          "action": "导入行自身规则保留；业务实体构造转换按符号拆到 processes"
+        },
+        {
+          "source": "database/src/repository/legacy_import/supersede_batch.rs",
+          "symbols": "WorkItem",
+          "target": "crates/erp-processes/src/import_apply/supersede.rs",
+          "action": "WorkItem 更新委托 workflow；导入状态方法留 import 仓储"
+        }
+      ]
+    },
+    {
+      "id": "08",
+      "file": "08-inventory.md",
+      "status": "未开始",
+      "crates": [
+        "erp-inventory"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/inventory/adjustment_post.rs",
+          "symbols": "post_stock_adjustment",
+          "target": "crates/erp-processes/src/inventory_adjustment/post.rs",
+          "action": "根命令编排；库存写入进 erp-inventory"
+        },
+        {
+          "source": "services/src/inventory/start_approval/prepare.rs",
+          "symbols": "prepare",
+          "target": "crates/erp-processes/src/inventory_adjustment/approval_prepare.rs",
+          "action": "库存事实与审批绑定适配"
+        },
+        {
+          "source": "services/src/inventory/cancel_approval.rs",
+          "symbols": "cancel",
+          "target": "crates/erp-processes/src/inventory_adjustment/cancel_approval.rs",
+          "action": "复用调用方 Executor"
+        },
+        {
+          "source": "database/src/repository/inventory/balance.rs",
+          "symbols": "StockBalance",
+          "target": "crates/erp-inventory/src/repository/inventory/balance.rs",
+          "action": "库存事实唯一拥有仓储"
+        },
+        {
+          "source": "entities/src/inventory/approval_snapshot.rs",
+          "symbols": "Snapshot",
+          "target": "crates/erp-inventory/src/entity/inventory/approval_snapshot.rs",
+          "action": "只持本域快照；工作流格式由 adapter 映射"
+        }
+      ]
+    },
+    {
+      "id": "09",
+      "file": "09-finance.md",
+      "status": "未开始",
+      "crates": [
+        "erp-finance"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/receivable/card_funds_register.rs",
+          "symbols": "update_sales_order_money_progress",
+          "target": "crates/erp-processes/src/finance_posting/card_funds.rs",
+          "action": "外层跨域流程上移；收款事实写入留 finance"
+        },
+        {
+          "source": "services/src/receivable/invoice.rs",
+          "symbols": "update_sales_order_money_progress",
+          "target": "crates/erp-processes/src/finance_posting/invoice.rs",
+          "action": "开票与销售进度同事务"
+        },
+        {
+          "source": "services/src/receivable/customer_receipt_commit.rs",
+          "symbols": "receipt",
+          "target": "crates/erp-processes/src/finance_posting/customer_receipt.rs",
+          "action": "收款根幂等/提交结果编排"
+        },
+        {
+          "source": "services/src/payable/payment.rs",
+          "symbols": "SupplierPayment",
+          "target": "crates/erp-processes/src/finance_posting/supplier_payment.rs",
+          "action": "审批与附件/应付/任务组合"
+        },
+        {
+          "source": "database/src/repository/receivable_sales_order_summary.rs",
+          "symbols": "sales_order_amount_summary",
+          "target": "crates/erp-finance/src/repository/receivable/sales_order_summary.rs",
+          "action": "仅应收集合聚合归财务公开事实接口"
+        },
+        {
+          "source": "database/src/repository/customer_center_receivable.rs",
+          "symbols": "customer_center_receivable",
+          "target": "crates/erp-finance/src/repository/receivable/customer_center.rs",
+          "action": "保留 Decimal128 数据库聚合和原分页/索引语义"
+        },
+        {
+          "source": "services/src/receivable/dto/query.rs",
+          "symbols": "WorkItemView",
+          "target": "crates/erp-read-models/src/finance/dto.rs",
+          "action": "嵌入工作项的跨域视图从 finance DTO 分离"
+        },
+        {
+          "source": "services/src/receivable/card_funds_task.rs",
+          "symbols": "WorkItemService",
+          "target": "crates/erp-processes/src/finance_posting/card_funds_task.rs",
+          "action": "任务推进归流程"
+        },
+        {
+          "source": "services/src/payable/payment_task.rs",
+          "symbols": "WorkItemService",
+          "target": "crates/erp-processes/src/finance_posting/payment_task.rs",
+          "action": "应付任务与财务写入共用 Executor"
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "file": "10-sales.md",
+      "status": "未开始",
+      "crates": [
+        "erp-sales"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/sales_order/formalize.rs",
+          "symbols": "formalize",
+          "target": "crates/erp-processes/src/order_to_cash/formalize.rs",
+          "action": "正式化跨域根流程；销售本域写入留 sales"
+        },
+        {
+          "source": "services/src/sales_review/sales_change_order.rs",
+          "symbols": "write_receivable_delta",
+          "target": "crates/erp-processes/src/order_to_cash/sales_change.rs",
+          "action": "应收差额及发票/资金审核任务移交 finance/workflow"
+        },
+        {
+          "source": "services/src/sales_order/query.rs",
+          "symbols": "load_sales_procurement_coverage",
+          "target": "crates/erp-read-models/src/sales_center/query.rs",
+          "action": "跨采购覆盖读模型迁出"
+        },
+        {
+          "source": "services/src/sales_review/sourcing.rs",
+          "symbols": "采购推荐方案已随采购二次确认删除",
+          "target": "",
+          "action": "删除历史注释占位；禁止恢复已删除的推荐入口"
+        },
+        {
+          "source": "entities/src/sales_order/content_hash.rs",
+          "symbols": "hash",
+          "target": "crates/erp-sales/src/entity/sales_order/content_hash.rs",
+          "action": "保持指纹和创建/提交/正式版本区别"
+        },
+        {
+          "source": "services/src/sales_order/mod.rs",
+          "symbols": "SalesOrderService",
+          "target": "crates/erp-sales/src/service/sales_order/mod.rs",
+          "action": "导出稳定单域用例和事务内接口"
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "file": "11-procurement.md",
+      "status": "未开始",
+      "crates": [
+        "erp-procurement"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/purchase_order/create_submit.rs",
+          "symbols": "create",
+          "target": "crates/erp-processes/src/procure_to_pay/create_submit.rs",
+          "action": "创建提交根编排"
+        },
+        {
+          "source": "services/src/purchase_order/creation_basis/create.rs",
+          "symbols": "create",
+          "target": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+          "action": "采购创建依据规则；外域事实由 Port 输入"
+        },
+        {
+          "source": "database/src/repository/purchase_order/list_facts.rs",
+          "symbols": "Facts",
+          "target": "crates/erp-read-models/src/purchase_center/repository/list_facts.rs",
+          "action": "跨域列表事实按查询归属拆分"
+        },
+        {
+          "source": "database/src/repository/purchase_order/center_facts.rs",
+          "symbols": "Facts",
+          "target": "crates/erp-read-models/src/purchase_center/repository/center_facts.rs",
+          "action": "跨域中心视图"
+        },
+        {
+          "source": "services/src/procurement_responsibility/resolver.rs",
+          "symbols": "resolve",
+          "target": "crates/erp-procurement/src/service/procurement_responsibility/resolver.rs",
+          "action": "角色/组织事实通过授权 Port"
+        },
+        {
+          "source": "services/src/purchase_order/change/effect.rs",
+          "symbols": "effect",
+          "target": "crates/erp-processes/src/procure_to_pay/change_effect.rs",
+          "action": "采购变更与应付/履约协作"
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "file": "12-fulfillment.md",
+      "status": "未开始",
+      "crates": [
+        "erp-fulfillment"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/fulfillment/delivery_posting.rs",
+          "symbols": "delivery",
+          "target": "crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "action": "发货跨库存/销售/任务流程"
+        },
+        {
+          "source": "services/src/fulfillment/customer_acceptance_posting.rs",
+          "symbols": "acceptance",
+          "target": "crates/erp-processes/src/fulfillment_execution/customer_acceptance.rs",
+          "action": "验收与销售/任务推进"
+        },
+        {
+          "source": "services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbols": "confirm",
+          "target": "crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "action": "服务履约确认根事务"
+        },
+        {
+          "source": "services/src/fulfillment/electronic_delivery.rs",
+          "symbols": "electronic",
+          "target": "crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "action": "跨域根编排；密文与本域事实规则留 fulfillment"
+        },
+        {
+          "source": "entities/src/fulfillment/acceptance_eligibility.rs",
+          "symbols": "Eligibility",
+          "target": "crates/erp-fulfillment/src/entity/fulfillment/acceptance_eligibility.rs",
+          "action": "纯资格与累计数量规则"
+        },
+        {
+          "source": "database/src/repository/fulfillment/purchase_receipt_totals.rs",
+          "symbols": "totals",
+          "target": "crates/erp-fulfillment/src/repository/fulfillment/purchase_receipt_totals.rs",
+          "action": "纯本域入库累计事实"
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "file": "13-returns.md",
+      "status": "未开始",
+      "crates": [
+        "erp-returns"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/returns/customer_refund.rs",
+          "symbols": "refund",
+          "target": "crates/erp-processes/src/reverse_flow/customer_refund.rs",
+          "action": "退款跨领域事务"
+        },
+        {
+          "source": "services/src/returns/receipt_reversal.rs",
+          "symbols": "reversal",
+          "target": "crates/erp-processes/src/reverse_flow/receipt_reversal.rs",
+          "action": "收款冲销根流程"
+        },
+        {
+          "source": "services/src/returns/payment_reversal.rs",
+          "symbols": "reversal",
+          "target": "crates/erp-processes/src/reverse_flow/payment_reversal.rs",
+          "action": "付款冲销根流程"
+        },
+        {
+          "source": "services/src/returns/offset_batch.rs",
+          "symbols": "offset",
+          "target": "crates/erp-processes/src/reverse_flow/offset_batch.rs",
+          "action": "分摊冲销协调"
+        },
+        {
+          "source": "entities/src/returns/cumulative_limit.rs",
+          "symbols": "CumulativeAmountLimit；ensure_within_limit",
+          "target": "crates/erp-returns/src/entity/returns/cumulative_limit.rs",
+          "action": "累计上限与禁止重复反转规则"
+        },
+        {
+          "source": "database/src/repository/returns_posted_totals.rs",
+          "symbols": "posted",
+          "target": "crates/erp-returns/src/repository/returns_posted_totals.rs",
+          "action": "逆向领域累计事实"
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "file": "14-integration.md",
+      "status": "未开始",
+      "crates": [
+        "erp-integration"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/integration_ops/mod.rs",
+          "symbols": "IntegrationOpsService",
+          "target": "crates/erp-integration/src/service/integration_ops/mod.rs",
+          "action": "集成事实与处置用例"
+        },
+        {
+          "source": "services/src/integration_ops/producer.rs",
+          "symbols": "produce",
+          "target": "crates/erp-integration/src/service/integration_ops/producer.rs",
+          "action": "保留生产方记录/去重行为"
+        },
+        {
+          "source": "services/src/integration_ops/task_decision/complete.rs",
+          "symbols": "complete",
+          "target": "crates/erp-processes/src/integration_resolution/complete.rs",
+          "action": "集成处置与工作项推进"
+        },
+        {
+          "source": "database/src/repository/integration_ops/difference_resolution_batch.rs",
+          "symbols": "ReconciliationDifferenceResolution",
+          "target": "crates/erp-integration/src/repository/integration_ops/difference_resolution_batch.rs",
+          "action": "差异处置批次唯一事实"
+        },
+        {
+          "source": "entities/src/integration_ops/evidence_reference.rs",
+          "symbols": "Evidence",
+          "target": "crates/erp-integration/src/entity/integration_ops/evidence_reference.rs",
+          "action": "稳定来源引用和证据约束"
+        }
+      ]
+    },
+    {
+      "id": "15",
+      "file": "15-commerce-scope.md",
+      "status": "未开始",
+      "crates": [],
+      "mappings": [
+        {
+          "source": "entities/src/ids.rs",
+          "symbols": "id_type!",
+          "target": "crates/erp-core/src/ids.rs",
+          "action": "核验阶段 01 已迁稳定 ID，不据此创建新聚合"
+        },
+        {
+          "source": "services/src/errors.rs",
+          "symbols": "uk_product_publication_revisions_publication_revision",
+          "target": "apps/web-api/src/core/errors.rs",
+          "action": "历史错误兼容映射按原语义保留，不生成发布功能"
+        },
+        {
+          "source": "entities/src/sales_order/entity/order.rs",
+          "symbols": "SalesOrder",
+          "target": "crates/erp-sales/src/entity/sales_order/entity/order.rs",
+          "action": "既有卡券销售事实仍归销售，不凭业务名称改归商城"
+        }
+      ]
+    },
+    {
+      "id": "16",
+      "file": "16-supply.md",
+      "status": "未开始",
+      "crates": [
+        "erp-supply"
+      ],
+      "mappings": [
+        {
+          "source": "services/src/supplier_offering/mod.rs",
+          "symbols": "SupplierOfferingService",
+          "target": "crates/erp-supply/src/service/supplier_offering/mod.rs",
+          "action": "资格事实通过供应商 Port 获取"
+        },
+        {
+          "source": "services/src/supplier_api/governance/command.rs",
+          "symbols": "command",
+          "target": "crates/erp-processes/src/supply_governance/command.rs",
+          "action": "批任务/集成/能力变更根编排"
+        },
+        {
+          "source": "services/src/supplier_fulfillment/gateway.rs",
+          "symbols": "SupplierGateway",
+          "target": "crates/erp-supply/src/ports/supplier_gateway.rs",
+          "action": "保持外部协议与失败关闭合同"
+        },
+        {
+          "source": "services/src/supplier_fulfillment/place.rs",
+          "symbols": "place",
+          "target": "crates/erp-processes/src/supply_execution/place.rs",
+          "action": "外部意图/调用/结果编排"
+        },
+        {
+          "source": "services/src/supplier_settlement/source.rs",
+          "symbols": "source",
+          "target": "crates/erp-supply/src/service/supplier_settlement/source.rs",
+          "action": "本供应链域内事实归属与证据"
+        },
+        {
+          "source": "entities/src/supplier_settlement/source_evidence.rs",
+          "symbols": "Evidence",
+          "target": "crates/erp-supply/src/entity/supplier_settlement/source_evidence.rs",
+          "action": "结算来源证据唯一语义"
+        },
+        {
+          "source": "apps/web-api/src/app_state.rs",
+          "symbols": "ExternalConnectorPorts；ExternalConnectorReadiness",
+          "target": "apps/web-api/src/app_state.rs",
+          "action": "注入新 gateway，保持 readiness 与 FailClosed"
+        }
+      ]
+    },
+    {
+      "id": "17",
+      "file": "17-cutover.md",
+      "status": "未开始",
+      "crates": [],
+      "mappings": [
+        {
+          "source": "Cargo.toml",
+          "symbols": "entities；database；services",
+          "target": "Cargo.toml",
+          "action": "删除旧成员与 workspace.dependencies；登记真实有实现的目标集合"
+        },
+        {
+          "source": "entities/src/lib.rs",
+          "symbols": "pub mod",
+          "target": "",
+          "action": "删除旧生产源码与 manifest；保留 tests/ 档案"
+        },
+        {
+          "source": "database/src/lib.rs",
+          "symbols": "ensure_indexes",
+          "target": "apps/web-api/src/app_state.rs",
+          "action": "最终索引初始化只在组合根登记领域索引"
+        },
+        {
+          "source": "services/src/errors.rs",
+          "symbols": "Error；ErrorCode",
+          "target": "apps/web-api/src/core/errors.rs",
+          "action": "保留稳定协议错误映射；清除旧错误依赖"
+        },
+        {
+          "source": "services/src/lib.rs",
+          "symbols": "pub mod",
+          "target": "",
+          "action": "删除旧生产源码与 manifest；不保留 services facade"
+        },
+        {
+          "source": "Dockerfile",
+          "symbols": "COPY database；COPY entities；COPY services",
+          "target": "Dockerfile",
+          "action": "移除旧目录 COPY；release 构建仍使用既有 LLVM/stable"
+        },
+        {
+          "source": "crates/test-support/Cargo.toml",
+          "symbols": "entities",
+          "target": "crates/test-support/Cargo.toml",
+          "action": "清除旧依赖；纯单元测试新域仍不用此共享数据库夹具"
+        },
+        {
+          "source": "scripts/check-service-boundaries.sh",
+          "symbols": "rules",
+          "target": "scripts/check-domain-boundaries.sh",
+          "action": "新检查覆盖同等语义后移除旧入口"
+        }
+      ]
+    }
+  ]
+}
