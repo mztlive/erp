@@ -41,7 +41,10 @@ uuid = { workspace = true }
 storage = { workspace = true }
 id-generator = { workspace = true }
 database = { workspace = true }
+persistence-core = { workspace = true }
 entities = { workspace = true }
+erp-core = { workspace = true }
+application-core = { workspace = true }
 services = { workspace = true }
 config = { workspace = true }
 permission-macros = { workspace = true }

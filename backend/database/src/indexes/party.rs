@@ -12,7 +12,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::PartyExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `party` 集合名。
 pub(crate) const PARTIES: &str = <mongodb::Database as PartyExt>::PARTIES;

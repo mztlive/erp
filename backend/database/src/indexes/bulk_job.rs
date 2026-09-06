@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::BulkJobExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `bulk_selection_snapshot` 集合名。
 pub(crate) const BULK_SELECTION_SNAPSHOTS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS;

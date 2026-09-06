@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 单条引用或集合编码的最大 UTF-8 字节数。
 const ENCODED_MAX_LEN: usize = 512;

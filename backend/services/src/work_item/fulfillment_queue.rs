@@ -5,21 +5,16 @@
 
 use std::collections::HashMap;
 
-use database::{
-    FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, NoTransaction, WorkItemExt,
-};
-use entities::{
-    common::time::Instant,
-    work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType},
-};
+use database::{FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, WorkItemExt};
+use entities::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType};
+use erp_core::common::time::Instant;
+use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::{
-    audit::AuditActor,
-    errors::{Error, Result},
-    query::{normalized_text, page_or_default, page_size_or_default},
-};
+use crate::errors::{Error, Result};
+use application_core::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::AuditActor;
 
 use super::access::{has_execution_permissions, ActorAccess};
 use super::query::ensure_queue_context;

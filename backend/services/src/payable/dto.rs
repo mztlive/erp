@@ -4,19 +4,19 @@
 //! 时间戳；金额一律十进制字符串；业务日期为 `YYYY-MM-DD`。
 //! 契约来源：`erp-client/features/supplier-payables/types.ts`（W12）。
 
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
-use entities::money::Amount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType,
     PaymentAllocation, PendingPaymentAllocation, SupplierPaymentStatus,
 };
 use entities::returns::PaymentReversalStatus;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 应付往来子账列表允许的排序字段白名单。
 pub(crate) const PAYABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[
@@ -32,7 +32,7 @@ pub(crate) const SUPPLIER_PAYMENT_SORT_FIELDS: &[&str] = &["paid_at", "amount", 
 pub(crate) const PURCHASE_INVOICE_ALLOCATION_SORT_FIELDS: &[&str] = &["created_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,13 +59,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // 应付往来子账（payable_account）
@@ -797,10 +797,10 @@ mod tests {
     fn payment_allocation_view_leaves_source_blank_before_enrichment() {
         use std::str::FromStr;
 
-        use entities::common::time::Instant;
-        use entities::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
-        use entities::money::Amount;
         use entities::payable::{AllocationAction, PaymentAllocation, PaymentAllocationData};
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
+        use erp_core::money::Amount;
 
         use super::PaymentAllocationView;
 
@@ -901,8 +901,8 @@ mod tests {
     fn payment_allocation_line_converts_to_pending_in_input_order() {
         use std::str::FromStr;
 
-        use entities::ids::PayableEntryId;
-        use entities::money::Amount;
+        use erp_core::ids::PayableEntryId;
+        use erp_core::money::Amount;
 
         use super::{PaymentAllocationLineRequest, PendingPaymentAllocation};
 
@@ -932,8 +932,8 @@ mod tests {
     fn payment_allocation_line_rejects_zero_or_negative_amount() {
         use std::str::FromStr;
 
-        use entities::ids::PayableEntryId;
-        use entities::money::Amount;
+        use erp_core::ids::PayableEntryId;
+        use erp_core::money::Amount;
 
         use super::PaymentAllocationLineRequest;
 

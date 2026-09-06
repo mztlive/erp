@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `SupplierApiExt` 关联常量导入。
 //!
 //! 筛选/行类型定义在本文件，经 `SupplierApiExt` 的关联类型对外暴露
@@ -24,10 +24,10 @@ use serde::{Deserialize, Serialize};
 use super::extensions::{
     AccessControlExt, BulkJobExt, SupplierApiExt, SupplierFulfillmentExt, SupplierOfferingExt,
 };
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 mod capability_change_batch;
 
@@ -757,7 +757,7 @@ impl<'a> SupplierApiRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，中途失败会留下只有连接没有能力（或只有部分
     /// 能力）的半成品；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `connection` - 待写入的连接配置
@@ -765,7 +765,7 @@ impl<'a> SupplierApiRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_connection_with_capabilities(
         &self,
@@ -979,7 +979,7 @@ mod tests {
     #[test]
     fn capability_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SupplierApiCapabilityFilter {
-            connection_id: Some(entities::ids::SupplierApiConnectionId::new("conn-1")),
+            connection_id: Some(erp_core::ids::SupplierApiConnectionId::new("conn-1")),
             capability_code: Some(SupplierApiCapabilityCode::Order),
             status: Some(SupplierApiCapabilityStatus::Active),
             page: 1,

@@ -7,19 +7,19 @@
 use std::collections::HashMap;
 
 use entities::catalog::{Product, Sku, SkuRevision};
-use entities::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::SupplierAccount;
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingAvailability,
     SupplierOfferingRevision,
 };
+use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
 use super::super::PageResult;
 use super::{SupplierOfferingFilter, SupplierOfferingRepository, SupplierOfferingRow};
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 供给列表的高层查询条件。
 ///
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn list_query_fields_preserve_all_filter_scopes() {
-        use entities::ids::{SkuId, SupplierAccountId};
+        use erp_core::ids::{SkuId, SupplierAccountId};
         let query = SupplierOfferingListQuery {
             availability_status: Some(entities::supplier_offering::AvailabilityStatus::Stale),
             keyword: Some("SUP-9".to_string()),
@@ -338,22 +338,22 @@ mod tests {
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId,
-        SupplierOfferingRevisionId,
-    };
-    use entities::money::{Quantity, Rate, UnitPrice};
     use entities::supplier_offering::{
         AvailabilityStatus, PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability,
         SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevision,
         SupplierOfferingRevisionData,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId,
+        SupplierOfferingRevisionId,
+    };
+    use erp_core::money::{Quantity, Rate, UnitPrice};
     use test_support::{require_mongo, TestDb};
 
     use super::super::super::extensions::SupplierOfferingExt;
     use crate::ensure_indexes;
-    use crate::{NoTransaction, Transactional};
+    use persistence_core::{NoTransaction, Transactional};
 
     /// 构造最小供给三元组（供给头 + 首版修订 + 可供投影）。
     fn offering_triple(
@@ -573,7 +573,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
                         let (offering, revision, availability) =

@@ -5,12 +5,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, SalesOrderExt};
-use entities::ids::SalesOrderSubmissionId;
-use entities::money::Amount;
-#[cfg(test)]
-use entities::money::Quantity;
+use database::SalesOrderExt;
 use entities::sales_order::{SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine, SubmissionStatus};
+use erp_core::ids::SalesOrderSubmissionId;
+use erp_core::money::Amount;
+#[cfg(test)]
+use erp_core::money::Quantity;
+use persistence_core::Executor;
 
 use super::brief::{
     format_instant_due_label, format_quantity, join_list_summary, line_title, non_empty, push_section,
@@ -473,7 +474,7 @@ fn sales_line_quantity_parts(
 
 #[cfg(test)]
 mod tests {
-    use entities::money::Quantity;
+    use erp_core::money::Quantity;
 
     use super::*;
 

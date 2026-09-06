@@ -1,14 +1,15 @@
 //! 客户资料详情查询与视图映射。
 
-use database::{AccessControlExt, CustomerExt, NoTransaction, PartyExt};
+use database::{AccessControlExt, CustomerExt, PartyExt};
 use entities::{
-    common::time::BusinessDate,
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerAssignment,
     },
-    ids::PartyId,
     party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision},
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::PartyId;
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 

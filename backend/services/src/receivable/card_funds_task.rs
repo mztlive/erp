@@ -3,14 +3,15 @@
 //! 任务规格、身份与摘要唯一来源为 `entities::work_item::finance_task`；
 //! 本文件只解析责任人/组织、调用 factory 并持久化（FIN-E06）。
 
-use database::{Executor, WorkItemExt};
-use entities::ids::WorkItemId;
+use database::WorkItemExt;
 use entities::receivable::ReceivableAccount;
 use entities::work_item::{
     card_funds_task_kind, new_card_funds_task, CardFundsTaskKind, CardFundsTaskSpec,
     FinanceResponsibilityOperation, WorkItem, WorkItemType, RECEIVABLE_OBJECT_TYPE,
 };
+use erp_core::ids::WorkItemId;
 use id_generator::next_id;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;

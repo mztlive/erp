@@ -1,6 +1,6 @@
 //! 采购二次确认任务已删除。本模块只保留空装载入口，避免旧队列路径回退。
 
-use database::Executor;
+use persistence_core::Executor;
 
 use super::{ObjectFactMap, WorkItemService};
 use crate::errors::Result;

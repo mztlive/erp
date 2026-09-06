@@ -9,8 +9,8 @@ use entities::catalog::parse_specification_signature;
 
 use super::shared::SKUS;
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 审计投影：只读取稳定主键与规格签名。
 #[derive(Debug, Deserialize)]

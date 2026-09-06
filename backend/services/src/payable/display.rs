@@ -4,13 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    NoTransaction, PartyExt, PayableExt, PurchaseOrderExt, ReturnsExt, SupplierExt, SupplierSettlementExt,
-};
-use entities::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
+use database::{PartyExt, PayableExt, PurchaseOrderExt, ReturnsExt, SupplierExt, SupplierSettlementExt};
 use entities::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use entities::returns::PaymentReversal;
+use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use super::PayableService;
@@ -460,10 +459,10 @@ pub(super) async fn resolve_source_document_no(
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::Instant;
-    use entities::ids::{PaymentReversalId, SupplierPaymentId};
-    use entities::money::Amount;
     use entities::returns::{PaymentReversal, PaymentReversalData};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
+    use erp_core::money::Amount;
 
     use super::{group_payment_reversals, merge_source_document_nos};
 
@@ -510,9 +509,9 @@ mod tests {
         source_type: &str,
         source_document_id: &str,
     ) -> entities::payable::PayableAccount {
-        use entities::ids::{PayableAccountId, SupplierAccountId};
-        use entities::money::Amount;
         use entities::payable::{PayableAccount, PayableAccountData, PayableSourceType};
+        use erp_core::ids::{PayableAccountId, SupplierAccountId};
+        use erp_core::money::Amount;
         let source_type = match source_type {
             "purchase" => PayableSourceType::PurchaseOrder,
             _ => PayableSourceType::SupplierSettlement,

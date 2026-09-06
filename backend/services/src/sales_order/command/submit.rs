@@ -1,14 +1,15 @@
-use database::{AccessControlExt, NoTransaction, SalesOrderExt, Transactional};
-use entities::common::time::Instant;
+use database::{AccessControlExt, SalesOrderExt};
 use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
-use entities::ids::{
-    BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
-};
 use entities::sales_order::{
     SalesContentHash, SalesOrder, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
     SalesOrderWorkingCopyUpdate, WorkingPurpose,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
+};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::adapter::{
@@ -29,9 +30,10 @@ use super::super::start_approval::{
 use super::super::SalesOrderService;
 use super::identity::{sales_submission_audit_id, sales_submission_fingerprint};
 use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {

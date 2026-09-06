@@ -31,16 +31,16 @@ pub fn conflict_if_stale_version(matched: bool) -> Result<()> {
 mod tests {
     use super::{conflict_if_stale_version, STALE_VERSION_MESSAGE};
     use crate::errors::Error;
-    use entities::common::time::Instant;
-    use entities::ids::{
-        CustomerAccountId, CustomerReceiptId, CustomerRefundId, PaymentReversalId, ReceiptReversalId,
-        SupplierAccountId, SupplierPaymentId, SupplierRefundId,
-    };
-    use entities::money::Amount;
     use entities::returns::{
         CustomerRefund, CustomerRefundData, PaymentReversal, PaymentReversalData, ReceiptReversal,
         ReceiptReversalData, SupplierRefund, SupplierRefundData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        CustomerAccountId, CustomerReceiptId, CustomerRefundId, PaymentReversalId, ReceiptReversalId,
+        SupplierAccountId, SupplierPaymentId, SupplierRefundId,
+    };
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     #[test]

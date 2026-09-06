@@ -7,7 +7,7 @@
 use sha2::{Digest, Sha256};
 
 use super::ReceivableFundsReview;
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 const CHAIN_HASH_PREFIX: &str = "receivable-review-chain-v1";
 
@@ -275,11 +275,11 @@ fn digest_part(digest: &mut Sha256, value: &str) {
 #[cfg(test)]
 mod tests {
     use super::ReceivableFundsReviewChain;
-    use crate::common::time::Instant;
-    use crate::ids::{FileAssetId, ReceivableAccountId, ReceivableFundsReviewId, WorkItemId};
     use crate::receivable::{
         FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{FileAssetId, ReceivableAccountId, ReceivableFundsReviewId, WorkItemId};
 
     fn review(
         id: &str,

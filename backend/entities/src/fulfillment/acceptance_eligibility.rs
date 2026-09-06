@@ -9,9 +9,9 @@
 
 use rust_decimal::Decimal;
 
-use crate::errors::{Error, Result};
-use crate::money::Quantity;
 use crate::sales_order::FulfillmentProgress;
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 use super::acceptance_fulfillment_allocation::AcceptanceFulfillmentAllocation;
 
@@ -211,14 +211,16 @@ mod tests {
         AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AllocationAction,
         FulfillmentFactType,
     };
-    use crate::ids::AcceptanceFulfillmentAllocationId;
+    use erp_core::ids::AcceptanceFulfillmentAllocationId;
 
     /// 构造一条 APPLY 分配（默认数量 4）。
     fn apply_allocation(line_id: &str, quantity: &str) -> AcceptanceFulfillmentAllocation {
         AcceptanceFulfillmentAllocation::new(
             AcceptanceFulfillmentAllocationId::new(format!("allocation-{line_id}-{quantity}")),
             AcceptanceFulfillmentAllocationData {
-                customer_acceptance_line_id: crate::ids::CustomerAcceptanceLineId::new("acceptance-line-1"),
+                customer_acceptance_line_id: erp_core::ids::CustomerAcceptanceLineId::new(
+                    "acceptance-line-1",
+                ),
                 fulfillment_fact_type: FulfillmentFactType::Delivery,
                 fulfillment_line_id: line_id.to_string(),
                 allocation_action: AllocationAction::Apply,
@@ -238,7 +240,9 @@ mod tests {
         AcceptanceFulfillmentAllocation::new(
             AcceptanceFulfillmentAllocationId::new(format!("allocation-{line_id}-reverse")),
             AcceptanceFulfillmentAllocationData {
-                customer_acceptance_line_id: crate::ids::CustomerAcceptanceLineId::new("acceptance-line-1"),
+                customer_acceptance_line_id: erp_core::ids::CustomerAcceptanceLineId::new(
+                    "acceptance-line-1",
+                ),
                 fulfillment_fact_type: FulfillmentFactType::Delivery,
                 fulfillment_line_id: line_id.to_string(),
                 allocation_action: AllocationAction::Reverse,

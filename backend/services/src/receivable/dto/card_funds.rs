@@ -1,12 +1,12 @@
 //! W13 卡券票款复核与历史票款登记 DTO。
 
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{FileAssetId, ReceivableAccountId, WorkItemId};
-use entities::money::Amount;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{FileAssetId, ReceivableAccountId, WorkItemId};
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// W13 当前应收账户关联的正式回款事实投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

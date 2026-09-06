@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::ids::{BusinessDocumentId, DocumentParticipantId};
-use crate::validation::normalize_required_text;
+use erp_core::ids::{BusinessDocumentId, DocumentParticipantId};
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
 /// 用户 ID 最大长度。
 const USER_ID_MAX_LEN: usize = 128;
@@ -92,7 +92,7 @@ impl DocumentParticipant {
     /// 完成全部文本字段的校验与规范化（trim、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DocumentParticipantId`）
+    /// * `id` - 实体主键（`erp_core::ids::DocumentParticipantId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -133,7 +133,7 @@ impl DocumentParticipant {
 #[cfg(test)]
 mod tests {
     use super::{DocumentParticipant, DocumentParticipantData, ParticipantRole};
-    use crate::ids::{BusinessDocumentId, DocumentParticipantId};
+    use erp_core::ids::{BusinessDocumentId, DocumentParticipantId};
 
     fn data() -> DocumentParticipantData {
         DocumentParticipantData {

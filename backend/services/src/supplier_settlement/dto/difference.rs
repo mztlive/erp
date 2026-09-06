@@ -5,7 +5,7 @@ use validator::Validate;
 
 use super::query::{SettlementDifferenceEvidenceView, SupplierSettlementDifferenceView};
 use super::safe_command_id;
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 差异补证强命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

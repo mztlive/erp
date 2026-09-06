@@ -1,4 +1,4 @@
-use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional};
+use database::{AccessControlExt, CatalogExt};
 use entities::catalog::product::{Product, ProductData};
 use entities::catalog::product_category::{ProductCategory, ProductCategoryData};
 use entities::catalog::product_revision::{ProductRevision, ProductRevisionData};
@@ -9,18 +9,20 @@ use entities::catalog::{
     next_revision_no, EnableStatus, ProductCategoryId, ProductId, ProductKind, ProductRevisionId, SkuId,
     SkuRevisionId, VoucherCategoryProfileRevisionId, VoucherCategorySelection,
 };
-use entities::common::time::BusinessDate;
+use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::sku_edit::{NewSkuContext, SkuEditItem};
 use super::CatalogService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, SortDir, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
 };
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 卡券类目扩展修订仓储筛选条件类型。
 type VoucherCategoryProfileRevisionFilter =
@@ -62,7 +64,7 @@ struct ResolvedVoucherCategoryInput {
     specification: Option<String>,
     category_id: ProductCategoryId,
     new_category: Option<ProductCategory>,
-    brand_id: entities::ids::ProductBrandId,
+    brand_id: erp_core::ids::ProductBrandId,
     sku: VoucherSkuInput,
     status: Option<EnableStatus>,
     effective_from: Option<BusinessDate>,

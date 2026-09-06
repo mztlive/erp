@@ -4,14 +4,14 @@
 
 use std::str::FromStr;
 
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::ReceivableEntryId;
-use entities::money::Amount;
 use entities::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
 };
 use entities::sales_review::{SalesChangeSubmission, SalesChangeSubmissionLine};
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::ReceivableEntryId;
+use erp_core::money::Amount;
 use id_generator::next_id;
 
 use crate::errors::{Error, Result};
@@ -88,12 +88,12 @@ pub(super) fn build_change_revision(
 /// ID 由服务层生成，工厂不得调用 ID 生成器。
 fn allocate_formal_revision_identities(lines: &[SalesChangeSubmissionLine]) -> FormalRevisionIdentities {
     FormalRevisionIdentities::new(
-        entities::ids::SalesOrderRevisionId::new(next_id()),
+        erp_core::ids::SalesOrderRevisionId::new(next_id()),
         lines
             .iter()
             .map(|line| {
                 FormalRevisionLineIdentity::new(
-                    entities::ids::SalesOrderRevisionLineId::new(next_id()),
+                    erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
                     FormalRevisionSubtypeIdentity::from_line_type(line.line_type.into(), next_id()),
                 )
             })

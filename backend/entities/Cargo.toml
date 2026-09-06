@@ -10,15 +10,15 @@ serde = { workspace = true }
 bpm = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }
+erp-core = { workspace = true }
 argon2 = { workspace = true }
 md5 = { workspace = true }
 regex = { workspace = true }
 rust_decimal = { workspace = true }
 validator = { workspace = true }
 chrono = { workspace = true }
-# 与 workspace 的 mongodb 驱动统一使用 BSON 3，仅用于 money 的
-# Decimal128 序列化委托（bson::Decimal128 的 Serialize/Deserialize 形态）。
 bson = { workspace = true }
+application-core = { workspace = true }
 # P1 §2.1 敏感字段指纹：带密钥 HMAC（数据模型 §4.5.5，禁止裸摘要）。
 # D05 file_asset 在生产代码（entities::file_asset::content_fingerprint）中
 # 使用，须为正式依赖（P0 放置在 dev-dependencies 下，P1 移正）。

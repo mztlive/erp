@@ -3,8 +3,8 @@
 //! DTO/预占到领域规格的转换与系统 ID 注入；编号与归属规则归实体批量工厂。
 
 use entities::fulfillment::DeliveryLineSpec;
-use entities::ids::DeliveryLineId;
 use entities::inventory::StockReservation;
+use erp_core::ids::DeliveryLineId;
 use id_generator::next_id;
 
 use crate::errors::Result;

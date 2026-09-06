@@ -16,9 +16,9 @@ use super::{
     AllocationAction, CustomerReceipt, EntryDirection, Invoice, ReceiptAllocation, ReceivableAccount,
     ReceivableEntry, SalesInvoiceAllocation,
 };
-use crate::errors::{Error, Result};
-use crate::ids::ReceivableEntryId;
-use crate::money::Amount;
+use erp_core::ids::ReceivableEntryId;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 const FACT_HASH_PREFIX: &str = "receivable-funds-facts-v1";
 
@@ -621,18 +621,18 @@ mod tests {
     use super::{
         CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType, ReceivableFundsSnapshot,
     };
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{
-        CustomerAccountId, CustomerReceiptId, InvoiceId, PartyId, ReceiptAllocationId, ReceivableAccountId,
-        ReceivableEntryId, SalesInvoiceAllocationId, SalesOrderId, SalesOrderRevisionId,
-    };
-    use crate::money::Amount;
     use crate::receivable::{
         AccountReviewStatus, AllocationAction, CustomerReceipt, CustomerReceiptData, EntryDirection, Invoice,
         InvoiceData, InvoiceDirection, InvoiceKind, ReceiptAllocation, ReceiptAllocationData,
         ReceivableAccount, ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
         SalesInvoiceAllocation, SalesInvoiceAllocationData,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        CustomerAccountId, CustomerReceiptId, InvoiceId, PartyId, ReceiptAllocationId, ReceivableAccountId,
+        ReceivableEntryId, SalesInvoiceAllocationId, SalesOrderId, SalesOrderRevisionId,
+    };
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {

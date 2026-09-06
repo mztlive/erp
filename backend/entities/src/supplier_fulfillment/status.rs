@@ -2,12 +2,12 @@
 //!
 //! `CANCEL_PENDING`/`CANCELED`/`REFUND_PENDING`/`REFUNDED` 不得折叠为单一状态枚举
 //! （§6.19）；`COMPLETED`/`REJECTED` 是终态，乱序或重复回调经
-//! [`crate::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
+//! [`erp_core::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
 //! 本模块只承载状态定义与邻接矩阵，不引用订单实体（避免与 `fulfillment_order` 循环依赖）。
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::DocumentState;
+use erp_core::common::state::DocumentState;
 
 /// 可由订单与原供应商动作共同证明的业务终态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -250,8 +250,8 @@ impl DocumentState for RefundStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::ensure_transition;
-    use crate::errors::Error;
+    use erp_core::common::state::ensure_transition;
+    use erp_core::Error;
 
     #[test]
     fn terminal_states_are_absorbing() {

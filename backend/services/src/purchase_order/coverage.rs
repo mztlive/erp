@@ -9,10 +9,11 @@
 //! `entities::purchase_order::coverage::build_procurement_coverage` 领域构造函数
 //! 承担；本模块只负责当前指针解析、仓储调用与领域错误映射。
 
-use database::{Executor, PurchaseOrderExt};
-use entities::ids::SalesOrderRevisionId;
+use database::PurchaseOrderExt;
 use entities::purchase_order::{build_procurement_coverage, SalesProcurementCoverage};
 use entities::sales_order::SalesOrder;
+use erp_core::ids::SalesOrderRevisionId;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 

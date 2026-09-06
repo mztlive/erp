@@ -1,11 +1,12 @@
-use database::{AccessControlExt, NoTransaction, SupplierFulfillmentExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
-use entities::ids::SupplierOrderActionId;
+use database::{AccessControlExt, SupplierFulfillmentExt, WorkItemExt};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus,
     SupplierOrderActionType,
 };
 use entities::work_item::WorkItemStatus;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierOrderActionId;
+use persistence_core::{NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -21,9 +22,10 @@ use super::receipt::{
     stable_digest, stable_evidence_id, stable_internal_idempotency_key, CompletionReceipt,
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 const COMPLETION_EVIDENCE_SCHEMA: &str = "W26_TASK_COMPLETION_V1";
 const COMPLETION_AUDIT_PREFIX: &str = "w26-completion-";

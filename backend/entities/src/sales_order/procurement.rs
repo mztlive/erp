@@ -7,8 +7,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::errors::{Error, Result};
-use crate::money::{Quantity, Rate};
+use erp_core::money::{Quantity, Rate};
+use erp_core::{Error, Result};
 
 /// 销售单当前版本的采购数量覆盖汇总。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -128,7 +128,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::{procurement_responsibility_key, ProcurementCoverageSummary};
-    use crate::money::{Quantity, Rate};
+    use erp_core::money::{Quantity, Rate};
 
     #[test]
     fn responsibility_key_is_stable_and_boundary_safe() {

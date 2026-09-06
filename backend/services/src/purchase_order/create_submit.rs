@@ -1,11 +1,11 @@
 //! 新建采购单后在同一事务内冻结并启动统一审批。
 
 use database::PurchaseOrderExt;
-use entities::common::time::Instant;
 use entities::document_registry::BusinessDocument;
-use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use entities::sales_order::SalesOrder;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 
@@ -20,9 +20,10 @@ use super::start_approval::{
 };
 use crate::approval::execution::prepare_start;
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 创建并提交后的正式号与乐观锁版本。
 pub(super) struct SubmittedCreatedOrder {

@@ -1,13 +1,7 @@
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PurchaseOrderExt, SalesOrderExt,
-    SupplierExt, WarehouseExt,
+    AccessControlExt, DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt, WarehouseExt,
 };
-use entities::common::time::BusinessDate;
 use entities::document_registry::DocumentType;
-use entities::ids::{
-    PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, WarehouseId,
-};
-use entities::money::{line_amounts, Amount, Quantity, UnitPrice};
 use entities::purchase_order::{
     basis_id_for, stable_line_id, supply_cost, BasisGroup, BasisLine, BasisScope, CreationBasisFacts,
     FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -17,8 +11,14 @@ use entities::purchase_order::{
 use entities::sales_order::SalesOrder;
 use entities::supplier::SupplierPaymentTerm;
 use entities::warehouse::WarehouseFulfillmentOperation;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, WarehouseId,
+};
+use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
 use id_generator::next_id;
 use mongodb::ClientSession;
+use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -37,10 +37,11 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
@@ -538,7 +539,7 @@ fn build_submission_line(
             purchase_order_submission_id: submission_id.clone(),
             line_no,
             line_type: PurchaseLineType::ItemService,
-            procurement_confirmation_line_id: Some(entities::ids::ProcurementConfirmationLineId::new(
+            procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                 stable_line_id(basis).to_string(),
             )),
             sku_id: Some(basis.coverage.goods_line.sku_id.clone()),
@@ -554,7 +555,7 @@ fn build_submission_line(
             input_tax_rate: Some(basis.supply.revision.input_tax_rate),
             expected_delivery_date: Some(line.selected.expected_delivery_date),
             sales_order_line_id: Some(basis.coverage.revision_line.sales_order_line_id.clone()),
-            sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new(
+            sales_order_revision_line_id: Some(erp_core::ids::SalesOrderRevisionLineId::new(
                 basis.coverage.revision_line.base.id.clone(),
             )),
             sales_order_submission_line_id: None,

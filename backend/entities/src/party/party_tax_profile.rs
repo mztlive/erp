@@ -8,13 +8,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::field_update::FieldUpdate;
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use erp_core::{Error, Result};
 
 use super::status::EffectiveRecordStatus;
 
-pub use crate::ids::{PartyId, PartyTaxProfileId};
+pub use erp_core::ids::{PartyId, PartyTaxProfileId};
 
 /// 税号最大长度。
 const TAX_NO_MAX_LEN: usize = 32;
@@ -83,7 +83,7 @@ impl PartyTaxProfile {
     /// 长度上限）；强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PartyTaxProfileId`）
+    /// * `id` - 实体主键（`erp_core::ids::PartyTaxProfileId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -199,10 +199,10 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
-    use crate::common::time::BusinessDate;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{PartyId, PartyTaxProfileId};
     use crate::party::status::EffectiveRecordStatus;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{PartyId, PartyTaxProfileId};
 
     fn tax_profile_data() -> PartyTaxProfileData {
         PartyTaxProfileData {

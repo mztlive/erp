@@ -3,18 +3,15 @@
 //! 纯业务规则已下沉至 `entities::supplier::eligibility`；本模块仅负责
 //! 已持久化事实的加载与领域判定的适配，不持有可复用的校验实现。
 
-use database::{NoTransaction, SupplierExt};
-use entities::{
-    common::time::BusinessDate,
-    ids::{SupplierAccountId, SupplierCapabilityRevisionId},
-    supplier::{
-        eligibility::{
-            ensure_capability_qualified as ensure_qualified_domain, CapabilityEligibilityViolation,
-        },
-        SupplierCapabilityRevision,
-    },
+use database::SupplierExt;
+use entities::supplier::{
+    eligibility::{ensure_capability_qualified as ensure_qualified_domain, CapabilityEligibilityViolation},
+    SupplierCapabilityRevision,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 

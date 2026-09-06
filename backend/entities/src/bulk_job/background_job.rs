@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::command::CommandFingerprint;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{BackgroundJobId, BulkSelectionSnapshotId, FileAssetId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use application_core::command::CommandFingerprint;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{BackgroundJobId, BulkSelectionSnapshotId, FileAssetId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 任务编号最大长度。
 const JOB_NO_MAX_LEN: usize = 128;
@@ -243,7 +243,7 @@ impl BackgroundJob {
     /// 上限），初始状态 `PENDING`，计数全零。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::BackgroundJobId`）
+    /// * `id` - 实体主键（`erp_core::ids::BackgroundJobId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -528,9 +528,9 @@ impl BackgroundJob {
 #[cfg(test)]
 mod tests {
     use super::{BackgroundJob, BackgroundJobData, JobStatus, JobType, JobUpdate};
-    use crate::common::state::ensure_transition;
-    use crate::common::time::Instant;
-    use crate::ids::{BackgroundJobId, FileAssetId};
+    use erp_core::common::state::ensure_transition;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{BackgroundJobId, FileAssetId};
 
     fn data() -> BackgroundJobData {
         BackgroundJobData {

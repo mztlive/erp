@@ -8,10 +8,10 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::status::EnableStatus;
-use crate::common::stable::StableBase;
-use crate::errors::{Error, Result};
-use crate::ids::{SkuAttributeId, SkuAttributeValueId};
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{SkuAttributeId, SkuAttributeValueId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 属性值代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -88,7 +88,7 @@ impl SkuAttributeValue {
     /// 并要求 `sort_order` 为非负整数。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SkuAttributeValueId`）
+    /// * `id` - 实体主键（`erp_core::ids::SkuAttributeValueId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -189,8 +189,8 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::SkuAttributeId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::SkuAttributeId;
 
     fn data() -> SkuAttributeValueData {
         SkuAttributeValueData {

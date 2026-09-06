@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 权限定义列表允许的排序字段白名单。
 pub(crate) const PERMISSION_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -26,7 +26,7 @@ pub(crate) const DATA_SCOPE_SORT_FIELDS: &[&str] = &["created_at", "updated_at"]
 pub(crate) const AUDIT_EVENT_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,13 +53,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 权限定义响应视图（W19 权限目录）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -464,14 +464,14 @@ impl AssignUserRoleRequest {
         UserRoleData {
             user_id: self.user_id,
             role_id: self.role_id,
-            effective_from: entities::common::time::Instant::from_unix_secs(
+            effective_from: erp_core::common::time::Instant::from_unix_secs(
                 self.effective_from
                     .map(|secs| secs as i64)
-                    .unwrap_or_else(|| entities::common::time::Instant::now().unix_secs()),
+                    .unwrap_or_else(|| erp_core::common::time::Instant::now().unix_secs()),
             ),
             effective_to: self
                 .effective_to
-                .map(|secs| entities::common::time::Instant::from_unix_secs(secs as i64)),
+                .map(|secs| erp_core::common::time::Instant::from_unix_secs(secs as i64)),
             assigned_by: assigned_by.to_string(),
         }
     }
@@ -773,7 +773,7 @@ mod tests {
         assert_eq!(data.assigned_by, "admin-1");
         assert_eq!(
             data.effective_from.unix_secs(),
-            entities::common::time::Instant::now().unix_secs()
+            erp_core::common::time::Instant::now().unix_secs()
         );
         assert!(data.effective_to.is_some());
     }

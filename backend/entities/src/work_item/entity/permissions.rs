@@ -1,7 +1,8 @@
 //! 工作项执行权限与可用账号身份。
 
-use crate::errors::{Error, Result};
-use crate::{AccountCore, AccountKind, Permission, PermissionSet};
+use crate::{AccountCore, Permission, PermissionSet};
+use erp_core::AccountKind;
+use erp_core::{Error, Result};
 
 use super::WorkItemType;
 
@@ -260,8 +261,8 @@ impl WorkItemType {
 #[cfg(test)]
 mod tests {
     use super::super::{direct_data, WorkItem, WorkItemData, WorkItemType};
-    use crate::common::time::Instant;
-    use crate::ids::WorkItemId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     #[test]
     fn fulfillment_task_cannot_bypass_frozen_responsibility_key() {

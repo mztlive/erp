@@ -1,19 +1,20 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, InventoryExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, WorkItemExt};
+use database::{InventoryExt, PurchaseOrderExt, SalesOrderExt, WorkItemExt};
 use entities::catalog::ProductKind;
-use entities::ids::{SalesOrderId, SkuId};
 use entities::purchase_order::{
     BasisGroup, CreationBasisFacts, SalesProcurementCoverage, StockBasisGroup, StockBasisLine,
 };
 use entities::sales_order::{CommercialStatus, SalesOrder};
+use erp_core::ids::{SalesOrderId, SkuId};
+use persistence_core::{Executor, NoTransaction};
 
 use super::super::coverage::load_sales_procurement_coverage;
 use super::super::dto::{CreationBasisListParams, CreationBasisView};
 use super::super::PurchaseOrderService;
 use super::mapping::{basis_groups_from_facts, build_basis_view, build_stock_basis_view, zero_quantity};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl PurchaseOrderService {
     /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。

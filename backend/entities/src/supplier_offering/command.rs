@@ -4,8 +4,8 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
 const OPERATION_MAX_LEN: usize = 64;

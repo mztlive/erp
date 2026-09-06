@@ -1,10 +1,10 @@
-use entities::ids::SalesOrderId;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_core::ids::SalesOrderId;
 use mongodb::bson::doc;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> Repository<'a, WorkItem> {
     /// 查询同一责任键下全部开放采购履约任务。

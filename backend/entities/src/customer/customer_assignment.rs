@@ -8,12 +8,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::field_update::FieldUpdate;
-use crate::validation::normalize_required_text;
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
-pub use crate::ids::{CustomerAccountId, CustomerAssignmentId};
+pub use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
 
 /// 用户标识最大长度。
 const USER_ID_MAX_LEN: usize = 128;
@@ -108,7 +108,7 @@ impl CustomerAssignment {
     /// 长度上限）；强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerAssignmentId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerAssignmentId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -330,9 +330,9 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentUpdate};
-    use crate::common::time::BusinessDate;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{CustomerAccountId, CustomerAssignmentId};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
 
     fn assignment_data() -> CustomerAssignmentData {
         CustomerAssignmentData {

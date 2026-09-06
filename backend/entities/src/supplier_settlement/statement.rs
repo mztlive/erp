@@ -12,11 +12,11 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{PayableAccountId, SupplierAccountId, SupplierSettlementStatementId};
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{PayableAccountId, SupplierAccountId, SupplierSettlementStatementId};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::difference::{SettlementDifferenceStatus, SupplierSettlementDifference};
 use super::item::{SettlementCostDelta, SupplierSettlementItem};
@@ -261,7 +261,7 @@ impl SupplierSettlementStatement {
     /// 确认时间与应付账户且两者成对。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierSettlementStatementId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierSettlementStatementId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -537,7 +537,7 @@ impl SupplierSettlementStatement {
         items: &[SupplierSettlementItem],
         differences: &[SupplierSettlementDifference],
     ) -> Result<SettlementCostDelta> {
-        let statement_id = crate::ids::SupplierSettlementStatementId::new(self.base.id.as_str());
+        let statement_id = erp_core::ids::SupplierSettlementStatementId::new(self.base.id.as_str());
         let mut item_by_id = HashMap::with_capacity(items.len());
         for item in items {
             if !item.belongs_to_statement(&statement_id) {
@@ -922,16 +922,16 @@ fn ensure_status_move(from: SettlementStatus, to: SettlementStatus) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::time::BusinessDate;
-    use crate::ids::{
-        PayableAccountId, SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
-    };
-    use crate::money::Quantity;
     use crate::supplier_settlement::{
         SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementDifferenceType,
         SupplierSettlementDifferenceData, SupplierSettlementItemData,
     };
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
+        PayableAccountId, SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+    };
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     fn sample_data() -> SupplierSettlementStatementData {

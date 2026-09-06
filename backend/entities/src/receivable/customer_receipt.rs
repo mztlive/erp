@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CustomerAccountId, CustomerReceiptId, PartyId, ReceivableEntryId};
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerAccountId, CustomerReceiptId, PartyId, ReceivableEntryId};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 回款单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
@@ -189,7 +189,7 @@ impl CustomerReceipt {
     /// 完成回款单号与银行引用的 trim/非空/长度校验和金额正数校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerReceiptId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerReceiptId`）
     /// * `data` - 创建数据
     /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
@@ -529,7 +529,7 @@ mod tests {
 
         receipt
             .start_approval(vec![PendingReceiptAllocation::new(
-                crate::ids::ReceivableEntryId::new("re-1"),
+                erp_core::ids::ReceivableEntryId::new("re-1"),
                 Amount::from_str("100.00").unwrap(),
             )
             .unwrap()])
@@ -546,7 +546,7 @@ mod tests {
 
     #[test]
     fn state_machine_edges_are_directed() {
-        use crate::common::state::ensure_transition as tr;
+        use erp_core::common::state::ensure_transition as tr;
         use CustomerReceiptStatus as S;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());
@@ -575,7 +575,7 @@ mod tests {
         assert_eq!(receipt.approval_subject_version, 0);
         let version = receipt
             .start_approval(vec![PendingReceiptAllocation::new(
-                crate::ids::ReceivableEntryId::new("re-1"),
+                erp_core::ids::ReceivableEntryId::new("re-1"),
                 Amount::from_str("100.00").unwrap(),
             )
             .unwrap()])
@@ -605,7 +605,7 @@ mod tests {
             CustomerReceipt::new(CustomerReceiptId::new("cr-approval"), data(), "creator-1").unwrap();
         receipt
             .start_approval(vec![PendingReceiptAllocation::new(
-                crate::ids::ReceivableEntryId::new("re-1"),
+                erp_core::ids::ReceivableEntryId::new("re-1"),
                 Amount::from_str("100.00").unwrap(),
             )
             .unwrap()])
@@ -643,7 +643,7 @@ mod tests {
         receipt.customer_id = None;
         receipt
             .start_approval(vec![PendingReceiptAllocation::new(
-                crate::ids::ReceivableEntryId::new("re-1"),
+                erp_core::ids::ReceivableEntryId::new("re-1"),
                 Amount::from_str("100.00").unwrap(),
             )
             .unwrap()])

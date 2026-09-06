@@ -1,8 +1,8 @@
 use bpm::model::{ApprovalNodeExecution, CommandPayloadField};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::inventory::StockAdjustmentLineUpdate;
+use erp_core::common::time::Instant;
 
 use super::super::dto::{StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest};
 use crate::approval::execution::idempotency::{

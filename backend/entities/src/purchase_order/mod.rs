@@ -4,12 +4,12 @@
 //!
 //! 字段字典与唯一约束见数据模型 §6.6；公共字段归属按 §4.3 判定：
 //! - `purchase_order` / `purchase_change_order` 是可编辑单据草稿 → 组合
-//!   [`crate::common::StableBase`]，主状态机见 §7.4；
+//!   [`erp_core::common::StableBase`]，主状态机见 §7.4；
 //! - `purchase_order_submission` / `purchase_change_submission` 是不可变提交，
 //!   字段按 §6.6 字典精确建模（`submission_no`、`submitted_at`/`submitted_by`），
 //!   不套用 FactBase（无 `fact_no`/`occurred_at`/`recorded_at` 语义字段）；
 //! - `purchase_order_revision`(+line) 是不可变生效版本 → 组合
-//!   [`crate::common::RevisionBase`]，并按 §4.4 内联结构化快照
+//!   [`erp_core::common::RevisionBase`]，并按 §4.4 内联结构化快照
 //!   （供应商名称、付款条件门禁、商品名称、规格、单位）；
 //! - `purchase_line_sales_allocation` 是分配明细，按 §6.6 字典精确建模。
 //!

@@ -3,11 +3,12 @@
 use std::collections::HashSet;
 
 use bpm::model::ApprovalNodeExecution;
-use database::{AccessControlExt, ApprovalIntegrationExt, Executor};
+use database::{AccessControlExt, ApprovalIntegrationExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
 use super::read_auth::runtime_object_readable;
@@ -15,9 +16,9 @@ use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationCont
 use crate::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
 };
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
 pub(super) struct DecisionNotificationFacts<'a> {
@@ -97,7 +98,7 @@ pub(super) async fn persist_cancel_notifications(
         return Err(Error::Internal("受阻取消通知意图不匹配".to_string()));
     }
     let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
-        entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+        erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
         intent.dedup_key.clone(),
         intent.event_kind,
         blocked_cancel_notification_recipients(facts.submitted_by, facts.actor_id),
@@ -135,7 +136,7 @@ pub(super) async fn runtime_admin_notification_recipients(
     let spec = adapter_spec_of(document_type)?;
     let accounts = db
         .accounts()
-        .list_by_kind(entities::AccountKind::Admin, executor)
+        .list_by_kind(erp_core::AccountKind::Admin, executor)
         .await?;
     let mut recipients = Vec::new();
     for account in accounts {
@@ -224,7 +225,7 @@ pub(super) async fn persist_decision_notifications(
             _ => unreachable!("unsupported decision event was rejected above"),
         };
         let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
-            entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+            erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),
             intent.event_kind,
             recipients,
@@ -341,7 +342,7 @@ pub(super) async fn persist_resume_notifications(
             _ => unreachable!("unsupported resume event was rejected above"),
         };
         let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
-            entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+            erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),
             intent.event_kind,
             recipients,

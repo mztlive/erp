@@ -6,14 +6,14 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevision};
-use entities::ids::{ProductId, SkuId};
+use erp_core::ids::{ProductId, SkuId};
 
 use super::super::extensions::CatalogExt;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc};
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 卡券类目扩展修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

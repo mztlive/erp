@@ -5,7 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, FulfillmentExt, PurchaseOrderExt, SalesOrderExt};
+use database::{FulfillmentExt, PurchaseOrderExt, SalesOrderExt};
+use persistence_core::Executor;
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
 use crate::errors::Result;

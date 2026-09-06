@@ -10,12 +10,12 @@
 use chrono::{FixedOffset, TimeZone};
 use std::str::FromStr;
 
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::WorkItemId;
-use crate::money::Amount;
 use crate::payable::{EntryDirection, PayableAccount, PayableEntry, PayableSourceType};
 use crate::receivable::AccountReviewStatus;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::WorkItemId;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 use super::entity::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 
@@ -411,8 +411,8 @@ pub fn payment_due_at(due_date: BusinessDate) -> Result<Instant> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::WorkItemId;
     use crate::work_item::WorkItemStatus;
+    use erp_core::ids::WorkItemId;
     use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {
@@ -701,10 +701,10 @@ mod tests {
     /// 采购应付准入覆盖来源、分录归属、方向、单据一致与未结清。
     #[test]
     fn purchase_payable_admission_covers_all_dimensions() {
-        use crate::ids::{PayableAccountId, SupplierAccountId};
         use crate::payable::{
             PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
         };
+        use erp_core::ids::{PayableAccountId, SupplierAccountId};
         fn account(source_type: crate::payable::PayableSourceType) -> PayableAccount {
             open_account(source_type, "0.00")
         }
@@ -725,7 +725,7 @@ mod tests {
             .unwrap()
         }
         fn entry(direction: EntryDirection, document_id: &str) -> PayableEntry {
-            use crate::ids::PayableEntryId;
+            use erp_core::ids::PayableEntryId;
             PayableEntry::new(
                 PayableEntryId::new("entry-1"),
                 PayableEntryData {

@@ -2,7 +2,7 @@
 //!
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳（`Instant` 序列化为整数）；
-//! 金额一律十进制字符串（`entities::money::Amount`）；业务日期为 `YYYY-MM-DD`。
+//! 金额一律十进制字符串（`erp_core::money::Amount`）；业务日期为 `YYYY-MM-DD`。
 //!
 //! 契约来源：`erp-client/features/customer-receivables/types.ts`（W11）、
 //! `features/card-funds-review`（W13）；与前端 mock 的 camelCase/ISO 形态差异
@@ -38,10 +38,10 @@ pub use self::query::{
 };
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
@@ -55,7 +55,7 @@ pub use crate::query::PageView;
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 #[cfg(test)]
 mod tests {
@@ -64,11 +64,11 @@ mod tests {
         CompleteCardFundsReviewCommand, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams,
         InvoiceView, ReceivableAccountListParams, SortDir,
     };
-    use entities::common::time::BusinessDate;
-    use entities::money::Amount;
     use entities::receivable::{
         CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus,
     };
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::Amount;
     use std::str::FromStr;
     use validator::Validate;
 

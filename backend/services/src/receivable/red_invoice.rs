@@ -1,15 +1,15 @@
 //! 按原蓝票一次开具红票并红冲分配。
 
-use entities::ids::{
-    InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, ReceivableAccountId, SalesInvoiceAllocationId,
-};
-use entities::money::Amount;
 use entities::payable::{PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 use entities::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, RedInvoiceAllocationBasis,
     RedInvoiceAllocationLine, RedInvoiceAllocationPlan, RedInvoiceAllocationPlanError,
     RedInvoiceAllocationReversal, SalesInvoiceAllocation, SalesInvoiceAllocationData,
 };
+use erp_core::ids::{
+    InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, ReceivableAccountId, SalesInvoiceAllocationId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
 use validator::Validate;
@@ -18,10 +18,12 @@ use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
 use super::mapping::zero_amount;
 use super::{invoice_task, ReceivableService};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
-use database::{AccessControlExt, PayableExt, ReceivableExt, Transactional};
+use database::{AccessControlExt, PayableExt, ReceivableExt};
+use persistence_core::Transactional;
 use std::collections::HashMap;
 
 impl ReceivableService {
@@ -158,7 +160,7 @@ impl ReceivableService {
                             party_id: original.party_id.clone(),
                             invoice_code: original.invoice_code.clone(),
                             invoice_no: red_no.clone(),
-                            invoice_date: entities::common::time::BusinessDate::today(),
+                            invoice_date: erp_core::common::time::BusinessDate::today(),
                             gross_amount: red_gross,
                             net_amount: red_net,
                             tax_amount: red_tax,
@@ -292,7 +294,7 @@ impl ReceivableService {
                             crate::sales_order::update_sales_order_money_progress(
                                 &db,
                                 session,
-                                &entities::ids::SalesOrderId::new(sales_order_id),
+                                &erp_core::ids::SalesOrderId::new(sales_order_id),
                                 actor_id.clone(),
                                 None,
                             )
@@ -541,8 +543,8 @@ fn map_red_invoice_allocation_plan_error(error: RedInvoiceAllocationPlanError) -
 #[cfg(test)]
 mod red_invoice_reversal_tests {
     use super::aggregate_reversal_deltas;
-    use entities::money::Amount;
     use entities::receivable::RedInvoiceAllocationLine;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn line(account: &str, gross: &str) -> RedInvoiceAllocationLine {

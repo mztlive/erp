@@ -8,8 +8,8 @@ use crate::catalog::product_category::{ProductCategory, ProductCategoryData};
 use crate::catalog::product_kind::ProductKind;
 use crate::catalog::status::EnableStatus;
 use crate::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData};
-use crate::errors::{Error, Result};
-use crate::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use erp_core::{Error, Result};
 
 /// 卡券根分类稳定代码。
 pub const VOUCHER_ROOT_CATEGORY_CODE: &str = "VOUCHER";

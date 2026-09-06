@@ -2,20 +2,20 @@
 //!
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；数量一律十进制字符串
-//! （`entities::money::Quantity` 自定义序列化）。契约目标形状（items/total/
+//! （`erp_core::money::Quantity` 自定义序列化）。契约目标形状（items/total/
 //! page/page_size）与 D01 source_registry 保持一致，本域按域内对象名提供
 //! 各列表视图。
 
-use entities::ids::{SalesOrderLineId, SkuId, WarehouseId};
 use entities::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
 };
-use entities::money::Quantity;
+use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
+use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::query::{page_or_default, page_size_or_default};
+use application_core::{page_or_default, page_size_or_default};
 
 /// 库存余额列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const STOCK_BALANCE_SORT_FIELDS: &[&str] = &["sku_id", "created_at"];
@@ -27,7 +27,7 @@ pub(crate) const STOCK_RESERVATION_SORT_FIELDS: &[&str] = &["created_at", "updat
 pub(crate) const STOCK_ADJUSTMENT_SORT_FIELDS: &[&str] = &["created_at", "adjustment_no"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,10 +54,10 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 库存余额列表视图（W10 台账，含仓库与 SKU 基础信息展示字段）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -757,9 +757,9 @@ mod tests {
         normalize_sort, SortDir, StockAdjustmentListParams, StockAdjustmentView, StockBalanceListParams,
         StockBalanceView, StockMovementListParams, StockReservationListParams,
     };
-    use entities::ids::{SalesOrderLineId, SkuId, WarehouseId};
     use entities::inventory::{AdjustmentReasonType, MovementType, ReservationStatus, StockAdjustmentState};
-    use entities::money::Quantity;
+    use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
     use validator::Validate;
 

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 const V1_PREFIX: &str = "sha256-v1:";
 

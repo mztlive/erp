@@ -4,8 +4,8 @@ use super::projection::{sort_doc, supplier_settlement_statement_projection};
 use super::source_scope::order_scope_filter;
 use super::{SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter};
 use crate::repository::QueryFilter;
-use entities::ids::SupplierSettlementItemId;
 use entities::supplier_settlement::{SettlementDifferenceStatus, SettlementPeriod, SettlementStatus};
+use erp_core::ids::SupplierSettlementItemId;
 use mongodb::bson::doc;
 
 #[test]
@@ -95,7 +95,7 @@ fn statement_projection_contains_frozen_review_and_audit_facts() {
 #[test]
 fn settlement_period_bounds_use_shanghai_inclusive_start_exclusive_end() {
     use chrono::DateTime;
-    use entities::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     // 边界口径必须来自领域 SettlementPeriod::secs_bounds（与 contains 同源），
     // 仓储不再复制第二份计算。
@@ -147,7 +147,7 @@ fn settlement_period_bounds_use_shanghai_inclusive_start_exclusive_end() {
 
 #[test]
 fn settlement_scope_filters_cover_supplier_period_and_requested_ids() {
-    use entities::ids::{SupplierAccountId, SupplierFulfillmentItemId};
+    use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId};
     use std::collections::BTreeSet;
 
     use super::source_scope::{item_scope_filter, refund_fact_scope_filter};

@@ -1,10 +1,11 @@
 use bpm::engine::DefinitionGraph;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use database::{BpmExt, Executor, NoTransaction};
+use database::BpmExt;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
 use crate::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
@@ -15,9 +16,9 @@ use crate::approval::{
     approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
     approval_document_read_scope_with_executor,
 };
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
 pub async fn ensure_return_start_actor_active(

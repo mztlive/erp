@@ -3,17 +3,18 @@
 //! 提交是不可变采购内容快照（§6.6）：财务审批与工作任务必须引用具体提交，
 //! 不得审批可变采购主表。提交与明细**不提供软删除方法**。
 
-use entities::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
 use entities::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
 use super::{PurchaseOrderRepository, PURCHASE_ORDER_SUBMISSIONS, PURCHASE_ORDER_SUBMISSION_LINES};
-use crate::executor::Executor;
 use crate::repository::{Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -277,8 +278,8 @@ impl<'a> Repository<'a, PurchaseOrderSubmissionLine> {
 #[cfg(test)]
 mod tests {
     use super::{PurchaseOrderSubmissionFilter, QueryFilter};
-    use entities::ids::PurchaseOrderId;
     use entities::purchase_order::SubmissionStatus;
+    use erp_core::ids::PurchaseOrderId;
     use mongodb::bson::doc;
 
     #[test]

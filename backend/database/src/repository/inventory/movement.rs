@@ -3,16 +3,16 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::common::time::Instant;
-use entities::ids::{SkuId, WarehouseId};
 use entities::inventory::{MovementDirection, MovementType, StockMovement};
-use entities::money::Quantity;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SkuId, WarehouseId};
+use erp_core::money::Quantity;
 
 use super::shared::{entities_by_ids, sort_doc};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -277,9 +277,9 @@ fn stock_movement_projection() -> Document {
 mod tests {
     use super::{stock_movement_sort, QueryFilter, StockMovementFilter};
 
-    use entities::common::time::Instant;
-    use entities::ids::{SkuId, WarehouseId};
     use entities::inventory::{MovementDirection, MovementType};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SkuId, WarehouseId};
     use mongodb::bson::{doc, Bson};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockMovementFilter {

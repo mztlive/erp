@@ -11,8 +11,8 @@ use super::{
     i64_version, merge_documents, ApprovalInstanceListProjection, BpmWorkflowRepository, CasReplaceSpec,
     CasWriteOutcome, ASSIGNEES, EXECUTIONS, INSTANCES, RECEIPTS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 只写入 BPM 运行事实：实例、审批人、首个执行和命令收据。

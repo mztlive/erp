@@ -18,15 +18,15 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     DeliveryId, DeliveryLineId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderId,
     SalesOrderLineId, StockReservationId, WarehouseId,
 };
-use crate::money::Quantity;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::Quantity;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::fingerprint::{hmac_sha256_hex, validate_fingerprint};
 
@@ -280,7 +280,7 @@ impl Delivery {
     /// `purchase_order_id` 且仓库为空（§6.7）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DeliveryId`）
+    /// * `id` - 实体主键（`erp_core::ids::DeliveryId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -518,7 +518,7 @@ impl DeliveryLine {
     /// 销售或采购变更被删除（§6.7），行变更由 P3 按表头状态把关。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DeliveryLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::DeliveryLineId`）
     /// * `data` - 创建数据
     /// * `delivery_type` - 所属发货单的发货类型（决定行级归属校验）
     ///
@@ -605,7 +605,7 @@ fn validate_source_ownership(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::PurchaseLineSalesAllocationId;
+    use erp_core::ids::PurchaseLineSalesAllocationId;
     use std::str::FromStr;
 
     const PLAINTEXT_ADDRESS: &str = "上海市浦东新区世纪大道100号 张三 13800000000";

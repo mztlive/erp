@@ -1,19 +1,21 @@
-use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, SupplierFulfillmentExt, Transactional};
-use entities::common::time::Instant;
-use entities::ids::{InboxMessageId, SourceSystemId, SupplierRefundAllocationId, SupplierRefundFactId};
+use database::{AccessControlExt, IntegrationOpsExt, SupplierFulfillmentExt};
 use entities::integration_ops::{InboxMessage, InboxMessageData, InboxMessageStatus, MessageType};
 use entities::supplier_fulfillment::{
     RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierRefundAllocation,
     SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierRefundAllocationId, SupplierRefundFactId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{RecordRefundResultRequest, SupplierRefundFactView};
 use super::mapping::refund_fact_view;
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl SupplierFulfillmentService {
     /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
@@ -131,7 +133,7 @@ impl SupplierFulfillmentService {
         &self,
         order: &SupplierFulfillmentOrder,
         req: &RecordRefundResultRequest,
-        connection_id: &entities::ids::SupplierApiConnectionId,
+        connection_id: &erp_core::ids::SupplierApiConnectionId,
         message: &InboxMessage,
     ) -> Result<(SupplierRefundFact, Vec<SupplierRefundAllocation>)> {
         let fact = SupplierRefundFact::new(
@@ -175,7 +177,7 @@ impl SupplierFulfillmentService {
                     },
                 )
             })
-            .collect::<std::result::Result<Vec<_>, entities::Error>>()?;
+            .collect::<std::result::Result<Vec<_>, erp_core::Error>>()?;
         fact.validate_allocations(&allocations)?;
         Ok((fact, allocations))
     }
@@ -197,7 +199,7 @@ impl SupplierFulfillmentService {
 fn build_refund_message(
     order: &SupplierFulfillmentOrder,
     req: &RecordRefundResultRequest,
-    connection_id: &entities::ids::SupplierApiConnectionId,
+    connection_id: &erp_core::ids::SupplierApiConnectionId,
     status: InboxMessageStatus,
 ) -> Result<InboxMessage> {
     let event_key = format!(

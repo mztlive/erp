@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::errors::{Error, Result};
+use crate::Error;
 
 /// 将 Tokio JoinError 映射为内部错误，保留任务名便于诊断。
 ///
@@ -28,10 +28,11 @@ fn map_owned_join_error(name: &'static str, error: tokio::task::JoinError) -> Er
 ///
 /// # 错误
 /// 当异步操作失败或任务 panic/被终止时返回错误。
-pub(crate) async fn await_owned<T, F>(name: &'static str, operation: F) -> Result<T>
+pub async fn await_owned<T, E, F>(name: &'static str, operation: F) -> std::result::Result<T, E>
 where
     T: Send + 'static,
-    F: Future<Output = Result<T>> + Send + 'static,
+    E: From<Error> + std::fmt::Display + Send + 'static,
+    F: Future<Output = std::result::Result<T, E>> + Send + 'static,
 {
     tokio::spawn(async move {
         let result = operation.await;
@@ -45,13 +46,13 @@ where
         result
     })
     .await
-    .map_err(|error| map_owned_join_error(name, error))?
+    .map_err(|error| E::from(map_owned_join_error(name, error)))?
 }
 
 #[cfg(test)]
 mod tests {
     use super::{await_owned, map_owned_join_error};
-    use crate::errors::Error;
+    use crate::Error;
 
     #[tokio::test]
     async fn operation_continues_after_waiter_is_cancelled() {
@@ -63,7 +64,7 @@ mod tests {
                 let _ = started_tx.send(());
                 let _ = release_rx.await;
                 let _ = completed_tx.send(());
-                Ok(())
+                Ok::<_, Error>(())
             })
             .await
         });

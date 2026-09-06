@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use database::{Executor, PayableExt, ReceivableExt};
+use database::{PayableExt, ReceivableExt};
+use persistence_core::Executor;
 
 use super::super::brief::{join_list_summary, push_section, ObjectBriefSource};
 use super::super::presentation::format_yuan;

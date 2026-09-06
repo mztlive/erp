@@ -14,8 +14,8 @@ use mongodb::bson::doc;
 use super::super::extensions::SupplierSettlementExt;
 use super::super::Repository;
 use super::SupplierSettlementRepository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 供应商结算单详情的最小事实快照。
 ///
@@ -163,20 +163,20 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
-    };
-    use entities::money::{Amount, Quantity};
     use entities::supplier_settlement::{
         SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
         SupplierSettlementDifferenceEvidenceData, SupplierSettlementItem, SupplierSettlementItemData,
         SupplierSettlementStatementData,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+    };
+    use erp_core::money::{Amount, Quantity};
     use test_support::{require_mongo, TestDb};
 
-    use crate::NoTransaction;
+    use persistence_core::NoTransaction;
 
     /// 构造单条补证实体。
     ///

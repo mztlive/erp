@@ -10,9 +10,9 @@ use super::funds_snapshot::{checked_add_amount, checked_sub_amount, net_receipt_
 use super::{
     AllocationAction, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
 };
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId};
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId};
+use erp_core::{Error, Result};
 
 /// 回款核销账本：按冻结待过账行完成净额、余额、序号与实体构造。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,15 +23,15 @@ pub struct ReceivableFundsLedger {
     pending_actions: Vec<AllocationAction>,
     pending_reverses: Vec<Option<ReceiptAllocationId>>,
     allocations: Vec<ReceiptAllocation>,
-    account_deltas: Vec<(ReceivableAccountId, crate::money::Amount)>,
+    account_deltas: Vec<(ReceivableAccountId, erp_core::money::Amount)>,
     account_delta_index: HashMap<String, usize>,
-    entry_allocated: HashMap<String, crate::money::Amount>,
+    entry_allocated: HashMap<String, erp_core::money::Amount>,
     seqs: Vec<u32>,
     applied_count: usize,
 }
 
 /// 账本内部使用的已验证合计别名，避免与实体字段混淆。
-type AmountLike = crate::money::Amount;
+type AmountLike = erp_core::money::Amount;
 
 impl ReceivableFundsLedger {
     /// 依据既有分配与待过账行构建回款核销账本。
@@ -55,7 +55,7 @@ impl ReceivableFundsLedger {
     /// 不生成 ID、不读写数据库、不校验分录／账户存在性。
     pub fn new(
         receipt_id: CustomerReceiptId,
-        receipt_amount: crate::money::Amount,
+        receipt_amount: erp_core::money::Amount,
         existing: &[ReceiptAllocation],
         pending: &[PendingReceiptAllocation],
     ) -> Result<Self> {
@@ -91,7 +91,7 @@ impl ReceivableFundsLedger {
     /// 过账路径继续走 [`Self::new`]（全部 APPLY）；冲减既有占用必须走本入口。
     pub fn new_with_actions(
         receipt_id: CustomerReceiptId,
-        receipt_amount: crate::money::Amount,
+        receipt_amount: erp_core::money::Amount,
         existing: &[ReceiptAllocation],
         pending: &[PendingReceiptAllocation],
         actions: &[AllocationAction],
@@ -112,7 +112,7 @@ impl ReceivableFundsLedger {
         if net_allocated_total.to_decimal().is_sign_negative() || net_allocated_total > receipt_amount {
             return Err(Error::from("核销合计超过回款金额"));
         }
-        let mut entry_allocated: HashMap<String, crate::money::Amount> = HashMap::new();
+        let mut entry_allocated: HashMap<String, erp_core::money::Amount> = HashMap::new();
         for allocation in existing {
             let balance = entry_allocated
                 .entry(allocation.receivable_entry_id.to_string())
@@ -156,8 +156,8 @@ impl ReceivableFundsLedger {
     /// 历史路径与审批过账共享同一账本类型。
     pub fn from_historical_plan(
         receipt_id: CustomerReceiptId,
-        receipt_amount: crate::money::Amount,
-        plan: &[(crate::ids::ReceivableEntryId, crate::money::Amount)],
+        receipt_amount: erp_core::money::Amount,
+        plan: &[(erp_core::ids::ReceivableEntryId, erp_core::money::Amount)],
     ) -> Result<Self> {
         let pending = plan
             .iter()
@@ -266,7 +266,7 @@ impl ReceivableFundsLedger {
     ///
     /// # 约束
     /// 过账路径只产出 APPLY 正增量。
-    pub fn account_settlement_deltas(&self) -> Vec<(ReceivableAccountId, crate::money::Amount)> {
+    pub fn account_settlement_deltas(&self) -> Vec<(ReceivableAccountId, erp_core::money::Amount)> {
         self.account_deltas
             .iter()
             .filter(|(_, amount)| *amount > zero_amount())
@@ -287,14 +287,14 @@ impl ReceivableFundsLedger {
     ///
     /// # 约束
     /// 供 `revert_settlement`；过账 APPLY 路径为空。
-    pub fn account_revert_deltas(&self) -> Vec<(ReceivableAccountId, crate::money::Amount)> {
+    pub fn account_revert_deltas(&self) -> Vec<(ReceivableAccountId, erp_core::money::Amount)> {
         self.account_deltas
             .iter()
             .filter(|(_, amount)| amount.to_decimal().is_sign_negative())
             .map(|(id, amount)| {
                 (
                     id.clone(),
-                    crate::money::Amount::try_from(-amount.to_decimal()).unwrap_or(*amount),
+                    erp_core::money::Amount::try_from(-amount.to_decimal()).unwrap_or(*amount),
                 )
             })
             .collect()
@@ -330,7 +330,7 @@ impl ReceivableFundsLedger {
     ///
     /// # 约束
     /// 构造时已保证不超过回款金额。
-    pub fn net_allocated_total(&self) -> crate::money::Amount {
+    pub fn net_allocated_total(&self) -> erp_core::money::Amount {
         self.net_allocated_total
     }
 
@@ -466,13 +466,13 @@ impl ReceivableFundsLedger {
 #[cfg(test)]
 mod tests {
     use super::ReceivableFundsLedger;
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId};
-    use crate::money::Amount;
     use crate::receivable::{
         AllocationAction, EntryDirection, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData,
         ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {

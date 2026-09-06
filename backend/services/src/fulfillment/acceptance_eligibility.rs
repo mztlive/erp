@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::{FulfillmentExt, NoTransaction, SalesOrderExt};
+use database::{FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{
     AcceptanceFactEligibility, AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery,
     DeliveryLine, ElectronicDelivery, FulfillmentFactType, ServiceFulfillment,
 };
-use entities::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
-use entities::money::Quantity;
+use erp_core::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
+use erp_core::money::Quantity;
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 
@@ -470,8 +471,6 @@ mod customer_acceptance_eligibility_no_approval_tests {
 mod acceptance_eligibility_rule_source_tests {
     use std::str::FromStr;
 
-    use entities::common::source::SourceType;
-    use entities::common::time::Instant;
     use entities::fulfillment::{
         AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
         AllocationAction, Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState,
@@ -479,18 +478,20 @@ mod acceptance_eligibility_rule_source_tests {
         FulfillmentFactType, FulfillmentResult, ServiceFulfillment, ServiceFulfillmentData,
         ServiceFulfillmentState,
     };
-    use entities::ids::{
+    use entities::sales_order::{
+        FulfillmentProgress, LineType, SalesOrderGoodsServiceLineRevision,
+        SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
+    };
+    use erp_core::common::source::SourceType;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
         AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId, DeliveryId, DeliveryLineId,
         ElectronicDeliveryId, FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId,
         SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
         SalesOrderRevisionLineId, ServiceFulfillmentId, SkuId, SkuRevisionId, StockReservationId,
         WarehouseId,
     };
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
-    use entities::sales_order::{
-        FulfillmentProgress, LineType, SalesOrderGoodsServiceLineRevision,
-        SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
-    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     use super::{build_eligibility_views, build_line_eligibilities, EligibilityGroupSources};
 

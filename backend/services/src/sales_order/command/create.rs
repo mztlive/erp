@@ -1,14 +1,12 @@
-use database::{
-    AccessControlExt, ContractExt, CustomerExt, DocumentRegistryExt, NoTransaction, SalesOrderExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, ContractExt, CustomerExt, DocumentRegistryExt, SalesOrderExt};
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
-use entities::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
 use entities::sales_order::{SalesOrder, SalesOrderData};
+use erp_core::common::time::Instant;
+use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::adapter::{
@@ -34,8 +32,9 @@ use super::identity::{
 };
 use super::submit::ensure_unified_start_command;
 use crate::approval::execution::prepare_start;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl SalesOrderService {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
@@ -82,7 +81,7 @@ impl SalesOrderService {
         &self,
         contract_id: &ContractId,
         editable: SalesOrderEditableDraftRequest,
-    ) -> Result<(CustomerAccountId, entities::ids::PartyId, SalesOrderDraftRequest)> {
+    ) -> Result<(CustomerAccountId, erp_core::ids::PartyId, SalesOrderDraftRequest)> {
         editable.validate()?;
         let contract = self
             .db

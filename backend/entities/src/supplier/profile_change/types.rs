@@ -1,4 +1,4 @@
-use crate::field_update::FieldUpdate;
+use erp_core::field_update::FieldUpdate;
 
 /// 将可空输入映射为明确设置或清空意图。
 ///

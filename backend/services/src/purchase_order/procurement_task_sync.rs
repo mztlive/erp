@@ -2,13 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, SalesOrderExt, WorkItemExt};
-use entities::common::time::Instant;
-use entities::ids::{SalesOrderId, WorkItemId};
-use entities::money::Quantity;
+use database::{SalesOrderExt, WorkItemExt};
 use entities::sales_order::SalesOrder;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderId, WorkItemId};
+use erp_core::money::Quantity;
 use id_generator::next_id;
+use persistence_core::Executor;
 use rust_decimal::Decimal;
 
 use super::coverage::load_sales_procurement_coverage;
@@ -289,10 +290,10 @@ mod tests {
     use std::collections::HashMap;
     use std::str::FromStr;
 
-    use entities::common::time::Instant;
-    use entities::ids::{SalesOrderId, WorkItemId};
-    use entities::money::Quantity;
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SalesOrderId, WorkItemId};
+    use erp_core::money::Quantity;
 
     use super::{remaining_for_scope, validate_procurement_task_access};
     use crate::errors::Error;

@@ -7,21 +7,19 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, Transactional,
-    WorkItemExt,
-};
+use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
 };
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
 use entities::inventory::StockAdjustment;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::adapter::{
@@ -46,9 +44,10 @@ use crate::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
     ApprovalActionContext,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
 const STOCK_ADJUSTMENT_AUDIT_RESOURCE: &str = "stock_adjustment";

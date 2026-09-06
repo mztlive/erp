@@ -1,6 +1,6 @@
 use bpm::model::ApprovalNodeExecution;
 use database::repository::bpm::ApprovalInstanceListProjection;
-use entities::common::time::Instant;
+use erp_core::common::time::Instant;
 
 /// 由入口执行构造有界列表投影。
 ///
@@ -30,7 +30,7 @@ mod tests {
     use super::list_projection_from_execution;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
-    use entities::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

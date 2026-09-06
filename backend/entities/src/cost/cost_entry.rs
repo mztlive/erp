@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CostEntryId, FileAssetId, SupplierAccountId};
-use crate::money::{Amount, Rate};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CostEntryId, FileAssetId, SupplierAccountId};
+use erp_core::money::{Amount, Rate};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -312,7 +312,7 @@ impl CostEntry {
     /// `cost_basis`，且 `NONE` 不得作为成本事实入表。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CostEntryId`）
+    /// * `id` - 实体主键（`erp_core::ids::CostEntryId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -455,7 +455,7 @@ fn validate_basis(scope: CostScope, basis: Option<CostBasis>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn data() -> CostEntryData {

@@ -1,9 +1,4 @@
-use database::{
-    AccessControlExt, Executor, NoTransaction, SupplierApiExt, SupplierFulfillmentExt, Transactional,
-    WorkItemExt,
-};
-use entities::common::time::Instant;
-use entities::ids::SupplierOrderActionId;
+use database::{AccessControlExt, SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     FulfillmentStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierFulfillmentOrderUpdate,
@@ -11,7 +6,10 @@ use entities::supplier_fulfillment::{
     SupplierOrderActionUpdate,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierOrderActionId;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -29,9 +27,10 @@ use super::receipt::{
     InvestigationReceipt,
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 const INVESTIGATION_EVIDENCE_SCHEMA: &str = "W26_INVESTIGATION_V1";
 const INVESTIGATION_INTENT_SCHEMA: &str = "W26_INVESTIGATION_INTENT_V1";
@@ -1144,12 +1143,10 @@ mod investigation_tests {
         INVESTIGATION_PREPARED_SCHEMA,
     };
     use crate::supplier_fulfillment::{InvestigationOutcome, SupplierOrderInvestigationAction};
-    use entities::{
-        ids::{SupplierFulfillmentOrderId, SupplierOrderActionId},
-        supplier_fulfillment::{
-            SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus, SupplierOrderActionType,
-        },
+    use entities::supplier_fulfillment::{
+        SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus, SupplierOrderActionType,
     };
+    use erp_core::ids::{SupplierFulfillmentOrderId, SupplierOrderActionId};
 
     fn context() -> InvestigationCommandContext {
         InvestigationCommandContext {

@@ -1,12 +1,12 @@
 use entities::catalog::{EnableStatus, VoucherCategoryProfileRevision};
-use entities::common::time::BusinessDate;
-use entities::ids::{ProductBrandId, ProductCategoryId, SkuId, UnitOfMeasureId};
-use entities::money::{Amount, Quantity};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ProductBrandId, ProductCategoryId, SkuId, UnitOfMeasureId};
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{page_or_default, page_size_or_default};
+use application_core::{page_or_default, page_size_or_default};
 
 use super::common::{non_blank, normalize_sort, PageParams};
 use super::product::ProductSkuInput;
@@ -289,8 +289,8 @@ impl VoucherCategoryProfileListParams {
 mod tests {
     use std::str::FromStr;
 
-    use entities::ids::UnitOfMeasureId;
-    use entities::money::{Amount, Quantity};
+    use erp_core::ids::UnitOfMeasureId;
+    use erp_core::money::{Amount, Quantity};
 
     use super::VoucherSkuInput;
 

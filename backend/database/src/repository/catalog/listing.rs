@@ -8,12 +8,12 @@ use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, ListingStatus};
-use entities::ids::ProductId;
+use erp_core::ids::ProductId;
 
 use super::shared::SKUS;
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 单个商品的上架计数投影；SPU 继承状态由领域规则 `ProductListingStatus::inherited` 计算。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,7 +200,7 @@ async fn aggregate_listing_summaries(
                 .await
         }
     }
-    .map_err(crate::Error::from)
+    .map_err(persistence_core::Error::from)
 }
 
 /// 按输入首次出现顺序去重商品 ID。
@@ -258,7 +258,7 @@ fn fill_listing_summaries(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entities::ids::ProductId;
+    use erp_core::ids::ProductId;
 
     fn summary(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingSummary {
         ProductListingSummary::new(product_id, listed_sku_count, sku_count)

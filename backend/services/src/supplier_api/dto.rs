@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 连接列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const SUPPLIER_API_CONNECTION_SORT_FIELDS: &[&str] =
@@ -27,7 +27,7 @@ pub(crate) const SUPPLIER_API_CONNECTION_SORT_FIELDS: &[&str] =
 pub(crate) const SUPPLIER_API_CAPABILITY_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,17 +54,17 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 ///
-/// `services::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
+/// `application_core::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
 /// `page`/`page_size`，不静默沿用 `{items,total}` 直出。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
 /// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 限流策略请求值对象（对应实体 `RateLimitPolicy`）。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Validate)]
@@ -93,7 +93,7 @@ pub struct CapabilityItemRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSupplierApiConnectionRequest {
     /// API 供应商（D09 `supplier_account`）。
-    pub supplier_id: entities::ids::SupplierAccountId,
+    pub supplier_id: erp_core::ids::SupplierAccountId,
     /// ERP 内稳定连接代码（全局唯一）。
     #[validate(custom(function = "non_blank", message = "连接代码不能为空"))]
     pub connection_code: String,
@@ -214,7 +214,7 @@ impl SupplierApiConnectionListParams {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierApiCapabilityListParams {
     /// 所属连接筛选。
-    pub connection_id: Option<entities::ids::SupplierApiConnectionId>,
+    pub connection_id: Option<erp_core::ids::SupplierApiConnectionId>,
     /// 能力代码筛选。
     pub capability_code: Option<SupplierApiCapabilityCode>,
     /// 能力启停状态筛选。
@@ -235,7 +235,7 @@ pub struct SupplierApiCapabilityListParams {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SupplierApiCapabilityListQuery {
     /// 所属连接筛选。
-    pub connection_id: Option<entities::ids::SupplierApiConnectionId>,
+    pub connection_id: Option<erp_core::ids::SupplierApiConnectionId>,
     /// 能力代码筛选。
     pub capability_code: Option<SupplierApiCapabilityCode>,
     /// 能力启停状态筛选。

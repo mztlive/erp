@@ -4,10 +4,10 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, ReceivableAccountId, ReceivableFundsReviewId, WorkItemId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::{FileAssetId, ReceivableAccountId, ReceivableFundsReviewId, WorkItemId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 证据引用最大长度。
 const EVIDENCE_MAX_LEN: usize = 512;
@@ -145,7 +145,7 @@ impl ReceivableFundsReview {
     /// 证据非空校验（证据单据与证据引用至少其一）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ReceivableFundsReviewId`）
+    /// * `id` - 实体主键（`erp_core::ids::ReceivableFundsReviewId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

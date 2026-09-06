@@ -3,12 +3,13 @@
 //! 差异事实创建后不可修改；决定只由 `task_decision` 追加，不在本模块暴露旧处理或
 //! 解决命令。
 
-use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, WorkItemExt};
+use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     difference_terminal_policy, project_difference_actions, DifferenceActionProjection,
     ReconciliationDifference, ReconciliationDifferenceData, ReconciliationDifferenceId,
 };
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::SortDir;
@@ -21,8 +22,9 @@ use super::{
     ActionBlockerView, CreateDifferenceRequest, DifferenceDetailView, DifferenceFilter, DifferenceListParams,
     DifferenceView, IntegrationOpsService, PageView, ResolutionView,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl IntegrationOpsService {
     /// 登记不可变对账差异事实。

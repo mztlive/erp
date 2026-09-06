@@ -7,19 +7,19 @@ use bpm::ids::{
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
-    PurchaseOrderExt, Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, PurchaseOrderExt, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
@@ -548,9 +548,9 @@ mod tests {
         ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, ParticipantId,
         ProcessKind, Timestamp,
     };
-    use entities::common::time::Instant;
     use entities::document_registry::business_document::ApprovalDefinitionBinding;
     use entities::document_registry::DocumentType;
+    use erp_core::common::time::Instant;
 
     use crate::approval::execution::idempotency::{start_identity, StartIdentityParams};
     use crate::approval::execution::{prepare_start, PreparedExecution};

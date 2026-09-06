@@ -6,20 +6,22 @@
 //!   `PartyRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
-use database::{AccessControlExt, Executor, NoTransaction, PartyExt, SupplierExt, Transactional};
-use entities::common::revision::RevisionBase;
-use entities::field_update::FieldUpdate;
+use database::{AccessControlExt, PartyExt, SupplierExt};
 use entities::party::{
     Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
     PartyUpdate,
 };
+use erp_core::common::revision::RevisionBase;
+use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 pub mod address;
 pub mod bank_account;

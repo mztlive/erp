@@ -184,7 +184,7 @@ fn sha256_hex(value: &[u8]) -> String {
 }
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{
+pub use erp_core::ids::{
     InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId, ReconciliationDifferenceResolutionId,
     SourceSystemId,
 };

@@ -2,12 +2,13 @@
 
 use std::str::FromStr;
 
-use database::{Executor, PartyExt, SupplierExt};
-use entities::common::time::BusinessDate;
-use entities::ids::{PartyId, SupplierAccountId};
-use entities::money::Amount;
+use database::{PartyExt, SupplierExt};
 use entities::party::PartyBankAccount;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{PartyId, SupplierAccountId};
+use erp_core::money::Amount;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::dto::PaymentRecipientView;
 use crate::errors::{Error, Result};

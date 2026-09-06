@@ -40,7 +40,7 @@ pub enum Error {
 
     /// 实体构造/校验失败。
     #[error("实体校验失败: {0}")]
-    Entity(#[from] entities::Error),
+    Entity(#[from] erp_core::Error),
 }
 
 /// 测试夹具统一结果类型。

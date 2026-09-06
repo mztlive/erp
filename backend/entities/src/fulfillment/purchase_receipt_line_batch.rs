@@ -4,10 +4,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
 use crate::fulfillment::{PurchaseReceiptLine, PurchaseReceiptLineData, QualityResult};
-use crate::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId};
-use crate::money::Quantity;
+use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 单行领域输入（不含行号/质量结果派生）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

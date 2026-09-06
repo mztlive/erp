@@ -1,19 +1,19 @@
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{PayableAccountId, SupplierAccountId};
 use entities::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{statement_sort_doc, supplier_settlement_statement_projection};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 供应商结算单列表投影行。
 ///
@@ -42,11 +42,11 @@ pub struct SupplierSettlementStatementRow {
     /// 供应商账单版本。
     pub external_bill_version: Option<String>,
     /// ERP 金额。
-    pub erp_amount: entities::money::Amount,
+    pub erp_amount: erp_core::money::Amount,
     /// 供应商金额。
-    pub supplier_amount: entities::money::Amount,
+    pub supplier_amount: erp_core::money::Amount,
     /// 双方金额差异（= 供应商金额 − ERP 金额）。
-    pub difference_amount: entities::money::Amount,
+    pub difference_amount: erp_core::money::Amount,
     /// 结算状态。
     pub status: SettlementStatus,
     /// 正式复核主题摘要。
@@ -121,7 +121,7 @@ pub struct SupplierSettlementStatementStatsRow {
     pub pending_reconciliation_count: i64,
     pub has_difference_count: i64,
     pub pending_review_count: i64,
-    pub confirmed_amount: entities::money::Amount,
+    pub confirmed_amount: erp_core::money::Amount,
 }
 
 impl QueryFilter for SupplierSettlementStatementFilter {

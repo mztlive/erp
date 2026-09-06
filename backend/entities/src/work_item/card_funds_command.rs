@@ -5,7 +5,7 @@
 //! 方法只解释已装载任务事实，不查询 RBAC、DataScope 或队列。
 
 use super::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::ids::ReceivableAccountId;
+use erp_core::ids::ReceivableAccountId;
 
 const RECEIVABLE_OBJECT_TYPE: &str = "receivable_account";
 
@@ -377,9 +377,9 @@ mod tests {
     use super::{
         CardFundsCommandIdentityError, CardFundsCommandSubject, CardFundsReviewKind, RECEIVABLE_OBJECT_TYPE,
     };
-    use crate::common::time::Instant;
-    use crate::ids::{ReceivableAccountId, WorkItemId};
     use crate::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ReceivableAccountId, WorkItemId};
 
     fn opening_item() -> WorkItem {
         WorkItem::new_at(

@@ -6,14 +6,16 @@
 
 use rust_decimal::Decimal;
 
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId};
-use crate::money::Amount;
 use crate::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceData, SupplierSettlementItem, SupplierSettlementItemData,
     SupplierSettlementSourceEvidence,
 };
+use erp_core::ids::{
+    SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 由不可变来源证据批次派生的完整草稿快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,13 +124,13 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
-    use crate::money::Quantity;
     use crate::supplier_settlement::{
         SettlementSourceFactType, SupplierSettlementSourceEvidenceData, SupplierSettlementSourceEvidenceLine,
         SETTLEMENT_TIMEZONE,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
+    use erp_core::money::Quantity;
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

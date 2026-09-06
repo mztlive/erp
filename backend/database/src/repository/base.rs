@@ -2,15 +2,15 @@
 //!
 //! 提供MongoDB数据库操作的通用接口，包括基础CRUD操作和各实体的特化方法
 
-use crate::errors::{Error, Result};
-use crate::mongo_ops;
-use crate::Executor;
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::{
     bson::{doc, serialize_to_document, Document},
     options::FindOptions,
     Database,
 };
+use persistence_core::mongo_ops;
+use persistence_core::Executor;
+use persistence_core::{Error, Result};
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Defines filter behavior for database queries
@@ -550,8 +550,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{apply_write_result, write_metadata_at, Pagination};
-    use crate::errors::Error;
     use entity_core::BaseModel;
+    use persistence_core::Error;
 
     struct TestPagination {
         page: u64,

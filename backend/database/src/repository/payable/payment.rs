@@ -1,16 +1,16 @@
-use entities::ids::SupplierAccountId;
-use entities::money::Amount;
 use entities::payable::{SupplierPayment, SupplierPaymentStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SupplierAccountId;
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 供应商付款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -115,7 +115,7 @@ impl<'a> Repository<'a, SupplierPayment> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_supplier_payments_by_ids(
         &self,
-        payment_ids: &[entities::ids::SupplierPaymentId],
+        payment_ids: &[erp_core::ids::SupplierPaymentId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierPayment>> {
         if payment_ids.is_empty() {

@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::CostExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `cost_entry` 集合名。
 pub(crate) const COST_ENTRIES: &str = <mongodb::Database as CostExt>::COST_ENTRIES;

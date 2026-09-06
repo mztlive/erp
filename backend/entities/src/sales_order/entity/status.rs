@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::DocumentState;
-use crate::money::Amount;
+use erp_core::common::state::DocumentState;
+use erp_core::money::Amount;
 
 /// 商业主状态（数据模型 §7.1：仅 4 值，审核环节走 `review_status` 审核轨）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

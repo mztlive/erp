@@ -4,7 +4,7 @@
 
 use std::{future::Future, pin::Pin};
 
-use database::Transactional;
+use persistence_core::Transactional;
 
 use super::IntegrationOpsService;
 use crate::errors::Result;

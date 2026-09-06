@@ -1,6 +1,6 @@
 use bpm::ids::ApprovalCommandReceiptId;
-use entities::common::time::Instant;
 use entities::document_registry::{DocumentType, WorkflowActionId};
+use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use super::super::business_adapter::BindingRevalidationContext;

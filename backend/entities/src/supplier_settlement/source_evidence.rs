@@ -13,11 +13,11 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
-use crate::money::{Amount, Quantity};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
+use erp_core::money::{Amount, Quantity};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 const COMMAND_ID_MAX_LEN: usize = 128;
 const POLICY_VALUE_MAX_LEN: usize = 128;

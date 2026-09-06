@@ -3,13 +3,13 @@
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 创建来源系统：单集合无跨步骤原子性要求 → `&mut NoTransaction`；
 //! - 建立外部身份映射：跨集合（map + target + 审计日志）→
-//!   `database::Transactional::with_transaction`。
+//!   `persistence_core::Transactional::with_transaction`。
 //!
 //! 审计写入参考既有写法（`audit::AuditActor::resource_log` +
 //! `AccessControlExt::audit_logs`）；仓库尚无 `run_audited_transaction` 模板，
 //! 跨集合审计事务按 TRANSACTIONS.md「基本用法」直接编排在 `with_transaction` 内。
 
-use database::{AccessControlExt, NoTransaction, SourceRegistryExt, Transactional};
+use database::{AccessControlExt, SourceRegistryExt};
 use entities::source_registry::{
     ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityMapId, ExternalIdentityTarget,
     ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemId,
@@ -17,10 +17,12 @@ use entities::source_registry::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 

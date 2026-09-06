@@ -3,8 +3,8 @@
 //!
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.3；公共字段归属按 §4.3 判定：
-//! - `warehouse` 是「稳定基础资料」→ 组合 [`crate::common::StableBase`]；
-//! - `warehouse_revision` 是不可变修订 → 用 [`crate::common::RevisionBase`]
+//! - `warehouse` 是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；
+//! - `warehouse_revision` 是不可变修订 → 用 [`erp_core::common::RevisionBase`]
 //!   （revision_no），正式版本按 §4.4 内联结构化快照字段，地址与联系人按
 //!   §4.5.5 以加密值 + 带密钥 HMAC 指纹保存（[`SensitiveText`]）；
 //! - `warehouse_sku_policy` 是库存预警策略行，只用 `BaseModel` 持久化元数据。
@@ -26,4 +26,4 @@ pub use warehouse_revision::WarehouseRevision;
 pub use warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyPeriod};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{WarehouseId, WarehouseRevisionId, WarehouseSkuPolicyId};
+pub use erp_core::ids::{WarehouseId, WarehouseRevisionId, WarehouseSkuPolicyId};

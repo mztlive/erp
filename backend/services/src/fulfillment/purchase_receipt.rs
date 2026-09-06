@@ -1,12 +1,13 @@
-use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transactional};
+use database::{AccessControlExt, FulfillmentExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
 };
-use entities::ids::PurchaseReceiptId;
+use erp_core::ids::PurchaseReceiptId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::approval::binding::{
@@ -15,10 +16,11 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::dto::SortDir;
 use super::purchase_receipt_lines::receipt_line_specs;
@@ -493,8 +495,8 @@ mod tests {
     use super::receipt_line_specs;
     use crate::fulfillment::PurchaseReceiptLineInput;
     use entities::fulfillment::{PurchaseReceiptLineBatch, PurchaseReceiptLineData, QualityResult};
-    use entities::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
-    use entities::money::Quantity;
+    use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     fn passed_line() -> PurchaseReceiptLineInput {
@@ -606,8 +608,8 @@ mod purchase_receipt_no_approval_tests {
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use entities::common::time::Instant;
-    use entities::ids::{PurchaseOrderId, PurchaseReceiptId, WarehouseId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{PurchaseOrderId, PurchaseReceiptId, WarehouseId};
 
     fn draft_receipt() -> PurchaseReceipt {
         PurchaseReceipt::new(

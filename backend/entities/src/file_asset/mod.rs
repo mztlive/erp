@@ -20,11 +20,11 @@ mod entity;
 mod pending_reference;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{DocumentAttachmentId, FileAssetId};
 pub use bank_receipt_evidence_policy::BankReceiptEvidencePolicy;
 pub use document_attachment::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 pub use entity::{
     content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,
     SensitivityClass,
 };
+pub use erp_core::ids::{DocumentAttachmentId, FileAssetId};
 pub use pending_reference::{PendingFileReference, PendingFileReferenceSet, PENDING_FILE_REFERENCE_PREFIX};

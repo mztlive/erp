@@ -5,13 +5,13 @@
 //! 唯一校验实现，三个行实体复用，避免同义分叉。
 //!
 //! 逐行金额守恒按 §4.2 铁律 1：`gross = net + tax` 精确成立，只能经
-//! [`crate::money::line_amounts`] 或 [`crate::money::round_to_cent`] 舍入。
+//! [`erp_core::money::line_amounts`] 或 [`erp_core::money::round_to_cent`] 舍入。
 
-use crate::errors::{Error, Result};
-use crate::ids::{ProcurementConfirmationLineId, SkuId};
-use crate::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use crate::purchase_order::types::PurchaseLineType;
-use crate::validation::normalize_optional_text;
+use erp_core::ids::{ProcurementConfirmationLineId, SkuId};
+use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::normalize_optional_text;
+use erp_core::{Error, Result};
 
 /// 商品名称快照最大长度。
 pub(crate) const PRODUCT_NAME_MAX_LEN: usize = 256;

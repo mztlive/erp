@@ -2,7 +2,7 @@
 //!
 //! 有效副本是否存在属于仓储事实，不得进入本模块。
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 use super::entity::{CloseStatus, CommercialStatus, SalesOrder};
 
@@ -46,8 +46,8 @@ mod tests {
     use super::super::types::{BusinessType, OriginSystem};
     use super::super::working_copy::{SalesOrderWorkingCopy, SalesOrderWorkingCopyData, WorkingPurpose};
     use super::super::working_copy_test_support::{amt, line_data};
-    use crate::common::time::Instant;
-    use crate::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
 
     fn order() -> SalesOrder {
         SalesOrder::new(
@@ -69,7 +69,7 @@ mod tests {
 
     fn working_copy() -> SalesOrderWorkingCopy {
         SalesOrderWorkingCopy::new(
-            crate::ids::SalesOrderWorkingCopyId::new("wc-1"),
+            erp_core::ids::SalesOrderWorkingCopyId::new("wc-1"),
             SalesOrderWorkingCopyData {
                 sales_order_id: SalesOrderId::new("o-1"),
                 working_purpose: WorkingPurpose::FirstSubmission,

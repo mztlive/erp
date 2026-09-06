@@ -7,21 +7,19 @@
 
 use std::str::FromStr;
 
-use entities::{
-    common::time::BusinessDate,
-    money::Amount,
-    receivable::{EntryDirection, ReceivableAccount},
-};
+use entities::receivable::{EntryDirection, ReceivableAccount};
+use erp_core::common::time::BusinessDate;
+use erp_core::money::Amount;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Bson, Decimal128, Document};
 use mongodb::Database;
 use serde::Deserialize;
 
-use crate::executor::Executor;
 use crate::repository::extensions::ReceivableExt;
 use crate::repository::Repository;
-use crate::Result;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 const RECEIVABLE_ENTRIES: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRIES;
 const RECEIVABLE_ENTRY_OFFSETS: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRY_OFFSETS;

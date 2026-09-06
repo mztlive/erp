@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与跨集合
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与跨集合
 //! 多步骤写入入口。集合名常量统一从 `extensions::integration_ops` 的
 //! `IntegrationOpsExt` 关联常量导入（单一权威来源）。
 //!
@@ -16,22 +16,23 @@
 //! 筛选/行类型定义在本文件，经 `IntegrationOpsExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::common::time::Instant;
 use entities::integration_ops::{
     ErrorClass, ErrorTaskStatus, InboxMessage, InboxMessageId, InboxMessageStatus, IntegrationErrorTask,
     MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
     ResolutionAction, ResolutionType, ResultingStatus, SourceSystemId,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::IntegrationOpsExt;
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 mod difference_resolution_batch;
 
@@ -658,7 +659,7 @@ impl<'a> IntegrationOpsRepository<'a> {
     /// 保证「错误任务 + 消息失败标记」原子可见（§6.21）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，消息更新失败（如版本冲突）会留下只有任务没有
-    /// 失败标记的半成品；Service 必须通过 `database::Transactional::with_transaction`
+    /// 失败标记的半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
     /// # 参数
@@ -668,8 +669,8 @@ impl<'a> IntegrationOpsRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、消息版本冲突
-    /// （透出 [`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、消息版本冲突
+    /// （透出 [`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     pub async fn create_error_task_with_message_failure(
         &self,
         task: &IntegrationErrorTask,

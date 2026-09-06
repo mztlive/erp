@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 
 use super::purchase_revision::PurchaseOrderRevisionLine;
 use super::types::PurchaseLineType;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
 };
-use crate::money::{Amount, Quantity};
+use erp_core::money::{Amount, Quantity};
+use erp_core::{Error, Result};
 
 /// 销售当前版本中可供采购分配重绑定的类型化行事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +104,7 @@ impl PurchaseLineSalesAllocation {
     /// 校验分配数量、两端成本金额非负，且不含税成本不超过含税成本（方向校验）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseLineSalesAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseLineSalesAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -264,13 +264,13 @@ mod tests {
         CurrentSalesAllocationLine, CurrentSalesAllocationPlan, CurrentSalesAllocationPlanError,
         PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
     };
-    use crate::common::time::BusinessDate;
-    use crate::ids::{
+    use crate::purchase_order::{PurchaseLineType, PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseLineSalesAllocationId, PurchaseOrderRevisionId,
         PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId, SkuId,
     };
-    use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
-    use crate::purchase_order::{PurchaseLineType, PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData};
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
     /// 构造可被当前销售版本重新绑定的商品/服务采购版本行夹具。
     ///

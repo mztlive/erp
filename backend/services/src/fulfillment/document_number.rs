@@ -4,9 +4,9 @@
 //! [`DocumentNumberGenerator`]，格式为 `DN20260826-000001` 这类日期序号。
 
 use chrono::{FixedOffset, TimeZone, Utc};
-use database::NoTransaction;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 

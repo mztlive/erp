@@ -4,7 +4,7 @@
 //! `audit_log.rs`），本文件只承载四个新增集合。单一集合 CRUD 与乐观锁直接
 //! 复用 [`Repository`] 基类（base.rs：`update`/`soft_delete`/`restore` 比较
 //! `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `extensions::AccessControlExt`
 //! 关联常量导入（conventions §4.3）。
 //!
@@ -22,9 +22,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::AccessControlExt;
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
@@ -528,7 +529,7 @@ impl<'a> AccessControlRepository<'a> {
     /// 原子可见（§4.5.4 安全审计与变更留痕）。**必须收到事务执行器**：本方法
     /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，审计失败
     /// 会留下没有审计的绑定；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `binding` - 待写入的用户角色绑定
@@ -536,7 +537,7 @@ impl<'a> AccessControlRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn assign_user_role_with_audit(
         &self,
@@ -631,9 +632,9 @@ mod tests {
         data_scope_subjects_filter, sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter,
         QueryFilter, Repository,
     };
-    use crate::NoTransaction;
     use entities::access_control::{AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType};
     use mongodb::bson::{doc, Bson};
+    use persistence_core::NoTransaction;
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {

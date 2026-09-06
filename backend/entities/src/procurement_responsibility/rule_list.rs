@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::ids::{ProductCategoryId, SkuId};
+use erp_core::ids::{ProductCategoryId, SkuId};
 
 use super::rule::ProcurementResponsibilityRule;
 
@@ -89,10 +89,10 @@ pub fn collect_rule_list_ids(
 #[cfg(test)]
 mod tests {
     use crate::catalog::EnableStatus;
-    use crate::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
     use crate::procurement_responsibility::{
         ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
+    use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 
     use super::*;
 

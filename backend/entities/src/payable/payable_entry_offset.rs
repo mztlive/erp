@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{PayableEntryId, PayableEntryOffsetId};
-use crate::money::Amount;
+use erp_core::ids::{PayableEntryId, PayableEntryOffsetId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 应付分录抵销创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,7 +46,7 @@ impl PayableEntryOffset {
     /// 完成金额正数、序号从 1 起与「减少分录不得冲减自身」校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PayableEntryOffsetId`）
+    /// * `id` - 实体主键（`erp_core::ids::PayableEntryOffsetId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

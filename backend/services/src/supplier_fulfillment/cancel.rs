@@ -1,22 +1,22 @@
-use database::{
-    AccessControlExt, IntegrationOpsExt, NoTransaction, SupplierApiExt, SupplierFulfillmentExt, Transactional,
-};
-use entities::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
+use database::{AccessControlExt, IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
 use entities::integration_ops::InboxMessageStatus;
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     CancelStatus, RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionData, SupplierOrderActionLine, SupplierOrderActionLineData, SupplierOrderActionType,
 };
+use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use super::mapping::action_line_view;
 use super::place::{build_action_message, ensure_capability};
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl SupplierFulfillmentService {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
@@ -222,7 +222,7 @@ impl SupplierFulfillmentService {
                     ),
                 )
             })
-            .collect::<std::result::Result<Vec<_>, entities::Error>>()
+            .collect::<std::result::Result<Vec<_>, erp_core::Error>>()
             .map_err(crate::errors::Error::from)
     }
 

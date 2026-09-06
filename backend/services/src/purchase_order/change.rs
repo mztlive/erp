@@ -18,10 +18,10 @@ mod tests {
         execute_purchase_change_domain_action, start_purchase_change_approval, PurchaseOrderService,
     };
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::ids::{
+    use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus};
+    use erp_core::ids::{
         PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
     };
-    use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus};
 
     fn change_source() -> String {
         [
@@ -185,19 +185,21 @@ mod tests {
     /// 采购变更生效不得把数据库 CAS 或 MongoDB 瞬态事务冲突泄露为 500。
     #[test]
     fn effect_concurrency_errors_map_to_stable_conflicts() {
-        let optimistic = crate::errors::Error::from(database::Error::OptimisticLockingError);
+        let optimistic = crate::errors::Error::from(persistence_core::Error::OptimisticLockingError);
         assert!(matches!(
             optimistic,
             crate::errors::Error::ConflictError(message)
                 if message == "数据已被其他请求修改，请刷新后重试"
         ));
 
-        let transient = crate::errors::Error::from(database::Error::TransientTransactionConflict(
+        let transient = crate::errors::Error::from(persistence_core::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("write conflict"),
         ));
         assert!(matches!(
             transient,
-            crate::errors::Error::TransientTransaction(database::Error::TransientTransactionConflict(_))
+            crate::errors::Error::TransientTransaction(
+                persistence_core::Error::TransientTransactionConflict(_)
+            )
         ));
     }
 

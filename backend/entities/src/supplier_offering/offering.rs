@@ -8,15 +8,15 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::{revision::RevisionBase, stable::StableBase, time::BusinessDate};
-use crate::errors::{Error, Result};
-use crate::ids::{
+use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
+use erp_core::common::{revision::RevisionBase, stable::StableBase, time::BusinessDate};
+use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
-use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
-use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 const SUPPLIER_CODE_MAX_LEN: usize = 128;
 const DROPSHIP_EXPRESS_MAX_LEN: usize = 512;
@@ -579,12 +579,12 @@ mod tests {
         FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
         SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
-    use crate::common::time::BusinessDate;
-    use crate::ids::{
+    use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
         SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
-    use crate::money::{Amount, Quantity, Rate, UnitPrice};
-    use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     fn offering_data() -> SupplierOfferingData {
         SupplierOfferingData {

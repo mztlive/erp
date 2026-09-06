@@ -29,7 +29,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::PurchaseOrderExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `purchase_order` 集合名。
 pub(crate) const PURCHASE_ORDERS: &str = <mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS;

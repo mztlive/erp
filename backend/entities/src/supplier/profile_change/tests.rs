@@ -4,12 +4,6 @@ use super::{
     plan_party_revision, NewQualificationParams, PlanCommercialProfileRevisionParams,
     PlanPartyRevisionParams,
 };
-use crate::common::time::BusinessDate;
-use crate::ids::{
-    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
-    SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
-    SupplierQualificationRevisionId,
-};
 use crate::party::{
     status::EffectiveRecordStatus, AddressType, Party, PartyAddress, PartyAddressData, PartyBankAccount,
     PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyKind, PartyStatus, PartyTaxProfile,
@@ -19,6 +13,12 @@ use crate::supplier::{
     CapabilityCode, InvoiceType, QualificationStatus, QualificationType, ReconciliationCycle, SettlementMode,
     SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierQualification,
     SupplierQualificationData,
+};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
+    SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
+    SupplierQualificationRevisionId,
 };
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -108,7 +108,7 @@ fn commercial_profile_revision_advances_pointer() {
         payment_term_snapshot: "PREPAY_30".to_string(),
         business_category: None,
         invoice_type: InvoiceType::VatSpecial,
-        invoice_tax_rate: crate::money::Rate::from_str("0.13").unwrap(),
+        invoice_tax_rate: erp_core::money::Rate::from_str("0.13").unwrap(),
         signing_entity_party_id: PartyId::new("party-sign"),
         payment_entity_party_id: PartyId::new("party-pay"),
         change_reason: "首版".to_string(),
@@ -136,7 +136,7 @@ fn fingerprint_key() -> Vec<u8> {
 fn disable_contacts_only_active() {
     let mut contacts = vec![
         PartyContact::new(
-            crate::ids::PartyContactId::new("c1"),
+            erp_core::ids::PartyContactId::new("c1"),
             PartyContactData {
                 party_id: PartyId::new("party-1"),
                 contact_name: "张三".to_string(),
@@ -154,7 +154,7 @@ fn disable_contacts_only_active() {
         )
         .unwrap(),
         PartyContact::new(
-            crate::ids::PartyContactId::new("c2"),
+            erp_core::ids::PartyContactId::new("c2"),
             PartyContactData {
                 party_id: PartyId::new("party-1"),
                 contact_name: "李四".to_string(),
@@ -174,7 +174,7 @@ fn disable_contacts_only_active() {
     ];
     // 手动构造一个已停用记录应被 retain 过滤
     let mut disabled = PartyContact::new(
-        crate::ids::PartyContactId::new("c3"),
+        erp_core::ids::PartyContactId::new("c3"),
         PartyContactData {
             party_id: PartyId::new("party-1"),
             contact_name: "王五".to_string(),
@@ -195,7 +195,7 @@ fn disable_contacts_only_active() {
         .update(
             crate::party::PartyContactUpdate {
                 status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: crate::field_update::FieldUpdate::Unchanged,
+                valid_to: erp_core::field_update::FieldUpdate::Unchanged,
                 is_default: Some(false),
             },
             "admin-1",
@@ -216,7 +216,7 @@ fn disable_contacts_only_active() {
 #[test]
 fn disable_addresses_tax_bank() {
     let mut addresses = vec![PartyAddress::new(
-        crate::ids::PartyAddressId::new("a1"),
+        erp_core::ids::PartyAddressId::new("a1"),
         PartyAddressData {
             party_id: PartyId::new("party-1"),
             address_type: AddressType::Operating,
@@ -235,7 +235,7 @@ fn disable_addresses_tax_bank() {
     assert_eq!(addresses[0].status, EffectiveRecordStatus::Disabled);
 
     let mut tax = vec![PartyTaxProfile::new(
-        crate::ids::PartyTaxProfileId::new("t1"),
+        erp_core::ids::PartyTaxProfileId::new("t1"),
         PartyTaxProfileData {
             party_id: PartyId::new("party-1"),
             tax_no: "TAX001".to_string(),
@@ -251,7 +251,7 @@ fn disable_addresses_tax_bank() {
     assert_eq!(tax[0].status, EffectiveRecordStatus::Disabled);
 
     let mut banks = vec![PartyBankAccount::new(
-        crate::ids::PartyBankAccountId::new("b1"),
+        erp_core::ids::PartyBankAccountId::new("b1"),
         PartyBankAccountData {
             bank_account_no: "BA-1".to_string(),
             party_id: PartyId::new("party-1"),
@@ -475,7 +475,7 @@ fn capability_disable_then_reenable_via_update() {
 #[test]
 fn disable_then_new_contact_reenable() {
     let mut contacts = vec![PartyContact::new(
-        crate::ids::PartyContactId::new("c-re"),
+        erp_core::ids::PartyContactId::new("c-re"),
         PartyContactData {
             party_id: PartyId::new("party-re"),
             contact_name: "张三".to_string(),
@@ -496,7 +496,7 @@ fn disable_then_new_contact_reenable() {
     assert_eq!(contacts[0].status, EffectiveRecordStatus::Disabled);
     assert!(!contacts[0].is_default);
     let recreated = PartyContact::new(
-        crate::ids::PartyContactId::new("c-re2"),
+        erp_core::ids::PartyContactId::new("c-re2"),
         PartyContactData {
             party_id: PartyId::new("party-re"),
             contact_name: "李四".to_string(),
@@ -521,7 +521,7 @@ fn disable_then_new_contact_reenable() {
 #[test]
 fn clear_intent_for_address_tax_bank_preserves_disable_semantics() {
     let mut addresses = vec![PartyAddress::new(
-        crate::ids::PartyAddressId::new("addr-clear"),
+        erp_core::ids::PartyAddressId::new("addr-clear"),
         PartyAddressData {
             party_id: PartyId::new("party-clear"),
             address_type: AddressType::Operating,
@@ -539,7 +539,7 @@ fn clear_intent_for_address_tax_bank_preserves_disable_semantics() {
     disable_addresses(&mut addresses, "admin-2").unwrap();
     assert_eq!(addresses[0].status, EffectiveRecordStatus::Disabled);
     let mut taxes = vec![PartyTaxProfile::new(
-        crate::ids::PartyTaxProfileId::new("tax-clear"),
+        erp_core::ids::PartyTaxProfileId::new("tax-clear"),
         PartyTaxProfileData {
             party_id: PartyId::new("party-clear"),
             tax_no: "91310000MA1BL4KW9X".to_string(),
@@ -554,7 +554,7 @@ fn clear_intent_for_address_tax_bank_preserves_disable_semantics() {
     disable_tax_profiles(&mut taxes, "admin-2").unwrap();
     assert_eq!(taxes[0].status, EffectiveRecordStatus::Disabled);
     let mut banks = vec![PartyBankAccount::new(
-        crate::ids::PartyBankAccountId::new("bank-clear"),
+        erp_core::ids::PartyBankAccountId::new("bank-clear"),
         PartyBankAccountData {
             bank_account_no: "BA-CLEAR".to_string(),
             party_id: PartyId::new("party-clear"),
@@ -645,11 +645,11 @@ fn duplicate_capability_codes_rejected_via_validate_profile_selection() {
 #[test]
 fn profile_change_plan_from_loaded_covers_full_matrix() {
     use super::{PlannedQualificationInput, SupplierProfileChangePlan};
-    use crate::ids::{
+    use crate::supplier::{CapabilityStatus, SupplierCapability, SupplierCapabilityData};
+    use erp_core::ids::{
         SupplierAccountId, SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId,
         SupplierQualificationRevisionId,
     };
-    use crate::supplier::{CapabilityStatus, SupplierCapability, SupplierCapabilityData};
     use std::collections::{HashMap, HashSet};
 
     let supplier_id = SupplierAccountId::new("supplier-plan");

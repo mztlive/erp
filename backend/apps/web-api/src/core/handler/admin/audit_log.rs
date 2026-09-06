@@ -1,8 +1,6 @@
+use application_core::Page;
 use axum::extract::{Query, State};
-use services::{
-    audit::{AuditLogItem, AuditLogListParams, AuditLogService},
-    Page,
-};
+use services::audit::{AuditLogItem, AuditLogListParams, AuditLogService};
 
 use crate::{
     app_state::AppState,

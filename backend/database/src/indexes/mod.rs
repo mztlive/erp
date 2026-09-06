@@ -41,7 +41,7 @@ mod work_item;
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub async fn ensure_indexes(db: &mongodb::Database) -> crate::Result<()> {
+pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {
     access_control::ensure(db).await?;
     approval_integration::ensure(db).await?;
     bpm::ensure(db).await?;

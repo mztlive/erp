@@ -1,5 +1,5 @@
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,13 +25,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-pub(super) use crate::query::non_blank;
+pub(super) use application_core::non_blank;
 
 #[cfg(test)]
 mod tests {

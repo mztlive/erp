@@ -15,8 +15,8 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::Result;
 
 use super::ReconciliationDifferenceId;
 
@@ -73,7 +73,7 @@ impl ReconciliationDifference {
     /// 差异发现时间由 `BaseModel.created_at` 承载，创建后不可修改、不设业务软删除。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ReconciliationDifferenceId`）
+    /// * `id` - 实体主键（`erp_core::ids::ReconciliationDifferenceId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -105,7 +105,7 @@ impl ReconciliationDifference {
         let right_fact_reference =
             normalize_optional_text(data.right_fact_reference, "右侧证据引用", FACT_REFERENCE_MAX_LEN)?;
         if left_fact_reference.is_none() && right_fact_reference.is_none() {
-            return Err(crate::errors::Error::from("差异必须至少提供一侧不可变证据引用"));
+            return Err(erp_core::Error::from("差异必须至少提供一侧不可变证据引用"));
         }
 
         Ok(Self {
@@ -144,7 +144,7 @@ impl ReconciliationDifference {
 #[cfg(test)]
 mod tests {
     use super::{ReconciliationDifference, ReconciliationDifferenceData};
-    use crate::ids::ReconciliationDifferenceId;
+    use erp_core::ids::ReconciliationDifferenceId;
 
     fn difference_data() -> ReconciliationDifferenceData {
         ReconciliationDifferenceData {

@@ -11,13 +11,13 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{PayableAccountId, PaymentAllocationId, SupplierPaymentId};
-use crate::money::Amount;
 use crate::payable::{
     AllocationAction, PayableEntry, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{PayableAccountId, PaymentAllocationId, SupplierPaymentId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 付款核销账本：以已装载分录事实逐行完成净额、余额、序号与实体构造。
 ///
@@ -321,7 +321,7 @@ fn checked_add_amount(left: Amount, right: Amount) -> Result<Amount> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::PayableEntryId;
+    use erp_core::ids::PayableEntryId;
     use rust_decimal::Decimal;
 
     fn entry(id: &str, account: &str, amount: &str) -> PayableEntry {
@@ -332,7 +332,7 @@ mod tests {
                 entry_type: crate::payable::PayableEntryType::Original,
                 direction: crate::payable::EntryDirection::Increase,
                 amount: Amount::from_str(amount).unwrap(),
-                due_date: crate::common::time::BusinessDate::from_ymd(2026, 9, 30).unwrap(),
+                due_date: erp_core::common::time::BusinessDate::from_ymd(2026, 9, 30).unwrap(),
                 source_fact_type: "purchase_order".to_string(),
                 source_document_id: "PO-1".to_string(),
                 source_revision_id: "rev-1".to_string(),

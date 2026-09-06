@@ -9,8 +9,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 无规格 SKU 的固定空规格签名（数据模型 §6.3）。
 pub const EMPTY_SPEC_SIGNATURE: &str = "";

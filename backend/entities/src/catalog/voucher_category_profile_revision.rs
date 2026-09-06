@@ -10,10 +10,10 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::status::EnableStatus;
-use crate::common::revision::RevisionBase;
-use crate::errors::{Error, Result};
-use crate::ids::{SkuId, VoucherCategoryProfileRevisionId};
-use crate::validation::normalize_required_text;
+use erp_core::common::revision::RevisionBase;
+use erp_core::ids::{SkuId, VoucherCategoryProfileRevisionId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 卡券类目描述最大长度。
 const DESCRIPTION_MAX_LEN: usize = 512;
@@ -53,7 +53,7 @@ impl VoucherCategoryProfileRevision {
     /// 并校验修订序号从 1 开始。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::VoucherCategoryProfileRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::VoucherCategoryProfileRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -127,8 +127,8 @@ impl VoucherCategoryProfileRevision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::VoucherCategoryProfileRevisionId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::VoucherCategoryProfileRevisionId;
 
     fn data() -> VoucherCategoryProfileRevisionData {
         VoucherCategoryProfileRevisionData {

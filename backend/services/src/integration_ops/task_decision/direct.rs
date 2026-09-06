@@ -1,9 +1,10 @@
-use database::{Executor, IntegrationOpsExt, WorkItemExt};
+use database::{IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     DirectConclusion, IntegrationCommandIdentity, ReconciliationDifference,
     ReconciliationDifferenceResolution,
 };
 use mongodb::Database;
+use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::super::evidence::{
@@ -17,8 +18,8 @@ use super::super::{
 use super::action::difference_action_fact;
 use super::guard::{command_identity, ensure_difference_open, latest_resolution, load_difference};
 use super::{append_resolution, store_receipt, DirectFact, DIRECT_DECISION_AUDIT};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DirectReceiptMessage {

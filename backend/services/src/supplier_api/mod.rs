@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 创建连接 + 能力清单：跨集合原子写入（`create_connection_with_capabilities`）
-//!   → `database::Transactional::with_transaction`；
+//!   → `persistence_core::Transactional::with_transaction`；
 //! - 更新连接、原子替换能力：跨集合（业务写 + 审计）→ 事务；
 //! - 健康检查（二期专属，P3 §3/§7）：**外部 HTTP 调用在事务之外完成**——
 //!   事务 1 先落 `inbox_message`（Received）+ 审计；事务外经 `SupplierApiGateway`
@@ -15,19 +15,21 @@
 
 use std::sync::Arc;
 
-use database::{AccessControlExt, NoTransaction, SupplierApiExt, SupplierExt, Transactional};
+use database::{AccessControlExt, SupplierApiExt, SupplierExt};
 use entities::integration_ops::ErrorClass;
 use entities::supplier_api::{
     PreparedSupplierConnectionCreate, SupplierApiConnection, SupplierApiConnectionData,
 };
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use crate::supplier_api::dto::SortDir;
+use application_core::AuditActor;
 
 mod dto;
 mod governance;
@@ -270,7 +272,7 @@ impl SupplierApiService {
             .await?
             .ok_or_else(|| Error::NotFound("API 供应商不存在".to_string()))?;
 
-        let id = entities::ids::SupplierApiConnectionId::new(next_id());
+        let id = erp_core::ids::SupplierApiConnectionId::new(next_id());
         let connection = SupplierApiConnection::new(
             id,
             SupplierApiConnectionData {
@@ -457,11 +459,11 @@ impl SupplierApiService {
 #[cfg(test)]
 mod tests {
 
-    use entities::ids::{SupplierAccountId, SupplierApiConnectionId};
     use entities::integration_ops::ErrorClass;
     use entities::supplier_api::{
         ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 
     use super::{ClassifiedError, SupplierApiGateway, UnavailableSupplierApiGateway};
 

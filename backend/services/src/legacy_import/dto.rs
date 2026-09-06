@@ -5,18 +5,18 @@
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
 use entities::bulk_job::JobStatus;
-use entities::common::time::BusinessDate;
-use entities::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
 use entities::legacy_import::{
     ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
 use entities::work_item::{WorkItemStatus, WorkItemType};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 use super::receipt::{optional_text, parse_command_version, required_text};
 
@@ -28,7 +28,7 @@ pub(crate) const LEGACY_IMPORT_ROW_SORT_FIELDS: &[&str] = &["created_at", "sourc
 pub(crate) const LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS: &[&str] = &["created_at", "trial_version"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询参数（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,13 +55,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 导入行创建请求（行级来源身份与规范化载荷，数据模型 §6.12）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -928,7 +928,7 @@ pub struct ApplyRowResult {
     /// 行级结果。
     pub outcome: ApplyRowOutcome,
     /// 来源稳定身份（试算阶段在 D01 建立；待映射行必填）。
-    pub external_identity_map_id: Option<entities::ids::ExternalIdentityMapId>,
+    pub external_identity_map_id: Option<erp_core::ids::ExternalIdentityMapId>,
     /// 成功结果目标单据 ID（`Imported` 必填）。
     pub target_document_id: Option<String>,
     /// 成功结果目标对象引用。
@@ -959,7 +959,7 @@ pub(crate) const CUSTOMER_NOT_FOUND_ERROR_DETAIL: &str = "目标客户主体不�
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, LegacyImportBatchListParams, SortDir};
-    use entities::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
     use serde_json::json;
     use validator::Validate;
 
@@ -1038,9 +1038,9 @@ mod tests {
         };
         let request = super::CreateLegacyImportBatchRequest {
             batch_no: "IMP-2026-001".to_string(),
-            source_system_id: entities::ids::SourceSystemId::new("sys-1"),
+            source_system_id: erp_core::ids::SourceSystemId::new("sys-1"),
             source_object_set: "CUSTOMER".to_string(),
-            baseline_date: entities::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+            baseline_date: erp_core::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
             import_rule_version: "v1".to_string(),
             source_file_hmac: None,
             successful_sanitized_file_asset_id: None,
@@ -1059,7 +1059,7 @@ mod tests {
             reason: Option<&str>,
         ) -> super::ImportBusinessConfirmationDecision {
             super::ImportBusinessConfirmationDecision {
-                batch_id: entities::ids::LegacyImportBatchId::new("batch-1"),
+                batch_id: erp_core::ids::LegacyImportBatchId::new("batch-1"),
                 expected_batch_version: "1".to_string(),
                 expected_trial_version: "2".to_string(),
                 confirmation_scope: " sales ".to_string(),
@@ -1073,7 +1073,7 @@ mod tests {
             reason: Option<&str>,
         ) -> super::CompleteImportBusinessConfirmationCommand {
             super::CompleteImportBusinessConfirmationCommand {
-                work_item_id: entities::ids::WorkItemId::new("work-item-1"),
+                work_item_id: erp_core::ids::WorkItemId::new("work-item-1"),
                 expected_task_version: "3".to_string(),
                 expected_subject_version: "subject-1".to_string(),
                 decision: decision(action, reason),
@@ -1112,7 +1112,7 @@ mod tests {
             reason: Option<&str>,
         ) -> super::ImportExecutionCommand {
             super::ImportExecutionCommand {
-                batch_id: entities::ids::LegacyImportBatchId::new("batch-1"),
+                batch_id: erp_core::ids::LegacyImportBatchId::new("batch-1"),
                 expected_batch_version: "4".to_string(),
                 expected_trial_version: trial.map(str::to_string),
                 action,

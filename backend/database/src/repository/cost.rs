@@ -9,21 +9,21 @@
 //! 筛选/行类型定义在本文件，经 `CostExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::common::time::Instant;
 use entities::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
-use entities::ids::{CostEntryId, SalesOrderId, SupplierAccountId};
-use entities::money::{Amount, Rate};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CostEntryId, SalesOrderId, SupplierAccountId};
+use erp_core::money::{Amount, Rate};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::CostExt;
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `cost_allocation` 集合名（单一来源：`CostExt` 关联常量）。
 const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_ALLOCATIONS;
@@ -330,7 +330,7 @@ impl<'a> CostRepository<'a> {
     /// 原子可见（数据模型 §6.10 成本分配合计等于成本事实金额）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 各笔写入自动提交，后续分配失败会留下没有分配行的成本事实；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `entry` - 待写入的成本事实
@@ -338,7 +338,7 @@ impl<'a> CostRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_cost_entry_with_allocations(
         &self,
@@ -430,7 +430,7 @@ fn cost_allocation_projection() -> Document {
 mod tests {
     use super::{cost_entry_projection, sort_doc, CostAllocationFilter, CostEntryFilter, QueryFilter};
     use entities::cost::{CostScope, CostStage, CostType};
-    use entities::ids::SupplierAccountId;
+    use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
 
     #[test]
@@ -459,7 +459,7 @@ mod tests {
     fn allocation_filter_escapes_regex_and_filters_by_target() {
         let filter = CostAllocationFilter {
             cost_entry_id: None,
-            sales_order_id: Some(entities::ids::SalesOrderId::new("so-1")),
+            sales_order_id: Some(erp_core::ids::SalesOrderId::new("so-1")),
             page: 1,
             page_size: 20,
             sort_by: Some("$where".to_string()),

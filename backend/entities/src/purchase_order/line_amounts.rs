@@ -7,15 +7,15 @@
 //! [`PurchaseChangeSubmissionLineData`]，复用行实体的字段工厂。
 //!
 //! 逐行金额守恒按 §4.2 铁律 1：`gross = net + tax` 精确成立，只能经
-//! [`crate::money::line_amounts`] 或 [`crate::money::round_to_cent`] 舍入；
+//! [`erp_core::money::line_amounts`] 或 [`erp_core::money::round_to_cent`] 舍入；
 //! 本模块不触碰任何 I/O、时钟、ID 生成器或密钥。
 
-use crate::common::time::BusinessDate;
-use crate::ids::{
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
     ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseOrderSubmissionId, SalesOrderLineId,
     SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
 };
-use crate::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
 
 use super::change_order::PurchaseChangeSubmissionLineData;
 use super::purchase_submission::PurchaseOrderSubmissionLineData;
@@ -247,12 +247,12 @@ fn zero_rate() -> Rate {
 mod tests {
     use std::str::FromStr;
 
-    use crate::common::time::BusinessDate;
-    use crate::ids::{
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseOrderSubmissionId,
         SalesOrderLineId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
     };
-    use crate::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     use super::{compute_header_totals, LineAmountViolation, PurchaseLineInput};
     use crate::purchase_order::types::PurchaseLineType;

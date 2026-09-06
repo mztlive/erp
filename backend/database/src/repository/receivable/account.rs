@@ -1,17 +1,17 @@
-use entities::common::stable::StableBase;
-use entities::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
-use entities::money::Amount;
 use entities::receivable::{AccountReviewStatus, ReceivableAccount, ReceivableAccountStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::sort_doc;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 应收往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -792,11 +792,12 @@ fn receivable_account_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{amount_bson, progress_pipeline, sort_doc, QueryFilter, ReceivableAccountFilter};
-    use crate::{NoTransaction, ReceivableExt, Repository};
-    use entities::ids::{CustomerAccountId, PartyId};
-    use entities::money::Amount;
+    use crate::{ReceivableExt, Repository};
     use entities::receivable::{ReceivableAccount, ReceivableAccountStatus};
+    use erp_core::ids::{CustomerAccountId, PartyId};
+    use erp_core::money::Amount;
     use mongodb::bson::{doc, Bson};
+    use persistence_core::NoTransaction;
     use std::str::FromStr;
 
     #[test]

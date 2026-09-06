@@ -7,7 +7,7 @@
 use super::party_address::{AddressType, PartyAddress};
 use super::party_bank_account::PartyBankAccount;
 use super::party_contact::PartyContact;
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 调用方预计算的查询指纹（HMAC 十六进制结果）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -352,12 +352,12 @@ mod tests {
         PartyAddressContentMatch, PartyBankAccountContentMatch, PartyContactContentMatch, QueryFingerprint,
         SensitiveFactReuse,
     };
-    use crate::common::time::BusinessDate;
-    use crate::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
     use crate::party::party_address::{AddressType, PartyAddress, PartyAddressData};
     use crate::party::party_bank_account::{PartyBankAccount, PartyBankAccountData};
     use crate::party::party_contact::{PartyContact, PartyContactData};
     use crate::party::status::EffectiveRecordStatus;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
 
     const KEY: &[u8] = b"content-match-test-key";
 

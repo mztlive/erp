@@ -8,18 +8,18 @@
 
 use std::collections::HashMap;
 
-use entities::ids::{
-    PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId,
-    SalesOrderRevisionId, SalesOrderRevisionLineId,
-};
 use entities::purchase_order::ProcurementCoverageFacts;
 use entities::purchase_order::{PurchaseLineType, PurchaseOrderStatus};
 use entities::sales_order::LineType;
+use erp_core::ids::{
+    PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId,
+    SalesOrderRevisionId, SalesOrderRevisionLineId,
+};
 use mongodb::Database;
 
-use crate::executor::Executor;
 use crate::repository::extensions::{CatalogExt, InventoryExt, PurchaseOrderExt, SalesOrderExt};
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 批量加载采购覆盖计算所需的最小持久化事实。
 ///
@@ -214,17 +214,9 @@ mod isolation_tests {
     use entities::catalog::product::ProductData;
     use entities::catalog::sku::SkuData;
     use entities::catalog::{EnableStatus, ListingStatus, Product, Sku};
-    use entities::common::time::Instant;
-    use entities::ids::{
-        ProductId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseOrderRevisionId,
-        PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
-        SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId, StockReservationId,
-        SupplierAccountId, SupplierCommercialProfileRevisionId, UnitOfMeasureId, WarehouseId,
-    };
     use entities::inventory::stock_reservation::{
         ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
-    use entities::money::{Amount, Quantity, Rate};
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderData,
         PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
@@ -238,11 +230,19 @@ mod isolation_tests {
     };
     use entities::sales_order::snapshot::HeaderSnapshotData;
     use entities::sales_order::{LineType, RevisionSource};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        ProductId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseOrderRevisionId,
+        PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
+        SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId, StockReservationId,
+        SupplierAccountId, SupplierCommercialProfileRevisionId, UnitOfMeasureId, WarehouseId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate};
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
     use crate::repository::extensions::{CatalogExt, InventoryExt, PurchaseOrderExt, SalesOrderExt};
-    use crate::{NoTransaction, Transactional};
+    use persistence_core::{NoTransaction, Transactional};
 
     use super::load_procurement_coverage_facts;
 
@@ -305,17 +305,17 @@ mod isolation_tests {
     /// 构造销售当前版本商品/服务子类型行。
     fn test_goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
         SalesOrderGoodsServiceLineRevision::new(
-            entities::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
+            erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
             SalesOrderGoodsServiceLineRevisionData {
                 revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
                 sku_id: SkuId::new("sku-1"),
-                sku_revision_id: entities::ids::SkuRevisionId::new("skur-1"),
+                sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
                 welfare_scenario: None,
                 service_region: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("10").unwrap(),
                 base_unit_code: "件".to_string(),
-                unit_price_gross: entities::money::UnitPrice::from_str("5").unwrap(),
+                unit_price_gross: erp_core::money::UnitPrice::from_str("5").unwrap(),
             },
         )
         .unwrap()
@@ -412,16 +412,16 @@ mod isolation_tests {
                 purchase_order_submission_id: PurchaseOrderSubmissionId::new(submission_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,
-                procurement_confirmation_line_id: Some(entities::ids::ProcurementConfirmationLineId::new(
+                procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "pcl-1",
                 )),
                 sku_id: Some(SkuId::new("sku-1")),
-                sku_revision_id: Some(entities::ids::SkuRevisionId::new("skur-1")),
+                sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("2").unwrap()),
                 base_unit_code: Some("件".to_string()),
-                unit_cost_gross: Some(entities::money::UnitPrice::from_str("5").unwrap()),
+                unit_cost_gross: Some(erp_core::money::UnitPrice::from_str("5").unwrap()),
                 gross_amount: Amount::from_str("10").unwrap(),
                 net_amount: Amount::from_str("10").unwrap(),
                 tax_amount: Amount::from_str("0").unwrap(),
@@ -468,16 +468,16 @@ mod isolation_tests {
                 purchase_order_revision_id: PurchaseOrderRevisionId::new(revision_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,
-                procurement_confirmation_line_id: Some(entities::ids::ProcurementConfirmationLineId::new(
+                procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "pcl-1",
                 )),
                 sku_id: Some(SkuId::new("sku-1")),
-                sku_revision_id: Some(entities::ids::SkuRevisionId::new("skur-1")),
+                sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("3").unwrap()),
                 base_unit_code: Some("件".to_string()),
-                unit_cost_gross: Some(entities::money::UnitPrice::from_str("5").unwrap()),
+                unit_cost_gross: Some(erp_core::money::UnitPrice::from_str("5").unwrap()),
                 gross_amount: Amount::from_str("15").unwrap(),
                 net_amount: Amount::from_str("15").unwrap(),
                 tax_amount: Amount::from_str("0").unwrap(),
@@ -789,7 +789,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
                         // 同一 session 内写入新的草稿提交行并推进当前提交指针，

@@ -10,11 +10,11 @@ use bpm::model::{
     ApprovalCommandIdentity, ApprovalCommandReceipt, CanonicalCommandPayload, CommandPayloadField,
     IdempotencyKey, Timestamp,
 };
-use entities::common::time::Instant;
-use entities::ids::WorkItemId;
 use entities::work_item::{
     ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
 
 use super::store::{
     close_open_tasks, insert_receipt, persist_ended_tasks, replay_after_duplicate, ApplyError,
@@ -223,16 +223,17 @@ pub fn run_memory_runtime_persistence_contract() -> RuntimePersistenceContract {
 #[cfg(test)]
 mod tests {
     use super::{assert_runtime_persistence_contract, run_memory_runtime_persistence_contract};
-    use database::{ensure_indexes, BpmExt, NoTransaction, Transactional, WorkItemExt};
+    use database::{ensure_indexes, BpmExt, WorkItemExt};
     use entities::work_item::ApprovalRuntimeTaskEnding;
     use mongodb::Client;
+    use persistence_core::{NoTransaction, Transactional};
     use test_support::{require_mongo, TestDb};
 
     use super::{contract_receipt, duplicate_open_tasks, RuntimePersistenceContract};
     use bpm::engine::TaskCloseReason;
     use bpm::ids::ApprovalNodeExecutionId;
-    use entities::common::time::Instant;
     use entities::work_item::WorkItem;
+    use erp_core::common::time::Instant;
 
     /// 内存适配器必须满足共用持久化契约。
     #[test]
@@ -330,7 +331,7 @@ mod tests {
             cas_ended[0].base.version = 99;
             let client: Client = fixture.client().clone();
             let db = fixture.db().clone();
-            let failed: std::result::Result<(), database::Error> = client
+            let failed: std::result::Result<(), persistence_core::Error> = client
                 .with_transaction(|session| {
                     let ended = cas_ended.clone();
                     let db = db.clone();
@@ -364,7 +365,7 @@ mod tests {
                 .insert_command_receipt(&receipt, &mut NoTransaction)
                 .await
                 .expect_err("重复收据");
-            assert!(matches!(duplicate, database::Error::DuplicateKey(_)));
+            assert!(matches!(duplicate, persistence_core::Error::DuplicateKey(_)));
             let stored = fixture
                 .db()
                 .bpm_workflow()

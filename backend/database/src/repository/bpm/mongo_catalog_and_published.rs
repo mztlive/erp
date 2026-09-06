@@ -1,6 +1,6 @@
 use super::DefinitionCatalogStatusFact;
+use crate::ensure_indexes;
 use crate::repository::extensions::BpmExt;
-use crate::{ensure_indexes, NoTransaction, Transactional};
 use bpm::graph::{DefinitionGraph, NewPopulatedDraftParams};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::types::ApprovalDefinitionStatus;
@@ -8,6 +8,7 @@ use bpm::model::{
     ApprovalNodeDefinition, ApprovalProcessDefinition, NewNodeDefinition, ParticipantId, Timestamp,
 };
 use bpm::ProcessKind;
+use persistence_core::{NoTransaction, Transactional};
 use test_support::{require_mongo, TestDb};
 
 fn draft(id: &str, kind: ProcessKind, version: u32) -> ApprovalProcessDefinition {

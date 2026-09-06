@@ -6,9 +6,9 @@
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.3；公共字段归属按 §4.3 判定：
 //! - 稳定主表（product_category、product_brand、unit_of_measure、sku_attribute、
-//!   sku_attribute_value、product、sku）组合 [`crate::common::StableBase`]；
+//!   sku_attribute_value、product、sku）组合 [`erp_core::common::StableBase`]；
 //! - 不可变修订表（product_revision、sku_revision、voucher_category_profile_revision）
-//!   用 [`crate::common::RevisionBase`]（revision_no），正式版本按 §4.4 内联结构化
+//!   用 [`erp_core::common::RevisionBase`]（revision_no），正式版本按 §4.4 内联结构化
 //!   快照字段（商品名称、规格、单位等），P1 定义并校验、P3 填充；
 //! - 关系行表（product_category_attribute、product_revision_media、
 //!   sku_revision_attribute_value）只用 `BaseModel` 持久化元数据。
@@ -57,7 +57,7 @@ pub use voucher_category_profile_revision::VoucherCategoryProfileRevision;
 pub use voucher_defaults::{VoucherCatalogDefaults, VoucherCategorySelection};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{
+pub use erp_core::ids::{
     ProductBrandId, ProductCategoryAttributeId, ProductCategoryId, ProductId, ProductRevisionId,
     ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionAttributeValueId,
     SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,

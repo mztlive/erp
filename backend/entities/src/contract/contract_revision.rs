@@ -8,11 +8,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
-use crate::validation::normalize_required_text;
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::snapshot::{
     CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot, SettlementPartySnapshot,
@@ -126,7 +126,7 @@ impl ContractRevision {
     /// `valid_to` 必须晚于 `valid_from`。版本一经形成不允许更新。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ContractRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::ContractRevisionId`）
     /// * `contract_id` - 所属合同主键
     /// * `revision_no` - 聚合内从 1 递增的版本号
     /// * `data` - 创建数据
@@ -245,8 +245,8 @@ impl ContractRevision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::time::BusinessDate;
-    use crate::ids::ContractId;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::ContractId;
 
     fn data() -> ContractRevisionData {
         ContractRevisionData {

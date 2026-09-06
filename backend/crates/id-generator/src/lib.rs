@@ -7,8 +7,8 @@
 
 mod document_number;
 
-pub use database::{Executor, NoTransaction};
 pub use document_number::{format_number, DocumentNumberGenerator, DocumentNumberKind, Error, Result};
+pub use persistence_core::{Executor, NoTransaction};
 
 use uuid::Uuid;
 

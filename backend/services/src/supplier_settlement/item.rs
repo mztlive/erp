@@ -1,4 +1,5 @@
-use database::{NoTransaction, SupplierSettlementExt};
+use database::SupplierSettlementExt;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::{SettlementPageView, SupplierSettlementItemListParams, SupplierSettlementItemView};

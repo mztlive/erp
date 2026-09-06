@@ -4,16 +4,16 @@
 //! 时间戳；金额一律十进制字符串。契约来源：`erp-client/features/actual-profit-loss`
 //! （W16 实际经营盈亏；利润指标按不含税口径，本域成本金额三元组同时携带）。
 
-use entities::common::time::Instant;
 use entities::cost::{CostBasis, CostScope, CostStage, CostType};
-use entities::ids::{CostEntryId, FileAssetId, SalesOrderId, SalesOrderLineId, SupplierAccountId};
-use entities::money::Amount;
-use entities::money::Rate;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CostEntryId, FileAssetId, SalesOrderId, SalesOrderLineId, SupplierAccountId};
+use erp_core::money::Amount;
+use erp_core::money::Rate;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 成本事实列表允许的排序字段白名单。
 pub(crate) const COST_ENTRY_SORT_FIELDS: &[&str] =
@@ -22,7 +22,7 @@ pub(crate) const COST_ENTRY_SORT_FIELDS: &[&str] =
 pub(crate) const COST_ALLOCATION_SORT_FIELDS: &[&str] = &["created_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,10 +49,10 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 // ---------------------------------------------------------------------------
 // 成本事实（cost_entry）
@@ -298,7 +298,7 @@ impl CostAllocationListParams {
 }
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 #[cfg(test)]
 mod tests {

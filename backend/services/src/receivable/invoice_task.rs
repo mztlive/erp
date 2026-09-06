@@ -3,19 +3,20 @@
 //! 任务身份、摘要与终态口径唯一来源为 `entities::work_item::finance_task`；
 //! 本文件只解析责任人/组织、调用 factory 并持久化（FIN-E06）。
 
-use database::{Executor, ReceivableExt, WorkItemExt};
-use entities::common::time::Instant;
-use entities::ids::{PartyId, ReceivableAccountId, WorkItemId};
+use database::{ReceivableExt, WorkItemExt};
 use entities::receivable::ReceivableAccount;
 use entities::work_item::{
     is_zero_amount, matches_sales_invoice_identity, new_sales_invoice_task, sales_invoice_impact_summary,
     FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
 use id_generator::next_id;
+use persistence_core::Executor;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 /// 触发应收可开票额度变化的正式业务事实。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

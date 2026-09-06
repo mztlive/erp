@@ -26,7 +26,6 @@ mod payable;
 mod procurement_responsibility;
 mod purchase_order;
 mod receivable;
-mod regex_filter;
 mod returns;
 mod role;
 mod sales_order;

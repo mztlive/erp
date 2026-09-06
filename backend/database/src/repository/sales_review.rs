@@ -2,11 +2,11 @@
 //!
 //! 旧采购确认、低毛利确认、卡券审批记录与变更复核集合已删除。
 
-use entities::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use super::extensions::SalesReviewExt;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `sales_change_order` 集合名。
 const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;

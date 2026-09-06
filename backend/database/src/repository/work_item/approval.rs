@@ -10,8 +10,8 @@ use serde::Deserialize;
 use super::super::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
 use super::super::extensions::{ApprovalIntegrationExt, BpmExt};
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 const APPROVAL_NODE_EXECUTIONS: &str = <Database as BpmExt>::APPROVAL_NODE_EXECUTIONS;
 const APPROVAL_PROCESS_INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -878,12 +878,12 @@ mod tests {
     };
     use crate::repository::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
     use bpm::ApprovalNodeExecutionId;
-    use entities::common::time::Instant;
-    use entities::ids::WorkItemId;
     use entities::work_item::{
         AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemStatus, WorkItemType,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     fn assigned_item() -> WorkItem {
         WorkItem::new_at(

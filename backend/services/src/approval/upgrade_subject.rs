@@ -7,15 +7,16 @@
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
 use database::{
-    CustomerExt, Executor, InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt,
-    SalesOrderExt, SalesReviewExt, SupplierExt,
+    CustomerExt, InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt,
+    SalesReviewExt, SupplierExt,
 };
 use entities::document_registry::DocumentType;
-use entities::ids::{SalesChangeOrderId, SalesOrderId};
 use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use entities::sales_review::SalesChangeOrderStatus;
+use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 
@@ -831,8 +832,8 @@ mod tests {
 
     #[test]
     fn submitted_entity_still_builds_authorization_facts_but_fresh_guard_rejects() {
-        use entities::ids::{StockAdjustmentId, WarehouseId};
         use entities::inventory::{AdjustmentReasonType, StockAdjustment, StockAdjustmentData};
+        use erp_core::ids::{StockAdjustmentId, WarehouseId};
 
         let mut adjustment = StockAdjustment::new(
             StockAdjustmentId::new("adjustment-1"),

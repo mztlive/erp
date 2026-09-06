@@ -5,9 +5,9 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::BusinessDate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::profile_validation::CustomerProfileOperation;
 
@@ -425,7 +425,7 @@ fn replay_customer_id(
 mod tests {
     use serde::Serialize;
 
-    use crate::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     use super::{
         CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileCommandResultData,
@@ -682,7 +682,7 @@ mod tests {
         customer_id: Option<&str>,
         initiated_by: &str,
         digest: &str,
-    ) -> crate::errors::Result<CustomerProfileReplayContext> {
+    ) -> erp_core::Result<CustomerProfileReplayContext> {
         CustomerProfileReplayContext::new(
             " customer-save-1 ",
             operation,

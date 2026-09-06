@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use std::str::FromStr;
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
-use crate::money::Amount;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 分配动作（数据模型 §6.8：`APPLY` 或 `REVERSE`）。
 ///
@@ -53,7 +53,7 @@ impl AllocationAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CardFundsRegistrationAllocationInput {
     /// 目标应收往来子账。
-    pub target_account_id: crate::ids::ReceivableAccountId,
+    pub target_account_id: erp_core::ids::ReceivableAccountId,
     /// 本行含税分配金额。
     pub amount: Amount,
 }
@@ -101,7 +101,7 @@ impl CardFundsRegistrationAllocations {
     /// 不去重或重排输入，不放宽带空白账户 ID 的拒绝行为，并在数值守恒后
     /// 保留 `expected_total` 的原始小数位表示，避免重算改变序列化结果。
     pub fn new(
-        target_account_id: crate::ids::ReceivableAccountId,
+        target_account_id: erp_core::ids::ReceivableAccountId,
         expected_total: Amount,
         lines: Vec<CardFundsRegistrationAllocationInput>,
     ) -> std::result::Result<Self, CardFundsRegistrationAllocationsError> {
@@ -183,11 +183,11 @@ impl CardFundsRegistrationAllocations {
 /// # 约束
 /// 不接受并静默修复带空白输入，以保持既有服务拒绝行为。
 fn canonical_registration_account_id(
-    account_id: &crate::ids::ReceivableAccountId,
-) -> Option<crate::ids::ReceivableAccountId> {
+    account_id: &erp_core::ids::ReceivableAccountId,
+) -> Option<erp_core::ids::ReceivableAccountId> {
     let normalized = account_id.as_ref().trim();
     (!normalized.is_empty() && normalized == account_id.as_ref())
-        .then(|| crate::ids::ReceivableAccountId::new(normalized))
+        .then(|| erp_core::ids::ReceivableAccountId::new(normalized))
 }
 
 /// 回款核销分配创建数据。
@@ -242,7 +242,7 @@ impl ReceiptAllocation {
     /// `REVERSE` 必填 `reverses_allocation_id`，`APPLY` 不得携带。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ReceiptAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::ReceiptAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -296,7 +296,7 @@ impl ReceiptAllocation {
 pub(crate) trait AllocationIdRef {}
 
 impl AllocationIdRef for ReceiptAllocationId {}
-impl AllocationIdRef for crate::ids::SalesInvoiceAllocationId {}
+impl AllocationIdRef for erp_core::ids::SalesInvoiceAllocationId {}
 
 /// 校验分配动作与反向引用的一致性。
 ///
@@ -491,7 +491,7 @@ mod tests {
     /// 测试会 panic，且辅助函数不执行任何外部 I/O。
     fn registration_line(account_id: &str, amount: &str) -> CardFundsRegistrationAllocationInput {
         CardFundsRegistrationAllocationInput {
-            target_account_id: crate::ids::ReceivableAccountId::new(account_id),
+            target_account_id: erp_core::ids::ReceivableAccountId::new(account_id),
             amount: Amount::from_str(amount).unwrap(),
         }
     }
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn card_funds_registration_allocations_accept_valid_lines() {
         let allocations = CardFundsRegistrationAllocations::new(
-            crate::ids::ReceivableAccountId::new("ra-1"),
+            erp_core::ids::ReceivableAccountId::new("ra-1"),
             Amount::from_str("100.00").unwrap(),
             vec![
                 registration_line("ra-1", "40.00"),
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn card_funds_registration_allocations_preserve_expected_total_scale() {
         let allocations = CardFundsRegistrationAllocations::new(
-            crate::ids::ReceivableAccountId::new("ra-1"),
+            erp_core::ids::ReceivableAccountId::new("ra-1"),
             Amount::from_str("10").unwrap(),
             vec![registration_line("ra-1", "10.00")],
         )
@@ -541,7 +541,7 @@ mod tests {
     fn card_funds_registration_allocations_reject_wrong_or_noncanonical_account() {
         for account_id in ["ra-2", " ra-1 "] {
             let error = CardFundsRegistrationAllocations::new(
-                crate::ids::ReceivableAccountId::new("ra-1"),
+                erp_core::ids::ReceivableAccountId::new("ra-1"),
                 Amount::from_str("10.00").unwrap(),
                 vec![registration_line(account_id, "10.00")],
             )
@@ -561,7 +561,7 @@ mod tests {
     fn card_funds_registration_allocations_reject_amount_failures() {
         for amount in ["0.00", "-0.01"] {
             let error = CardFundsRegistrationAllocations::new(
-                crate::ids::ReceivableAccountId::new("ra-1"),
+                erp_core::ids::ReceivableAccountId::new("ra-1"),
                 Amount::from_str("10.00").unwrap(),
                 vec![registration_line("ra-1", amount)],
             )
@@ -570,7 +570,7 @@ mod tests {
         }
 
         let error = CardFundsRegistrationAllocations::new(
-            crate::ids::ReceivableAccountId::new("ra-1"),
+            erp_core::ids::ReceivableAccountId::new("ra-1"),
             Amount::from_str("10.00").unwrap(),
             vec![registration_line("ra-1", "9.99")],
         )
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn card_funds_registration_allocations_accept_cent_boundary() {
         let allocations = CardFundsRegistrationAllocations::new(
-            crate::ids::ReceivableAccountId::new("ra-1"),
+            erp_core::ids::ReceivableAccountId::new("ra-1"),
             Amount::from_str("0.01").unwrap(),
             vec![registration_line("ra-1", "0.01")],
         )

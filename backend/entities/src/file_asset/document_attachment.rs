@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
-use crate::validation::normalize_required_text;
+use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
 /// 创建人标识最大长度。
 const CREATED_BY_MAX_LEN: usize = 128;
@@ -86,7 +86,7 @@ impl DocumentAttachment {
     /// 完成 created_by 的校验与规范化（trim、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DocumentAttachmentId`）
+    /// * `id` - 实体主键（`erp_core::ids::DocumentAttachmentId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -114,7 +114,7 @@ impl DocumentAttachment {
 #[cfg(test)]
 mod tests {
     use super::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
-    use crate::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
+    use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 
     fn data() -> DocumentAttachmentData {
         DocumentAttachmentData {

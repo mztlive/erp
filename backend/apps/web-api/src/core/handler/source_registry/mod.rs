@@ -3,17 +3,15 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::source_registry` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    source_registry::{
-        CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
-        ExternalIdentityMapView, PageView, SourceRegistryService, SourceSystemListParams, SourceSystemView,
-        UpdateSourceSystemRequest,
-    },
+use services::source_registry::{
+    CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
+    ExternalIdentityMapView, PageView, SourceRegistryService, SourceSystemListParams, SourceSystemView,
+    UpdateSourceSystemRequest,
 };
 
 use crate::{

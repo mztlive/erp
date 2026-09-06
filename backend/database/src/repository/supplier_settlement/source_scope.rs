@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
-use entities::common::time::BusinessDate;
-use entities::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierRefundAllocation, SupplierRefundFact,
 };
 use entities::supplier_settlement::SettlementPeriod;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use mongodb::bson::{doc, Document};
 
 use super::super::Repository;
@@ -13,8 +13,8 @@ use super::{
     SupplierSettlementRepository, SUPPLIER_FULFILLMENT_ITEMS, SUPPLIER_FULFILLMENT_ORDERS,
     SUPPLIER_REFUND_ALLOCATIONS, SUPPLIER_REFUND_FACTS,
 };
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 供应商结算来源范围的最小事实快照。
 ///

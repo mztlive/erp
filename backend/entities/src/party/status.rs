@@ -2,12 +2,12 @@
 //!
 //! 这些表按「有效期事实追加」维护（W03：追加有效期事实），内容变更不原地
 //! 修改，启停状态是唯一允许原地切换的生命周期字段；状态机对称可逆，
-//! 用 [`crate::common::state::assert_adjacency_closed`] 验证闭包。
+//! 用 [`erp_core::common::state::assert_adjacency_closed`] 验证闭包。
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::Result;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::Result;
 
 /// 从属事实行的启停状态（§6.2：启用/停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -63,7 +63,7 @@ impl EffectiveRecordStatus {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标状态非法时返回 [`crate::errors::Error::InvalidStateTransition`]。
+    /// 目标状态非法时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn transition_to(&mut self, to: Self) -> Result<()> {
         ensure_transition(*self, to)?;
         *self = to;
@@ -108,7 +108,7 @@ pub fn select_current_default<T>(
 #[cfg(test)]
 mod tests {
     use super::EffectiveRecordStatus;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
 
     /// 状态机邻接矩阵对称闭合。
     #[test]

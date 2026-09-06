@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use bpm::model::types::ModelError;
 use database::repository::bpm::DefinitionGraph;
-use database::{AccessControlExt, Executor, MongoCasbinAdapter};
+use database::{AccessControlExt, MongoCasbinAdapter};
 use entities::document_registry::DocumentType;
 use entities::{AccountCore, RoleIdSet};
 use mongodb::Database;
+use persistence_core::Executor;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::{subject, SharedRbacService};
+use application_core::AuditActor;
 
 use super::super::business_adapter::{
     adapter_spec_of, assignment_scope_covers_organization, ensure_separation_of_duties,

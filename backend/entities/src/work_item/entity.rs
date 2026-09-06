@@ -19,12 +19,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
 #[cfg(test)]
-use crate::ids::WorkItemId;
+use crate::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+use erp_core::common::time::Instant;
 #[cfg(test)]
-use crate::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+use erp_core::ids::WorkItemId;
+#[cfg(test)]
+use erp_core::AccountKind;
+use erp_core::{Error, Result};
 
 use super::FulfillmentResponsibilityKey;
 
@@ -280,8 +282,8 @@ fn account(status: AccountStatus) -> AccountCore {
 #[cfg(test)]
 mod tests {
     use super::{direct_data, AssignmentSource, WorkItem, WorkItemType};
-    use crate::common::time::Instant;
-    use crate::ids::WorkItemId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     #[test]
     fn codes_and_bson_shape_are_stable() {

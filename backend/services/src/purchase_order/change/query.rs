@@ -1,5 +1,6 @@
-use database::{NoTransaction, PurchaseOrderExt};
+use database::PurchaseOrderExt;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::super::dto::{PageView, PurchaseChangeOrderListParams, PurchaseChangeOrderView};

@@ -1,9 +1,9 @@
-use crate::common::time::BusinessDate;
-use crate::ids::SupplierCapabilityId;
 use crate::supplier::{
     qualification_identity_key, CapabilityCode, CapabilityStatus, QualificationType, SupplierCapability,
     SupplierQualification,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::SupplierCapabilityId;
 
 /// 能力变更中需切换状态的既有能力。
 ///
@@ -36,7 +36,7 @@ pub struct PlannedQualificationInput {
     /// 失效日期。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件 ID。
-    pub attachment_id: Option<crate::ids::FileAssetId>,
+    pub attachment_id: Option<erp_core::ids::FileAssetId>,
     /// 适用能力代码集合。
     pub capability_codes: Vec<CapabilityCode>,
 }
@@ -86,7 +86,7 @@ impl SupplierProfileChangePlan {
         capability_ids: &std::collections::HashMap<String, SupplierCapabilityId>,
         requested_capability_codes: &[CapabilityCode],
         requested_qualifications: &[PlannedQualificationInput],
-    ) -> crate::Result<Self> {
+    ) -> erp_core::Result<Self> {
         use std::collections::{HashMap, HashSet};
         let requested_set: HashSet<String> = requested_capability_codes
             .iter()
@@ -141,9 +141,9 @@ impl SupplierProfileChangePlan {
                         capability_ids
                             .get(code.as_str())
                             .map(ToString::to_string)
-                            .ok_or_else(|| crate::Error::from("资质适用能力不存在"))
+                            .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))
                     })
-                    .collect::<crate::Result<_>>()?;
+                    .collect::<erp_core::Result<_>>()?;
                 let current_links = linked_capabilities
                     .get(&qual.base.id)
                     .cloned()

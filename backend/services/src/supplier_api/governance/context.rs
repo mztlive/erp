@@ -1,16 +1,16 @@
 use database::SupplierApiExt;
-use entities::ids::SupplierApiConnectionId;
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, SupplierApiCapability, SupplierApiConnection,
     SupplierCommandShapeRejection, SupplierConnectionAction, SupplierGovernanceBlocker,
     SupplierHealthCheckRun,
 };
 use entities::Permission;
+use erp_core::ids::SupplierApiConnectionId;
 use sha2::{Digest, Sha256};
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::subject;
+use application_core::AuditActor;
 
 use super::super::dto::{RelatedImpactView, SafeReferenceView, SupplierActionBlockerView};
 use super::super::SupplierApiService;
@@ -28,7 +28,7 @@ impl SupplierApiService {
     pub(super) async fn governance_context(
         &self,
         connection: &SupplierApiConnection,
-        executor: &mut dyn database::Executor,
+        executor: &mut dyn persistence_core::Executor,
     ) -> Result<GovernanceContext> {
         let data = self
             .db
@@ -79,7 +79,7 @@ impl SupplierApiService {
     pub(super) async fn load_connection(
         &self,
         id: &str,
-        executor: &mut dyn database::Executor,
+        executor: &mut dyn persistence_core::Executor,
     ) -> Result<SupplierApiConnection> {
         self.db
             .supplier_api()

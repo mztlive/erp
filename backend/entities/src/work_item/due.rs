@@ -3,8 +3,8 @@
 use chrono::{Datelike, FixedOffset, TimeZone};
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
+use erp_core::common::time::Instant;
+use erp_core::{Error, Result};
 
 /// 工作项到期筛选。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -70,7 +70,7 @@ impl WorkItemDueFilter {
 #[cfg(test)]
 mod tests {
     use super::WorkItemDueFilter;
-    use crate::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     #[test]
     fn shanghai_windows_keep_now_exclusive_and_today_overlapping() {

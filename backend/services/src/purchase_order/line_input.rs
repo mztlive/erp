@@ -7,17 +7,17 @@
 
 use std::str::FromStr;
 
-use entities::common::time::BusinessDate;
-use entities::ids::{
-    ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId,
-    PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
-    SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
-};
-use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::purchase_order::{
     compute_header_totals, LineAmountViolation, PurchaseChangeSubmissionLine, PurchaseLineInput,
     PurchaseLineType, PurchaseOrderSubmissionLine,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId,
+    PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+    SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
+};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use id_generator::next_id;
 
 use super::dto::SavePurchaseOrderLine;
@@ -263,9 +263,9 @@ fn parse_business_date(value: &str) -> Result<BusinessDate> {
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::BusinessDate;
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::purchase_order::PurchaseLineType;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     use super::{compute_request_totals, to_line_inputs, SavePurchaseOrderLine};
     use crate::errors::Error;

@@ -13,7 +13,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::ReturnsExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `sales_return_case` 集合名。
 pub(crate) const SALES_RETURN_CASES: &str = <mongodb::Database as ReturnsExt>::SALES_RETURN_CASES;

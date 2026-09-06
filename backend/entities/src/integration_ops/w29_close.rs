@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 use super::ResolutionAction;
 

@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 客户资料根命令操作类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

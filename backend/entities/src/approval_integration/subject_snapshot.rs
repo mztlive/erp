@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
 use crate::document_registry::DocumentType;
-use crate::errors::{Error, Result};
-use crate::ids::{ApprovalSubjectSnapshotId, CustomerAccountId, SupplierAccountId, WarehouseId};
-use crate::money::{Amount, Quantity};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalSubjectSnapshotId, CustomerAccountId, SupplierAccountId, WarehouseId};
+use erp_core::money::{Amount, Quantity};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use bpm::ApprovalProcessInstanceId;
 
@@ -243,11 +243,11 @@ fn requires_quantity(document_type: DocumentType) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-    use crate::common::time::Instant;
     use crate::document_registry::DocumentType;
-    use crate::ids::{ApprovalSubjectSnapshotId, WarehouseId};
-    use crate::money::Quantity;
     use bpm::ApprovalProcessInstanceId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ApprovalSubjectSnapshotId, WarehouseId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     fn stock_payload() -> ApprovalSubjectSnapshotPayload {

@@ -2,17 +2,17 @@
 
 use std::future::Future;
 
-use entities::ids::SkuId;
 use entities::procurement_responsibility::{
     ProcurementCatalogBundle, ProcurementResponsibilityRule, ProcurementRuleListDisplayFacts,
     ProcurementRuleListPage,
 };
+use erp_core::ids::SkuId;
 use mongodb::Database;
 
 use super::super::procurement_responsibility::ProcurementResponsibilityRuleFilter;
-use crate::executor::Executor;
 use crate::Repository;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 采购责任规则仓储访问入口。
 pub trait ProcurementResponsibilityExt {

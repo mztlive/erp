@@ -5,16 +5,16 @@ use serde::{Deserialize, Serialize};
 use entity_core::BaseModel;
 use entity_macros::Entity;
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::{Error, Result};
-use crate::ids::{
+use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
+use crate::supplier::SupplierPaymentTerm;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::ids::{
     PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId,
     SupplierAccountId, WarehouseId,
 };
-use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
-use crate::supplier::SupplierPaymentTerm;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 采购单号最大长度。
 const PURCHASE_NO_MAX_LEN: usize = 64;
@@ -305,7 +305,7 @@ impl PurchaseOrder {
     /// `approval_subject_version` 为 0。不得预分配正式号。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -856,12 +856,12 @@ mod tests {
         ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
         PurchaseReviewStatus,
     };
-    use crate::common::state::ensure_transition;
-    use crate::ids::{
+    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
+    use erp_core::common::state::ensure_transition;
+    use erp_core::ids::{
         PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId,
         SalesOrderRevisionId, SupplierAccountId,
     };
-    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
     fn order_data() -> PurchaseOrderData {
         PurchaseOrderData {
@@ -874,7 +874,7 @@ mod tests {
             payment_term_code: " NET-30 ".to_string(),
             fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
             owner_user_id: " buyer-1 ".to_string(),
-            target_warehouse_id: Some(crate::ids::WarehouseId::new("wh-1")),
+            target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
         }
     }
 

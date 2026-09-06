@@ -2,8 +2,8 @@ use entities::supplier_fulfillment::SupplierOrderActionType;
 
 use super::dto::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use super::SupplierFulfillmentService;
-use crate::audit::AuditActor;
 use crate::errors::Result;
+use application_core::AuditActor;
 
 impl SupplierFulfillmentService {
     /// 提交供应商退款（幂等键：「订单号 + REFUND」，§6.19）。

@@ -13,7 +13,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SupplierExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `supplier_account` 集合名。
 pub(crate) const SUPPLIER_ACCOUNTS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS;

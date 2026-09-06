@@ -1,14 +1,14 @@
 use entities::catalog::{Sku, SkuRevision};
 use entities::document_registry::BusinessDocument;
 use entities::fulfillment::PurchaseReceipt;
-use entities::ids::SkuId;
 use entities::warehouse::{Warehouse, WarehouseRevision};
+use erp_core::ids::SkuId;
 use mongodb::bson::doc;
 
 use super::super::extensions::{CatalogExt, DocumentRegistryExt, FulfillmentExt, WarehouseExt};
 use super::InventoryRepository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> InventoryRepository<'a> {
     /// 按主键读取已注册业务单据（库存水合事实包入口，不拥有该集合）。

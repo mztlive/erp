@@ -2,12 +2,12 @@
 //!
 //! 变更路径只负责 D14→D13 字段组转换，公共行、快照和卡券单行约束复用销售单域工厂。
 
-use crate::errors::{Error, Result};
 use crate::sales_order::formal_revision::{FormalRevisionHeader, PreparedRevisionLine};
 use crate::sales_order::SalesContentHash;
 use crate::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, LineType as SalesLineType, SalesOrderRevisionAggregate,
 };
+use erp_core::{Error, Result};
 
 use super::sales_change_submission::{SalesChangeSubmission, SalesChangeSubmissionLine};
 use super::types::{BusinessType, LineType};
@@ -147,18 +147,18 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::common::time::Instant;
-    use crate::ids::{
-        ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
-        SalesChangeSubmissionLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
-        SalesOrderRevisionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-    };
-    use crate::money::{Amount, Quantity, Rate, UnitPrice};
     use crate::sales_order::{FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource};
     use crate::sales_review::{
         CardForm, GoodsLineFields, SalesChangeSubmissionData, SalesChangeSubmissionLineData,
         VoucherLineDraft, WelfareScenario,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
+        SalesChangeSubmissionLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+        SalesOrderRevisionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

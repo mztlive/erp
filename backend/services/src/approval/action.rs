@@ -2,10 +2,10 @@
 
 use std::{future::Future, pin::Pin};
 
-use database::Executor;
+use persistence_core::Executor;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::policy::ApprovalDomainAction;
 
@@ -443,8 +443,8 @@ fn parse_subject_version(subject_version: impl Into<String>) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use database::NoTransaction;
-    use entities::AccountKind;
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
 
     use super::*;
 

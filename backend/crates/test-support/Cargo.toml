@@ -22,3 +22,4 @@ jwt = { workspace = true }
 jwt-hmac = { workspace = true }
 jwt-sha2 = { workspace = true }
 entities = { workspace = true }
+erp-core = { workspace = true }

@@ -4,15 +4,14 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use database::{AccessControlExt, Transactional};
+use database::AccessControlExt;
 use entities::AuditLog;
 use mongodb::ClientSession;
+use persistence_core::Transactional;
 
 use super::{policy::commit_outcome_unknown, RbacService};
-use crate::{
-    errors::{Error, Result},
-    owned_task::await_owned,
-};
+use crate::errors::{Error, Result};
+use application_core::owned_task::await_owned;
 
 impl RbacService {
     /// 在取消安全的所有权任务内运行系统初始化 policy 事务。
@@ -91,7 +90,7 @@ impl RbacService {
                             }
                             None => policy_store.bump_policy_revision(session).await?,
                         }
-                        Ok(value)
+                        Ok::<_, Error>(value)
                     })
                 })
                 .await;
@@ -121,7 +120,7 @@ impl RbacService {
             Box::pin(async move {
                 let value = transaction(session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok(value)
+                Ok::<_, Error>(value)
             })
         })
         .await

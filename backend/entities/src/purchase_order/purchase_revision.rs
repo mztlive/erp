@@ -8,19 +8,19 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{
-    ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-    SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SkuRevisionId, SupplierCommercialProfileRevisionId,
-};
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
 use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
 use crate::purchase_order::purchase_submission::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::purchase_order::types::PurchaseLineType;
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
+    ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
+    SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SkuRevisionId, SupplierCommercialProfileRevisionId,
+};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::{Error, Result};
 
 /// 采购版本创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,7 +77,7 @@ impl PurchaseOrderRevision {
     /// 版本内容不可修改；追加变更走更高版本号的新修订。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseOrderRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -370,7 +370,7 @@ impl PurchaseOrderRevisionLine {
     /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseOrderRevisionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderRevisionLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -568,19 +568,19 @@ mod tests {
         PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
         PurchaseOrderRevisionLineData,
     };
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{
-        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
-        SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-    };
-    use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use crate::purchase_order::purchase_submission::{
         PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
         PurchaseOrderSubmissionLineData,
     };
     use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
+        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+        SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
@@ -617,7 +617,7 @@ mod tests {
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
             sku_id: Some(SkuId::new("sku-1")),
-            sku_revision_id: Some(crate::ids::SkuRevisionId::new("skur-1")),
+            sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
             product_name_snapshot: Some("慰问礼包".to_string()),
             specification_snapshot: Some("500g×2".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),

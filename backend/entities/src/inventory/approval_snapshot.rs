@@ -3,11 +3,11 @@
 //! 快照责任组织、对手方、数量合计、行数与空行拒绝的唯一规则源。
 
 use crate::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::WarehouseId;
 use crate::inventory::{StockAdjustment, StockAdjustmentLine};
-use crate::money::Quantity;
+use erp_core::common::time::Instant;
+use erp_core::ids::WarehouseId;
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 库存调整审批快照构造入口。
 pub struct StockAdjustmentApprovalSnapshot;
@@ -85,8 +85,8 @@ fn sum_line_quantity(lines: &[StockAdjustmentLine]) -> Result<Quantity> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
     use crate::inventory::{MovementDirection, StockAdjustmentData, StockAdjustmentLineData};
+    use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
     use std::str::FromStr;
 
     fn adjustment() -> StockAdjustment {

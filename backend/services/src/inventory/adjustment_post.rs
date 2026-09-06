@@ -1,22 +1,24 @@
 use std::str::FromStr;
 
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, WorkItemExt};
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
+use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
 use entities::document_registry::DocumentType;
-use entities::ids::{StockAdjustmentId, StockMovementId, StockReservationEntryId};
 use entities::inventory::{
     MovementDirection, ReservationEntryType, StockAdjustment, StockAdjustmentLine, StockMovement,
     StockMovementData, StockReservationEntry, StockReservationEntryData,
 };
-use entities::money::Quantity;
 use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{StockAdjustmentId, StockMovementId, StockReservationEntryId};
+use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::approval::ApprovalActionContext;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use super::approval_query::load_approval_binding;
@@ -337,8 +339,8 @@ async fn post_adjustment_line(
 async fn release_applicable_reservations(
     db: &Database,
     session: &mut mongodb::ClientSession,
-    warehouse_id: &entities::ids::WarehouseId,
-    sku_id: &entities::ids::SkuId,
+    warehouse_id: &erp_core::ids::WarehouseId,
+    sku_id: &erp_core::ids::SkuId,
     balance_id: &str,
     line: &StockAdjustmentLine,
 ) -> Result<()> {

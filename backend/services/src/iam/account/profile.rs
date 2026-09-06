@@ -1,6 +1,8 @@
-use database::{AccessControlExt, NoTransaction};
-use entities::{AccountCore, AccountKind, Permission};
+use database::AccessControlExt;
+use entities::{AccountCore, Permission};
+use erp_core::AccountKind;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use crate::account_support::account_of_kind;
@@ -172,9 +174,8 @@ impl AccountProfileService {
 #[cfg(test)]
 mod tests {
     use super::AccountProfileService;
-    use entities::{
-        AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Permission, Secret,
-    };
+    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Permission, Secret};
+    use erp_core::AccountKind;
 
     #[test]
     fn build_profile_should_keep_admin_identity_and_phone() {

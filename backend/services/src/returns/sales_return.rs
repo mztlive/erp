@@ -8,17 +8,19 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{AccessControlExt, Executor, NoTransaction, ReturnsExt, Transactional};
+use application_core::AuditActor;
+use database::{AccessControlExt, ReturnsExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::ids::{SalesReturnCaseId, SalesReturnLineId};
 use entities::returns::{SalesReturnCase, SalesReturnCaseData, SalesReturnLine, SalesReturnLineData};
+use erp_core::ids::{SalesReturnCaseId, SalesReturnLineId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 /// 销售退货处理单列表筛选条件类型（经 `ReturnsExt` 关联类型跨 crate 可达）。
@@ -417,9 +419,9 @@ mod sales_return_case_no_approval_tests {
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use entities::common::time::Instant;
-    use entities::ids::{SalesOrderId, SalesReturnCaseId};
     use entities::returns::{CaseType, ReturnRoute};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SalesOrderId, SalesReturnCaseId};
 
     fn draft_case() -> SalesReturnCase {
         SalesReturnCase::new(

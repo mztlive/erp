@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{page_or_default, page_size_or_default};
+use application_core::{page_or_default, page_size_or_default};
 
 /// 销售变更单列表允许的排序字段白名单。
 pub(crate) const SALES_CHANGE_ORDER_SORT_FIELDS: &[&str] = &["created_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,13 +44,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // sales_change_order（销售变更单，W05 变更轨）
@@ -60,7 +60,7 @@ use crate::query::non_blank;
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SalesChangeOrderListParams {
     /// 原销售单筛选。
-    pub sales_order_id: Option<entities::ids::SalesOrderId>,
+    pub sales_order_id: Option<erp_core::ids::SalesOrderId>,
     /// 变更状态筛选。
     pub status: Option<entities::sales_review::SalesChangeOrderStatus>,
     /// 页码（1 起）。
@@ -117,7 +117,7 @@ impl SalesChangeOrderListParams {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSalesChangeOrderRequest {
     /// 原销售单。
-    pub sales_order_id: entities::ids::SalesOrderId,
+    pub sales_order_id: erp_core::ids::SalesOrderId,
     /// 变更类型。
     pub change_type: SalesChangeType,
     /// 客户端已见的当前正式版本号；已变更时拒绝以防止从过期页面发起。

@@ -47,13 +47,11 @@ use query::customer_status_blockers;
 
 #[cfg(test)]
 mod tests {
-    use entities::{
-        common::time::BusinessDate,
-        customer::{
-            CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileOperation,
-            CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
-        },
+    use entities::customer::{
+        CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileOperation,
+        CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
     };
+    use erp_core::common::time::BusinessDate;
 
     use crate::errors::Error;
 

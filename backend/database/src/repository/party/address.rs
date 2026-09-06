@@ -1,14 +1,14 @@
-use entities::ids::PartyId;
 use entities::party::{AddressType, EffectiveRecordStatus, PartyAddress};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::PartyId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{active_fact_filter, sort_doc};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 地址列表投影行。
 ///
@@ -162,7 +162,7 @@ impl<'a> Repository<'a, PartyAddress> {
     pub async fn list_active_on(
         &self,
         party_id: &PartyId,
-        as_of: entities::common::time::BusinessDate,
+        as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyAddress>> {
         self.find_many(active_fact_filter(party_id, as_of), executor)
@@ -184,7 +184,7 @@ impl<'a> Repository<'a, PartyAddress> {
     pub async fn list_current_on(
         &self,
         party_id: &PartyId,
-        as_of: entities::common::time::BusinessDate,
+        as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyAddress>> {
         self.find_many_sorted(

@@ -12,7 +12,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SupplierSettlementExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `supplier_settlement_statement` 集合名。
 pub(crate) const SUPPLIER_SETTLEMENT_STATEMENTS: &str =

@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
-use crate::money::Quantity;
 use crate::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
-use crate::validation::normalize_optional_text;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_optional_text;
+use erp_core::{Error, Result};
 
 const SOURCE_REVISION_TOKEN_MAX_LEN: usize = 256;
 
@@ -192,10 +192,10 @@ mod tests {
     use std::str::FromStr;
 
     use super::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
-    use crate::common::time::Instant;
-    use crate::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
-    use crate::money::Quantity;
     use crate::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
+    use erp_core::money::Quantity;
 
     fn data(at: i64) -> SupplierOfferingAvailabilityData {
         SupplierOfferingAvailabilityData {

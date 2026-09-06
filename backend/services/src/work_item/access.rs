@@ -2,18 +2,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, DocumentRegistryExt, Executor, MongoCasbinAdapter, NoTransaction};
+use database::{AccessControlExt, DocumentRegistryExt, MongoCasbinAdapter};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage, ResponsibilityScopeSet},
     work_item::{AvailableWorkItemAccount, WorkItem, WorkItemStatus, WorkItemType},
     Permission, PermissionSet,
 };
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
-use crate::{
-    audit::AuditActor,
-    errors::{Error, ErrorCode, Result},
-};
+use crate::errors::{Error, ErrorCode, Result};
+use application_core::AuditActor;
 
 use super::close::is_w29_fields_closable;
 use super::dto;
@@ -66,7 +65,7 @@ impl WorkItemService {
 
     async fn actor_access_for(
         &self,
-        account_kind: entities::AccountKind,
+        account_kind: erp_core::AccountKind,
         actor_id: &str,
     ) -> Result<ActorAccess> {
         let role_ids = self.rbac.role_ids(account_kind, actor_id).await?;
@@ -216,7 +215,7 @@ impl WorkItemService {
     /// 事务内按 MongoDB 权威角色、范围、对象和审批事实构造访问快照。
     pub(super) async fn assignment_access_for_executor(
         &self,
-        account_kind: entities::AccountKind,
+        account_kind: erp_core::AccountKind,
         actor_id: &str,
         read_permission: &Permission,
         read_role_ids: &[String],
@@ -398,7 +397,7 @@ pub(super) async fn ensure_policy_revision(
 /// 从事务内 Casbin `g` 授权事实与启用角色形成角色集合。
 pub(super) async fn active_role_ids(
     db: &Database,
-    account_kind: entities::AccountKind,
+    account_kind: erp_core::AccountKind,
     account_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {

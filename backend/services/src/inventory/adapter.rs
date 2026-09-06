@@ -270,13 +270,13 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
-    use entities::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
     use entities::inventory::{
         AdjustmentReasonType, MovementDirection, StockAdjustmentData, StockAdjustmentLine,
         StockAdjustmentLineData,
     };
-    use entities::money::Quantity;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     fn draft_adjustment() -> StockAdjustment {

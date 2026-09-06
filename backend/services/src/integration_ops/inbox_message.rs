@@ -3,13 +3,14 @@
 //! 消息层/业务事实层幂等由唯一索引保证，服务层不做「先查后插」重复性判断；
 //! 所有业务写入与审计日志在同一 MongoDB 事务原子提交（模板见 `super::transaction`）。
 
-use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, SourceRegistryExt, WorkItemExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, IntegrationOpsExt, SourceRegistryExt, WorkItemExt};
 use entities::integration_ops::{
     error_owner_role, InboxMessage, InboxMessageId, InboxMessageReceivedData, InboxMessageStatus,
     InboxMessageUpdate, IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
 };
+use erp_core::common::time::Instant;
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::SortDir;
@@ -20,8 +21,9 @@ use super::{
     IntegrationOpsService, PageView, PreparedWriteBackOutcome, RegisterInboxMessageRequest,
     WriteBackInboxResultRequest,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl IntegrationOpsService {
     /// 登记入站消息（消息层与业务事实层幂等由唯一索引保证）。

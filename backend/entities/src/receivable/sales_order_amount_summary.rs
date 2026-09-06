@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::money::Amount;
+use erp_core::money::Amount;
 
 use super::receivable_account::ReceivableAccount;
 
@@ -95,12 +95,14 @@ mod tests {
     use std::str::FromStr;
 
     use super::SalesOrderReceivableAmountSummary;
-    use crate::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
-    use crate::money::Amount;
     use crate::receivable::receivable_account::{
         AccountReviewStatus, ReceivableAccount, ReceivableAccountData,
     };
     use crate::sales_order::BusinessType;
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
+    };
+    use erp_core::money::Amount;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

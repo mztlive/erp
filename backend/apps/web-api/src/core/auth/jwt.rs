@@ -6,7 +6,7 @@ use jwt_hmac::{digest::InvalidLength, Hmac, Mac};
 use jwt_sha2::Sha256;
 use serde_json::Value;
 
-use entities::AccountKind;
+use erp_core::AccountKind;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

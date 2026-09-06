@@ -25,8 +25,8 @@ impl AdminRuntime {
     /// 配置无效、数据库不可用或不支持事务时返回错误。
     pub async fn connect(config_path: &str) -> Result<Self> {
         let config = Config::from_file(config_path).await?;
-        let (_, db) = database::connect(&config.database.uri, &config.database.db_name).await?;
-        database::ensure_transaction_support(&db).await?;
+        let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;
+        persistence_core::ensure_transaction_support(&db).await?;
         database::ensure_indexes(&db).await?;
         let rbac = shared_rbac_service(db.clone());
         Ok(Self {

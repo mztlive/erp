@@ -3,14 +3,15 @@
 use std::collections::{HashMap, HashSet};
 
 use database::{
-    AccessControlExt, CustomerExt, Executor, PartyExt, PayableExt, PurchaseOrderExt, ReceivableExt,
-    SalesOrderExt, SupplierExt,
+    AccessControlExt, CustomerExt, PartyExt, PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
+    SupplierExt,
 };
-use entities::common::time::BusinessDate;
-use entities::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
 use entities::party::Party;
 use entities::payable::{PayableAccount, SupplierPayment};
 use entities::receivable::{CustomerReceipt, ReceivableAccount};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
+use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, non_empty, BriefLine, BRIEF_LINE_LIMIT};
 use super::super::presentation::format_yuan;
@@ -96,7 +97,7 @@ impl WorkItemService {
         &self,
         accounts: &[PayableAccount],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, entities::common::time::BusinessDate>> {
+    ) -> Result<HashMap<String, erp_core::common::time::BusinessDate>> {
         let ids = accounts
             .iter()
             .map(|account| PayableAccountId::new(account.base.id.clone()))

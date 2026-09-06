@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 合同首次归档：跨集合（contract + contract_revision + 审计）→
-//!   `database::Transactional::with_transaction`（仓储方法
+//!   `persistence_core::Transactional::with_transaction`（仓储方法
 //!   `create_contract_with_revision` 声明「必须收到事务执行器」）；
 //! - 追加版本 / 终止：跨集合（版本 + 主表 CAS + 审计）→ 同一事务模板；
 //! - 列表 / 详情：单集合无跨步骤原子性要求 → `&mut NoTransaction`。
@@ -11,19 +11,21 @@
 //! 审计写入复用 `audit::AuditActor::resource_log` + `AccessControlExt::audit_logs`，
 //! 与既有 `source_registry` 模板一致。
 
-use database::{AccessControlExt, ContractExt, CustomerExt, FileAssetExt, NoTransaction, Transactional};
+use database::{AccessControlExt, ContractExt, CustomerExt, FileAssetExt};
 use entities::contract::{
     ArchiveSource, Contract, ContractData, ContractId, ContractRevision, ContractRevisionData,
     ContractRevisionId,
 };
 use entities::file_asset::FileAsset;
-use entities::ids::FileAssetId;
+use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 mod query;
@@ -439,7 +441,7 @@ mod version_lock_tests {
     use super::conflict_if_stale_version;
     use crate::errors::Error;
     use entities::contract::{Contract, ContractData, ContractId};
-    use entities::ids::{CustomerAccountId, PartyId};
+    use erp_core::ids::{CustomerAccountId, PartyId};
 
     /// 归档与终止必须使用实体 matches_version，禁止字段级直接比较。
     #[test]

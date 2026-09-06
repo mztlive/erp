@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::DocumentRegistryExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `business_document` 集合名。
 pub(crate) const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;

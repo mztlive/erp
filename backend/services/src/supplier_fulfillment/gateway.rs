@@ -234,8 +234,6 @@ fn simulate_investigation(
 #[cfg(test)]
 mod tests {
     use super::{simulate_investigation, simulate_outcome, DispatchOutcome, InvestigationOutcome};
-    use entities::common::time::Instant;
-    use entities::ids::{SupplierAccountId, SupplierApiConnectionId};
     use entities::supplier_api::{
         ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
@@ -244,6 +242,8 @@ mod tests {
         SupplierFulfillmentOrderData, SupplierFulfillmentOrderId, SupplierOrderAction,
         SupplierOrderActionData, SupplierOrderActionId, SupplierOrderActionStatus, SupplierOrderActionType,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use std::str::FromStr;
 
     fn sample_connection(endpoint_reference: &str) -> SupplierApiConnection {
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn amounts_parse_from_string_shape() {
-        assert!(entities::money::Quantity::from_str("1.000000").is_ok());
-        assert!(entities::money::Amount::from_str("9.99").is_ok());
+        assert!(erp_core::money::Quantity::from_str("1.000000").is_ok());
+        assert!(erp_core::money::Amount::from_str("9.99").is_ok());
     }
 }

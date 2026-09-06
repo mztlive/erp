@@ -13,7 +13,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::ReceivableExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `receivable_account` 集合名。
 pub(crate) const RECEIVABLE_ACCOUNTS: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS;

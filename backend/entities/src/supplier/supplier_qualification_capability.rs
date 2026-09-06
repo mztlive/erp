@@ -8,9 +8,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
+use erp_core::Result;
 
-pub use crate::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
+pub use erp_core::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
 
 /// 资质适用能力创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,7 +40,7 @@ impl SupplierQualificationCapability {
     /// 重写关联集合），不做原地修改。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierQualificationCapabilityId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationCapabilityId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -77,15 +77,15 @@ impl SupplierQualificationCapability {
         capability_codes: &[crate::supplier::CapabilityCode],
         capability_ids: &std::collections::HashMap<String, SupplierCapabilityId>,
         link_ids: Vec<SupplierQualificationCapabilityId>,
-    ) -> crate::Result<Vec<Self>> {
+    ) -> erp_core::Result<Vec<Self>> {
         if capability_codes.len() != link_ids.len() {
-            return Err(crate::Error::from("资质适用能力与关联 ID 数量不一致"));
+            return Err(erp_core::Error::from("资质适用能力与关联 ID 数量不一致"));
         }
         let mut links = Vec::with_capacity(capability_codes.len());
         for (code, link_id) in capability_codes.iter().zip(link_ids) {
             let capability_id = capability_ids
                 .get(code.as_str())
-                .ok_or_else(|| crate::Error::from("资质适用能力不存在"))?;
+                .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))?;
             links.push(Self::new(
                 link_id,
                 SupplierQualificationCapabilityData {
@@ -101,7 +101,7 @@ impl SupplierQualificationCapability {
 #[cfg(test)]
 mod tests {
     use super::{SupplierQualificationCapability, SupplierQualificationCapabilityData};
-    use crate::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
+    use erp_core::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
 
     /// happy path：成对关联落库。
     #[test]

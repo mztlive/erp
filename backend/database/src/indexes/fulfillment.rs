@@ -20,7 +20,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::FulfillmentExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `purchase_receipt` 集合名。
 pub(crate) const PURCHASE_RECEIPTS: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS;

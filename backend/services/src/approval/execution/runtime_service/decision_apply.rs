@@ -9,11 +9,12 @@ use bpm::model::types::{
 };
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, IdempotencyKey, ParticipantId, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 
 use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::hidden_forbidden;
@@ -42,9 +43,10 @@ use super::{
 use crate::approval::business_adapter::adapter_spec_of;
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{ApprovalActionContext, ApprovalDomainActionPort, DecisionActionParams};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 已规范化的审批决定命令；协议字段保持不变，摘要在进入事务前固定。
 #[derive(Debug, Clone)]

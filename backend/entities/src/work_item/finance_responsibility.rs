@@ -8,8 +8,8 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::EnableStatus;
-use crate::errors::{Error, Result};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::entity::WorkItemType;
 

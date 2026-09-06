@@ -3,7 +3,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：`update`/
 //! `soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本目录按集合拆分投影行、筛选与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本目录按集合拆分投影行、筛选与
 //! 域特有查询：
 //! - [`order`]：采购主表列表投影与按单号/来源单查询；
 //! - [`submission`]：不可变提交列表（财务审核队列）与明细批量取回；
@@ -40,9 +40,10 @@ use entities::purchase_order::{
 use mongodb::Database;
 
 use super::extensions::PurchaseOrderExt;
-use crate::executor::Executor;
-use crate::mongo_ops;
-use crate::{Repository, Result};
+use crate::Repository;
+use persistence_core::mongo_ops;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// `purchase_order` 集合名（单一来源：`PurchaseOrderExt` 关联常量）。
 const PURCHASE_ORDERS: &str = <mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS;
@@ -92,7 +93,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     /// 头、行冻结），保证「提交 + 明细 + 主表指针」原子可见。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 提交与明细各自自动提交，主表 CAS 失败会留下只有提交没有指针的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `order` - 已执行 `PurchaseOrder::submit_for_review` 的采购主表（带期望版本）
@@ -101,8 +102,8 @@ impl<'a> PurchaseOrderRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当提交序号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、主表版本
-    /// 冲突（[`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、主表版本
+    /// 冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     pub async fn create_purchase_submission(
         &self,
         order: &mut PurchaseOrder,
@@ -145,7 +146,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当版本号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB
+    /// 当版本号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB
     /// 写入失败时返回错误。
     pub async fn create_effective_revision(
         &self,
@@ -187,8 +188,8 @@ impl<'a> PurchaseOrderRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当提交序号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、变更单
-    /// 版本冲突（[`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时
+    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、变更单
+    /// 版本冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时
     /// 返回错误。
     pub async fn create_change_submission(
         &self,

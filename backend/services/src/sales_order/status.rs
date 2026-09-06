@@ -165,12 +165,12 @@ pub(super) fn compute_can_start_sales_change(
 mod tests {
     use std::str::FromStr;
 
-    use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
-    use entities::money::Amount;
     use entities::sales_order::{
         BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress,
         InvoiceProgress, OriginSystem, ReviewStatus, SalesOrder, SalesOrderData,
     };
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use erp_core::money::Amount;
 
     use super::{
         close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,

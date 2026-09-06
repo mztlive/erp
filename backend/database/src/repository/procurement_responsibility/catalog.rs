@@ -1,10 +1,11 @@
 use entities::catalog::ProductCategory;
-use entities::ids::{ProductCategoryId, ProductRevisionId, SkuId};
 use entities::procurement_responsibility::ProcurementCatalogBundle;
+use erp_core::ids::{ProductCategoryId, ProductRevisionId, SkuId};
 
 use super::ids::unique_ids;
-use crate::executor::Executor;
-use crate::{CatalogExt, Result};
+use crate::CatalogExt;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 批量加载采购责任目录所需的最小持久化事实.
 ///

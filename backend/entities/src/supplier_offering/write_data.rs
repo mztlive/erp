@@ -5,9 +5,9 @@
 
 use std::str::FromStr;
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::common::time::BusinessDate;
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::{Error, Result};
 
 /// 解析进项税率字符串。
 ///

@@ -13,10 +13,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::ContractExt;
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `contract` 集合名（单一来源：`ContractExt` 关联常量）。
 const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;
@@ -272,7 +272,7 @@ impl<'a> ContractRepository<'a> {
     /// 保证「合同身份 + 首个不可变版本 + PDF 关联」原子可见（数据模型 §6.4）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时各
     /// 步自动提交，中途失败会留下没有版本的合同半成品；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `contract` - 待写入的合同（成功后内存中绑定首个版本指针并递增版本）
@@ -280,7 +280,7 @@ impl<'a> ContractRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、乐观锁冲突或
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
     pub async fn create_contract_with_revision(
         &self,
@@ -427,7 +427,7 @@ mod tests {
         contract_revision_no_from_rows, latest_contract_revision_filter, latest_contract_revision_options,
         sort_doc, ContractFilter, ContractRevisionNoRow, QueryFilter,
     };
-    use entities::ids::ContractId;
+    use erp_core::ids::ContractId;
     use mongodb::bson::doc;
 
     #[test]

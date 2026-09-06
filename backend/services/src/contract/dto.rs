@@ -7,20 +7,20 @@
 //! 契约来源：erp-client `features/contracts`（W04）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 的 `ContractCenterView` 差异见批次报告「契约变更」。
 
-use entities::common::time::BusinessDate;
 use entities::contract::{ArchiveSource, ContractStatus};
-use entities::ids::{CustomerAccountId, FileAssetId, PartyId};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 合同列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const CONTRACT_SORT_FIELDS: &[&str] = &["created_at", "contract_no"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,14 +47,14 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
 /// 不生效，空 contract_no 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 合同首次归档请求（W04 上传 PDF：合同身份 + 首个不可变版本 + PDF 关联原子形成）。
 ///
@@ -422,7 +422,7 @@ impl From<entities::contract::ContractRevision> for ContractRevisionView {
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, SortDir};
-    use entities::ids::CustomerAccountId;
+    use erp_core::ids::CustomerAccountId;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

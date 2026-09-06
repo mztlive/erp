@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-use entities::ids::PartyId;
 use entities::party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile};
+use erp_core::ids::PartyId;
 use mongodb::bson::doc;
 use mongodb::Database;
 
 use super::super::extensions::PartyExt;
 use super::super::Repository;
 use super::{PartyRepository, PARTIES, PARTY_REVISIONS};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> PartyRepository<'a> {
     /// 按稳定 ID 读取未删除主体。
@@ -176,7 +176,7 @@ impl<'a> PartyRepository<'a> {
     pub async fn load_current_facts(
         &self,
         party_id: &PartyId,
-        as_of: entities::common::time::BusinessDate,
+        as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<(
         Vec<PartyContact>,
@@ -321,7 +321,7 @@ impl<'a> PartyRepository<'a> {
     /// （数据模型 §6.2 稳定基础资料 + 不可变修订）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时修订先各自提交，后续主体版本冲突会留下「新修订存在但主体指针未更新」
-    /// 的半成品；Service 必须通过 `database::Transactional::with_transaction`
+    /// 的半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
     /// # 参数
@@ -332,8 +332,8 @@ impl<'a> PartyRepository<'a> {
     ///
     /// # 错误
     /// 当修订违反 `(party_id, revision_no)` 唯一索引（透出
-    /// [`crate::Error::DuplicateKey`]）、主体版本冲突（返回
-    /// [`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// [`persistence_core::Error::DuplicateKey`]）、主体版本冲突（返回
+    /// [`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     pub async fn append_party_revision(
         &self,
         party: &mut Party,

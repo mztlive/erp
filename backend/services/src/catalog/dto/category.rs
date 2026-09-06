@@ -1,10 +1,10 @@
 use entities::catalog::{EnableStatus, ProductCategory, ProductKind};
-use entities::ids::ProductCategoryId;
+use erp_core::ids::ProductCategoryId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 use super::common::{non_blank, normalize_sort, PageParams};
 

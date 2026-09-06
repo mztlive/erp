@@ -8,9 +8,9 @@
 
 use rust_decimal::Decimal;
 
-use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderId, SalesOrderLineId};
-use crate::money::Amount;
+use erp_core::ids::{SalesOrderId, SalesOrderLineId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 成本分配计划输入行（尾差归属尚未解析）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,8 +159,8 @@ impl CostAllocationSet {
 #[cfg(test)]
 mod tests {
     use super::{CostAllocationLineInput, CostAllocationSet};
-    use crate::ids::{SalesOrderId, SalesOrderLineId};
-    use crate::money::Amount;
+    use erp_core::ids::{SalesOrderId, SalesOrderLineId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn line(

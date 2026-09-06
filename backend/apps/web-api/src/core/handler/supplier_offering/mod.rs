@@ -2,20 +2,17 @@
 //!
 //! Handler 只做协议适配、成本字段授权与 Service 调用，不定义重复 DTO。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
 use entities::Permission;
-use services::{
-    audit::AuditActor,
-    supplier_offering::{
-        CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
-        CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
-        ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingService,
-        SupplierOfferingView, UpdateSupplierOfferingAvailabilityRequest,
-        UpdateSupplierOfferingAvailabilityResult,
-    },
+use services::supplier_offering::{
+    CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
+    CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
+    ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingService, SupplierOfferingView,
+    UpdateSupplierOfferingAvailabilityRequest, UpdateSupplierOfferingAvailabilityResult,
 };
 
 use crate::{

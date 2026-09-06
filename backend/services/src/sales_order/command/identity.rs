@@ -4,9 +4,9 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 use database::DocumentRegistryExt;
 use entities::document_registry::BusinessDocument;
 use entities::sales_order::SalesOrder;

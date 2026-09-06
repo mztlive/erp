@@ -21,7 +21,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::IntegrationOpsExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `inbox_message` 集合名。
 pub(crate) const INBOX_MESSAGES: &str = <mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES;

@@ -10,8 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::Result;
 
 /// 客户名称最大长度。
 const CUSTOMER_NAME_MAX_LEN: usize = 128;

@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SupplierApiExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `supplier_api_connection` 集合名。
 pub(crate) const SUPPLIER_API_CONNECTIONS: &str =

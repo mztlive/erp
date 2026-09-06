@@ -2,9 +2,9 @@
 
 use std::str::FromStr;
 
-use entities::money::{Amount, Rate};
 use entities::purchase_order::{PaymentTermSnapshot, PurchaseChangeOrder, PurchaseOrder};
 use entities::supplier::SupplierPaymentTerm;
+use erp_core::money::{Amount, Rate};
 
 use super::PurchaseOrderService;
 use crate::errors::{Error, Result};

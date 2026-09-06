@@ -6,15 +6,15 @@
 
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::SupplierAccountId;
-use entities::money::Quantity;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
 use entities::sales_order::SalesOrder;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierAccountId;
+use erp_core::money::Quantity;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -138,7 +138,7 @@ pub fn purchase_change_order_subject_ref(business_object_id: &str) -> Result<Sub
 /// 非草稿、指纹非法或版本溢出时返回冲突。
 pub fn start_purchase_change_approval(
     order: &mut PurchaseChangeOrder,
-    submission_id: entities::ids::PurchaseChangeSubmissionId,
+    submission_id: erp_core::ids::PurchaseChangeSubmissionId,
     target_content_hash: impl Into<String>,
     updated_by: &str,
 ) -> Result<u32> {
@@ -436,20 +436,20 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
-    use entities::ids::{
-        CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseChangeOrderId,
-        PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId,
-        SalesOrderId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId,
-        SupplierCommercialProfileRevisionId,
-    };
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseChangeOrderData,
         PurchaseChangeSubmissionData, PurchaseChangeSubmissionLineData, PurchaseLineType, PurchaseType,
         SupplierSnapshot,
     };
     use entities::sales_order::{BusinessType, OriginSystem, SalesOrderData};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseChangeOrderId,
+        PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId,
+        SalesOrderId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId,
+        SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn draft_order() -> PurchaseChangeOrder {
@@ -525,8 +525,8 @@ mod tests {
                 tax_amount: Amount::from_str("0").expect("金额合法"),
                 input_tax_rate: Some(Rate::from_str("0").expect("税率合法")),
                 expected_delivery_date: None,
-                sales_order_line_id: Some(entities::ids::SalesOrderLineId::new("sol-1")),
-                sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new("sorl-1")),
+                sales_order_line_id: Some(erp_core::ids::SalesOrderLineId::new("sol-1")),
+                sales_order_revision_line_id: Some(erp_core::ids::SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
                 allocated_quantity: Some(Quantity::from_str("2").expect("数量合法")),
             },
@@ -586,7 +586,7 @@ mod tests {
         let mut order = draft_order();
         start_purchase_change_approval(
             &mut order,
-            entities::ids::PurchaseChangeSubmissionId::new("pcs-1"),
+            erp_core::ids::PurchaseChangeSubmissionId::new("pcs-1"),
             "hash-1",
             "submitter-9",
         )
@@ -617,7 +617,7 @@ mod tests {
         let mut effective = draft_order();
         start_purchase_change_approval(
             &mut effective,
-            entities::ids::PurchaseChangeSubmissionId::new("pcs-1"),
+            erp_core::ids::PurchaseChangeSubmissionId::new("pcs-1"),
             "hash-1",
             "user-2",
         )
@@ -627,7 +627,7 @@ mod tests {
             .unwrap();
         assert!(start_purchase_change_approval(
             &mut effective,
-            entities::ids::PurchaseChangeSubmissionId::new("pcs-2"),
+            erp_core::ids::PurchaseChangeSubmissionId::new("pcs-2"),
             "hash-2",
             "user-2",
         )
@@ -719,7 +719,7 @@ mod tests {
         let mut order = draft_order();
         start_purchase_change_approval(
             &mut order,
-            entities::ids::PurchaseChangeSubmissionId::new("pcs-1"),
+            erp_core::ids::PurchaseChangeSubmissionId::new("pcs-1"),
             "hash-1",
             "user-1",
         )

@@ -12,7 +12,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::CustomerExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `customer_account` 集合名。
 pub(crate) const CUSTOMER_ACCOUNTS: &str = <mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS;

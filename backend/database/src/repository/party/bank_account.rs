@@ -1,14 +1,14 @@
-use entities::ids::PartyId;
 use entities::party::{EffectiveRecordStatus, PartyBankAccount};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::PartyId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{active_fact_filter, sort_doc};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 银行账户列表投影行。
 ///
@@ -169,7 +169,7 @@ impl<'a> Repository<'a, PartyBankAccount> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_bank_accounts_by_ids(
         &self,
-        ids: &[entities::ids::PartyBankAccountId],
+        ids: &[erp_core::ids::PartyBankAccountId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyBankAccount>> {
         if ids.is_empty() {
@@ -194,7 +194,7 @@ impl<'a> Repository<'a, PartyBankAccount> {
     pub async fn list_active_on(
         &self,
         party_id: &PartyId,
-        as_of: entities::common::time::BusinessDate,
+        as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyBankAccount>> {
         self.find_many(active_fact_filter(party_id, as_of), executor)
@@ -216,7 +216,7 @@ impl<'a> Repository<'a, PartyBankAccount> {
     pub async fn list_current_on(
         &self,
         party_id: &PartyId,
-        as_of: entities::common::time::BusinessDate,
+        as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyBankAccount>> {
         self.find_many_sorted(

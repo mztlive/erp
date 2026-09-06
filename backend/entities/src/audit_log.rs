@@ -2,9 +2,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::validation::{normalize_optional_text, normalize_required_text};
-use crate::AccountKind;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::AccountKind;
+use erp_core::Result;
 
 /// 操作人ID最大长度。
 const ACTOR_ID_MAX_LEN: usize = 128;
@@ -97,7 +97,7 @@ impl AuditLog {
 #[cfg(test)]
 mod tests {
     use super::{AuditLog, AuditLogData};
-    use crate::AccountKind;
+    use erp_core::AccountKind;
 
     fn audit_data() -> AuditLogData {
         AuditLogData {

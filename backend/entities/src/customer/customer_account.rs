@@ -7,13 +7,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::Result;
-use crate::field_update::FieldUpdate;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::field_update::FieldUpdate;
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
-pub use crate::ids::{CustomerAccountId, PartyId};
+pub use erp_core::ids::{CustomerAccountId, PartyId};
 
 /// 客户编号最大长度。
 const CUSTOMER_NO_MAX_LEN: usize = 64;
@@ -140,7 +140,7 @@ impl CustomerAccount {
     /// 上限），付款条件引用规范化。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerAccountId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerAccountId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -214,7 +214,7 @@ impl CustomerAccount {
         if self.base.version == expected {
             return Ok(());
         }
-        Err(crate::errors::Error::from("数据已被其他请求修改，请刷新后重试"))
+        Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试"))
     }
 
     /// 应用默认付款条件更新。
@@ -273,7 +273,7 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
         return Ok(None);
     }
     if value.chars().count() > PAYMENT_TERM_ID_MAX_LEN {
-        return Err(crate::errors::Error::from("付款条件引用过长"));
+        return Err(erp_core::Error::from("付款条件引用过长"));
     }
     Ok(Some(value))
 }
@@ -281,9 +281,9 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::{CustomerAccount, CustomerAccountData, CustomerAccountStatus, CustomerAccountUpdate};
-    use crate::common::state::assert_adjacency_closed;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{CustomerAccountId, PartyId};
+    use erp_core::common::state::assert_adjacency_closed;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{CustomerAccountId, PartyId};
 
     fn account_data() -> CustomerAccountData {
         CustomerAccountData {

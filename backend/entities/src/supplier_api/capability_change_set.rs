@@ -98,7 +98,7 @@ impl std::fmt::Display for CapabilityChangeSetRejection {
 
 impl std::error::Error for CapabilityChangeSetRejection {}
 
-impl From<CapabilityChangeSetRejection> for crate::errors::Error {
+impl From<CapabilityChangeSetRejection> for erp_core::Error {
     /// 将集合拒绝转换为实体层通用错误（保留展示文本）。
     ///
     /// # 参数
@@ -289,11 +289,11 @@ impl ClassifiedCapabilityChangeSet {
 #[cfg(test)]
 mod tests {
     use super::{CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, MAX_CHANGES};
-    use crate::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
     use crate::supplier_api::{
         SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData,
         SupplierApiCapabilityStatus,
     };
+    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
     use std::collections::BTreeMap;
 
     /// 构造既有能力声明测试夹具。
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn change_set_rejection_converts_to_entity_error_without_io() {
-        let error: crate::errors::Error = CapabilityChangeSetRejection::DuplicateCodes.into();
+        let error: erp_core::Error = CapabilityChangeSetRejection::DuplicateCodes.into();
         assert_eq!(error.to_string(), "能力变更代码不能重复");
     }
 }

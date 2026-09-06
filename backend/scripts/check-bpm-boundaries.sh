@@ -135,8 +135,8 @@ require_single_definition "ApprovalProcessInstanceId" "crates/bpm/src/ids.rs"
 require_single_definition "ApprovalNodeExecutionId" "crates/bpm/src/ids.rs"
 require_single_definition "ApprovalInstanceAssigneeId" "crates/bpm/src/ids.rs"
 require_single_definition "ApprovalCommandReceiptId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalSubjectSnapshotId" "entities/src/ids.rs"
-require_single_definition "ApprovalNotificationOutboxId" "entities/src/ids.rs"
+require_single_definition "ApprovalSubjectSnapshotId" "crates/erp-core/src/ids.rs"
+require_single_definition "ApprovalNotificationOutboxId" "crates/erp-core/src/ids.rs"
 
 echo "检查 id_type 过程宏定义源…"
 MACRO_COUNT="$(python3 - "${BACKEND_DIR}/crates/entity-macros/src/lib.rs" <<'PY'

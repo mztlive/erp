@@ -5,11 +5,11 @@
 
 use std::collections::HashMap;
 
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::BusinessDocument;
-use entities::money::Amount;
 use entities::returns::{CustomerRefund, CustomerRefundStatus};
+use erp_core::common::time::Instant;
+use erp_core::money::Amount;
 
 use super::adapter::document_approval_view;
 use super::dto::CustomerRefundView;
@@ -188,12 +188,12 @@ mod tests {
         CustomerRefundListFacts,
     };
     use bpm::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
     use entities::document_registry::business_document::ApprovalDefinitionBinding;
     use entities::document_registry::{BusinessDocument, BusinessDocumentData, DocumentType};
-    use entities::ids::{BusinessDocumentId, CustomerAccountId, CustomerReceiptId, CustomerRefundId};
-    use entities::money::Amount;
     use entities::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{BusinessDocumentId, CustomerAccountId, CustomerReceiptId, CustomerRefundId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn facts() -> CustomerRefundListFacts {

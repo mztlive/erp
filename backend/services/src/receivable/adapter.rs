@@ -6,11 +6,11 @@
 
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::CustomerAccountId;
 use entities::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation};
+use erp_core::common::time::Instant;
+use erp_core::ids::CustomerAccountId;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -380,8 +380,8 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
     use entities::receivable::CustomerReceiptData;
+    use erp_core::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
     use std::str::FromStr;
 
     fn draft_receipt() -> CustomerReceipt {
@@ -392,7 +392,7 @@ mod tests {
                 counterparty_party_id: PartyId::new("party-1"),
                 customer_id: Some(CustomerAccountId::new("cust-1")),
                 received_at: Instant::from_unix_secs(10),
-                amount: entities::money::Amount::from_str("100").expect("金额合法"),
+                amount: erp_core::money::Amount::from_str("100").expect("金额合法"),
                 bank_reference: None,
             },
             "creator-1",
@@ -403,7 +403,7 @@ mod tests {
     fn one_allocation() -> PendingReceiptAllocation {
         PendingReceiptAllocation::new(
             ReceivableEntryId::new("re-1"),
-            entities::money::Amount::from_str("40").expect("金额合法"),
+            erp_core::money::Amount::from_str("40").expect("金额合法"),
         )
         .expect("分配必须可构造")
     }

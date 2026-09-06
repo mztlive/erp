@@ -18,7 +18,7 @@ impl<T> Page<T> {
     ///
     /// # 返回值
     /// 返回分页结果。
-    pub(crate) fn new(items: Vec<T>, total: i64) -> Self {
+    pub fn new(items: Vec<T>, total: i64) -> Self {
         Self { items, total }
     }
 }

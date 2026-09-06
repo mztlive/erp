@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `extensions::FileAssetExt` 关联
 //! 常量导入（conventions §4.3）。
 //!
@@ -13,15 +13,16 @@ use std::collections::HashSet;
 use entities::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
-use entities::ids::{BusinessDocumentId, FileAssetId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{BusinessDocumentId, FileAssetId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 文件资产列表投影行（列表接口只取必要字段，禁止返回整文档）。
 ///
@@ -293,9 +294,9 @@ fn file_asset_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{sort_doc, FileAsset, FileAssetFilter, QueryFilter, Repository};
-    use crate::NoTransaction;
     use entities::file_asset::{RetentionClass, SecurityScanStatus, SensitivityClass};
     use mongodb::bson::doc;
+    use persistence_core::NoTransaction;
 
     #[test]
     fn filter_applies_name_regex_and_class_filters() {

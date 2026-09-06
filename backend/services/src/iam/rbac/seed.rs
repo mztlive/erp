@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
-use database::{AccessControlExt, NoTransaction};
+use database::AccessControlExt;
 use entities::{
     access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType},
     Permission, PermissionSet, RoleData,
 };
+use persistence_core::NoTransaction;
 
 use super::RbacService;
 use crate::errors::{Error, Result};
@@ -195,7 +196,7 @@ impl RbacService {
         )?;
         match self.db.data_scopes().create(&scope, &mut NoTransaction).await {
             Ok(()) => Ok(true),
-            Err(database::Error::DuplicateKey(_)) => Ok(false),
+            Err(persistence_core::Error::DuplicateKey(_)) => Ok(false),
             Err(error) => Err(error.into()),
         }
     }

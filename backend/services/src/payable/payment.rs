@@ -2,23 +2,24 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, Executor, FileAssetExt, NoTransaction, PartyExt, PayableExt, SupplierExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, FileAssetExt, PartyExt, PayableExt, SupplierExt};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::file_asset::BankReceiptEvidencePolicy;
-use entities::ids::{
-    FileAssetId, PartyBankAccountId, PayableAccountId, PayableEntryId, PaymentAllocationId,
-    SupplierAccountId, SupplierPaymentId,
-};
-use entities::money::Amount;
 use entities::party::PartyBankAccount;
 use entities::payable::{
     AllocationAction, PayableAccount, PayableEntry, PaymentAllocation, PaymentAllocationLedger,
     PendingPaymentAllocation, SupplierPayment, SupplierPaymentData, SupplierPaymentStatus,
 };
 use entities::supplier::SupplierAccount;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    FileAssetId, PartyBankAccountId, PayableAccountId, PayableEntryId, PaymentAllocationId,
+    SupplierAccountId, SupplierPaymentId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::display;
@@ -33,12 +34,14 @@ use crate::approval::binding::{
     bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
 use crate::iam::SharedRbacService;
 use crate::pending_file_assets::PendingFileAssets;
+use application_core::AuditActor;
 
 impl PayableService {
     // -----------------------------------------------------------------------
@@ -781,9 +784,10 @@ async fn lock_expected_payment_recipient(
 }
 
 /// 把收款账户占用冲突映射为可操作的刷新提示。
-fn payment_recipient_lock_error(error: database::Error) -> Error {
+fn payment_recipient_lock_error(error: persistence_core::Error) -> Error {
     match error {
-        database::Error::OptimisticLockingError | database::Error::TransientTransactionConflict(_) => {
+        persistence_core::Error::OptimisticLockingError
+        | persistence_core::Error::TransientTransactionConflict(_) => {
             Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string())
         }
         other => other.into(),

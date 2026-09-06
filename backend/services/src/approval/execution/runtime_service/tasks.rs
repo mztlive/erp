@@ -3,11 +3,11 @@
 use bpm::engine::{TaskCloseReason, TaskIntent};
 use bpm::ids::ApprovalNodeExecutionId;
 use database::WorkItemExt;
-use entities::common::time::Instant;
-use entities::ids::WorkItemId;
 use entities::work_item::{
     ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
 use id_generator::next_id;
 use mongodb::Database;
 

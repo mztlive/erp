@@ -3,6 +3,7 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::payable` 的 DTO。
 
+use application_core::AuditActor;
 use axum::{
     body::Body,
     extract::{Multipart, Path, Query, State},
@@ -14,15 +15,12 @@ use axum::{
     Extension, Json,
 };
 use entities::file_asset::{SecurityScanStatus, SensitivityClass};
-use services::{
-    audit::AuditActor,
-    payable::{
-        CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
-        PayableAccountSummaryView, PayableAccountView, PayableService, PaymentRecipientRevealView,
-        PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
-        RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
-        SupplierPaymentView,
-    },
+use services::payable::{
+    CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
+    PayableAccountSummaryView, PayableAccountView, PayableService, PaymentRecipientRevealView,
+    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+    RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
+    SupplierPaymentView,
 };
 use tracing::error;
 

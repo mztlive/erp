@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use casbin::RbacApi;
-use database::{AccessControlExt, NoTransaction};
-use entities::{AccountKind, Permission, Role};
+use database::AccessControlExt;
+use entities::{Permission, Role};
+use erp_core::AccountKind;
+use persistence_core::NoTransaction;
 
 use super::{
     authorize::role_is_assignable,
@@ -12,7 +14,8 @@ use super::{
     },
     subject, RbacService,
 };
-use crate::{audit::AuditActor, errors::Result, iam::RoleItem};
+use crate::{errors::Result, iam::RoleItem};
+use application_core::AuditActor;
 
 impl RbacService {
     /// 查询全部角色及其直接权限。

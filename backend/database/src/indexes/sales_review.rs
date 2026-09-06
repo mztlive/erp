@@ -7,7 +7,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SalesReviewExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `sales_change_order` 集合名。
 pub(crate) const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;

@@ -12,8 +12,8 @@
 //! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在职责子模块，经本模块重新导出并由 `SupplierExt` 的关联类型对外暴露。
 
-use entities::ids::SupplierAccountId;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -21,8 +21,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::extensions::SupplierExt;
 use super::Repository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 mod account;
 mod bundle;

@@ -6,13 +6,6 @@
 
 use std::collections::HashMap;
 
-use crate::common::time::BusinessDate;
-use crate::ids::{
-    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
-    SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
-    SupplierQualificationRevisionId, SupplierRatingRevisionId,
-};
-use crate::money::Rate;
 use crate::party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use crate::supplier::{
     profile_change, validate_profile_selection, CapabilityCode, InvoiceType, QualificationType,
@@ -22,6 +15,13 @@ use crate::supplier::{
     SupplierQualificationRevision, SupplierQualificationSelection, SupplierRating, SupplierRatingRevision,
     SupplierRatingRevisionData,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
+    SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
+    SupplierQualificationRevisionId, SupplierRatingRevisionId,
+};
+use erp_core::money::Rate;
 
 /// 单份资质创建所需的已分配主键。
 ///
@@ -78,7 +78,7 @@ pub struct SupplierCreationQualificationInput {
     /// 失效日。
     pub valid_to: Option<BusinessDate>,
     /// 附件 ID。
-    pub attachment_id: Option<crate::ids::FileAssetId>,
+    pub attachment_id: Option<erp_core::ids::FileAssetId>,
     /// 适用能力代码。
     pub capability_codes: Vec<CapabilityCode>,
 }
@@ -199,7 +199,7 @@ pub struct SupplierCreationPlan {
 pub fn plan_supplier_creation(
     ids: SupplierCreationIds,
     inputs: SupplierCreationInputs,
-) -> crate::Result<SupplierCreationPlan> {
+) -> erp_core::Result<SupplierCreationPlan> {
     let selections: Vec<SupplierQualificationSelection<'_>> = inputs
         .qualifications
         .iter()
@@ -211,10 +211,10 @@ pub fn plan_supplier_creation(
         .collect();
     validate_profile_selection(&inputs.capability_codes, &selections)?;
     if ids.capability_ids.len() != inputs.capability_codes.len() {
-        return Err(crate::Error::from("供应商能力 ID 与能力代码数量不一致"));
+        return Err(erp_core::Error::from("供应商能力 ID 与能力代码数量不一致"));
     }
     if ids.qualification_ids.len() != inputs.qualifications.len() {
-        return Err(crate::Error::from("供应商资质 ID 与资质输入数量不一致"));
+        return Err(erp_core::Error::from("供应商资质 ID 与资质输入数量不一致"));
     }
 
     let mut party = Party::new(
@@ -326,10 +326,10 @@ pub fn plan_supplier_creation(
         )?),
         (None, None) => None,
         (Some(_), None) => {
-            return Err(crate::Error::from("供应商评级 ID 缺失"));
+            return Err(erp_core::Error::from("供应商评级 ID 缺失"));
         }
         (None, Some(_)) => {
-            return Err(crate::Error::from("供应商评级输入缺失"));
+            return Err(erp_core::Error::from("供应商评级输入缺失"));
         }
     };
 
@@ -351,7 +351,7 @@ pub fn plan_supplier_creation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::PartyId;
+    use erp_core::ids::PartyId;
     use std::str::FromStr;
 
     /// 构造最小合法创建输入。
@@ -396,9 +396,9 @@ mod tests {
     fn test_ids(with_rating: bool) -> SupplierCreationIds {
         SupplierCreationIds {
             party_id: PartyId::new("party-1"),
-            party_revision_id: crate::ids::PartyRevisionId::new("party-rev-1"),
+            party_revision_id: erp_core::ids::PartyRevisionId::new("party-rev-1"),
             supplier_id: SupplierAccountId::new("supplier-1"),
-            commercial_profile_id: crate::ids::SupplierCommercialProfileRevisionId::new("profile-1"),
+            commercial_profile_id: erp_core::ids::SupplierCommercialProfileRevisionId::new("profile-1"),
             capability_ids: vec![(
                 CapabilityCode::Physical,
                 SupplierCapabilityId::new("cap-1"),
@@ -407,7 +407,7 @@ mod tests {
             qualification_ids: vec![SupplierCreationQualificationIds {
                 qualification_id: SupplierQualificationId::new("qual-1"),
                 revision_id: SupplierQualificationRevisionId::new("qual-rev-1"),
-                link_ids: vec![crate::ids::SupplierQualificationCapabilityId::new("link-1")],
+                link_ids: vec![erp_core::ids::SupplierQualificationCapabilityId::new("link-1")],
             }],
             rating_id: with_rating.then(|| SupplierRatingRevisionId::new("rating-1")),
         }

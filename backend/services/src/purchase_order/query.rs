@@ -2,8 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt};
+use database::{AccessControlExt, PurchaseOrderExt};
 use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::approval_query::load_document_approval;
@@ -42,8 +43,8 @@ impl PurchaseOrderService {
         let query = params.normalized()?;
         let filter = PurchaseOrderFilter {
             purchase_no: query.q,
-            sales_order_id: query.sales_order_id.map(entities::ids::SalesOrderId::new),
-            supplier_id: query.supplier_id.map(entities::ids::SupplierAccountId::new),
+            sales_order_id: query.sales_order_id.map(erp_core::ids::SalesOrderId::new),
+            supplier_id: query.supplier_id.map(erp_core::ids::SupplierAccountId::new),
             status: query.status,
             page: query.paging.page,
             page_size: query.paging.page_size,
@@ -549,12 +550,12 @@ mod query_mapping_tests {
     use std::collections::HashMap;
     use std::str::FromStr;
 
-    use entities::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
-    use entities::money::Amount;
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
         PurchaseType, SupplierSnapshot,
     };
+    use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
+    use erp_core::money::Amount;
 
     use super::{center_content_source, list_row_totals, owner_display, sales_no_for, supplier_display};
 
@@ -568,7 +569,7 @@ mod query_mapping_tests {
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
-                supplier_revision_id: entities::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
+                supplier_revision_id: erp_core::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
                 supplier_snapshot: SupplierSnapshot::new("供应商".to_string()).expect("快照合法"),
                 payment_term_snapshot: PaymentTermSnapshot::new("NET-30".to_string(), false, None, None)
                     .expect("条款合法"),

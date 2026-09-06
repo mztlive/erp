@@ -1,18 +1,19 @@
-use database::{AccessControlExt, Executor, IntegrationOpsExt, NoTransaction, WorkItemExt};
+use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     error_work_item_type, IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference,
     ReconciliationDifferenceId, ReconciliationDifferenceResolution, ResolutionVersionCheck,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::super::{
     IntegrationItemType, IntegrationNonTerminalTaskAction, IntegrationOpsService, PreparedWorkItemTarget,
 };
 use super::ReceiptEnvelope;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl IntegrationOpsService {
     pub(super) async fn replay_receipt<T: DeserializeOwned>(

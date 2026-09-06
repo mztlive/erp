@@ -3,7 +3,7 @@
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 单集合无跨步骤原子性要求的 CRUD 传入 `&mut NoTransaction`；
 //! - 表头+明细创建、状态迁移+审计、过账（调整单+流水+余额+预占）使用
-//!   `database::Transactional::with_transaction`（§8.2 第 3 条跨集合原子性）。
+//!   `persistence_core::Transactional::with_transaction`（§8.2 第 3 条跨集合原子性）。
 //!
 //! 跨域协作（P3-service-api §2：只调对方 Repository，不依赖对方 Service）：
 //! - D11 `warehouse`：仓库代码 + 当前修订名称；

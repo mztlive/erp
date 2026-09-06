@@ -5,12 +5,12 @@
 //! 枚举的映射、批量文件资产的仓储读取结果到 `validate_assets` 的转交，以及 canonical
 //! 证据与工作流意见的唯一生成入口。Service 仍保留批量读取、当前时间注入、授权与审批提交。
 
-use entities::common::time::Instant;
 use entities::file_asset::FileAsset;
 use entities::receivable::{
     EntityCardFundsReviewConclusion, EntityCardFundsReviewResult, EntityCardFundsReviewType,
     ValidatedCardFundsReviewDecision, ValidatedCardFundsReviewDecisionParams,
 };
+use erp_core::common::time::Instant;
 
 use super::dto::{
     CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewResult, CardFundsReviewType,
@@ -174,11 +174,11 @@ pub(crate) fn allowed_reasons() -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entities::ids::FileAssetId;
+    use erp_core::ids::FileAssetId;
 
     fn decision_with_reason(reason: Option<&str>) -> CardFundsReviewDecision {
         CardFundsReviewDecision {
-            receivable_account_id: entities::ids::ReceivableAccountId::new("ra-1"),
+            receivable_account_id: erp_core::ids::ReceivableAccountId::new("ra-1"),
             expected_account_seq: 1,
             expected_account_domain_version: "1".to_string(),
             expected_review_chain_tail_id: None,
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn canonical_and_workflow_are_byte_stable() {
         let dto = CardFundsReviewDecision {
-            receivable_account_id: entities::ids::ReceivableAccountId::new("ra-1"),
+            receivable_account_id: erp_core::ids::ReceivableAccountId::new("ra-1"),
             expected_account_seq: 1,
             expected_account_domain_version: "1".to_string(),
             expected_review_chain_tail_id: None,

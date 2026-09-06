@@ -10,9 +10,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{SkuId, StockBalanceId, StockMovementId, WarehouseId};
-use crate::money::Quantity;
+use erp_core::ids::{SkuId, StockBalanceId, StockMovementId, WarehouseId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 use super::stock_adjustment::{StockAdjustment, StockAdjustmentLine};
 
@@ -74,7 +74,7 @@ impl StockBalance {
     /// `on_hand - reserved`（§6.7/§8.2 第 4 条）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::StockBalanceId`）
+    /// * `id` - 实体主键（`erp_core::ids::StockBalanceId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -188,8 +188,8 @@ fn ensure_quantities_non_negative(on_hand: Quantity, reserved: Quantity, availab
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{StockAdjustmentId, StockBalanceId};
-    use crate::money::Quantity;
+    use erp_core::ids::{StockAdjustmentId, StockBalanceId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     fn data() -> StockBalanceData {
@@ -283,7 +283,7 @@ mod tests {
         )
         .unwrap();
         let line = StockAdjustmentLine::new_for_reason(
-            crate::ids::StockAdjustmentLineId::new("line-1"),
+            erp_core::ids::StockAdjustmentLineId::new("line-1"),
             adjustment.reason_type,
             crate::inventory::StockAdjustmentLineData {
                 stock_adjustment_id: StockAdjustmentId::new("adj-1"),

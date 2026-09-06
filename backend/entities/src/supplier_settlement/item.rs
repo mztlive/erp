@@ -10,12 +10,12 @@ use entity_macros::Entity;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId,
     SupplierSettlementStatementId,
 };
-use crate::money::{Amount, Quantity};
+use erp_core::money::{Amount, Quantity};
+use erp_core::{Error, Result};
 
 /// 已冻结双方金额派生的成本差额三元组。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +151,7 @@ impl SupplierSettlementItem {
     /// ERP 与供应商账单两侧均满足 `gross = net + tax`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierSettlementItemId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierSettlementItemId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -276,7 +276,7 @@ fn ensure_amount_components(gross: Amount, net: Amount, tax: Amount, message: &s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId};
+    use erp_core::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId};
     use std::str::FromStr;
 
     fn sample_data() -> SupplierSettlementItemData {

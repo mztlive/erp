@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::errors::{Error, Result};
 use crate::file_asset::SensitivityClass;
-use crate::ids::FileAssetId;
+use erp_core::ids::FileAssetId;
+use erp_core::{Error, Result};
 
 /// multipart 业务命令中临时文件引用的稳定前缀。
 pub const PENDING_FILE_REFERENCE_PREFIX: &str = "pending-file:";
@@ -159,7 +159,7 @@ mod tests {
 
     use super::{PendingFileReference, PendingFileReferenceSet};
     use crate::file_asset::SensitivityClass;
-    use crate::ids::FileAssetId;
+    use erp_core::ids::FileAssetId;
 
     fn references() -> PendingFileReferenceSet {
         PendingFileReferenceSet::new(vec![

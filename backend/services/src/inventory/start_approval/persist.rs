@@ -6,21 +6,21 @@ use bpm::model::types::{
 };
 use bpm::model::ApprovalNodeExecution;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, InventoryExt,
-    Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, InventoryExt, WorkItemExt,
 };
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
 };
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::super::adapter::require_frozen_binding;
 use super::super::approval_query::load_approval_binding;
@@ -33,9 +33,10 @@ use super::prepare::{
 use crate::approval::execution::apply_plan::PlannedWrites;
 use crate::approval::execution::map_receipt_first_write_error;
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
 /// 库存调整启动事务写入集合。
@@ -266,7 +267,7 @@ async fn revalidate_start_lines(
     let persisted = db
         .inventory()
         .adjustment_lines_by_adjustment_ids(
-            &[entities::ids::StockAdjustmentId::new(current.base.id.clone())],
+            &[erp_core::ids::StockAdjustmentId::new(current.base.id.clone())],
             executor,
         )
         .await?;

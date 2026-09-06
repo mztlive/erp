@@ -1,12 +1,12 @@
-use entities::ids::{PayableAccountId, PayableEntryId};
 use entities::payable::{PaymentAllocation, PurchaseInvoiceAllocation};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PayableAccountId, PayableEntryId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 进项发票分配服务端分页筛选条件（FIN-R06）。
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct PurchaseInvoiceAllocationFilter {
     /// 应付往来子账；`None` 表示不筛选。
     pub payable_account_id: Option<PayableAccountId>,
     /// 进项发票；`None` 表示不筛选。
-    pub invoice_id: Option<entities::ids::InvoiceId>,
+    pub invoice_id: Option<erp_core::ids::InvoiceId>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -64,7 +64,7 @@ impl<'a> Repository<'a, PaymentAllocation> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_allocations_by_payments(
         &self,
-        payment_ids: &[entities::ids::SupplierPaymentId],
+        payment_ids: &[erp_core::ids::SupplierPaymentId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PaymentAllocation>> {
         if payment_ids.is_empty() {
@@ -114,7 +114,7 @@ impl<'a> Repository<'a, PurchaseInvoiceAllocation> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_allocations_by_invoices(
         &self,
-        invoice_ids: &[entities::ids::InvoiceId],
+        invoice_ids: &[erp_core::ids::InvoiceId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseInvoiceAllocation>> {
         if invoice_ids.is_empty() {
@@ -189,11 +189,11 @@ impl<'a> Repository<'a, PurchaseInvoiceAllocation> {
 #[cfg(test)]
 mod tests {
     use super::{Pagination, PurchaseInvoiceAllocationFilter, QueryFilter};
-    use entities::ids::PayableAccountId;
+    use erp_core::ids::PayableAccountId;
 
     #[test]
     fn invoice_allocation_filter_applies_account_invoice_and_deleted_filter() {
-        use entities::ids::InvoiceId;
+        use erp_core::ids::InvoiceId;
         let filter = PurchaseInvoiceAllocationFilter {
             payable_account_id: Some(PayableAccountId::new("acct-1")),
             invoice_id: Some(InvoiceId::new("inv-1")),

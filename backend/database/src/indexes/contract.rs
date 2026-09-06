@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::ContractExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `contract` 集合名。
 pub(crate) const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;

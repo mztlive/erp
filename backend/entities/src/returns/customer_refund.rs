@@ -4,14 +4,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     CustomerAccountId, CustomerReceiptId, CustomerRefundId, FileAssetId, ReceivableEntryId, SalesReturnCaseId,
 };
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 退款单号最大长度。
 const REFUND_NO_MAX_LEN: usize = 64;
@@ -173,7 +173,7 @@ impl CustomerRefund {
     /// 与复核人分离校验，以及「原回款或原应收」二选一校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerRefundId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerRefundId`）
     /// * `data` - 创建数据
     /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
@@ -425,7 +425,7 @@ pub(crate) fn validate_original_target<T, U>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn data() -> CustomerRefundData {
@@ -546,7 +546,7 @@ mod tests {
 
     #[test]
     fn state_machine_forces_in_approval_before_posting() {
-        use crate::common::state::ensure_transition as tr;
+        use erp_core::common::state::ensure_transition as tr;
         use CustomerRefundStatus as S;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());

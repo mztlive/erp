@@ -1,8 +1,8 @@
-use entities::ids::SupplierAccountId;
 use entities::supplier::{
     CapabilityCode, QualificationType, SupplierCommercialProfileRevision, SupplierRatingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -13,8 +13,8 @@ use super::{
     SupplierRepository, SUPPLIER_CAPABILITY_REVISIONS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS,
     SUPPLIER_QUALIFICATION_REVISIONS, SUPPLIER_RATING_REVISIONS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 /// 商务结算版本列表筛选条件。
 #[derive(Debug, Clone)]

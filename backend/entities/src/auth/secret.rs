@@ -6,7 +6,7 @@ use argon2::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 登录账号最小长度。
 const ACCOUNT_MIN_LEN: usize = 3;

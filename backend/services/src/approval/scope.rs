@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, Executor, MongoCasbinAdapter, NoTransaction};
+use database::{AccessControlExt, MongoCasbinAdapter};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
     document_registry::DocumentType,
@@ -10,12 +10,13 @@ use entities::{
     AccountCore, Permission,
 };
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
 use crate::{
-    audit::AuditActor,
     errors::{Error, Result},
     iam::RbacService,
 };
+use application_core::AuditActor;
 
 use super::dto::ApprovalRecoveryAuthorization;
 use super::policy::{policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};
@@ -848,11 +849,12 @@ mod tests {
         approval_account_matches_actor, binding_upgrade_authorization_from_facts, intersect_coverage,
         scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
     };
-    use crate::audit::AuditActor;
+    use application_core::AuditActor;
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::document_registry::DocumentType;
-    use entities::ids::DataScopeId;
-    use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+    use erp_core::ids::DataScopeId;
+    use erp_core::AccountKind;
 
     fn account(id: &str, status: AccountStatus) -> AccountCore {
         AccountCore::new(

@@ -5,7 +5,7 @@
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 common 基元。
 //! 公共字段归属按 §4.3 判定：
 //! - `sales_return_case` / `purchase_return_order` 是处理单主表类 → 组合
-//!   [`crate::common::stable::StableBase`]；
+//!   [`erp_core::common::stable::StableBase`]；
 //! - 其余表是行项或正式事实（§4.5 不设业务软删除），按 §6.11 字段字典建模；
 //!   §6.11 财务纠错表未含 FactBase 全部语义字段，因此不组合 FactBase，仅用
 //!   `BaseModel` 持久化元数据；

@@ -3,7 +3,7 @@ use super::{QualificationConstraintKind, SupplierQualificationHealthFilter};
 
 #[test]
 fn supplier_list_candidate_intersection_preserves_order_and_empty() {
-    use entities::ids::SupplierAccountId;
+    use erp_core::ids::SupplierAccountId;
     // 能力与资质双维度同时命中时取交集，且保留能力侧顺序。
     let capability_ids = Some(vec![
         SupplierAccountId::new("s-1"),

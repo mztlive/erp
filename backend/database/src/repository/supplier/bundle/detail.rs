@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
-use entities::ids::{PartyId, SupplierAccountId};
 use entities::supplier::{SupplierCommercialProfileRevision, SupplierQualificationCapability};
+use erp_core::ids::{PartyId, SupplierAccountId};
 
 use super::super::super::extensions::PartyExt;
 use super::super::super::Repository;
 use super::super::{SupplierRepository, SUPPLIER_QUALIFICATION_CAPABILITIES};
 use super::SupplierDetailBundle;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> SupplierRepository<'a> {
     /// 批量加载供应商详情所需的全部事实（`PROC-R04`）。
@@ -69,9 +69,9 @@ impl<'a> SupplierRepository<'a> {
             .await?;
         let capabilities = self.list_capabilities(supplier_id, executor).await?;
         let qualifications = self.list_qualifications(supplier_id, executor).await?;
-        let qualification_ids: Vec<entities::ids::SupplierQualificationId> = qualifications
+        let qualification_ids: Vec<erp_core::ids::SupplierQualificationId> = qualifications
             .iter()
-            .map(|item| entities::ids::SupplierQualificationId::new(&item.base.id))
+            .map(|item| erp_core::ids::SupplierQualificationId::new(&item.base.id))
             .collect();
         let qualification_links =
             Repository::<SupplierQualificationCapability>::new(self.db, SUPPLIER_QUALIFICATION_CAPABILITIES)

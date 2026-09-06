@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use super::extensions::BpmExt;
 use super::Repository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 const DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_PROCESS_DEFINITIONS;
 const NODE_DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_NODE_DEFINITIONS;

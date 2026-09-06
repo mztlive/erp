@@ -1,14 +1,16 @@
-use database::{AccessControlExt, BulkJobExt, FileAssetExt, LegacyImportExt, NoTransaction, Transactional};
+use database::{AccessControlExt, BulkJobExt, FileAssetExt, LegacyImportExt};
 use entities::bulk_job::BackgroundJob;
-use entities::ids::BackgroundJobId;
 use entities::legacy_import::{
     LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportRow, LegacyImportRowId,
 };
+use erp_core::ids::BackgroundJobId;
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::dto::{CreateLegacyImportBatchRequest, LegacyImportBatchView};
 use super::LegacyImportService;
@@ -114,7 +116,7 @@ impl LegacyImportService {
     /// # 错误
     /// * `NotFound` - 资产引用不存在
     async fn ensure_file_assets_exist(&self, req: &CreateLegacyImportBatchRequest) -> Result<()> {
-        let labeled: [(&str, Option<&entities::ids::FileAssetId>); 3] = [
+        let labeled: [(&str, Option<&erp_core::ids::FileAssetId>); 3] = [
             ("成功白名单包", req.successful_sanitized_file_asset_id.as_ref()),
             ("成功 manifest", req.success_manifest_file_asset_id.as_ref()),
             ("失败诊断包", req.failure_diagnostic_file_asset_id.as_ref()),
@@ -200,8 +202,8 @@ impl LegacyImportService {
 /// # 约束
 /// 纯内存映射，不访问数据库；不解释软删除与缺失的区分（由仓储决定）。
 fn first_missing_asset_label(
-    labeled: &[(&str, Option<&entities::ids::FileAssetId>); 3],
-    missing: &[entities::ids::FileAssetId],
+    labeled: &[(&str, Option<&erp_core::ids::FileAssetId>); 3],
+    missing: &[erp_core::ids::FileAssetId],
 ) -> Option<String> {
     use std::collections::HashSet;
     let missing_set = missing.iter().map(ToString::to_string).collect::<HashSet<_>>();
@@ -218,7 +220,7 @@ fn first_missing_asset_label(
 #[cfg(test)]
 mod tests {
     use super::first_missing_asset_label;
-    use entities::ids::FileAssetId;
+    use erp_core::ids::FileAssetId;
 
     fn asset(id: &str) -> FileAssetId {
         FileAssetId::new(id.to_string())

@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::LegacyImportExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// 失败诊断保留天数（数据模型 §4.5.7/§6.12：失败合规包与行列诊断明细 30 天清理）。
 const DIAGNOSTIC_RETENTION_SECONDS: i64 = 30 * 24 * 60 * 60;

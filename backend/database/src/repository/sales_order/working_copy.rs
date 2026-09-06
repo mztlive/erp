@@ -4,20 +4,20 @@
 //! 有效工作副本」由部分唯一索引 `uk_sales_order_working_copies_active_per_purpose`
 //! 保证（理由与回滚方式见 `indexes::sales_order`）。
 
-use entities::ids::SalesChangeOrderId;
 use entities::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, WorkingCopyStatus, WorkingPurpose,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SalesChangeOrderId;
 use mongodb::bson::{doc, Document};
 
 use super::super::{Pagination, QueryFilter, Repository};
 use super::{
     SalesOrderRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES, SALES_ORDER_WORKING_COPIES,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 工作副本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -221,7 +221,7 @@ impl<'a> SalesOrderRepository<'a> {
     /// `SalesOrderWorkingCopy::submit()` 状态迁移（本层不做业务判定）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 中途失败会留下没有提交头的明细或未锁定的草稿；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `working_copy` - 已迁移到 `Submitted` 的工作副本（成功后内存版本递增）
@@ -230,7 +230,7 @@ impl<'a> SalesOrderRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、乐观锁冲突或
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.sales_order.submit_working_copy",

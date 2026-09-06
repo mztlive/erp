@@ -5,19 +5,19 @@
 
 use std::collections::HashMap;
 
-use database::{
-    AccessControlExt, BulkJobExt, Executor, LegacyImportExt, NoTransaction, PartyExt, Transactional,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, BulkJobExt, LegacyImportExt, PartyExt};
 use entities::legacy_import::{
     ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportBatch,
     LegacyImportRow,
 };
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::dto::{
     ApplyLegacyImportBatchRequest, ApplyRowOutcome, ApplyRowResult, LegacyImportBatchView,
@@ -105,7 +105,7 @@ impl LegacyImportService {
             ));
         }
         let job = self.load_running_import_job(&batch).await?;
-        let scope_batch_id = entities::ids::LegacyImportBatchId::new(batch_id.to_string());
+        let scope_batch_id = erp_core::ids::LegacyImportBatchId::new(batch_id.to_string());
         let mut scope = self
             .db
             .legacy_import_rows()
@@ -176,7 +176,7 @@ impl LegacyImportService {
         result_set: &ApplyResultSet,
         rows: &HashMap<String, LegacyImportRow>,
     ) -> Result<HashMap<String, bool>> {
-        use entities::ids::PartyId;
+        use erp_core::ids::PartyId;
         let targets = collect_customer_import_targets(result_set, rows);
         if targets.is_empty() {
             return Ok(HashMap::new());
@@ -360,7 +360,7 @@ fn apply_result_set_from_request(req: ApplyLegacyImportBatchRequest) -> Result<A
 ///
 /// # 错误
 /// 存在缺失 ID 时返回 `ValidationError`。
-fn ensure_no_missing_apply_rows(missing: &[entities::ids::LegacyImportRowId]) -> Result<()> {
+fn ensure_no_missing_apply_rows(missing: &[erp_core::ids::LegacyImportRowId]) -> Result<()> {
     let Some(first) = missing.first() else {
         return Ok(());
     };
@@ -558,11 +558,11 @@ async fn persist_apply_transaction(
 mod tests {
     use std::collections::HashMap;
 
-    use entities::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
     use entities::legacy_import::{
         ApplyResultDraft, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportRow,
         LegacyImportRowData, ParseStatus,
     };
+    use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
 
     use super::{
         advance_batch_counts, apply_result_set_from_request, collect_apply_deltas,
@@ -826,15 +826,14 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn persist_rolls_back_when_later_row_cas_fails() {
-        use database::{
-            ensure_indexes, AccessControlExt, BulkJobExt, LegacyImportExt, NoTransaction, Transactional,
-        };
+        use database::{ensure_indexes, AccessControlExt, BulkJobExt, LegacyImportExt};
         use entities::bulk_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
-        use entities::common::time::{BusinessDate, Instant};
-        use entities::ids::{BackgroundJobId, LegacyImportBatchId, SourceSystemId};
         use entities::legacy_import::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
-        use entities::AccountKind;
         use entities::{AuditLog, AuditLogData};
+        use erp_core::common::time::{BusinessDate, Instant};
+        use erp_core::ids::{BackgroundJobId, LegacyImportBatchId, SourceSystemId};
+        use erp_core::AccountKind;
+        use persistence_core::{NoTransaction, Transactional};
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {

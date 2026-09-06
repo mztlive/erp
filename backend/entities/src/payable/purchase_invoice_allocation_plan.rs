@@ -11,10 +11,10 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::errors::{Error, Result};
-use crate::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
-use crate::money::Amount;
 use crate::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
+use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 进项发票分配计划输入行（金额三元组由计划统一校验）。
 #[derive(Debug, Clone, PartialEq, Eq)]

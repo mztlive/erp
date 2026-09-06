@@ -5,7 +5,7 @@
 //! - 客户退款、供应商退款、回款冲正与付款冲正创建必须在同一事务注册
 //!   `BusinessDocument` 并绑定发布定义；
 //! - 跨集合写入（处理单 + 明细行、退款/冲正过账）→
-//!   `database::Transactional::with_transaction`；
+//!   `persistence_core::Transactional::with_transaction`；
 //! - 单集合草稿写入 → `&mut NoTransaction`。
 //! - 资金类根入口以操作人 + 操作号的事务内命令收据回放首次结果，业务单号
 //!   唯一索引只承担最终唯一性兜底。
@@ -29,7 +29,8 @@ mod start_approval;
 mod supplier_refund;
 mod version_conflict;
 
-use database::{AccessControlExt, Executor, ReturnsExt};
+use database::{AccessControlExt, ReturnsExt};
+use persistence_core::Executor;
 
 use entities::document_registry::DocumentType;
 use mongodb::Database;
@@ -52,6 +53,7 @@ pub use self::dto::{
     SubmitPaymentReversalRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
     SupplierRefundView,
 };
+use crate::audit::AuditActorLogs;
 use crate::{
     errors::{Error, Result},
     iam::{self, SharedRbacService},
@@ -133,7 +135,7 @@ pub(crate) async fn finalize_approved_return_in_transaction(
     db: &Database,
     document_type: DocumentType,
     business_object_id: &str,
-    actor: &crate::audit::AuditActor,
+    actor: &application_core::AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     let actor_id = actor.id();
@@ -194,7 +196,7 @@ pub(crate) async fn cancel_approval_in_transaction(
     document_type: DocumentType,
     id: &str,
     action: crate::approval::policy::ApprovalDomainAction,
-    actor: &crate::audit::AuditActor,
+    actor: &application_core::AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     match document_type {

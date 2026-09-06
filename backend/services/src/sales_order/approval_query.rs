@@ -4,10 +4,11 @@
 
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
-use database::{BpmExt, NoTransaction};
+use database::BpmExt;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use super::adapter::{document_approval_view_with_history, RECENT_HISTORY_LIMIT};
 use super::dto::{

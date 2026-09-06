@@ -1,13 +1,14 @@
-use entities::ids::SkuRevisionId;
 use entities::procurement_responsibility::{
     collect_rule_list_ids, ProcurementResponsibilityRule, ProcurementRuleListDisplayFacts,
     ProcurementRuleListPage,
 };
+use erp_core::ids::SkuRevisionId;
 
 use super::ids::unique_ids;
 use super::ProcurementResponsibilityRuleFilter;
-use crate::executor::Executor;
-use crate::{AccessControlExt, CatalogExt, ProcurementResponsibilityExt, Result};
+use crate::{AccessControlExt, CatalogExt, ProcurementResponsibilityExt};
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 批量加载规则行展示所需的最小关联事实.
 ///

@@ -1,10 +1,9 @@
-use database::{
-    AccessControlExt, CostExt, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt, Transactional,
-};
+use database::{AccessControlExt, CostExt, PayableExt, PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use mongodb::ClientSession;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::allocation_maintenance::{
@@ -15,8 +14,9 @@ use super::super::dto::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult}
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::super::PurchaseOrderService;
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl PurchaseOrderService {
     /// 最终通过并生效：改写采购单并同步履约影响。

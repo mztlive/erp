@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use casbin::{CoreApi, Enforcer, MemoryAdapter, RbacApi};
-use entities::{AccountKind, Permission, PermissionSet, Role, RoleData};
+use entities::{Permission, PermissionSet, Role, RoleData};
+use erp_core::AccountKind;
 
 use super::{
     collect_role_ids, collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable,
@@ -15,7 +16,7 @@ use crate::errors::Error;
 
 #[test]
 fn commit_outcome_unknown_is_detected_separately_from_definite_errors() {
-    let unknown = Error::from(database::Error::CommitOutcomeUnknown(
+    let unknown = Error::from(persistence_core::Error::CommitOutcomeUnknown(
         mongodb::error::Error::custom("unknown"),
     ));
     let definite = Error::NotFound("role".to_string());
@@ -254,7 +255,7 @@ async fn unknown_commit_outcome_poison_policy_state() {
         .await
         .unwrap();
     let rbac = RbacService::new(client.database("rbac-unit-test"));
-    let unknown = Error::from(database::Error::CommitOutcomeUnknown(
+    let unknown = Error::from(persistence_core::Error::CommitOutcomeUnknown(
         mongodb::error::Error::custom("unknown"),
     ));
 
@@ -262,7 +263,9 @@ async fn unknown_commit_outcome_poison_policy_state() {
 
     assert!(matches!(
         result,
-        Err(Error::OutcomeUnknown(database::Error::CommitOutcomeUnknown(_)))
+        Err(Error::OutcomeUnknown(
+            persistence_core::Error::CommitOutcomeUnknown(_)
+        ))
     ));
     assert!(matches!(
         rbac.ensure_policy_consistency_known(),

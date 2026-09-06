@@ -12,9 +12,9 @@ use entities::integration_ops::ReconciliationDifferenceResolution;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
-use crate::executor::Executor;
 use crate::repository::Repository;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 对差异 ID 集合去重并保持首次出现顺序。
 ///
@@ -133,11 +133,11 @@ impl<'a> Repository<'a, ReconciliationDifferenceResolution> {
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::Instant;
     use entities::integration_ops::{
         ReconciliationDifferenceId, ReconciliationDifferenceResolution,
         ReconciliationDifferenceResolutionData, ReconciliationDifferenceResolutionId, ResolutionAction,
     };
+    use erp_core::common::time::Instant;
 
     use super::{dedupe_difference_ids, latest_batch_filter, latest_per_difference};
 

@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::FileAssetId;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::FileAssetId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::ConfirmationScope;
 
@@ -105,7 +105,7 @@ pub struct LegacyImportBatchData {
     /// 导入批次号（唯一）。
     pub batch_no: String,
     /// 来源系统。
-    pub source_system_id: crate::ids::SourceSystemId,
+    pub source_system_id: erp_core::ids::SourceSystemId,
     /// 本批来源对象集合，如客户、供应商、SPU、SKU、卡券销售。
     pub source_object_set: String,
     /// 期初业务基准日。
@@ -139,7 +139,7 @@ pub struct LegacyImportBatch {
     /// 导入批次号（创建后不可修改）。
     pub batch_no: String,
     /// 来源系统。
-    pub source_system_id: crate::ids::SourceSystemId,
+    pub source_system_id: erp_core::ids::SourceSystemId,
     /// 本批来源对象集合。
     pub source_object_set: String,
     /// 期初业务基准日。
@@ -176,7 +176,7 @@ impl LegacyImportBatch {
     /// `success_rows + failed_rows <= total_rows`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::LegacyImportBatchId`）
+    /// * `id` - 实体主键（`erp_core::ids::LegacyImportBatchId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -184,7 +184,7 @@ impl LegacyImportBatch {
     ///
     /// # 错误
     /// 当必填文本为空或超长，或处理统计不一致时返回错误。
-    pub fn new(id: crate::ids::LegacyImportBatchId, data: LegacyImportBatchData) -> Result<Self> {
+    pub fn new(id: erp_core::ids::LegacyImportBatchId, data: LegacyImportBatchData) -> Result<Self> {
         let batch_no =
             normalize_required_text(data.batch_no, "批次号不能为空", BATCH_NO_MAX_LEN, "批次号过长")?;
         let source_object_set = normalize_required_text(
@@ -476,8 +476,8 @@ impl LegacyImportBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::ensure_transition;
-    use crate::ids::{LegacyImportBatchId, SourceSystemId};
+    use erp_core::common::state::ensure_transition;
+    use erp_core::ids::{LegacyImportBatchId, SourceSystemId};
 
     fn batch_data() -> LegacyImportBatchData {
         LegacyImportBatchData {

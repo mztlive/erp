@@ -4,10 +4,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
 use crate::fulfillment::{CustomerAcceptanceLine, CustomerAcceptanceLineData};
-use crate::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderLineId};
-use crate::money::Quantity;
+use erp_core::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderLineId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 单行领域输入（已验证形态，不含行号/表头/凭证）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

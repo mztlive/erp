@@ -6,8 +6,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::catalog::{Product, ProductCategory, ProductKind, ProductRevision, Sku};
-use crate::errors::{Error, Result};
-use crate::ids::{ProductCategoryId, ProductRevisionId};
+use erp_core::ids::{ProductCategoryId, ProductRevisionId};
+use erp_core::{Error, Result};
 
 use super::resolution::ProcurementResponsibilityResolutionLine;
 
@@ -210,8 +210,8 @@ mod tests {
     use crate::catalog::product_revision::ProductRevisionData;
     use crate::catalog::sku::SkuData;
     use crate::catalog::{EnableStatus, ProductKind};
-    use crate::common::time::BusinessDate;
-    use crate::ids::{ProductBrandId, ProductCategoryId, ProductId, SkuId, UnitOfMeasureId};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{ProductBrandId, ProductCategoryId, ProductId, SkuId, UnitOfMeasureId};
 
     fn test_product(current_revision_id: Option<&str>) -> Product {
         let mut product = Product::new(
@@ -230,7 +230,7 @@ mod tests {
 
     fn test_revision(category_id: &str) -> ProductRevision {
         ProductRevision::new(
-            crate::ids::ProductRevisionId::new("rev-1"),
+            erp_core::ids::ProductRevisionId::new("rev-1"),
             ProductRevisionData {
                 product_id: ProductId::new("product-1"),
                 revision_no: 1,

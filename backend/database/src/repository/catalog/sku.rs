@@ -6,17 +6,17 @@ use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, ListingStatus, Product, Sku, SkuRevision, SkuRevisionAttributeValue};
-use entities::common::time::BusinessDate;
-use entities::ids::{ProductId, SkuId, SkuRevisionId};
-use entities::money::{Amount, Quantity};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
+use erp_core::money::{Amount, Quantity};
 
 use super::super::extensions::CatalogExt;
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc, SKUS, SKU_REVISIONS};
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `sku_revision_attribute_value` 集合名（单一来源：`CatalogExt` 关联常量）。
 const SKU_REVISION_ATTRIBUTE_VALUES: &str = <mongodb::Database as CatalogExt>::SKU_REVISION_ATTRIBUTE_VALUES;
@@ -884,7 +884,7 @@ impl<'a> CatalogRepository<'a> {
     /// 保证「SKU 身份 + 修订快照 + 规格值」原子可见（数据模型 §6.3）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时各笔写入各自自动提交，中途失败会留下有 SKU 没有修订的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `sku` - 待写入的稳定 SKU
@@ -893,7 +893,7 @@ impl<'a> CatalogRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_sku_with_revision(
         &self,

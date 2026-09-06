@@ -7,8 +7,8 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{ProductCategoryAttributeId, ProductCategoryId, SkuAttributeId};
+use erp_core::ids::{ProductCategoryAttributeId, ProductCategoryId, SkuAttributeId};
+use erp_core::{Error, Result};
 
 /// 分类-属性适用关系创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,7 +54,7 @@ impl ProductCategoryAttribute {
     /// 创建后不可修改（组合唯一由 P3/索引校验）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ProductCategoryAttributeId`）
+    /// * `id` - 实体主键（`erp_core::ids::ProductCategoryAttributeId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -119,7 +119,7 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::ProductCategoryId;
+    use erp_core::ids::ProductCategoryId;
 
     fn data() -> ProductCategoryAttributeData {
         ProductCategoryAttributeData {

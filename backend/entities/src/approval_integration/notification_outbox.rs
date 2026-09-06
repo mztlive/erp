@@ -4,10 +4,10 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::ApprovalNotificationOutboxId;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::ApprovalNotificationOutboxId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 const DEDUP_KEY_MAX_LEN: usize = 128;
 const RECIPIENT_MAX_LEN: usize = 128;
@@ -362,8 +362,8 @@ mod tests {
         ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
         ApprovalNotificationTemplateParams, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
     };
-    use crate::common::time::Instant;
-    use crate::ids::ApprovalNotificationOutboxId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::ApprovalNotificationOutboxId;
 
     fn params() -> ApprovalNotificationTemplateParams {
         ApprovalNotificationTemplateParams {

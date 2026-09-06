@@ -1,8 +1,10 @@
 use std::{collections::HashMap, sync::atomic::Ordering};
 
 use casbin::Enforcer;
-use database::{AccessControlExt, Executor, NoTransaction};
-use entities::{AccountKind, Permission, PermissionSet, Role, RoleIdSet};
+use database::AccessControlExt;
+use entities::{Permission, PermissionSet, Role, RoleIdSet};
+use erp_core::AccountKind;
+use persistence_core::{Executor, NoTransaction};
 
 use super::{
     policy::{
@@ -12,10 +14,8 @@ use super::{
     subject, AuthorizedAccountManagement, AuthorizedPermissions, AuthorizedRoleGrant, AuthorizedRoleUpdate,
     RbacService, ROOT_ROLE_ID,
 };
-use crate::{
-    audit::AuditActor,
-    errors::{Error, Result},
-};
+use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl RbacService {
     /// 校验操作人是否可以授予目标角色，并捕获当前 policy 版本。

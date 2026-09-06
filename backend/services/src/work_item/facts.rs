@@ -2,15 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    Executor, IntegrationOpsExt, LegacyImportExt, NoTransaction, SupplierFulfillmentExt, SupplierOfferingExt,
-};
-use entities::common::time::Instant;
+use database::{IntegrationOpsExt, LegacyImportExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };
+use erp_core::common::time::Instant;
+use persistence_core::{Executor, NoTransaction};
 
 use crate::errors::Result;
 
@@ -593,7 +592,7 @@ impl WorkItemService {
             .await?;
         let offering_ids = offerings
             .iter()
-            .map(|offering| entities::ids::SupplierOfferingId::new(offering.base.id.clone()))
+            .map(|offering| erp_core::ids::SupplierOfferingId::new(offering.base.id.clone()))
             .collect::<Vec<_>>();
         let availabilities = self
             .db
@@ -637,14 +636,12 @@ impl WorkItemService {
 
 #[cfg(test)]
 mod integration_brief_tests {
-    use entities::{
-        common::time::Instant,
-        ids::{IntegrationErrorTaskId, ReconciliationDifferenceId},
-        integration_ops::{
-            ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
-            ReconciliationDifferenceData,
-        },
+    use entities::integration_ops::{
+        ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
+        ReconciliationDifferenceData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     use super::{integration_error_brief_source, reconciliation_difference_brief_source};
 

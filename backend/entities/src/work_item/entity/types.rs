@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::DocumentState;
+use erp_core::common::state::DocumentState;
 
 /// 当前代码注册的任务类型。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

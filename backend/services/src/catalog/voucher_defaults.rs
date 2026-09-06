@@ -1,10 +1,12 @@
-use database::{CatalogExt, NoTransaction};
+use database::CatalogExt;
 use entities::catalog::{ProductBrandId, ProductCategoryId, UnitOfMeasureId, VoucherCatalogDefaults};
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 
 use super::CatalogService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl CatalogService {
     /// 确保共用卡券根分类存在。

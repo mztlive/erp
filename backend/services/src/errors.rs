@@ -1,3 +1,15 @@
+use application_core::ErrorClass;
+
+impl From<application_core::Error> for Error {
+    /// 将应用合同错误映射为服务错误。
+    fn from(error: application_core::Error) -> Self {
+        match error {
+            application_core::Error::Internal(message) => Self::Internal(message),
+            application_core::Error::ValidationError(message) => Self::ValidationError(message),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -16,10 +28,10 @@ pub enum Error {
     ConflictError(String),
 
     #[error("数据冲突: 数据已存在，请勿重复提交")]
-    ReceiptDuplicate(#[source] database::Error),
+    ReceiptDuplicate(#[source] persistence_core::Error),
 
     #[error("数据冲突: 并发事务冲突，请重试")]
-    TransientTransaction(#[source] database::Error),
+    TransientTransaction(#[source] persistence_core::Error),
 
     #[error("权限不足: {0}")]
     Forbidden(String),
@@ -28,37 +40,39 @@ pub enum Error {
     Unauthenticated(String),
 
     #[error(transparent)]
-    Logic(#[from] entities::Error),
+    Logic(#[from] erp_core::Error),
 
     #[error("RBAC 错误: {0}")]
     Rbac(String),
 
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
-    OutcomeUnknown(#[source] database::Error),
+    OutcomeUnknown(#[source] persistence_core::Error),
 
     #[error("数据库错误：{0}")]
-    RepositoryError(database::Error),
+    RepositoryError(persistence_core::Error),
 
     #[error("{0}")]
     Coded(ErrorCode),
 }
 
-impl From<database::Error> for Error {
+impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为服务层错误。
     ///
     /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
     /// 其余错误保持内部仓储错误。唯一键冲突优先按已知索引名给出
     /// 面向用户的字段级提示，避免一律返回笼统的「数据已存在」。
-    fn from(error: database::Error) -> Self {
+    fn from(error: persistence_core::Error) -> Self {
         match error {
-            error @ database::Error::DuplicateKey(_) => {
+            error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
             }
-            database::Error::OptimisticLockingError => {
+            persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
             }
-            error @ database::Error::TransientTransactionConflict(_) => Self::TransientTransaction(error),
-            error @ database::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
+            error @ persistence_core::Error::TransientTransactionConflict(_) => {
+                Self::TransientTransaction(error)
+            }
+            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
     }
@@ -71,7 +85,7 @@ impl From<database::Error> for Error {
 ///
 /// # 返回
 /// 已知索引返回字段级中文提示；无法识别时返回通用冲突提示。
-fn duplicate_key_conflict_message(error: &database::Error) -> String {
+fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
@@ -127,19 +141,6 @@ impl From<validator::ValidationErrors> for Error {
     fn from(err: validator::ValidationErrors) -> Self {
         Error::ValidationError(err.to_string())
     }
-}
-
-/// 服务层错误分类。协议层仅按该分类决定传输语义，不解析错误文案。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorClass {
-    /// 部署或服务内部不变量损坏。
-    Internal,
-    /// 当前状态或乐观锁冲突。
-    Conflict,
-    /// 业务前置条件不满足。
-    BusinessRule,
-    /// 当前主体没有执行权限。
-    Forbidden,
 }
 
 /// 合同冻结的结构化服务错误码。
@@ -283,18 +284,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 mod tests {
     use mongodb::error::Error as MongoError;
 
-    use super::{duplicate_index_conflict_message, Error, ErrorClass, ErrorCode};
+    use super::{duplicate_index_conflict_message, Error, ErrorCode};
+    use application_core::ErrorClass;
 
     #[test]
     fn optimistic_locking_error_maps_to_conflict() {
-        let error = Error::from(database::Error::OptimisticLockingError);
+        let error = Error::from(persistence_core::Error::OptimisticLockingError);
 
         assert!(matches!(error, Error::ConflictError(_)));
     }
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {
-        let error = Error::from(database::Error::DuplicateKey(MongoError::custom("duplicate key")));
+        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
+            "duplicate key",
+        )));
 
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
@@ -338,9 +342,9 @@ mod tests {
 
     #[test]
     fn transient_transaction_error_maps_to_conflict() {
-        let error = Error::from(database::Error::TransientTransactionConflict(MongoError::custom(
-            "write conflict",
-        )));
+        let error = Error::from(persistence_core::Error::TransientTransactionConflict(
+            MongoError::custom("write conflict"),
+        ));
 
         assert!(matches!(&error, Error::TransientTransaction(_)));
         assert_eq!(error.to_string(), "数据冲突: 并发事务冲突，请重试");
@@ -349,7 +353,7 @@ mod tests {
 
     #[test]
     fn receipt_duplicate_keeps_source_and_existing_conflict_wire_message() {
-        let error = Error::ReceiptDuplicate(database::Error::DuplicateKey(MongoError::custom(
+        let error = Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(MongoError::custom(
             "duplicate receipt",
         )));
 
@@ -359,7 +363,7 @@ mod tests {
 
     #[test]
     fn other_database_error_remains_repository_error() {
-        let error = Error::from(database::Error::DatabaseError(MongoError::custom(
+        let error = Error::from(persistence_core::Error::DatabaseError(MongoError::custom(
             "connection failed",
         )));
 
@@ -368,7 +372,7 @@ mod tests {
 
     #[test]
     fn unknown_commit_outcome_has_dedicated_service_semantics() {
-        let error = Error::from(database::Error::CommitOutcomeUnknown(MongoError::custom(
+        let error = Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom(
             "unknown commit",
         )));
 

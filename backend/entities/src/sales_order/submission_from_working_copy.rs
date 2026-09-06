@@ -3,9 +3,9 @@
 //! ID 生成、外部身份解析、提交序号与提交审计由调用方注入；本模块不依赖
 //! `services::dto` 或 `id-generator`。
 
-use crate::common::time::Instant;
-use crate::errors::Result;
-use crate::ids::SalesOrderWorkingCopyId;
+use erp_core::common::time::Instant;
+use erp_core::ids::SalesOrderWorkingCopyId;
+use erp_core::Result;
 
 use super::snapshot::HeaderSnapshotData;
 use super::submission::{SalesOrderSubmissionData, SalesOrderSubmissionLineData};
@@ -133,8 +133,8 @@ mod tests {
     use super::super::working_copy_line::SalesOrderWorkingCopyLineData;
     use super::super::working_copy_test_support::{amt, line_data, price, rate};
     use super::*;
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
         ContractId, ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
         SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId,
     };

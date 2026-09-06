@@ -453,7 +453,7 @@ mod tests {
             commit_writes, replay_after_duplicate, MemoryRuntimeStore, RecordingDomainActions,
             TaskApplyContext,
         };
-        use entities::common::time::Instant;
+        use erp_core::common::time::Instant;
 
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
         let PreparedExecution::Apply(writes) = started else {

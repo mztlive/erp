@@ -7,12 +7,12 @@
 
 pub mod product;
 
+use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use entities::file_asset::SensitivityClass;
-use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, MoveProductCategoryRequest, PageView,

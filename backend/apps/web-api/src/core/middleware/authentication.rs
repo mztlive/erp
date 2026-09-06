@@ -1,10 +1,11 @@
+use application_core::AuditActor;
 use axum::{
     extract::{Request, State},
     http::{header::AUTHORIZATION, HeaderMap},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use services::{audit::AuditActor, auth::BackofficeAuthService, iam};
+use services::{auth::BackofficeAuthService, iam};
 use tracing::{error, info, warn};
 
 use crate::{
@@ -115,11 +116,11 @@ fn attach_identity(request: &mut Request, payload: TokenPayload) -> Result<(), A
 
 #[cfg(test)]
 mod tests {
+    use application_core::AuditActor;
     use axum::body::Body;
     use axum::extract::Request;
     use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
-    use entities::AccountKind;
-    use services::audit::AuditActor;
+    use erp_core::AccountKind;
 
     use super::{attach_identity, bearer_token, RbacSubject};
     use crate::core::{

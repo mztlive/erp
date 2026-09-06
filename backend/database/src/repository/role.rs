@@ -1,9 +1,9 @@
 use super::Repository;
-use crate::errors::Result;
-use crate::{mongo_ops, Executor};
 use entities::Role;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
+use persistence_core::Result;
+use persistence_core::{mongo_ops, Executor};
 
 impl<'a> Repository<'a, Role> {
     /// 判断指定角色 ID 是否对应未软删除记录。

@@ -6,8 +6,8 @@
 
 use std::collections::HashSet;
 
-use crate::errors::{Error, Result};
-use crate::ids::{LegacyImportBatchId, LegacyImportRowId};
+use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
+use erp_core::{Error, Result};
 
 use super::{LegacyImportRow, LegacyImportRowData};
 
@@ -72,7 +72,7 @@ pub fn build_import_rows(
 #[cfg(test)]
 mod tests {
     use super::{build_import_rows, ImportRowSpec};
-    use crate::ids::{LegacyImportBatchId, LegacyImportRowId};
+    use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 
     fn spec(id: &str, object: &str, key: &str) -> ImportRowSpec {
         ImportRowSpec {

@@ -1,5 +1,3 @@
-use crate::field_update::FieldUpdate;
-use crate::ids::{PartyId, PartyRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 use crate::party::{
     Party, PartyAddress, PartyAddressUpdate, PartyBankAccount, PartyBankAccountUpdate, PartyContact,
     PartyContactUpdate, PartyRevision, PartyRevisionData, PartyTaxProfile, PartyTaxProfileUpdate,
@@ -9,6 +7,8 @@ use crate::supplier::{
     InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountUpdate,
     SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
 };
+use erp_core::field_update::FieldUpdate;
+use erp_core::ids::{PartyId, PartyRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
 use super::types::option_as_authoritative_update;
 
@@ -46,7 +46,7 @@ pub struct PlanPartyRevisionParams<'a> {
 ///
 /// # 约束
 /// 纯内存操作，不触及 MongoDB、全局 ID 或加密；`party_no` 与 `party_kind` 不在此修改。
-pub fn plan_party_revision(params: PlanPartyRevisionParams<'_>) -> crate::Result<PartyRevision> {
+pub fn plan_party_revision(params: PlanPartyRevisionParams<'_>) -> erp_core::Result<PartyRevision> {
     let PlanPartyRevisionParams {
         party,
         unified_credit_code,
@@ -93,7 +93,7 @@ pub struct PlanCommercialProfileRevisionParams<'a> {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
-    pub invoice_tax_rate: crate::money::Rate,
+    pub invoice_tax_rate: erp_core::money::Rate,
     /// 签约主体。
     pub signing_entity_party_id: PartyId,
     /// 付款主体。
@@ -123,7 +123,7 @@ pub struct PlanCommercialProfileRevisionParams<'a> {
 /// 纯内存，不触及外部 I/O；不分配新 ID，需 Service 注入。
 pub fn plan_commercial_profile_revision(
     params: PlanCommercialProfileRevisionParams<'_>,
-) -> crate::Result<SupplierCommercialProfileRevision> {
+) -> erp_core::Result<SupplierCommercialProfileRevision> {
     let PlanCommercialProfileRevisionParams {
         supplier,
         settlement_mode,
@@ -180,7 +180,7 @@ pub fn plan_commercial_profile_revision(
 ///
 /// # 约束
 /// 纯内存；保留 Service 侧 `retain(is_active)` 语义，不得改变过滤顺序。
-pub fn disable_contacts(items: &mut Vec<PartyContact>, actor_id: &str) -> crate::Result<()> {
+pub fn disable_contacts(items: &mut Vec<PartyContact>, actor_id: &str) -> erp_core::Result<()> {
     items.retain(PartyContact::is_active);
     for item in items.iter_mut().filter(|item| item.is_active()) {
         item.update(
@@ -209,7 +209,7 @@ pub fn disable_contacts(items: &mut Vec<PartyContact>, actor_id: &str) -> crate:
 ///
 /// # 约束
 /// 纯内存；与 `disable_contacts` 同构，保持一致的停用语义。
-pub fn disable_addresses(items: &mut Vec<PartyAddress>, actor_id: &str) -> crate::Result<()> {
+pub fn disable_addresses(items: &mut Vec<PartyAddress>, actor_id: &str) -> erp_core::Result<()> {
     items.retain(PartyAddress::is_active);
     for item in items.iter_mut().filter(|item| item.is_active()) {
         item.update(
@@ -238,7 +238,7 @@ pub fn disable_addresses(items: &mut Vec<PartyAddress>, actor_id: &str) -> crate
 ///
 /// # 约束
 /// 纯内存；保持原 Service 顺序。
-pub fn disable_tax_profiles(items: &mut Vec<PartyTaxProfile>, actor_id: &str) -> crate::Result<()> {
+pub fn disable_tax_profiles(items: &mut Vec<PartyTaxProfile>, actor_id: &str) -> erp_core::Result<()> {
     items.retain(PartyTaxProfile::is_active);
     for item in items.iter_mut().filter(|item| item.is_active()) {
         item.update(
@@ -267,7 +267,7 @@ pub fn disable_tax_profiles(items: &mut Vec<PartyTaxProfile>, actor_id: &str) ->
 ///
 /// # 约束
 /// 纯内存；不触及加密列，仅切换状态与默认值。
-pub fn disable_bank_accounts(items: &mut Vec<PartyBankAccount>, actor_id: &str) -> crate::Result<()> {
+pub fn disable_bank_accounts(items: &mut Vec<PartyBankAccount>, actor_id: &str) -> erp_core::Result<()> {
     items.retain(PartyBankAccount::is_active);
     for item in items.iter_mut().filter(|item| item.is_active()) {
         item.update(

@@ -31,26 +31,26 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PayableExt, ReturnsExt, SupplierExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use application_core::AuditActor;
+use database::{AccessControlExt, DocumentRegistryExt, PayableExt, ReturnsExt, SupplierExt};
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
-use entities::ids::{PaymentAllocationId, PaymentReversalId, SupplierAccountId, SupplierPaymentId};
-use entities::money::Amount;
 use entities::payable::{
     AllocationAction as PayableAllocationAction, PaymentAllocation, PaymentAllocationData, SupplierPayment,
     SupplierPaymentStatus,
 };
 use entities::returns::{CumulativeAmountLimit, PaymentReversal, PaymentReversalData, PaymentReversalStatus};
+use erp_core::common::time::Instant;
+use erp_core::ids::{PaymentAllocationId, PaymentReversalId, SupplierAccountId, SupplierPaymentId};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 impl ReturnsService {
@@ -818,10 +818,10 @@ async fn persist_reverse_allocations(
 mod payment_reversal_approval_tests {
     use super::{execute_payment_reversal_domain_action, start_payment_reversal_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
-    use entities::ids::{PaymentReversalId, SupplierPaymentId};
-    use entities::money::Amount;
     use entities::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_reversal() -> PaymentReversal {

@@ -1,10 +1,10 @@
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::SupplierAccountId;
 use entities::returns::{PaymentReversal, PaymentReversalStatus};
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierAccountId;
 
 use super::super::dto::{
     DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView,
@@ -357,8 +357,8 @@ mod payment_reversal_tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::ids::{PaymentReversalId, SupplierPaymentId};
     use entities::returns::PaymentReversalData;
+    use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
     use std::str::FromStr;
 
     fn draft_reversal() -> PaymentReversal {
@@ -369,7 +369,7 @@ mod payment_reversal_tests {
                 original_supplier_payment_id: SupplierPaymentId::new("sp-1"),
                 reason_code: None,
                 reason_text: "错付款冲正".into(),
-                amount: entities::money::Amount::from_str("100").expect("金额合法"),
+                amount: erp_core::money::Amount::from_str("100").expect("金额合法"),
                 handled_by: "handler-1".into(),
                 reviewed_by: "reviewer-1".into(),
                 occurred_at: Instant::from_unix_secs(10),

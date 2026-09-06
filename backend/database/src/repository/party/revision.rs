@@ -1,15 +1,15 @@
-use entities::ids::PartyId;
 use entities::party::PartyRevision;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::PartyId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::sort_doc;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 主体修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -255,7 +255,7 @@ impl<'a> Repository<'a, PartyRevision> {
     pub async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
         let revisions = self.list_revision_history(party_id, executor).await?;
         PartyRevision::next_revision_no(party_id, &revisions)
-            .map_err(|_| crate::Error::EntityMetadataOutOfRange("revision_no"))
+            .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("revision_no"))
     }
 }
 /// 主体修订列表投影字段。

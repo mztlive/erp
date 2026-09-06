@@ -7,9 +7,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{PurchaseOrderRevisionLineId, PurchaseReturnLineId, PurchaseReturnOrderId, WarehouseId};
-use crate::money::Quantity;
+use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReturnLineId, PurchaseReturnOrderId, WarehouseId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 采购退货明细创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -58,7 +58,7 @@ impl PurchaseReturnLine {
     /// 完成退货数量正数校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseReturnLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseReturnLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

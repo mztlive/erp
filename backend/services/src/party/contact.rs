@@ -5,18 +5,20 @@
 //! 指纹密钥见 `super::sensitive`。原地更新只允许切换启停状态、结束有效期
 //! 与调整默认标记；同一主体默认联系人唯一（跨行约束，事务内校验，§6.2）。
 
-use database::{AccessControlExt, NoTransaction, PartyExt, Transactional};
-use entities::field_update::FieldUpdate;
+use database::{AccessControlExt, PartyExt};
 use entities::party::{
     EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyContactUpdate, PartyId,
 };
+use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use std::sync::Arc;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::dto::{
     normalize_sort, CreatePartyContactRequest, PageView, PartyContactListParams, PartyContactView, SortDir,

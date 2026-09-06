@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use entities::ids::{PartyId, SupplierAccountId};
 use entities::supplier::{CapabilityCode, QualificationType, SupplierQualification};
+use erp_core::ids::{PartyId, SupplierAccountId};
 
 use super::super::super::extensions::PartyExt;
 use super::super::super::Repository;
@@ -11,8 +11,8 @@ use super::{
     QualificationConstraintKind, SupplierListBundle, SupplierListSearchInput,
     SupplierQualificationHealthFilter,
 };
-use crate::executor::Executor;
-use crate::{Error, Result};
+use persistence_core::Executor;
+use persistence_core::{Error, Result};
 
 /// 判定资质筛选约束的纯分支种类。
 ///
@@ -92,7 +92,7 @@ pub(super) fn intersect_supplier_ids(
 /// 纯日期计算，不触及 I/O；窗口长度固定为 30 天。
 pub(super) fn qualification_expiry_cutoff(as_of: &str) -> Result<String> {
     let as_of = as_of
-        .parse::<entities::common::time::BusinessDate>()
+        .parse::<erp_core::common::time::BusinessDate>()
         .map_err(|_| Error::EntityMetadataOutOfRange("supplier business date"))?;
     Ok(SupplierQualification::expiry_cutoff(as_of, 30)
         .map_err(|_| Error::EntityMetadataOutOfRange("supplier expiry cutoff"))?

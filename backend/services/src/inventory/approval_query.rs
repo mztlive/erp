@@ -3,12 +3,13 @@
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use database::{ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentState};
 use entities::work_item::WorkItem;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
 use super::adapter::{
     document_approval_view_with_history, require_frozen_binding, stock_adjustment_subject_ref,
@@ -29,8 +30,8 @@ use crate::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
 };
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
 pub(super) async fn load_document_approval(

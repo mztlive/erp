@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{BackgroundJobId, BackgroundJobItemId};
-use crate::validation::normalize_optional_text;
+use erp_core::ids::{BackgroundJobId, BackgroundJobItemId};
+use erp_core::validation::normalize_optional_text;
+use erp_core::{Error, Result};
 
 /// 对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
@@ -133,7 +133,7 @@ impl BackgroundJobItem {
     /// 递增（为 0 视为越界拒绝）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::BackgroundJobItemId`）
+    /// * `id` - 实体主键（`erp_core::ids::BackgroundJobItemId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -229,7 +229,7 @@ impl BackgroundJobItem {
 #[cfg(test)]
 mod tests {
     use super::{BackgroundJobItem, BackgroundJobItemData, ItemStatus};
-    use crate::ids::{BackgroundJobId, BackgroundJobItemId};
+    use erp_core::ids::{BackgroundJobId, BackgroundJobItemId};
 
     fn data() -> BackgroundJobItemData {
         BackgroundJobItemData {

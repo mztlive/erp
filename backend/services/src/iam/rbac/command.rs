@@ -1,18 +1,20 @@
 use std::sync::Arc;
 
-use database::{AccessControlExt, NoTransaction};
+use database::AccessControlExt;
 use entities::{AuditLog, Permission, PermissionSet, Role, RoleData, RoleUpdate};
+use persistence_core::NoTransaction;
 
 use super::{
     authorize::{ensure_role_deletable, ensure_role_mutable},
     policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found},
     AuthorizedRoleUpdate, RbacService,
 };
+use crate::audit::AuditActorLogs;
 use crate::{
-    audit::AuditActor,
     errors::{Error, Result},
     iam::{CreateRoleParams, UpdateRoleParams},
 };
+use application_core::AuditActor;
 
 impl RbacService {
     /// 创建角色并写入 Casbin 权限策略。

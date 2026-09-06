@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, PartyBankAccountId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{FileAssetId, PartyBankAccountId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 付款单号最大长度。
 const PAYMENT_NO_MAX_LEN: usize = 64;
@@ -151,7 +151,7 @@ impl SupplierPayment {
     /// 完成付款单号与银行流水号的 trim/非空/长度校验和金额正数校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierPaymentId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierPaymentId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn state_machine_edges_are_directed() {
-        use crate::common::state::ensure_transition as tr;
+        use erp_core::common::state::ensure_transition as tr;
         use SupplierPaymentStatus as S;
 
         assert!(tr(S::Draft, S::Posted).is_ok());

@@ -1,5 +1,6 @@
-use database::{BulkJobExt, LegacyImportExt, NoTransaction};
+use database::{BulkJobExt, LegacyImportExt};
 use entities::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::errors::{Error, Result};

@@ -1,21 +1,22 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
-use entities::ids::{SalesOrderId, SupplierAccountId};
 use entities::purchase_order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SalesOrderId, SupplierAccountId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::common::{in_filter, sort_doc, PURCHASE_ORDER_SORT_FIELDS};
 use super::PurchaseOrderRepository;
-use crate::executor::Executor;
 use crate::repository::extensions::PurchaseOrderExt;
-use crate::repository::regex_filter::insert_literal_regex_filter;
 use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 采购单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -339,8 +340,8 @@ fn purchase_order_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{active_purchase_order_filter, PurchaseOrderFilter, QueryFilter};
-    use entities::ids::{SalesOrderId, SupplierAccountId};
     use entities::purchase_order::PurchaseOrderStatus;
+    use erp_core::ids::{SalesOrderId, SupplierAccountId};
     use mongodb::bson::doc;
 
     #[test]

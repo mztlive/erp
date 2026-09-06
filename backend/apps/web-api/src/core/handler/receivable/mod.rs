@@ -3,21 +3,19 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    receivable::{
-        CancelCustomerReceiptApprovalRequest, CardFundsRegistrationResult, CardFundsReviewDetailParams,
-        CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
-        CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CreateCustomerReceiptRequest,
-        CreateInvoiceRequest, CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView,
-        InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
-        ReceivableAccountListParams, ReceivableAccountSummaryView, ReceivableAccountView, ReceivableService,
-        RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SubmitCustomerReceiptRequest,
-    },
+use services::receivable::{
+    CancelCustomerReceiptApprovalRequest, CardFundsRegistrationResult, CardFundsReviewDetailParams,
+    CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
+    CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CreateCustomerReceiptRequest,
+    CreateInvoiceRequest, CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView,
+    InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
+    ReceivableAccountListParams, ReceivableAccountSummaryView, ReceivableAccountView, ReceivableService,
+    RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SubmitCustomerReceiptRequest,
 };
 
 use crate::{

@@ -1,4 +1,4 @@
-use entities::AccountKind;
+use erp_core::AccountKind;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -36,7 +36,7 @@ pub struct PasswordLoginPayload {
 
 #[cfg(test)]
 mod tests {
-    use entities::AccountKind;
+    use erp_core::AccountKind;
 
     use super::{AuthRequest, PasswordLoginPayload};
     use validator::Validate;

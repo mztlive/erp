@@ -1,14 +1,15 @@
 use std::collections::HashSet;
 
-use database::{AccessControlExt, CatalogExt, FileAssetExt, NoTransaction, Transactional};
+use database::{AccessControlExt, CatalogExt, FileAssetExt};
 use entities::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
 use entities::catalog::{EnableStatus, ProductBrandId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateProductBrandRequest, PageView, ProductBrandListParams, ProductBrandView, SortDir,
     UpdateProductBrandRequest,
@@ -16,6 +17,7 @@ use crate::catalog::dto::{
 use crate::errors::Result;
 use crate::file_asset::PendingFileAssetRequest;
 use crate::pending_file_assets::PendingFileAssets;
+use application_core::AuditActor;
 
 /// 商品品牌列表筛选条件类型。
 type ProductBrandFilter = <mongodb::Database as CatalogExt>::ProductBrandFilter;
@@ -237,7 +239,7 @@ impl CatalogService {
     /// 校验既有 Logo 文件资产存在；本次待登记资产由调用方事务负责。
     async fn ensure_brand_logo_exists(
         &self,
-        asset_id: Option<&entities::ids::FileAssetId>,
+        asset_id: Option<&erp_core::ids::FileAssetId>,
         pending_assets: &PendingFileAssets,
     ) -> Result<()> {
         let Some(asset_id) = asset_id else {

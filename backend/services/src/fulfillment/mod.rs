@@ -5,7 +5,7 @@
 //!   `NO_APPROVAL` 返回空绑定，不查询发布定义、不启动实例、不建任务；
 //! - 单集合无跨步骤原子性要求的 CRUD 传入 `&mut NoTransaction`；
 //! - 表头+行创建、状态迁移+审计、过账（§8.2 第 1/2/5 条跨集合原子性）使用
-//!   `database::Transactional::with_transaction`。
+//!   `persistence_core::Transactional::with_transaction`。
 //!
 //! 跨域协作（P3-service-api §2：只调对方 Repository，不依赖对方 Service）：
 //! - D15 `purchase_order`：采购单/生效版本/版本行/采购销售分配；§8.1.5

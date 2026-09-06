@@ -1,0 +1,17 @@
+[package]
+name = "erp-core"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+bson = { workspace = true }
+chrono = { workspace = true }
+entity-core = { workspace = true }
+entity-macros = { workspace = true }
+regex = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+validator = { workspace = true }

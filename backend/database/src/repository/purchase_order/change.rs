@@ -4,19 +4,20 @@
 //! 引用不可变变更提交。变更提交/明细**不提供软删除方法**；变更单本身是
 //! 可编辑单据草稿（`StableBase`），可软删除与恢复。
 
-use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
 use super::{PurchaseOrderRepository, PURCHASE_CHANGE_ORDERS};
-use crate::executor::Executor;
 use crate::repository::PageResult;
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> PurchaseOrderRepository<'a> {
     /// 分页查询采购变更单，并按创建时间稳定排序。

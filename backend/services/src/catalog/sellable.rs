@@ -4,10 +4,11 @@
 //! 有效供给组合为销售只读投影。资格判定由 catalog Repository 的同一条聚合
 //! 管道执行，销售单提交也复用该仓储判定。
 
-use database::{CatalogExt, NoTransaction};
+use database::CatalogExt;
 use entities::catalog::ProductKind;
-use entities::common::time::BusinessDate;
-use entities::money::Amount;
+use erp_core::common::time::BusinessDate;
+use erp_core::money::Amount;
+use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

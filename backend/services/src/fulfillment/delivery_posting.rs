@@ -1,18 +1,20 @@
-use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt, Transactional};
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
+use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt};
 use entities::fulfillment::{Delivery, DeliveryLine, DeliveryState, DeliveryType};
-use entities::ids::{DeliveryId, StockMovementId, StockReservationEntryId};
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, StockMovement, StockMovementData,
     StockReservationEntry, StockReservationEntryData,
 };
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{DeliveryId, StockMovementId, StockReservationEntryId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
 use super::{DeliveryView, FulfillmentService, PostDeliveryRequest};

@@ -7,19 +7,19 @@ use bpm::ids::{
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
-    ReceivableExt, Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, ReceivableExt, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::receivable::CustomerReceipt;
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::customer_receipt_object_readable;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
@@ -31,8 +31,9 @@ use crate::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -616,7 +617,7 @@ mod tests {
     use super::list_projection_from_execution;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
-    use entities::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

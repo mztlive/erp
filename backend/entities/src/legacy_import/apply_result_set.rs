@@ -4,9 +4,9 @@
 //! 收紧输入。不访问数据库、时钟或 HTTP；ID 是否属于目标批次由 Service /
 //! Repository 再确认。
 
-use crate::errors::{Error, Result};
-use crate::ids::{ExternalIdentityMapId, LegacyImportRowId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::{ExternalIdentityMapId, LegacyImportRowId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 单次应用请求允许的最大行结果数（与 HTTP 契约 1–1000 对齐）。
 const APPLY_RESULT_MAX_LEN: usize = 1000;
@@ -337,7 +337,7 @@ fn optional_error_detail(value: Option<String>) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
-    use crate::ids::{ExternalIdentityMapId, LegacyImportRowId};
+    use erp_core::ids::{ExternalIdentityMapId, LegacyImportRowId};
 
     fn draft(id: &str, outcome: ApplyResultOutcome) -> ApplyResultDraft {
         ApplyResultDraft {

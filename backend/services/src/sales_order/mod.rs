@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 建单（订单 + 稳定明细 + 工作副本 + 工作副本行 + 审计）：跨集合 →
-//!   `database::Transactional::with_transaction`；
+//!   `persistence_core::Transactional::with_transaction`；
 //! - 提交（提交快照 + 订单审核轨推进 + 审批记录/采购确认批次 + 待办 + 审计）：
 //!   跨集合 → 同一事务模板；
 //! - 保存草稿 / 作废：跨集合（工作副本行替换 + 头 CAS + 审计）→ 事务；
@@ -20,11 +20,13 @@
 //! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{AccessControlExt, Executor, SalesOrderExt};
+use application_core::AuditActor;
+use database::{AccessControlExt, SalesOrderExt};
 use mongodb::Database;
+use persistence_core::Executor;
 
 mod adapter;
 mod approval_query;

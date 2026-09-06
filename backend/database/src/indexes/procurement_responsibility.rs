@@ -8,7 +8,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::ProcurementResponsibilityExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// 创建采购责任规则索引。
 ///

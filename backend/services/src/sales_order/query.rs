@@ -4,15 +4,15 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
-    WorkItemExt,
+    AccessControlExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt,
 };
-use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
     BusinessType, ReviewStatus, SalesOrderRevision, SalesOrderRevisionLine, SalesOrderSubmissionLine,
     SalesOrderWorkingCopy, WorkingPurpose,
 };
 use entities::Permission;
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::approval_query::load_document_approval;
@@ -29,10 +29,10 @@ use super::status::{
 use super::SalesOrderService;
 use crate::document_registry::find_approval_binding;
 use crate::{
-    audit::AuditActor,
     errors::{Error, Result},
     iam::subject,
 };
+use application_core::AuditActor;
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
 type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;
@@ -52,10 +52,10 @@ type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;
 /// 零值只用于未生效销售单，不掩盖已生效销售单的当前版本缺失。
 fn empty_sales_procurement_coverage() -> SalesProcurementCoverageView {
     SalesProcurementCoverageView {
-        total_quantity: entities::money::Quantity::from_str("0").expect("零数量合法"),
-        covered_quantity: entities::money::Quantity::from_str("0").expect("零数量合法"),
-        remaining_quantity: entities::money::Quantity::from_str("0").expect("零数量合法"),
-        progress: entities::money::Rate::from_str("0").expect("零进度合法"),
+        total_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
+        covered_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
+        remaining_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
+        progress: erp_core::money::Rate::from_str("0").expect("零进度合法"),
     }
 }
 

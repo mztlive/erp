@@ -9,8 +9,8 @@ use entities::supplier_api::SupplierApiCapability;
 use serde::Serialize;
 
 use super::{SupplierApiRepository, SUPPLIER_API_CAPABILITIES};
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 会话感知的有序批量插入（确定性写入）。
 ///
@@ -27,7 +27,7 @@ use crate::Result;
 /// 写入成功时返回 `Ok(())`。
 ///
 /// # 错误
-/// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
+/// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
 ///
 /// # 约束
 /// 不开事务、不提交事务；有序写入显式声明，不依赖驱动默认。
@@ -64,7 +64,7 @@ impl<'a> SupplierApiRepository<'a> {
     /// 乐观锁冲突并推进内存版本）；新增实体按给定顺序一次有序批量插入。
     /// 两组输入同时为空时直接返回成功且不访问数据库。必须收到事务执行器；
     /// 本方法不构成原子边界，`NoTransaction` 下各笔各自提交，Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话，任一失败整体回滚。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话，任一失败整体回滚。
     ///
     /// # 参数
     /// * `updates` - 待写回的已更新能力实体（顺序即写入顺序；内存版本随写回推进）
@@ -108,7 +108,7 @@ impl<'a> SupplierApiRepository<'a> {
 #[cfg(test)]
 mod tests {
     use super::SupplierApiRepository;
-    use crate::NoTransaction;
+    use persistence_core::NoTransaction;
 
     /// 空输入直接成功且不访问数据库（INT-R32）。
     ///

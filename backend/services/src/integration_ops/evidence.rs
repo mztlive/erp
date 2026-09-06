@@ -3,7 +3,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use database::{Executor, IntegrationOpsExt, ReturnsExt, SupplierFulfillmentExt};
+use database::{IntegrationOpsExt, ReturnsExt, SupplierFulfillmentExt};
 use entities::integration_ops::{
     difference_terminal_policy, error_terminal_policy,
     reconciliation_reason_registry as domain_reason_registry, CanonicalEvidenceReference, DirectConclusion,
@@ -13,6 +13,7 @@ use entities::integration_ops::{
 };
 use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::{
     ActionBlockerView, ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode,
@@ -432,7 +433,7 @@ impl IntegrationEvidenceAuthority for Database {
                 let records = self
                     .reconciliation_difference_resolutions()
                     .search_resolutions(
-                        &entities::ids::ReconciliationDifferenceId::new(subject.item_id.clone()),
+                        &erp_core::ids::ReconciliationDifferenceId::new(subject.item_id.clone()),
                         executor,
                     )
                     .await?;
@@ -863,7 +864,7 @@ fn ensure_association(subject: &EvidenceSubject, ids: &[String]) -> Result<()> {
 ///
 /// # 约束
 /// 不重复实现 grammar；仅保留 wire 错误类别。
-fn evidence_reference_grammar<T>(result: entities::Result<T>) -> Result<T> {
+fn evidence_reference_grammar<T>(result: erp_core::Result<T>) -> Result<T> {
     result.map_err(|error| Error::ValidationError(error.to_string()))
 }
 
@@ -935,7 +936,7 @@ mod tests {
         IntegrationErrorTask::new(
             IntegrationErrorTaskId::new("task-1"),
             IntegrationErrorTaskData {
-                message_id: Some(entities::ids::InboxMessageId::new("message-1")),
+                message_id: Some(erp_core::ids::InboxMessageId::new("message-1")),
                 business_object_id: None,
                 error_class: ErrorClass::ResultUnknown,
                 owner_role: Some("role-operations".to_string()),

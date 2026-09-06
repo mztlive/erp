@@ -7,13 +7,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::ensure_transition;
-use crate::errors::{Error, Result};
-use crate::ids::WarehouseId;
-use crate::validation::{normalize_optional_text, normalize_required_text};
 use crate::warehouse::status::EnableStatus;
 use crate::warehouse::warehouse_revision::WarehouseRevision;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::ensure_transition;
+use erp_core::ids::WarehouseId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 仓库代码最大长度。
 const WAREHOUSE_CODE_MAX_LEN: usize = 64;
@@ -96,7 +96,7 @@ impl Warehouse {
     /// 完成 warehouse_code 的校验与规范化（去首尾空白、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::WarehouseId`）
+    /// * `id` - 实体主键（`erp_core::ids::WarehouseId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -224,10 +224,10 @@ fn normalize_handler_user_id(value: Option<String>) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::common::time::BusinessDate;
-    use crate::ids::{WarehouseId, WarehouseRevisionId};
     use crate::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 
     fn data() -> WarehouseData {
         WarehouseData {

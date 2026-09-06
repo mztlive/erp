@@ -2,7 +2,7 @@
 //!
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common::StableBase` 基元。
 //! 字段字典与唯一约束见数据模型 §6.1；公共字段归属按 §4.3 判定：
-//! - `source_system` 是「稳定基础资料」→ 组合 [`crate::common::StableBase`]；
+//! - `source_system` 是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；
 //! - `external_identity_map` / `external_identity_target` 是来源身份注册表，
 //!   不属基础资料或正式事实 → 只用 `BaseModel` 持久化元数据，状态与审计字段按
 //!   §6.1 各自建模（`mapping_status` / `mapped_at` / `mapped_by` /
@@ -15,12 +15,12 @@ use entity_macros::Entity;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::common::stable::StableBase;
-use crate::errors::{Error, Result};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::stable::StableBase;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+pub use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
 
 /// 来源系统代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -466,7 +466,7 @@ impl SourceSystem {
     /// 完成 code/name 的完整校验与规范化（去首尾空白、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SourceSystemId`）
+    /// * `id` - 实体主键（`erp_core::ids::SourceSystemId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -600,7 +600,7 @@ impl ExternalIdentityMap {
     /// `external_id_key`（只移除首尾空白，不做大小写折叠）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ExternalIdentityMapId`）
+    /// * `id` - 实体主键（`erp_core::ids::ExternalIdentityMapId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -718,7 +718,7 @@ impl ExternalIdentityTarget {
     /// `valid_to` 必须晚于 `valid_from`；`approved_at` 与 `approved_by` 必须成对。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ExternalIdentityTargetId`）
+    /// * `id` - 实体主键（`erp_core::ids::ExternalIdentityTargetId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -781,7 +781,7 @@ mod tests {
         ExternalIdentityTargetData, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
         SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate, TargetStatus,
     };
-    use crate::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+    use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
 
     fn source_system_data() -> SourceSystemData {
         SourceSystemData {

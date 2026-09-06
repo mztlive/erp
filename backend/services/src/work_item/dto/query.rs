@@ -6,7 +6,7 @@ use validator::Validate;
 use super::status::{family_of, WorkItemFamily, WorkItemScope, WorkItemSort, WORK_ITEM_TYPES};
 use super::view::WorkItemView;
 use crate::errors::{Error, Result};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 pub(super) const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
 
@@ -181,7 +181,7 @@ pub struct WorkItemStatsView {
     /// 当前责任范围内按任务族划分的可处理任务数。
     pub family_counts: WorkItemFamilyCountsView,
     /// 服务端统计时点。
-    pub as_of: entities::common::time::Instant,
+    pub as_of: erp_core::common::time::Instant,
 }
 
 fn normalize_work_item_types(

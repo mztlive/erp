@@ -1,10 +1,10 @@
 //! 财务责任规则 HTTP 适配层。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use services::audit::AuditActor;
 use services::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
     FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest, WorkItemService,

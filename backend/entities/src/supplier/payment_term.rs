@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 结算方式（§6.2：预付款、先用后付、现结等受控代码）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

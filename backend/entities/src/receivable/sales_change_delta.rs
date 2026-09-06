@@ -4,13 +4,13 @@
 //! 与绝对金额。零差额表示无需记账，调用方不得产生分录；正差额为应收增加，
 //! 负差额为应收减少。所有金额均为 `Amount`（2 位小数），由领域层保证精度。
 
-use crate::errors::{Error, Result};
-use crate::money::Amount;
 use crate::receivable::receivable_account::{
     AccountReviewStatus, ReceivableAccount, ReceivableAccountUpdate,
 };
 use crate::receivable::EntryDirection;
 use crate::sales_order::BusinessType;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 销售变更应收差额 VO。
 ///
@@ -320,8 +320,8 @@ mod tests {
     }
 
     fn make_account(status: AccountReviewStatus) -> ReceivableAccount {
-        use crate::common::time::Instant;
-        use crate::ids::{
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{
             CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
         };
         let reviewed = if status == AccountReviewStatus::Reviewed {

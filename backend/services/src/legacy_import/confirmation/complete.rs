@@ -1,19 +1,19 @@
-use database::{
-    AccessControlExt, DocumentRegistryExt, LegacyImportExt, NoTransaction, Transactional, WorkItemExt,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, DocumentRegistryExt, LegacyImportExt, WorkItemExt};
 use entities::document_registry::WorkflowActionId;
 use entities::legacy_import::{
     confirmation_workflow_action, ConfirmationDecision, ConfirmationScope, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_core::common::time::Instant;
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 use super::super::dto::{
     CompleteImportBusinessConfirmationCommand, CompleteImportBusinessConfirmationResult,

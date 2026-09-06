@@ -107,14 +107,14 @@ mod tests {
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use crate::errors::{Error, ErrorCode};
     use entities::{
-        common::time::Instant,
-        ids::WorkItemId,
         work_item::{
             AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
             WorkItemStatus, WorkItemType,
         },
-        AccountKind, AuditLog, AuditLogData, Permission,
+        AuditLog, AuditLogData, Permission,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::{ids::WorkItemId, AccountKind};
     use std::collections::{HashMap, HashSet};
 
     /// 验证工作项管理员转交的授权提交栅栏。

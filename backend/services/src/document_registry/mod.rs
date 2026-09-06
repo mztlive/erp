@@ -10,10 +10,7 @@
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
 //! 已登记（读取对方仓储，不经过对方 Service）。
 
-use database::{
-    AccessControlExt, ApprovalBindingLookup, DocumentRegistryExt, Executor, NoTransaction, SourceRegistryExt,
-    Transactional,
-};
+use database::{AccessControlExt, ApprovalBindingLookup, DocumentRegistryExt, SourceRegistryExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, BusinessDocumentId, DocumentParticipant, DocumentRelation,
@@ -21,10 +18,12 @@ use entities::document_registry::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 
@@ -527,7 +526,7 @@ impl DocumentRegistryService {
     ) -> Result<DocumentParticipantView> {
         req.validate()?;
         let participant = DocumentParticipant::new(
-            entities::ids::DocumentParticipantId::new(next_id()),
+            erp_core::ids::DocumentParticipantId::new(next_id()),
             req.into_data(actor.id()),
         )?;
         let audit = actor.clone().resource_log(
@@ -561,7 +560,7 @@ impl DocumentRegistryService {
     /// 在单个事务中执行业务写入并追加审计日志（TRANSACTIONS.md「基本用法」）。
     ///
     /// 事务闭包内不做外部 HTTP / 文件 I/O；提交结果未知由
-    /// `database::Error::CommitOutcomeUnknown` → `services::Error::OutcomeUnknown` 映射。
+    /// `persistence_core::Error::CommitOutcomeUnknown` → `services::Error::OutcomeUnknown` 映射。
     ///
     /// # 参数
     /// * `transaction` - 业务写入闭包（收到事务会话执行器）

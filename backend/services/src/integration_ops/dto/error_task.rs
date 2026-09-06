@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 use super::common::{normalize_sort, PageParams};
 use super::task_decision::{ControlledEvidenceRef, ResolutionEvidencePolicyView};

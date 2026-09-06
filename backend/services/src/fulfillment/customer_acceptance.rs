@@ -1,14 +1,15 @@
-use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transactional};
-use entities::common::time::Instant;
+use database::{AccessControlExt, FulfillmentExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
     CustomerAcceptanceLineBatch,
 };
-use entities::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId};
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::approval::binding::{
@@ -17,10 +18,11 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::customer_acceptance_lines::acceptance_line_specs;
 use super::dto::SortDir;
@@ -442,8 +444,8 @@ mod tests {
     use super::acceptance_line_specs;
     use crate::fulfillment::AcceptanceLineInput;
     use entities::fulfillment::CustomerAcceptanceLineBatch;
-    use entities::ids::{CustomerAcceptanceId, SalesOrderLineId};
-    use entities::money::Quantity;
+    use erp_core::ids::{CustomerAcceptanceId, SalesOrderLineId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     #[test]
@@ -493,9 +495,9 @@ mod customer_acceptance_no_approval_tests {
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use entities::common::time::Instant;
     use entities::fulfillment::AcceptanceResult;
-    use entities::ids::{CustomerAcceptanceId, SalesOrderId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
 
     fn draft_acceptance() -> CustomerAcceptance {
         CustomerAcceptance::new(

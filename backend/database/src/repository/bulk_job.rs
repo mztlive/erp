@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `extensions::BulkJobExt` 关联常量
 //! 导入（conventions §4.3）。
 //!
@@ -20,9 +20,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BulkJobExt;
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 唯一请求身份仲裁后的后台任务登记结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -528,7 +529,7 @@ impl<'a> BulkJobRepository<'a> {
     /// 「快照 + 冻结目标集合」原子可见（数据模型 §6.1）。**必须收到事务
     /// 执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自
     /// 自动提交，逐项失败会留下没有目标的空快照；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `snapshot` - 待写入的选择快照
@@ -536,7 +537,7 @@ impl<'a> BulkJobRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_snapshot_with_items(
         &self,
@@ -567,7 +568,7 @@ impl<'a> BulkJobRepository<'a> {
     /// 逐项行」原子可见（数据模型 §6.1）。**必须收到事务执行器**：本方法
     /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，逐项
     /// 失败会留下没有逐项行的任务注册；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `job` - 待写入的后台任务
@@ -575,7 +576,7 @@ impl<'a> BulkJobRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_job_with_items(
         &self,

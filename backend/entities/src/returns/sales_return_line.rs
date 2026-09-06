@@ -7,9 +7,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderLineId, SalesReturnCaseId, SalesReturnLineId};
-use crate::money::Quantity;
+use erp_core::ids::{SalesOrderLineId, SalesReturnCaseId, SalesReturnLineId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 退回验收结果（数据模型 §6.11：退回验收；未验收时为空）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,7 +104,7 @@ impl SalesReturnLine {
     /// 数量；可重新入库数量不得超过实际退回数量且必须验收合格。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesReturnLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesReturnLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

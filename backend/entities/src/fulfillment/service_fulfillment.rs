@@ -15,17 +15,17 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::fact::FactBase;
-use crate::common::source::SourceType;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::fact::FactBase;
+use erp_core::common::source::SourceType;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId, ServiceFulfillmentId,
 };
-use crate::money::Quantity;
-use crate::validation::normalize_optional_text;
-use crate::validation::normalize_required_text;
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_optional_text;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::electronic_delivery::FulfillmentResult;
 use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
@@ -419,7 +419,7 @@ impl ServiceFulfillment {
     /// 关联；本实体负责确认与验收事实状态。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ServiceFulfillmentId`）
+    /// * `id` - 实体主键（`erp_core::ids::ServiceFulfillmentId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -480,7 +480,7 @@ impl ServiceFulfillment {
                 data.occurred_at,
                 data.recorded_at,
                 recorded_by,
-                crate::common::fact::FactSource {
+                erp_core::common::fact::FactSource {
                     source_type: data.source_type,
                     source_reference: data.source_reference,
                     reason_code: data.reason_code,
@@ -779,7 +779,7 @@ fn require_evidence_attachment_id(evidence_attachment_id: FileAssetId) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::ServiceFulfillmentId;
+    use erp_core::ids::ServiceFulfillmentId;
     use std::str::FromStr;
 
     const PLAINTEXT_RECIPIENT: &str = "收货人 王五 13912345678";

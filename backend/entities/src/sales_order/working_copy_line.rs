@@ -8,11 +8,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderLineId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId};
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderLineId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::amount_validation::sum_line_amounts;
 use super::types::{build_line_groups, GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario};
@@ -77,7 +77,7 @@ pub struct SalesOrderWorkingCopyLine {
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
     /// 精确 SKU 修订。
-    pub sku_revision_id: Option<crate::ids::SkuRevisionId>,
+    pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
@@ -110,11 +110,11 @@ impl SalesOrderWorkingCopyLine {
     /// 创建工作副本行。
     ///
     /// 完成文本字段校验与规范化，行金额三元组按
-    /// [`crate::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
+    /// [`erp_core::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
     /// 校验面额小计、成交金额与配赠金额一致性。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderWorkingCopyLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderWorkingCopyLineId`）
     /// * `working_copy_id` - 所属工作副本
     /// * `data` - 创建数据
     ///
@@ -194,7 +194,7 @@ impl SalesOrderWorkingCopyLine {
     ///
     /// # 错误
     /// 实物及服务行缺少 SKU 或 SKU 修订时返回错误。
-    pub fn sellable_sku_ref(&self) -> Result<Option<(&SkuId, &crate::ids::SkuRevisionId)>> {
+    pub fn sellable_sku_ref(&self) -> Result<Option<(&SkuId, &erp_core::ids::SkuRevisionId)>> {
         if self.line_type != LineType::GoodsService {
             return Ok(None);
         }

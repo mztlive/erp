@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::ids::{
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
 };
-use crate::money::{Amount, Quantity};
+use erp_core::money::{Amount, Quantity};
 
 use super::super::types::{BusinessType, OriginSystem};
 use super::*;

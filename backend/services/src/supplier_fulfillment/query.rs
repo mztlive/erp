@@ -1,9 +1,10 @@
-use database::{NoTransaction, SupplierApiExt, SupplierExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{SupplierApiExt, SupplierExt, SupplierFulfillmentExt, WorkItemExt};
 use entities::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionType,
 };
 use entities::work_item::WorkItemType;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::{
@@ -19,10 +20,10 @@ use super::investigate::{
 use super::mapping::{item_view, refund_fact_view};
 use super::place::ensure_capability;
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use crate::work_item::{WorkItemAllowedAction, WorkItemService};
+use application_core::AuditActor;
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
 type FulfillmentOrderFilter = <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;

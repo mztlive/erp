@@ -3,25 +3,23 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::returns` 的 DTO。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    returns::{
-        CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
-        CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest,
-        CommitCustomerRefundRequest, CommitPaymentReversalRequest, CommitReceiptReversalRequest,
-        CommitSupplierRefundRequest, CreateCustomerRefundRequest, CreatePaymentReversalRequest,
-        CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest, CreateSalesReturnCaseRequest,
-        CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView, PageView,
-        PaymentReversalView, PostCustomerRefundRequest, PostPaymentReversalRequest,
-        PostReceiptReversalRequest, PostSupplierRefundRequest, PurchaseReturnOrderListParams,
-        PurchaseReturnOrderView, ReceiptReversalView, ReturnsService, SalesReturnCaseListParams,
-        SalesReturnCaseView, SubmitCustomerRefundRequest, SubmitPaymentReversalRequest,
-        SubmitReceiptReversalRequest, SubmitSupplierRefundRequest, SupplierRefundView,
-    },
+use services::returns::{
+    CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
+    CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest, CommitCustomerRefundRequest,
+    CommitPaymentReversalRequest, CommitReceiptReversalRequest, CommitSupplierRefundRequest,
+    CreateCustomerRefundRequest, CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest,
+    CreateReceiptReversalRequest, CreateSalesReturnCaseRequest, CreateSupplierRefundRequest,
+    CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView, PostCustomerRefundRequest,
+    PostPaymentReversalRequest, PostReceiptReversalRequest, PostSupplierRefundRequest,
+    PurchaseReturnOrderListParams, PurchaseReturnOrderView, ReceiptReversalView, ReturnsService,
+    SalesReturnCaseListParams, SalesReturnCaseView, SubmitCustomerRefundRequest,
+    SubmitPaymentReversalRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
+    SupplierRefundView,
 };
 
 use crate::{

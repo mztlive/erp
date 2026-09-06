@@ -4,8 +4,8 @@
 //! 一次性完成边界校验与形状收紧，持有 tagged 决定。Service 只消费 tagged
 //! 结果，不再拼装初始状态与 outcome 形状。时间由调用方注入，DTO 不读取时钟。
 
-use entities::common::time::Instant;
 use entities::integration_ops::ErrorClass;
+use erp_core::common::time::Instant;
 use validator::Validate;
 
 use super::inbox_message::{WriteBackInboxResultRequest, WriteBackOutcome};
@@ -81,8 +81,8 @@ mod tests {
 
     use super::PreparedWriteBackOutcome;
     use super::WriteBackInboxResultRequest;
-    use entities::common::time::Instant;
     use entities::integration_ops::ErrorClass;
+    use erp_core::common::time::Instant;
 
     const NOW: i64 = 1_700_000_000;
 

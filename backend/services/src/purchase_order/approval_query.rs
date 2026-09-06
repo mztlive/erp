@@ -2,10 +2,11 @@
 
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
-use database::{BpmExt, NoTransaction};
+use database::BpmExt;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::purchase_order::PurchaseOrderStatus;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use super::adapter::{
     document_approval_view, document_approval_view_with_definition, purchase_order_subject_ref,

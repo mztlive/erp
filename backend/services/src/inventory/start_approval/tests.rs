@@ -7,8 +7,8 @@ use crate::approval::execution::idempotency::{legacy_payload_digest, ReceiptBran
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
 use entities::approval_integration::ApprovalNotificationEventKind;
-use entities::common::time::Instant;
 use entities::inventory::{AdjustmentReasonType, MovementDirection};
+use erp_core::common::time::Instant;
 
 use crate::inventory::dto::{
     ExpectedStockBalanceVersion, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,

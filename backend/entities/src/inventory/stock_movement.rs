@@ -12,14 +12,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::fact::FactBase;
-use crate::common::source::SourceType;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SkuId, StockMovementId, WarehouseId};
-use crate::money::Quantity;
-use crate::validation::normalize_optional_text;
-use crate::validation::normalize_required_text;
+use erp_core::common::fact::FactBase;
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_optional_text;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源引用最大长度。
 const SOURCE_REFERENCE_MAX_LEN: usize = 256;
@@ -242,7 +242,7 @@ impl StockMovement {
     /// `occurred_at`、冲正流水不引用自身。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::StockMovementId`）
+    /// * `id` - 实体主键（`erp_core::ids::StockMovementId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -292,7 +292,7 @@ impl StockMovement {
                 data.occurred_at,
                 data.recorded_at,
                 recorded_by,
-                crate::common::fact::FactSource {
+                erp_core::common::fact::FactSource {
                     source_type: data.source_type,
                     source_reference,
                     reason_code: data.reason_code,
@@ -314,7 +314,7 @@ impl StockMovement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::StockMovementId;
+    use erp_core::ids::StockMovementId;
     use std::str::FromStr;
 
     fn data() -> StockMovementData {

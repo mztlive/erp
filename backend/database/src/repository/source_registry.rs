@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `indexes::source_registry` 导入。
 //!
 //! 筛选/行类型定义在本文件，经 `SourceRegistryExt` 的关联类型对外暴露
@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 
 use super::extensions::SourceRegistryExt;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `external_identity_map` 集合名（单一来源：`SourceRegistryExt` 关联常量）。
 const EXTERNAL_IDENTITY_MAPS: &str = <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS;
@@ -428,7 +428,7 @@ impl<'a> Repository<'a, ExternalIdentityTarget> {
             let target_id = target.base.id.clone();
             match self.update(target, executor).await {
                 Ok(()) => outcome.applied.push(target_id),
-                Err(crate::Error::OptimisticLockingError) => {
+                Err(persistence_core::Error::OptimisticLockingError) => {
                     outcome.conflicts.push(target_id);
                 }
                 Err(error) => return Err(error),
@@ -589,7 +589,7 @@ impl<'a> SourceRegistryRepository<'a> {
     /// 保证「映射身份 + 目标谱系」原子可见（数据模型 §6.1）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，中途失败会留下只有映射没有目标的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `map` - 待写入的外部身份映射
@@ -597,7 +597,7 @@ impl<'a> SourceRegistryRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_external_identity_link(
         &self,

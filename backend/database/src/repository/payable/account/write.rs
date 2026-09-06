@@ -1,10 +1,10 @@
-use entities::money::Amount;
 use entities::payable::PayableAccount;
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
 use super::super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> Repository<'a, PayableAccount> {
     /// 执行单文档条件更新（管道形态）。

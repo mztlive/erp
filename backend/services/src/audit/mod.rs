@@ -1,105 +1,53 @@
-use database::{repository::AuditLogFilter, AccessControlExt, NoTransaction};
-use entities::{AuditLog, AuditLogData, CommandReceiptMatch};
+use application_core::AuditActor;
+use application_core::CommandReceiptMatch;
+use database::{repository::AuditLogFilter, AccessControlExt};
+use entities::{AuditLog, AuditLogData};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::{
-    errors::{Error, Result},
-    Page,
-};
+use crate::errors::{Error, Result};
+use application_core::Page;
 
 use self::dto::NormalizedAuditLogListParams;
 pub use self::dto::{AuditLogItem, AuditLogListParams};
 
 mod dto;
 
-pub(crate) use entities::CommandReceipt;
+pub(crate) use application_core::CommandReceipt;
 
-/// 已通过 HTTP 鉴权的审计操作人。
-///
-/// 该类型只携带操作人身份；审计动作、资源类型和目标由具体 Service 决定，
-/// 避免协议层伪造或遗漏业务审计语义。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuditActor {
-    actor_id: String,
-    actor_account: String,
-    actor_type: entities::AccountKind,
-}
-
-impl AuditActor {
-    /// 创建审计操作人。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人账号 ID
-    /// * `actor_account` - 操作人登录账号
-    /// * `actor_type` - 操作人账号类型
-    ///
-    /// # 返回值
-    /// 返回只包含鉴权身份的审计操作人。
-    pub fn new(actor_id: String, actor_account: String, actor_type: entities::AccountKind) -> Self {
-        Self {
-            actor_id,
-            actor_account,
-            actor_type,
-        }
-    }
-
-    /// 返回操作人账号 ID。
-    ///
-    /// # 返回值
-    /// 返回已认证身份中的账号 ID。
-    pub fn id(&self) -> &str {
-        &self.actor_id
-    }
-
-    /// 返回操作人账号类型。
-    ///
-    /// # 返回值
-    /// 返回已认证身份中的后台账号类型。
-    pub fn kind(&self) -> entities::AccountKind {
-        self.actor_type
-    }
-
+/// 由审计领域消费 [`AuditActor`] 构造可持久化审计日志。
+pub(crate) trait AuditActorLogs {
     /// 在业务写入前构造并验证成功资源审计日志。
-    ///
-    /// # 参数
-    /// * `action` - Service 确定的动作名
-    /// * `resource_type` - Service 确定的资源类型
-    /// * `resource_id` - 本次操作目标
-    ///
-    /// # 返回值
-    /// 返回已通过领域校验、可直接持久化的审计日志。
-    ///
-    /// # 错误
-    /// 当操作人或资源审计字段不符合领域约束时返回错误。
-    pub(crate) fn resource_log(
+    fn resource_log(self, action: &str, resource_type: &str, resource_id: String) -> Result<AuditLog>;
+
+    /// 使用服务端生成的稳定 ID 构造成功资源审计日志。
+    fn resource_log_with_id(
+        self,
+        id: String,
+        action: &str,
+        resource_type: &str,
+        resource_id: String,
+        message: Option<String>,
+    ) -> Result<AuditLog>;
+
+    /// 在业务写入前构造并验证带业务说明的成功资源审计日志。
+    fn resource_log_with_message(
         self,
         action: &str,
         resource_type: &str,
         resource_id: String,
-    ) -> Result<AuditLog> {
+        message: Option<String>,
+    ) -> Result<AuditLog>;
+}
+
+impl AuditActorLogs for AuditActor {
+    fn resource_log(self, action: &str, resource_type: &str, resource_id: String) -> Result<AuditLog> {
         self.resource_log_with_message(action, resource_type, resource_id, None)
     }
 
-    /// 使用服务端生成的稳定 ID 构造成功资源审计日志。
-    ///
-    /// 该入口供需要数据库唯一键仲裁幂等请求的强类型服务使用。调用方不得把
-    /// 原始幂等键写入 `audit_logs`；稳定 ID 必须由不可逆摘要形成。
-    ///
-    /// # 参数
-    /// * `id` - 服务端生成的不可逆稳定审计 ID
-    /// * `action` - Service 确定的动作名
-    /// * `resource_type` - Service 确定的资源类型
-    /// * `resource_id` - 本次操作目标
-    /// * `message` - 权限安全的业务说明
-    ///
-    /// # 返回值
-    /// 返回已通过领域校验、可直接持久化的审计日志。
-    ///
-    /// # 错误
-    /// 当操作人、资源或审计字段不符合领域约束时返回错误。
-    pub(crate) fn resource_log_with_id(
+    fn resource_log_with_id(
         self,
         id: String,
         action: &str,
@@ -110,12 +58,13 @@ impl AuditActor {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+        let (actor_id, actor_account, actor_type) = self.into_parts();
         AuditLog::new(
             id,
             AuditLogData {
-                actor_id: self.actor_id,
-                actor_account: self.actor_account,
-                actor_type: self.actor_type,
+                actor_id,
+                actor_account,
+                actor_type,
                 action: action.to_string(),
                 resource_type: resource_type.to_string(),
                 resource_id: Some(resource_id),
@@ -126,20 +75,7 @@ impl AuditActor {
         .map_err(Into::into)
     }
 
-    /// 在业务写入前构造并验证带业务说明的成功资源审计日志。
-    ///
-    /// # 参数
-    /// * `action` - Service 确定的动作名
-    /// * `resource_type` - Service 确定的资源类型
-    /// * `resource_id` - 本次操作目标
-    /// * `message` - 业务变更原因或执行说明
-    ///
-    /// # 返回值
-    /// 返回已通过领域校验、可直接持久化的审计日志。
-    ///
-    /// # 错误
-    /// 当操作人、资源或消息字段不符合领域约束时返回错误。
-    pub(crate) fn resource_log_with_message(
+    fn resource_log_with_message(
         self,
         action: &str,
         resource_type: &str,
@@ -149,12 +85,13 @@ impl AuditActor {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+        let (actor_id, actor_account, actor_type) = self.into_parts();
         AuditLog::new(
-            next_id(),
+            id_generator::next_id(),
             AuditLogData {
-                actor_id: self.actor_id,
-                actor_account: self.actor_account,
-                actor_type: self.actor_type,
+                actor_id,
+                actor_account,
+                actor_type,
                 action: action.to_string(),
                 resource_type: resource_type.to_string(),
                 resource_id: Some(resource_id),
@@ -286,9 +223,10 @@ impl AuditLogService {
 mod tests {
     use serde::Serialize;
 
-    use entities::{AccountKind, CommandReceiptFact, CommandReceiptMatch};
+    use application_core::{CommandReceiptFact, CommandReceiptMatch};
+    use erp_core::AccountKind;
 
-    use super::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+    use super::{AuditActor, AuditActorLogs, CommandReceipt, CommandReceiptServiceExt as _};
 
     #[derive(Serialize)]
     struct CommandPayload {

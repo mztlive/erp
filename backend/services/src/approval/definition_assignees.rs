@@ -1,14 +1,15 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScope。
 
-use database::{AccessControlExt, NoTransaction};
+use database::AccessControlExt;
 use entities::document_registry::DocumentType;
+use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
 use super::definition::ApprovalDefinitionService;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
-use crate::audit::AuditActor;
 use crate::errors::Result;
+use application_core::AuditActor;
 
 /// 定义期候选人查询。
 #[derive(Debug, Clone, PartialEq, Eq)]

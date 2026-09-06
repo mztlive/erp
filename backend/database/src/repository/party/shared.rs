@@ -1,5 +1,5 @@
-use entities::ids::PartyId;
 use entities::party::EffectiveRecordStatus;
+use erp_core::ids::PartyId;
 use mongodb::bson::{doc, Document};
 
 /// 构造指定日期生效的 Party 从属事实过滤条件。
@@ -12,7 +12,7 @@ use mongodb::bson::{doc, Document};
 /// 返回启用状态且日期落在左闭右开有效期内的查询文档。
 pub(super) fn active_fact_filter(
     party_id: &PartyId,
-    as_of: entities::common::time::BusinessDate,
+    as_of: erp_core::common::time::BusinessDate,
 ) -> Document {
     let mut filter = active_fact_window_filter(as_of);
     filter.insert("party_id", party_id.to_string());
@@ -26,7 +26,7 @@ pub(super) fn active_fact_filter(
 ///
 /// # 返回
 /// 返回启用状态且日期落在左闭右开有效期内的公共查询文档。
-pub(super) fn active_fact_window_filter(as_of: entities::common::time::BusinessDate) -> Document {
+pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessDate) -> Document {
     let as_of = as_of.to_string();
     doc! {
         "status": EffectiveRecordStatus::Active.as_str(),
@@ -61,7 +61,7 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 #[cfg(test)]
 mod tests {
     use super::{active_fact_window_filter, sort_doc};
-    use entities::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
 
     #[test]

@@ -3,13 +3,13 @@
 //! 首次提交与销售变更提交共用同一套公共行、快照和卡券单行约束；ID、时间、版本号
 //! 与上一版本指针由调用方注入，本模块不查询仓储、不生成 ID。
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     ContractRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId,
     SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId,
 };
-use crate::money::{Amount, Rate};
+use erp_core::money::{Amount, Rate};
+use erp_core::{Error, Result};
 
 use super::revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
@@ -693,12 +693,12 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::ids::{
-        CustomerAccountId, PartyId, SalesOrderSubmissionId, SalesOrderSubmissionLineId, SkuRevisionId,
-    };
-    use crate::money::{Quantity, UnitPrice};
     use crate::sales_order::submission::SalesOrderSubmissionData;
     use crate::sales_order::types::{CardForm, WelfareScenario};
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, SalesOrderSubmissionId, SalesOrderSubmissionLineId, SkuRevisionId,
+    };
+    use erp_core::money::{Quantity, UnitPrice};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -788,7 +788,7 @@ mod tests {
         SalesOrderSubmissionData {
             sales_order_id: SalesOrderId::new("o-1"),
             submission_no: 1,
-            working_copy_id: crate::ids::SalesOrderWorkingCopyId::new("wc-1"),
+            working_copy_id: erp_core::ids::SalesOrderWorkingCopyId::new("wc-1"),
             working_copy_version: 3,
             business_type: BusinessType::GoodsService,
             customer_id: CustomerAccountId::new("cust-1"),
@@ -816,7 +816,7 @@ mod tests {
             business_type: BusinessType::Voucher,
             voucher_category_sku_id: Some(SkuId::new("vcat-1")),
             voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            receivable_due_date: Some(crate::common::time::BusinessDate::from_ymd(2026, 10, 31).unwrap()),
+            receivable_due_date: Some(erp_core::common::time::BusinessDate::from_ymd(2026, 10, 31).unwrap()),
             submitted_at: Instant::from_unix_secs(1_790_000_000),
             gross_amount: amt("270.00"),
             net_amount: amt("238.94"),

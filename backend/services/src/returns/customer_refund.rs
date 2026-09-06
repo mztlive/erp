@@ -33,29 +33,29 @@ use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{
-    AccessControlExt, CustomerExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, ReturnsExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use application_core::AuditActor;
+use database::{AccessControlExt, CustomerExt, DocumentRegistryExt, ReceivableExt, ReturnsExt};
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
-use entities::ids::{
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     CustomerAccountId, CustomerReceiptId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId,
     ReceivableEntryOffsetId,
 };
+use persistence_core::{Executor, NoTransaction, Transactional};
 
-use entities::money::Amount;
 use entities::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceiptStatus,
     EntryDirection as ReceivableEntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryOffset, ReceivableEntryOffsetData, ReceivableEntryType,
 };
 use entities::returns::{CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -1051,7 +1051,7 @@ fn build_customer_refund_decrease_entry(
             entry_type: ReceivableEntryType::Refund,
             direction: ReceivableEntryDirection::Decrease,
             amount: refund.amount,
-            due_date: entities::common::time::BusinessDate::today(),
+            due_date: erp_core::common::time::BusinessDate::today(),
             source_fact_type: "customer_refund".to_string(),
             source_document_id: refund.base.id.clone(),
             source_revision_id: refund.base.id.clone(),
@@ -1099,10 +1099,10 @@ async fn persist_customer_refund_decrease_offset(
 mod customer_refund_approval_tests {
     use super::{execute_customer_refund_domain_action, start_customer_refund_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
-    use entities::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
-    use entities::money::Amount;
     use entities::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_refund() -> CustomerRefund {

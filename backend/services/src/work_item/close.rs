@@ -1,22 +1,24 @@
 //! W29 异常任务受控关闭。
 
-use database::{AccessControlExt, Executor, IntegrationOpsExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
+use application_core::{CommandFingerprint, CommandReceipt};
+use database::{AccessControlExt, IntegrationOpsExt, WorkItemExt};
 use entities::{
     integration_ops::{
         ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
         ReconciliationDifferenceResolutionId, ResolutionType, W29CloseDecision, W29EvidenceReference,
     },
     work_item::{WorkItem, WorkItemCloseData, WorkItemType},
-    CommandFingerprint, CommandReceipt,
 };
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use crate::{
-    audit::{AuditActor, CommandReceiptServiceExt as _},
+    audit::CommandReceiptServiceExt as _,
     errors::{Error, Result},
 };
+use application_core::AuditActor;
 
 use super::access::{ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ActorAccess};
 use super::dto;

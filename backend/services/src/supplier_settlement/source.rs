@@ -3,25 +3,27 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, NoTransaction, SupplierSettlementExt, Transactional};
-use entities::common::time::{BusinessDate, Instant};
-use entities::money::{line_amounts, Amount};
+use database::{AccessControlExt, SupplierSettlementExt};
 use entities::supplier_fulfillment::AllocationAction;
 use entities::supplier_settlement::{
     SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
     SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
     SupplierSettlementSourceEvidenceLine, SupplierSettlementSourceEvidenceLineData, SETTLEMENT_TIMEZONE,
 };
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::money::{line_amounts, Amount};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::{
     digest_parts, RecordSettlementSourceEvidenceRequest, SupplierSettlementService,
     SupplierSettlementSourceEvidenceQuery,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::supplier_settlement::SupplierSettlementSourceEvidenceView;
+use application_core::AuditActor;
 
 impl SupplierSettlementService {
     /// 查询供应商与周期下最新的完整来源证据批次。
@@ -597,13 +599,6 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::str::FromStr;
 
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
-        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierOfferingRevisionId, SupplierRefundAllocationId, SupplierRefundFactId,
-    };
-    use entities::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use entities::supplier_fulfillment::{
         AllocationAction, FulfillmentStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
         SupplierFulfillmentOrder, SupplierFulfillmentOrderData, SupplierRefundAllocation,
@@ -613,6 +608,13 @@ mod tests {
         SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
         SETTLEMENT_TIMEZONE,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
+        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierOfferingRevisionId, SupplierRefundAllocationId, SupplierRefundFactId,
+    };
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
     use super::{build_source_line, ensure_complete_source_scope, refund_amounts, CompleteSourceScope};
     use crate::errors::{Error, Result};

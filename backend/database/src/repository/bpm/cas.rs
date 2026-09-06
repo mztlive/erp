@@ -9,8 +9,8 @@ use super::{
     i64_version, merge_documents, AssignDocumentNoOutcome, BpmWorkflowRepository, CasReplaceSpec,
     CasWriteOutcome, DEFINITIONS, EXECUTIONS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     pub(super) async fn cas_write_definition(

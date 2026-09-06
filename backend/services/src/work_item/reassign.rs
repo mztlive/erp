@@ -2,26 +2,29 @@
 
 use std::collections::HashSet;
 
+use application_core::CommandReceipt;
 use database::{
-    AccessControlExt, Executor, InventoryExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt,
-    ReceivableExt, SalesOrderExt, SalesReviewExt, SupplierSettlementExt, WorkItemExt,
+    AccessControlExt, InventoryExt, MongoCasbinAdapter, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
+    SalesReviewExt, SupplierSettlementExt, WorkItemExt,
 };
-use entities::common::time::Instant;
 use entities::{
     work_item::{
         AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
         WorkItemType,
     },
-    CommandReceipt, Permission,
+    Permission,
 };
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
+use crate::audit::AuditActorLogs;
 use crate::{
-    audit::AuditActor,
     errors::{Error, Result},
     iam::SharedRbacService,
 };
+use application_core::AuditActor;
 
 use super::access::{
     active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ensure_managed_access,
@@ -39,8 +42,8 @@ const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 struct AssignmentAuthorizationSnapshot {
     policy_revision: u64,
-    actor_kind: entities::AccountKind,
-    assignee_kind: entities::AccountKind,
+    actor_kind: erp_core::AccountKind,
+    assignee_kind: erp_core::AccountKind,
     read_permission: Permission,
     actor_read_role_ids: Vec<String>,
     actor_manage_role_ids: Vec<String>,
@@ -120,7 +123,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .accounts()
-            .list_by_kind(entities::AccountKind::Admin, &mut NoTransaction)
+            .list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction)
             .await?;
         let mut candidates = Vec::new();
         for account in accounts {
@@ -308,7 +311,7 @@ impl WorkItemService {
     /// 在调用方事务快照中重验操作人权限、管理范围与对象参与权。
     async fn ensure_assignment_actor_access(
         &self,
-        actor_kind: entities::AccountKind,
+        actor_kind: erp_core::AccountKind,
         actor_id: &str,
         item: &WorkItem,
         require_manager: bool,
@@ -360,7 +363,7 @@ impl WorkItemService {
     async fn ensure_assignment_candidate(
         &self,
         user_id: &str,
-        expected_kind: entities::AccountKind,
+        expected_kind: erp_core::AccountKind,
         item: &WorkItem,
         authorization: &AssignmentAuthorizationSnapshot,
         allow_current_owner: bool,
@@ -561,7 +564,7 @@ impl WorkItemService {
         }
         self.ensure_current_card_funds_subject(item, &account, executor)
             .await?;
-        let account_id = entities::ids::ReceivableAccountId::new(account.base.id.clone());
+        let account_id = erp_core::ids::ReceivableAccountId::new(account.base.id.clone());
         let entries = self
             .db
             .receivable_entries()
@@ -569,7 +572,7 @@ impl WorkItemService {
             .await?;
         let entry_ids = entries
             .iter()
-            .map(|entry| entities::ids::ReceivableEntryId::new(entry.base.id.clone()))
+            .map(|entry| erp_core::ids::ReceivableEntryId::new(entry.base.id.clone()))
             .collect::<Vec<_>>();
         let receipt_allocations = self
             .db
@@ -599,7 +602,7 @@ impl WorkItemService {
             .db
             .receivable_funds_reviews()
             .find_reviews_by_account(
-                &entities::ids::ReceivableAccountId::new(account.base.id.clone()),
+                &erp_core::ids::ReceivableAccountId::new(account.base.id.clone()),
                 executor,
             )
             .await?;
@@ -660,7 +663,7 @@ impl WorkItemService {
     async fn card_funds_receipts(
         &self,
         ids: &HashSet<String>,
-        party_id: &entities::ids::PartyId,
+        party_id: &erp_core::ids::PartyId,
         executor: &mut dyn Executor,
     ) -> Result<HashSet<String>> {
         if ids.is_empty() {
@@ -691,7 +694,7 @@ impl WorkItemService {
     async fn card_funds_invoices(
         &self,
         ids: &HashSet<String>,
-        party_id: &entities::ids::PartyId,
+        party_id: &erp_core::ids::PartyId,
         executor: &mut dyn Executor,
     ) -> Result<HashSet<String>> {
         if ids.is_empty() {
@@ -948,7 +951,7 @@ impl WorkItemService {
                             .update(&mut current, session)
                             .await
                             .map_err(|error| match error {
-                                database::Error::OptimisticLockingError => {
+                                persistence_core::Error::OptimisticLockingError => {
                                     Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
                                 }
                                 error => Error::from(error),
@@ -1009,7 +1012,7 @@ impl WorkItemService {
 /// 操作人身份必须与授权快照一致。
 struct AssignmentPolicyCheck<'a> {
     /// 操作人账号类型。
-    actor_kind: entities::AccountKind,
+    actor_kind: erp_core::AccountKind,
     /// 操作人 ID。
     actor_id: &'a str,
     /// 目标责任人 ID。
@@ -1156,7 +1159,7 @@ async fn reassign_purchase_order_fulfillment_responsibility(
         .update(&mut order, executor)
         .await
         .map_err(|error| match error {
-            database::Error::OptimisticLockingError => {
+            persistence_core::Error::OptimisticLockingError => {
                 Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
             }
             error => Error::from(error),
@@ -1170,7 +1173,7 @@ async fn reassign_purchase_order_fulfillment_responsibility(
             .update(task, executor)
             .await
             .map_err(|error| match error {
-                database::Error::OptimisticLockingError => {
+                persistence_core::Error::OptimisticLockingError => {
                     Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
                 }
                 error => Error::from(error),
@@ -1193,7 +1196,7 @@ async fn load_purchase_order_fulfillment_scope(
     let order = db
         .purchase_orders()
         .find_by_id(
-            &entities::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
+            &erp_core::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
             executor,
         )
         .await?

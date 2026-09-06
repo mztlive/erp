@@ -4,12 +4,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CustomerReceiptId, FileAssetId, ReceiptReversalId};
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, FileAssetId, ReceiptReversalId};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::customer_refund::validate_actor_pair;
 
@@ -161,7 +161,7 @@ impl ReceiptReversal {
     /// 复核人分离校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ReceiptReversalId`）
+    /// * `id` - 实体主键（`erp_core::ids::ReceiptReversalId`）
     /// * `data` - 创建数据
     /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
@@ -358,7 +358,7 @@ impl ReceiptReversal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn data() -> ReceiptReversalData {
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn state_machine_forces_in_approval_before_posting() {
-        use crate::common::state::ensure_transition as tr;
+        use erp_core::common::state::ensure_transition as tr;
         use ReceiptReversalStatus as S;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());

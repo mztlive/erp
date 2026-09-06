@@ -6,15 +6,17 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use database::{NoTransaction, SupplierExt};
-use entities::common::time::BusinessDate;
+use database::SupplierExt;
 use entities::supplier::{SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision};
+use erp_core::common::time::BusinessDate;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::party::{SensitiveDataCodec, SensitiveFieldKind};
+use application_core::AuditActor;
 
 mod dto;
 pub(crate) mod eligibility;
@@ -261,7 +263,7 @@ impl SupplierService {
         let Some(codec) = &self.sensitive_data else {
             return Ok(Vec::new());
         };
-        let expires_at = u64::try_from(entities::common::time::Instant::now().unix_secs())
+        let expires_at = u64::try_from(erp_core::common::time::Instant::now().unix_secs())
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?
             + 60;
         let mut fields = Vec::new();
@@ -378,7 +380,7 @@ fn assemble_qualification_views(
     qualifications: Vec<entities::supplier::SupplierQualification>,
     links: Vec<entities::supplier::SupplierQualificationCapability>,
 ) -> Vec<SupplierQualificationView> {
-    let mut links_by_qualification: HashMap<String, Vec<entities::ids::SupplierCapabilityId>> =
+    let mut links_by_qualification: HashMap<String, Vec<erp_core::ids::SupplierCapabilityId>> =
         HashMap::new();
     for link in links {
         links_by_qualification

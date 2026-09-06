@@ -2,10 +2,10 @@ use std::str::FromStr;
 
 use database::{FulfillmentExt, PayableExt, PurchaseOrderExt};
 use entities::fulfillment::PurchaseFulfillmentEligibility;
-use entities::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId};
-use entities::money::Amount;
 use entities::payable::AllocationAction as PayableAllocationAction;
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
+use erp_core::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId};
+use erp_core::money::Amount;
 use mongodb::Database;
 
 use crate::errors::{Error, Result};
@@ -158,7 +158,7 @@ pub(super) async fn ensure_allocation_valid(
     session: &mut mongodb::ClientSession,
     po: &PurchaseOrder,
     allocation_id: &PurchaseLineSalesAllocationId,
-    sales_order_line_id: &entities::ids::SalesOrderLineId,
+    sales_order_line_id: &erp_core::ids::SalesOrderLineId,
 ) -> Result<()> {
     let allocation = db
         .purchase_line_sales_allocations()
@@ -184,7 +184,7 @@ pub(super) async fn ensure_allocation_valid(
         .await?;
     let sales_association = sales_revision_line.map(|line| {
         (
-            entities::ids::SalesOrderRevisionLineId::new(line.base.id),
+            erp_core::ids::SalesOrderRevisionLineId::new(line.base.id),
             line.sales_order_line_id,
         )
     });
@@ -202,10 +202,10 @@ pub(super) async fn ensure_allocation_valid(
 #[cfg(test)]
 mod tests {
     use super::ensure_po_fulfillable;
-    use entities::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
     use entities::purchase_order::{
         FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseType,
     };
+    use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
 
     #[test]
     fn po_fulfillable_guards_status() {
@@ -214,14 +214,14 @@ mod tests {
             PurchaseOrderData {
                 purchase_no: "PO-1".to_string(),
                 sales_order_id: SalesOrderId::new("so-1"),
-                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("sor-1"),
+                sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("sor-1"),
                 creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".to_string(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                 owner_user_id: "buyer-1".to_string(),
-                target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
+                target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
             },
             "admin-1",
         )

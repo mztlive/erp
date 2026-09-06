@@ -2,9 +2,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::ensure_transition;
-use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderId, SalesOrderLineId};
+use erp_core::common::state::ensure_transition;
+use erp_core::ids::{SalesOrderId, SalesOrderLineId};
+use erp_core::{Error, Result};
 
 use super::LineStatus;
 
@@ -32,7 +32,7 @@ impl SalesOrderLine {
     /// 创建稳定明细行（初始 `Active`）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderLineId`）
     /// * `sales_order_id` - 所属销售单
     /// * `data` - 创建数据
     ///

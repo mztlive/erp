@@ -5,8 +5,8 @@
 
 use std::str::FromStr;
 
-use crate::errors::{Error, Result};
-use crate::money::Amount;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 汇总已经逐行舍入的金额三元组。
 ///

@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{CostAllocationId, CostEntryId, SalesOrderId, SalesOrderLineId};
-use crate::money::Amount;
+use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId, SalesOrderLineId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 成本分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,7 +56,7 @@ impl CostAllocation {
     /// 含税 ≥ 不含税校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CostAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::CostAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -130,7 +130,7 @@ fn validate_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn data() -> CostAllocationData {

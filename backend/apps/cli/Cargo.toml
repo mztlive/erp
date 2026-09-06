@@ -8,6 +8,7 @@ autotests = false
 clap = { workspace = true }
 config = { workspace = true }
 database = { workspace = true }
+persistence-core = { workspace = true }
 rpassword = "7.4.0"
 services = { workspace = true }
 thiserror = { workspace = true }

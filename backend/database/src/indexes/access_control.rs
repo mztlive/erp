@@ -11,7 +11,7 @@ use mongodb::{
 
 use crate::casbin_adapter::CASBIN_RULES;
 use crate::repository::extensions::AccessControlExt;
-use crate::Result;
+use persistence_core::Result;
 
 const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";

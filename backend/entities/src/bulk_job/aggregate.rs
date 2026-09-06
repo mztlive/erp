@@ -4,12 +4,12 @@ use crate::bulk_job::{
     BackgroundJob, BackgroundJobData, BackgroundJobItem, BackgroundJobItemData, BulkSelectionItem,
     BulkSelectionItemData, BulkSelectionSnapshot, BulkSelectionSnapshotData, JobType, SelectionType,
 };
-use crate::command::CommandFingerprint;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use application_core::command::CommandFingerprint;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId, FileAssetId,
 };
+use erp_core::{Error, Result};
 
 /// 选择快照聚合创建数据；目标数由子项自动派生。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,8 +243,8 @@ mod tests {
         BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData,
     };
     use crate::bulk_job::{JobType, SelectionType};
-    use crate::common::time::Instant;
-    use crate::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
 
     #[test]
     fn selection_aggregate_rejects_empty_and_derives_parent_and_count() {

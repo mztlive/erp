@@ -9,13 +9,13 @@ use entity_macros::Entity;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
 };
-use crate::money::{Amount, Quantity};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::{Amount, Quantity};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 幂等键最大长度。
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
@@ -312,7 +312,7 @@ impl SupplierOrderAction {
     /// 完成幂等键与摘要的校验和规范化。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierOrderActionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierOrderActionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -522,7 +522,7 @@ impl SupplierOrderActionLine {
     /// 校验数量与金额必须大于零（取消/退款实际提交范围必须是正量）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierOrderActionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierOrderActionLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -551,7 +551,7 @@ impl SupplierOrderActionLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId};
+    use erp_core::ids::{SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId};
     use std::str::FromStr;
 
     fn sample_data() -> SupplierOrderActionData {

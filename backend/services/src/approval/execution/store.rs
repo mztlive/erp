@@ -10,10 +10,10 @@ use bpm::model::{
     IdempotencyKey,
 };
 use entities::approval_integration::{ApprovalNotificationOutbox, ApprovalNotificationTemplateParams};
-use entities::common::time::Instant;
-use entities::ids::{ApprovalNotificationOutboxId, WorkItemId};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{ApprovalRuntimeTaskEnding, WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalNotificationOutboxId, WorkItemId};
 
 use super::apply_plan::{DomainActionKind, PlannedWrites};
 use super::notification_outbox::NotificationIntent;
@@ -622,8 +622,8 @@ mod tests {
     use super::*;
     use bpm::engine::TaskCloseReason;
     use bpm::ids::ApprovalNodeExecutionId;
-    use entities::ids::WorkItemId;
     use entities::work_item::WorkItemStatus;
+    use erp_core::ids::WorkItemId;
 
     fn open_task(id: &str, execution_id: &str) -> WorkItem {
         WorkItem::new_document_approval(

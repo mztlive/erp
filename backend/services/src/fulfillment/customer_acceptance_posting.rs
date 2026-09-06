@@ -1,23 +1,26 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, FulfillmentExt, SalesOrderExt, Transactional};
-use entities::common::time::Instant;
+use database::{AccessControlExt, FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
     AcceptanceResult, AllocationAction, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
     CustomerAcceptanceLineData, CustomerAcceptanceUpdate, FulfillmentFactType, ServiceFulfillment,
 };
-use entities::ids::{
+use entities::sales_order::BusinessType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
 };
-use entities::money::Quantity;
-use entities::sales_order::BusinessType;
+use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt};
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::acceptance_eligibility::{build_line_eligibilities, so_line_ids, EligibilityGroupSources};
 use super::customer_acceptance::register_created_customer_acceptance_document;
@@ -678,7 +681,7 @@ async fn write_acceptance_allocation(
     line_id: &str,
     allocation: &AcceptanceAllocationInput,
     acceptance_line: &CustomerAcceptanceLine,
-    sales_order_id: &entities::ids::SalesOrderId,
+    sales_order_id: &erp_core::ids::SalesOrderId,
 ) -> Result<()> {
     let net_successful = load_fulfillment_fact(
         db,
@@ -741,7 +744,7 @@ async fn load_fulfillment_fact(
     session: &mut mongodb::ClientSession,
     fact_type: FulfillmentFactType,
     fact_id: &str,
-    sales_order_id: &entities::ids::SalesOrderId,
+    sales_order_id: &erp_core::ids::SalesOrderId,
     acceptance_line: &CustomerAcceptanceLine,
 ) -> Result<Quantity> {
     match fact_type {
@@ -826,7 +829,7 @@ async fn update_sales_order_fulfillment_progress(
         .sales_order_revision_lines()
         .list_lines_by_revision(&revision.base.id.clone().into(), session)
         .await?;
-    let revision_line_ids: Vec<entities::ids::SalesOrderRevisionLineId> = revision_lines
+    let revision_line_ids: Vec<erp_core::ids::SalesOrderRevisionLineId> = revision_lines
         .iter()
         .map(|line| line.base.id.clone().into())
         .collect();
@@ -838,7 +841,7 @@ async fn update_sales_order_fulfillment_progress(
         .fulfillment()
         .list_acceptance_eligible_deliveries(sales_order_id, session)
         .await?;
-    let delivery_ids: Vec<entities::ids::DeliveryId> = deliveries
+    let delivery_ids: Vec<erp_core::ids::DeliveryId> = deliveries
         .iter()
         .map(|delivery| delivery.base.id.clone().into())
         .collect();
@@ -918,9 +921,9 @@ async fn update_sales_order_fulfillment_progress(
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::Instant;
     use entities::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData};
-    use entities::ids::{CustomerAcceptanceId, SalesOrderId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
 
     use super::ensure_existing_acceptance_draft;
 

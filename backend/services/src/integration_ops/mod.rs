@@ -3,7 +3,7 @@
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 单集合、无跨步骤原子性要求的查询一律 `&mut NoTransaction`；
 //! - 所有业务写入均与审计日志跨集合（`audit_logs` 属 D06），统一
-//!   `database::Transactional::with_transaction` 原子提交（D01 样板写法）；
+//!   `persistence_core::Transactional::with_transaction` 原子提交（D01 样板写法）；
 //!   共享模板 `transaction::run_audited` 与乐观锁校验 `validation::ensure_version`
 //!   仅限本域内部使用（`pub(super)`），不对外暴露；
 //! - 跨域协作只调对方域 Repository（D01 `SourceRegistryExt::source_systems`），

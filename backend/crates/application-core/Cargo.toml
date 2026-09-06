@@ -1,0 +1,16 @@
+[package]
+name = "application-core"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+erp-core = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+tracing = { workspace = true }
+validator = { workspace = true }

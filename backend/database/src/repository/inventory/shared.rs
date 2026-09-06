@@ -5,10 +5,10 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use entities::money::Quantity;
+use erp_core::money::Quantity;
 
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 按主键读取未删除实体。
 ///
@@ -222,7 +222,7 @@ mod tests {
     use mongodb::bson::{doc, Bson};
     use std::str::FromStr;
 
-    use entities::ids::WarehouseId;
+    use erp_core::ids::WarehouseId;
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {

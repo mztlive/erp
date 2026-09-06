@@ -20,10 +20,10 @@ pub mod user_role;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids；
 // `role` 沿用 rbac::RoleId，见 ids.rs 映射表）。
-pub use crate::ids::{AuditEventId, DataScopeId, PermissionId, UserRoleId};
 pub use crate::rbac::RoleId;
 pub use audit_event::{AuditEvent, AuditEventData, AuditEventResult};
 pub use data_scope::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
+pub use erp_core::ids::{AuditEventId, DataScopeId, PermissionId, UserRoleId};
 pub use permission::{Permission, PermissionData, PermissionUpdate};
 pub use responsibility_scope::{OrganizationCoverage, ResponsibilityScopeSet};
 pub use user_role::{UserRole, UserRoleData, UserRoleRevokeData};

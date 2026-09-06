@@ -1,13 +1,13 @@
-use entities::money::Amount;
 use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 use super::{normalize_sort, SortDir, SupplySourceType};
 

@@ -1,5 +1,6 @@
-use database::{InventoryExt, NoTransaction, Transactional};
+use database::InventoryExt;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine};
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::adapter::require_frozen_binding;
@@ -10,8 +11,8 @@ use super::dto::{
     StockAdjustmentView,
 };
 use super::InventoryService;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 库存调整单列表筛选条件类型。
 type StockAdjustmentFilter = <mongodb::Database as InventoryExt>::StockAdjustmentFilter;

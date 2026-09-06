@@ -4,9 +4,9 @@
 //! 拆开的必填组合，内部命令因此不存在非法状态。客户/账号存在性、重叠查询、
 //! 事务和审计不在本层。
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::BusinessDate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::customer_assignment::{
     AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
@@ -266,9 +266,9 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{AssignCustomerAssignment, AssignmentRole, EndCustomerAssignment};
-    use crate::common::time::BusinessDate;
-    use crate::errors::Error;
-    use crate::ids::{CustomerAccountId, CustomerAssignmentId};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
+    use erp_core::Error;
 
     fn date(year: i32, month: u32, day: u32) -> BusinessDate {
         BusinessDate::from_ymd(year, month, day).unwrap()

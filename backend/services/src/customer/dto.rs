@@ -3,18 +3,18 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；业务日期一律 `YYYY-MM-DD`；时间一律秒级时间戳。
 
-use entities::common::time::BusinessDate;
 use entities::customer::{
     AssignCustomerAssignment, AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment,
     CustomerAssignmentCommand, EndCustomerAssignment,
 };
-use entities::ids::PartyId;
 use entities::party::AddressType;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::PartyId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 客户角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const CUSTOMER_SORT_FIELDS: &[&str] = &["created_at", "updated_at", "customer_no", "status"];
@@ -37,7 +37,7 @@ pub enum CustomerScope {
 }
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的客户角色列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,13 +79,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 客户角色创建请求（HTTP 契约：`{ party_id, customer_no, ... }`）。
 ///

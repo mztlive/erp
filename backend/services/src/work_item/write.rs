@@ -1,12 +1,15 @@
 //! 责任队列写入结果、幂等回放与版本冲突投影。
 
-use database::{NoTransaction, WorkItemExt};
-use entities::{work_item::WorkItem, CommandReceipt};
+use application_core::CommandReceipt;
+use database::WorkItemExt;
+use entities::work_item::WorkItem;
+use persistence_core::NoTransaction;
 
 use crate::{
-    audit::{AuditActor, CommandReceiptServiceExt as _},
+    audit::CommandReceiptServiceExt as _,
     errors::{Error, Result},
 };
+use application_core::AuditActor;
 
 use super::access::detail_scope;
 use super::query::single_item_context_id;
@@ -25,8 +28,8 @@ pub(super) enum WorkItemWriteError {
     Service(Error),
 }
 
-impl From<database::Error> for WorkItemWriteError {
-    fn from(error: database::Error) -> Self {
+impl From<persistence_core::Error> for WorkItemWriteError {
+    fn from(error: persistence_core::Error) -> Self {
         Self::Service(Error::from(error))
     }
 }
@@ -37,16 +40,16 @@ impl From<Error> for WorkItemWriteError {
     }
 }
 
-impl From<entities::Error> for WorkItemWriteError {
-    fn from(error: entities::Error) -> Self {
+impl From<erp_core::Error> for WorkItemWriteError {
+    fn from(error: erp_core::Error) -> Self {
         Self::Service(Error::from(error))
     }
 }
 
 /// 只把任务实体自身的 CAS 未命中归类为任务版本冲突。
-pub(super) fn work_item_update_error(error: database::Error) -> WorkItemWriteError {
+pub(super) fn work_item_update_error(error: persistence_core::Error) -> WorkItemWriteError {
     match error {
-        database::Error::OptimisticLockingError => WorkItemWriteError::VersionConflict,
+        persistence_core::Error::OptimisticLockingError => WorkItemWriteError::VersionConflict,
         error => WorkItemWriteError::Service(Error::from(error)),
     }
 }

@@ -4,26 +4,26 @@
 //! `sort_by`/`sort_dir` 扁平传递；业务日期一律 `YYYY-MM-DD`；时间一律秒级时间戳；
 //! 金额/税率按 P0 约定序列化为字符串（`invoice_tax_rate` 为 `Rate` 定点小数）。
 
-use entities::common::time::BusinessDate;
-use entities::ids::{FileAssetId, SupplierCapabilityId};
-use entities::money::Rate;
 use entities::supplier::{
     CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
     ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountStatus, SupplierCapability,
     SupplierCommercialProfileRevision, SupplierQualification, SupplierRating, SupplierRatingRevision,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{FileAssetId, SupplierCapabilityId};
+use erp_core::money::Rate;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::party::{PartyAddressView, PartyBankAccountView, PartyContactView, PartyTaxProfileView};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 供应商角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SUPPLIER_SORT_FIELDS: &[&str] = &["created_at", "supplier_no", "status"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,13 +50,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 供应商角色响应视图（列表用，契约形状对齐 `supplier_account` 投影行）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -176,7 +176,7 @@ pub struct SupplierListParams {
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）。
-    pub party_id: Option<entities::ids::PartyId>,
+    pub party_id: Option<erp_core::ids::PartyId>,
     /// 启停状态筛选。
     pub status: Option<SupplierAccountStatus>,
     /// 供应能力代码，多项以逗号分隔；命中任一当前有效能力即可。
@@ -203,7 +203,7 @@ pub(crate) struct SupplierListQuery {
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID。
-    pub party_id: Option<entities::ids::PartyId>,
+    pub party_id: Option<erp_core::ids::PartyId>,
     /// 启停状态筛选。
     pub status: Option<SupplierAccountStatus>,
     /// 命中任一当前有效能力的能力代码。
@@ -639,9 +639,9 @@ pub struct SaveSupplierProfileRequest {
     /// 发票税点。
     pub invoice_tax_rate: Rate,
     /// 签约主体。
-    pub signing_entity_party_id: entities::ids::PartyId,
+    pub signing_entity_party_id: erp_core::ids::PartyId,
     /// 付款主体。
-    pub payment_entity_party_id: entities::ids::PartyId,
+    pub payment_entity_party_id: erp_core::ids::PartyId,
     /// 当前启用能力代码集合。
     pub capability_codes: Vec<CapabilityCode>,
     /// 当前资质集合。
@@ -879,12 +879,12 @@ pub struct SupplierProfileMutationView {
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::BusinessDate;
-    use entities::ids::PartyId;
-    use entities::money::Rate;
     use entities::supplier::{
         CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode,
     };
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::PartyId;
+    use erp_core::money::Rate;
     use validator::Validate;
 
     use super::{

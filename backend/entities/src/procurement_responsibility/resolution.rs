@@ -3,10 +3,11 @@
 use std::collections::HashSet;
 
 use crate::catalog::ProductKind;
-use crate::errors::{Error, Result};
-use crate::ids::{ProductCategoryId, SkuId};
-use crate::validation::normalize_required_text;
-use crate::{AccountCore, AccountKind};
+use crate::AccountCore;
+use erp_core::ids::{ProductCategoryId, SkuId};
+use erp_core::validation::normalize_required_text;
+use erp_core::AccountKind;
+use erp_core::{Error, Result};
 
 use super::rule::{
     normalize_service_region, ProcurementResponsibilityRule, ProcurementResponsibilityRuleType,
@@ -407,9 +408,9 @@ fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::catalog::EnableStatus;
-    use crate::ids::ProcurementResponsibilityRuleId;
     use crate::procurement_responsibility::ProcurementResponsibilityRuleData;
     use crate::{AccountCoreData, AccountStatus, LoginAccount, Secret};
+    use erp_core::ids::ProcurementResponsibilityRuleId;
 
     use super::*;
 

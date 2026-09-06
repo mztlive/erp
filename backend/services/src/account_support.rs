@@ -1,8 +1,10 @@
 //! 账号生命周期的共享校验与更新解析。
 
-use database::{AccessControlExt, Executor};
-use entities::{AccountCore, AccountCoreUpdate, AccountKind, LoginAccount};
+use database::AccessControlExt;
+use entities::{AccountCore, AccountCoreUpdate, LoginAccount};
+use erp_core::AccountKind;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::auth::password;
 use crate::errors::Result;
@@ -96,9 +98,8 @@ pub(crate) async fn apply_account_update(
 mod tests {
     use super::{account_of_kind, apply_account_update};
     use crate::auth::password::{hash_secret, verify_password, PasswordCheck};
-    use entities::{
-        AccountCore, AccountCoreData, AccountCoreUpdate, AccountKind, AccountStatus, LoginAccount,
-    };
+    use entities::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount};
+    use erp_core::AccountKind;
 
     #[tokio::test]
     async fn password_update_returns_fully_prepared_account() {

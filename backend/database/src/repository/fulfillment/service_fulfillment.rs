@@ -1,17 +1,18 @@
 //! `service_fulfillment` 线下服务履约记录仓储：列表投影查询。
 
-use entities::common::time::Instant;
 use entities::fulfillment::{FulfillmentResult, ServiceFulfillment, ServiceFulfillmentState};
-use entities::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 线下服务履约记录排序白名单（查询与测试共用）。
 const SERVICE_FULFILLMENT_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -30,7 +31,7 @@ pub struct ServiceFulfillmentRow {
     /// 采购行到销售行的明确分配。
     pub purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId,
     /// 服务数量。
-    pub quantity: entities::money::Quantity,
+    pub quantity: erp_core::money::Quantity,
     /// 履约结果。
     pub result: FulfillmentResult,
     /// 当前状态。

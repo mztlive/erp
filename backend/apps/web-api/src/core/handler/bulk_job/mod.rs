@@ -3,18 +3,16 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::bulk_job` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    bulk_job::{
-        BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkJobService,
-        BulkSelectionItemView, BulkSelectionSnapshotListParams, BulkSelectionSnapshotView,
-        CancelBackgroundJobRequest, ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobRequest,
-        CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest, PageView,
-    },
+use services::bulk_job::{
+    BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkJobService, BulkSelectionItemView,
+    BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelBackgroundJobRequest,
+    ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobRequest, CreateBulkSelectionSnapshotRequest,
+    ExpireBulkSelectionSnapshotRequest, PageView,
 };
 
 use crate::{

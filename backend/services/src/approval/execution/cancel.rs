@@ -7,9 +7,10 @@ use bpm::model::{
     ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId,
     SubjectRef,
 };
-use database::{BpmExt, Executor, WorkItemExt};
+use database::{BpmExt, WorkItemExt};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::apply_plan::{apply_plan, DomainActionKind};
 use super::authorization::requires_blocked_cancel;

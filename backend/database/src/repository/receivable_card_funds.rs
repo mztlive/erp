@@ -6,21 +6,21 @@
 
 use std::collections::HashSet;
 
-use entities::ids::{ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId};
-use entities::money::Amount;
 use entities::receivable::{
     CustomerReceipt, Invoice, ReceiptAllocation, ReceivableAccount, ReceivableEntry, ReceivableFundsReview,
     SalesInvoiceAllocation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId};
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
 use super::account::{amount_bson, progress_pipeline};
 use super::{ReceivableRepository, SettlementBatchResult};
-use crate::executor::Executor;
 use crate::repository::extensions::ReceivableExt;
 use crate::repository::Repository;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// W13 票款快照的有界持久化事实（FIN-R12）。
 ///
@@ -138,7 +138,7 @@ impl<'a> ReceivableRepository<'a> {
     /// 全部写入成功或空输入时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 唯一键冲突透出 [`crate::Error::DuplicateKey`]，由 Service 转译。
+    /// 唯一键冲突透出 [`persistence_core::Error::DuplicateKey`]，由 Service 转译。
     ///
     /// # 约束
     /// 不开启事务；空输入不访问数据库。
@@ -310,14 +310,14 @@ fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{settlement_guard, unique_ids, CardFundsSnapshotFacts};
-    use crate::executor::NoTransaction;
     use crate::repository::extensions::ReceivableExt;
     use crate::repository::receivable::SettlementBatchResult;
     use crate::repository::Repository;
-    use entities::ids::{ReceivableAccountId, ReceivableEntryId};
-    use entities::money::Amount;
     use entities::receivable::{ReceivableAccount, ReceivableEntry};
+    use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
+    use erp_core::money::Amount;
     use mongodb::bson::Bson;
+    use persistence_core::NoTransaction;
     use std::str::FromStr;
 
     #[test]
@@ -351,10 +351,10 @@ mod tests {
     }
 
     fn test_entry(id: &str, sequence: u32) -> ReceivableEntry {
-        use entities::common::time::{BusinessDate, Instant};
         use entities::receivable::{
             EntryDirection, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
         };
+        use erp_core::common::time::{BusinessDate, Instant};
         ReceivableEntry::new(
             ReceivableEntryId::new(id),
             ReceivableEntryData {
@@ -497,8 +497,8 @@ mod tests {
     }
 
     fn test_account(id: &str, gross: &str, settled: &str) -> ReceivableAccount {
-        use entities::ids::{CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
         use entities::receivable::{AccountReviewStatus, ReceivableAccountData};
+        use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
         ReceivableAccount::new(
             ReceivableAccountId::new(id),
             ReceivableAccountData {
@@ -590,11 +590,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn find_review_by_supersedes_returns_exact_successor() {
-        use entities::common::time::Instant;
-        use entities::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
         use entities::receivable::{
             FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
         };
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {
@@ -661,13 +661,13 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_reports_missing_receipts_before_invoices() {
-        use entities::common::time::{BusinessDate, Instant};
-        use entities::ids::{
-            CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableEntryId, SalesInvoiceAllocationId,
-        };
         use entities::receivable::{
             AllocationAction, EntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
             ReceivableEntryData, ReceivableEntryType, SalesInvoiceAllocation, SalesInvoiceAllocationData,
+        };
+        use erp_core::common::time::{BusinessDate, Instant};
+        use erp_core::ids::{
+            CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableEntryId, SalesInvoiceAllocationId,
         };
         use test_support::{require_mongo, TestDb};
 
@@ -760,12 +760,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_missing_receipts_only_keeps_invoice_count_ok() {
-        use entities::common::time::{BusinessDate, Instant};
-        use entities::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
         use entities::receivable::{
             AllocationAction, EntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
             ReceivableEntryData, ReceivableEntryType,
         };
+        use erp_core::common::time::{BusinessDate, Instant};
+        use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {
@@ -833,7 +833,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn find_review_by_id_and_supersedes_miss() {
-        use entities::ids::ReceivableFundsReviewId;
+        use erp_core::ids::ReceivableFundsReviewId;
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {
@@ -856,11 +856,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn long_chain_supersedes_lookup_uses_unique_index() {
-        use entities::common::time::Instant;
-        use entities::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
         use entities::receivable::{
             FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
         };
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
         use mongodb::bson::doc;
         use test_support::{require_mongo, TestDb};
 
@@ -940,12 +940,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_same_session_ignores_concurrent_review_insert() {
-        use crate::Transactional;
-        use entities::common::time::Instant;
-        use entities::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
         use entities::receivable::{
             FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
         };
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
+        use persistence_core::Transactional;
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {
@@ -1022,7 +1022,7 @@ mod tests {
                             .receivable()
                             .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), session)
                             .await?;
-                        Ok::<_, crate::Error>((before.reviews.len(), after.reviews.len()))
+                        Ok::<_, persistence_core::Error>((before.reviews.len(), after.reviews.len()))
                     })
                 })
                 .await
@@ -1044,9 +1044,9 @@ mod tests {
         seq: u32,
         value: &str,
     ) -> entities::receivable::ReceiptAllocation {
-        use entities::common::time::Instant;
-        use entities::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
         use entities::receivable::{AllocationAction, ReceiptAllocation, ReceiptAllocationData};
+        use erp_core::common::time::Instant;
+        use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
         ReceiptAllocation::new(
             ReceiptAllocationId::new(id),
             ReceiptAllocationData {
@@ -1065,7 +1065,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn historical_and_approval_batch_writes_conserve_and_rollback() {
-        use crate::Transactional;
+        use persistence_core::Transactional;
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {
@@ -1149,7 +1149,7 @@ mod tests {
                         .apply_settlements_many(&delta, "tester", session)
                         .await?;
                     if !applied.rejected.is_empty() {
-                        return Err(crate::Error::OptimisticLockingError);
+                        return Err(persistence_core::Error::OptimisticLockingError);
                     }
                     db_tx
                         .receivable()

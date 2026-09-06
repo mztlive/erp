@@ -3,7 +3,7 @@
 //! DTO 到领域规格的转换与系统行 ID 注入；行号与数量规则归实体批量工厂。
 
 use entities::fulfillment::CustomerAcceptanceLineSpec;
-use entities::ids::CustomerAcceptanceLineId;
+use erp_core::ids::CustomerAcceptanceLineId;
 use id_generator::next_id;
 
 use super::AcceptanceLineInput;

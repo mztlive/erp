@@ -2,17 +2,17 @@
 //!
 //! `$match` 前缀命中 `uk_receivable_accounts_sales_order`（`sales_order_id + account_seq`）。
 
-use entities::ids::SalesOrderId;
-use entities::money::Amount;
 use entities::receivable::{ReceivableAccount, SalesOrderReceivableAmountSummary};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SalesOrderId;
+use erp_core::money::Amount;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 销售单应收合计聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]
@@ -136,14 +136,14 @@ mod tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{sales_order_amount_summary_pipeline, summary_from_rows, SalesOrderAmountSummaryRow};
-    use entities::ids::{
-        CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
-    };
-    use entities::money::Amount;
     use entities::receivable::{
         AccountReviewStatus, ReceivableAccount, ReceivableAccountData, SalesOrderReceivableAmountSummary,
     };
     use entities::sales_order::BusinessType;
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
+    };
+    use erp_core::money::Amount;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -253,8 +253,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn sales_order_amount_summary_matches_entity_add_and_hits_identity_index() {
+        use crate::ensure_indexes;
         use crate::repository::extensions::ReceivableExt;
-        use crate::{ensure_indexes, NoTransaction};
+        use persistence_core::NoTransaction;
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {

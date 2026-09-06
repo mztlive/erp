@@ -2,7 +2,7 @@
 //!
 //! 草稿行（工作副本行）与提交行按 `line_type` 携带「商品、数量、价格、履约字段组」
 //! 或「卡券字段组」（§6.5 字段组概念），行金额一律由
-//! [`crate::money::line_amounts`] 统一计算（§4.2 铁律 1，逐行舍入）。
+//! [`erp_core::money::line_amounts`] 统一计算（§4.2 铁律 1，逐行舍入）。
 //!
 //! 本组类型在 D14/D15 有同形副本（`common/**` P0 冻结，P1 §3 跨域约束），
 //! 待 `chore/erp-p0-amend-*` 地基修订统一收口到 `entities/src/common/`。
@@ -12,11 +12,11 @@ use std::collections::HashSet;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
-use crate::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
+use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
@@ -463,7 +463,7 @@ pub(crate) fn build_line_groups(
                 BASE_UNIT_CODE_MAX_LEN,
                 "基础单位过长",
             )?;
-            fields.service_region = crate::validation::normalize_optional_text(
+            fields.service_region = erp_core::validation::normalize_optional_text(
                 fields.service_region,
                 "服务区域",
                 SERVICE_REGION_MAX_LEN,
@@ -638,7 +638,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::ids::SalesOrderLineId;
+    use erp_core::ids::SalesOrderLineId;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

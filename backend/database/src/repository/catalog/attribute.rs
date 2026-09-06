@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use entities::catalog::sku_attribute::AttributeValueType;
 use entities::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
 
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::sort_doc;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkuAttributeRow {

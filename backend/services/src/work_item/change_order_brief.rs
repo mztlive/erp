@@ -5,9 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
+use database::{PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
 use entities::{
-    ids::{PurchaseOrderRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId},
     purchase_order::{
         PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrderRevision,
         PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
@@ -18,6 +17,8 @@ use entities::{
     },
     sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine},
 };
+use erp_core::ids::{PurchaseOrderRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId};
+use persistence_core::Executor;
 
 use super::brief::{
     format_instant_date, format_instant_datetime, format_quantity, join_list_summary, line_title, non_empty,
@@ -548,8 +549,8 @@ fn push_purchase_header_comparisons(
 fn push_amount_comparison(
     sections: &mut Vec<super::brief::BriefSection>,
     label: &str,
-    before: Option<&entities::money::Amount>,
-    after: Option<&entities::money::Amount>,
+    before: Option<&erp_core::money::Amount>,
+    after: Option<&erp_core::money::Amount>,
 ) {
     let comparison = amount_comparison(before, after);
     push_section(sections, label, comparison.as_deref(), true);
@@ -557,8 +558,8 @@ fn push_amount_comparison(
 
 /// 返回金额前后值。
 fn amount_comparison(
-    before: Option<&entities::money::Amount>,
-    after: Option<&entities::money::Amount>,
+    before: Option<&erp_core::money::Amount>,
+    after: Option<&erp_core::money::Amount>,
 ) -> Option<String> {
     text_comparison(
         before.map(format_yuan).as_deref(),

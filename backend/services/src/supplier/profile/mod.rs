@@ -12,9 +12,10 @@ mod validation;
 
 use std::sync::Arc;
 
-use database::{NoTransaction, SupplierExt};
+use database::SupplierExt;
 use entities::supplier::SupplierProfileCommand;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use crate::{errors::Result, party::SensitiveDataCodec};
 

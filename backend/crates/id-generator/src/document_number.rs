@@ -6,12 +6,12 @@
 //! 保证并发环境下取号唯一、序号连续递增，且序号一经消费永不回收。
 
 use chrono::NaiveDate;
-use database::{Error as DatabaseError, Executor};
 use mongodb::{
     bson::{doc, serialize_to_bson, Bson},
     options::ReturnDocument,
     Collection, Database,
 };
+use persistence_core::{Error as DatabaseError, Executor};
 use serde::{Deserialize, Serialize};
 
 /// 计数器集合名称。

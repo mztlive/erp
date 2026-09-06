@@ -17,15 +17,15 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::WarehouseExt;
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
-use entities::common::time::BusinessDate;
-use entities::ids::{SkuId, WarehouseId};
-use entities::money::Quantity;
 use entities::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SkuId, WarehouseId};
+use erp_core::money::Quantity;
 
 /// `warehouse` 集合名（单一来源：`WarehouseExt` 关联常量）。
 const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
@@ -508,7 +508,7 @@ impl<'a> WarehouseRepository<'a> {
     /// 修订快照」原子可见（数据模型 §6.3）。**必须收到事务执行器**：本方法
     /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败
     /// 会留下没有修订的仓库；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `warehouse` - 待写入的仓库（首修订链入后写库）
@@ -516,7 +516,7 @@ impl<'a> WarehouseRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_warehouse_with_revision(
         &self,

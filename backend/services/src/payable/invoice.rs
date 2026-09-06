@@ -2,14 +2,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PayableExt, ReceivableExt, SupplierExt, Transactional};
-use entities::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, SupplierAccountId};
+use database::{AccessControlExt, PayableExt, ReceivableExt, SupplierExt};
 use entities::payable::{
     PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
 };
 use entities::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
 use entities::supplier::SupplierAccount;
+use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, SupplierAccountId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{
@@ -18,8 +19,10 @@ use super::dto::{
 };
 use super::mapping::zero_amount;
 use super::{PayableService, PurchaseInvoiceAllocationFilter};
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl PayableService {
     // -----------------------------------------------------------------------

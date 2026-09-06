@@ -9,16 +9,17 @@ use entities::document_registry::{
     BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
     WorkflowActionType,
 };
-use entities::ids::DataScopeId;
-use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+use erp_core::ids::DataScopeId;
+use erp_core::AccountKind;
 
 use crate::approval::business_adapter::ensure_runtime_cut_over;
 use crate::approval::execution::upgrade_binding_identity;
 use crate::approval::policy::{policy_of, ApprovalRequirement, ALL_DOCUMENT_TYPES};
 use crate::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
-use crate::audit::AuditActor;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, ErrorCode};
+use application_core::AuditActor;
 
 use super::super::business_adapter::BindingRevalidationContext;
 use super::revalidate::{

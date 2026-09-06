@@ -5,11 +5,11 @@
 //!   （审计日志按 D01 既有写法独立写入）；
 //! - 商品创建与规格编辑：跨集合（products + product_revisions + 媒体 +
 //!   skus + sku_revisions + 审计）→
-//!   `database::Transactional::with_transaction`，保证「SPU 身份 + 修订快照 +
+//!   `persistence_core::Transactional::with_transaction`，保证「SPU 身份 + 修订快照 +
 //!   SKU 身份 + 规格签名」原子可见（数据模型 §6.3）；
 //! - 卡券类目原子创建：跨集合（[新建分类] + products + product_revisions +
 //!   唯一 SKU + sku_revisions + voucher_category_profile_revisions + 审计）→
-//!   `database::Transactional::with_transaction`，与商品创建同构（数据模型
+//!   `persistence_core::Transactional::with_transaction`，与商品创建同构（数据模型
 //!   §6.3：卡券类目即 VOUCHER 类型的单 SKU 商品，不再要求预先存在 SKU）。
 //!
 //! 业务规则来自 entities（`new()`/`update()` 已完成校验与规范化，

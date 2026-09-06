@@ -12,7 +12,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SalesOrderExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `sales_order` 集合名。
 pub(crate) const SALES_ORDERS: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDERS;

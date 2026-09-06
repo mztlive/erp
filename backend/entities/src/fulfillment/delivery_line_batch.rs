@@ -4,12 +4,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
 use crate::fulfillment::{DeliveryLine, DeliveryLineData, DeliveryType};
-use crate::ids::{
+use erp_core::ids::{
     DeliveryId, DeliveryLineId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId,
 };
-use crate::money::Quantity;
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 单行领域输入（已验证形态，不含行号与表头）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

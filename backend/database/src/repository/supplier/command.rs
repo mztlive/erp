@@ -1,8 +1,8 @@
-use entities::ids::SupplierQualificationId;
 use entities::supplier::{
     SupplierAccount, SupplierCommercialProfileRevision, SupplierProfileCommand,
     SupplierQualificationCapability,
 };
+use erp_core::ids::SupplierQualificationId;
 use mongodb::bson::doc;
 
 use super::super::Repository;
@@ -10,8 +10,8 @@ use super::{
     SupplierRepository, SUPPLIER_ACCOUNTS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_PROFILE_COMMANDS,
     SUPPLIER_QUALIFICATION_CAPABILITIES,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> Repository<'a, SupplierProfileCommand> {
     /// 按客户端幂等键读取已成功命令结果。
@@ -57,7 +57,7 @@ impl<'a> SupplierRepository<'a> {
     /// 携带 `current_commercial_profile_revision_id` 指向当前版本）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，中途失败会留下只有版本没有供应商角色的
-    /// 半成品；Service 必须通过 `database::Transactional::with_transaction`
+    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
     /// # 参数
@@ -67,7 +67,7 @@ impl<'a> SupplierRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当供应商编号或主体归属违反唯一索引（透出 [`crate::Error::DuplicateKey`]）
+    /// 当供应商编号或主体归属违反唯一索引（透出 [`persistence_core::Error::DuplicateKey`]）
     /// 或 MongoDB 写入失败时返回错误。
     pub async fn create_supplier_with_initial_profile(
         &self,

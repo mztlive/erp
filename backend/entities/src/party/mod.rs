@@ -3,8 +3,8 @@
 //!
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.2；公共字段归属按 §4.3 判定：
-//! - `party` 是「稳定基础资料」→ 组合 [`crate::common::StableBase`]；
-//! - `party_revision` 是不可变修订 → 组合 [`crate::common::RevisionBase`]，
+//! - `party` 是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；
+//! - `party_revision` 是不可变修订 → 组合 [`erp_core::common::RevisionBase`]，
 //!   法定名称/简称按 §2.2 / §4.4 内联为结构化快照；
 //! - `party_contact` / `party_address` / `party_tax_profile` / `party_bank_account`
 //!   是「支持有效期的从属事实行」（§5.2 / §6.2），按字段字典精确建模：
@@ -24,14 +24,14 @@ pub mod party_tax_profile;
 mod sensitive;
 pub mod status;
 
-pub use crate::ids::{
-    PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
-};
 pub use content_match::{
     PartyAddressContentMatch, PartyBankAccountContentMatch, PartyContactContentMatch, QueryFingerprint,
     SensitiveFactReuse,
 };
 pub use entity::{Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
+pub use erp_core::ids::{
+    PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
+};
 pub use party_address::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};
 pub use party_bank_account::{PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate};
 pub use party_contact::{PartyContact, PartyContactData, PartyContactUpdate};
@@ -39,7 +39,7 @@ pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
 pub use status::{select_current_default, EffectiveRecordStatus};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 由单一 Party 拥有的从属实体。
 pub trait PartyOwned {
@@ -99,7 +99,7 @@ impl PartyOwned for PartyBankAccount {
 
 #[cfg(test)]
 mod tests {
-    use crate::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     use super::{EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyId, PartyOwned};
 

@@ -1,6 +1,4 @@
-use database::{AccessControlExt, NoTransaction, SupplierApiExt, Transactional};
-use entities::common::time::Instant;
-use entities::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+use database::{AccessControlExt, SupplierApiExt};
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, CapabilityChangeInput,
     CapabilityChangeSet, CapabilityChangeSetRejection, ClassifiedCapabilityChangeSet,
@@ -9,11 +7,15 @@ use entities::supplier_api::{
     SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction,
     SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData, SupplierConnectionGovernance,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::super::dto::{
     ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
@@ -585,7 +587,7 @@ pub(super) struct CommandReceiptWrite<'a> {
 pub(super) async fn persist_command_receipt(
     db: &mongodb::Database,
     write: CommandReceiptWrite<'_>,
-    executor: &mut dyn database::Executor,
+    executor: &mut dyn persistence_core::Executor,
 ) -> Result<SupplierConnectionCommandResult> {
     let CommandReceiptWrite {
         connection,

@@ -10,8 +10,8 @@ use super::{
     SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE, SUPPLIER_SETTLEMENT_ITEMS,
     SUPPLIER_SETTLEMENT_STATEMENTS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// D33 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
@@ -40,7 +40,7 @@ impl<'a> SupplierSettlementRepository<'a> {
     /// 结算单确认与成本差额、应付账户及原始应付分录在同一事务完成，P3 编排）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，中途失败会留下只有结算单没有明细的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `statement` - 待写入的结算单
@@ -48,7 +48,7 @@ impl<'a> SupplierSettlementRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_statement_with_items(
         &self,

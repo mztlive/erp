@@ -1,9 +1,10 @@
-use database::{AccessControlExt, NoTransaction, SupplierSettlementExt, Transactional};
-use entities::common::time::Instant;
+use database::{AccessControlExt, SupplierSettlementExt};
 use entities::supplier_settlement::{
     SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementStatus,
     SupplierSettlementDifference, SupplierSettlementStatement, SupplierSettlementStatementUpdate,
 };
+use erp_core::common::time::Instant;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{
@@ -14,9 +15,10 @@ use super::{
     command_audit_id, digest_parts, dto, ensure_audit_resource, ensure_same_id, parse_receipt_number,
     receipt_result, SupplierSettlementService, COMMAND_FINGERPRINT_PREFIX,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::supplier_fulfillment::dto::SortDir;
+use application_core::AuditActor;
 
 /// 结算差异列表筛选条件类型。
 type DifferenceFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementDifferenceFilter;
@@ -127,7 +129,7 @@ impl SupplierSettlementService {
             .find_by_id(&difference.statement_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
-        let statement_id = entities::ids::SupplierSettlementStatementId::new(&req.statement_id);
+        let statement_id = erp_core::ids::SupplierSettlementStatementId::new(&req.statement_id);
         if !item.belongs_to_statement(&statement_id) {
             return Err(Error::ConflictError("结算差异已不属于当前结算单".to_string()));
         }

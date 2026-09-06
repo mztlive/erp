@@ -2,21 +2,24 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, CustomerExt, Executor, NoTransaction, SupplierExt, WorkItemExt};
+use database::{AccessControlExt, CustomerExt, SupplierExt, WorkItemExt};
 use entities::catalog::EnableStatus;
-use entities::ids::{CustomerAccountId, SupplierAccountId};
 use entities::work_item::{
     AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule,
     FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
-use entities::{AccountKind, Permission, PermissionSet};
+use entities::{Permission, PermissionSet};
+use erp_core::ids::{CustomerAccountId, SupplierAccountId};
+use erp_core::AccountKind;
 use id_generator::next_id;
+use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::WorkItemService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 

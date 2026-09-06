@@ -66,13 +66,13 @@ pub enum Error {
     Unauthorized(String),
 
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
-    OutcomeUnknown(#[source] database::Error),
+    OutcomeUnknown(#[source] persistence_core::Error),
 
     #[error(transparent)]
     RateLimited(#[from] crate::core::rate_limit::Error),
 
     #[error(transparent)]
-    Logic(#[from] entities::Error),
+    Logic(#[from] erp_core::Error),
 
     #[error(transparent)]
     Validation(#[from] validator::ValidationErrors),
@@ -81,12 +81,12 @@ pub enum Error {
     Coded(services::ErrorCode),
 }
 
-impl From<database::Error> for Error {
+impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为 HTTP 边界错误。
     ///
     /// 唯一键与乐观锁冲突使用 409，其余仓储错误保持内部错误语义。
     /// 唯一键冲突优先按已知索引名给出字段级提示。
-    fn from(error: database::Error) -> Self {
+    fn from(error: persistence_core::Error) -> Self {
         services::Error::from(error).into()
     }
 }
@@ -212,10 +212,10 @@ impl Error {
             Error::RateLimited(error) if error.retry_after_secs().is_some() => StatusCode::TOO_MANY_REQUESTS,
             Error::RateLimited(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Coded(code) => match code.class() {
-                services::ErrorClass::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-                services::ErrorClass::Conflict => StatusCode::CONFLICT,
-                services::ErrorClass::BusinessRule => StatusCode::UNPROCESSABLE_ENTITY,
-                services::ErrorClass::Forbidden => StatusCode::FORBIDDEN,
+                application_core::ErrorClass::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+                application_core::ErrorClass::Conflict => StatusCode::CONFLICT,
+                application_core::ErrorClass::BusinessRule => StatusCode::UNPROCESSABLE_ENTITY,
+                application_core::ErrorClass::Forbidden => StatusCode::FORBIDDEN,
             },
         }
     }
@@ -282,14 +282,16 @@ impl Error {
             }
             Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::Coded(code) => match code.class() {
-                services::ErrorClass::Internal => {
+                application_core::ErrorClass::Internal => {
                     "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
                 }
-                services::ErrorClass::Conflict => "当前资料状态不允许继续操作，请刷新后核对".to_string(),
-                services::ErrorClass::BusinessRule => {
+                application_core::ErrorClass::Conflict => {
+                    "当前资料状态不允许继续操作，请刷新后核对".to_string()
+                }
+                application_core::ErrorClass::BusinessRule => {
                     "当前业务条件不允许继续操作，请核对相关资料后重试".to_string()
                 }
-                services::ErrorClass::Forbidden => {
+                application_core::ErrorClass::Forbidden => {
                     "当前账号没有执行此操作的权限，请联系管理员或有权限的同事".to_string()
                 }
             },
@@ -395,16 +397,16 @@ mod tests {
         let business: Error = services::Error::BusinessLogicError("x".into()).into();
         let forbidden: Error = services::Error::Forbidden("x".into()).into();
         let unauthorized: Error = services::Error::Unauthenticated("x".into()).into();
-        let logic: Error = services::Error::Logic(entities::Error::from("x")).into();
-        let outcome_unknown: Error = services::Error::from(database::Error::CommitOutcomeUnknown(
+        let logic: Error = services::Error::Logic(erp_core::Error::from("x")).into();
+        let outcome_unknown: Error = services::Error::from(persistence_core::Error::CommitOutcomeUnknown(
             mongodb::error::Error::custom("unknown"),
         ))
         .into();
-        let receipt_duplicate: Error = services::Error::ReceiptDuplicate(database::Error::DuplicateKey(
-            mongodb::error::Error::custom("duplicate receipt source"),
-        ))
+        let receipt_duplicate: Error = services::Error::ReceiptDuplicate(
+            persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate receipt source")),
+        )
         .into();
-        let transient: Error = services::Error::from(database::Error::TransientTransactionConflict(
+        let transient: Error = services::Error::from(persistence_core::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("transient source"),
         ))
         .into();
@@ -425,14 +427,15 @@ mod tests {
 
     #[test]
     fn maps_optimistic_locking_error_to_conflict() {
-        let error: Error = database::Error::OptimisticLockingError.into();
+        let error: Error = persistence_core::Error::OptimisticLockingError.into();
 
         assert!(matches!(error, Error::Conflict(_)));
     }
 
     #[test]
     fn duplicate_key_race_maps_to_http_conflict() {
-        let repository_error = database::Error::DuplicateKey(mongodb::error::Error::custom("duplicate key"));
+        let repository_error =
+            persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate key"));
         let service_error = services::Error::from(repository_error);
         let response = Error::from(service_error).into_response();
 
@@ -470,7 +473,7 @@ mod tests {
                 "RATE_LIMITED",
             ),
             (
-                Error::Logic(entities::Error::from("x")),
+                Error::Logic(erp_core::Error::from("x")),
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "BUSINESS_RULE_BLOCKED",
             ),
@@ -480,7 +483,7 @@ mod tests {
                 "INTERNAL_ERROR",
             ),
             (
-                Error::OutcomeUnknown(database::Error::CommitOutcomeUnknown(
+                Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
                     mongodb::error::Error::custom("unknown"),
                 )),
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -515,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_commit_outcome_has_stable_non_sensitive_response() {
-        let response = Error::OutcomeUnknown(database::Error::CommitOutcomeUnknown(
+        let response = Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
             mongodb::error::Error::custom("driver details"),
         ))
         .into_response();
@@ -547,7 +550,7 @@ mod tests {
 
     #[tokio::test]
     async fn technical_business_error_uses_safe_fallback() {
-        let response = Error::Logic(entities::Error::from("同步水位不得回退")).into_response();
+        let response = Error::Logic(erp_core::Error::from("同步水位不得回退")).into_response();
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("response body should be readable");

@@ -1,12 +1,13 @@
 use bpm::graph::DefinitionGraph;
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::ApprovalProcessDefinition;
-use database::{BpmExt, Transactional};
+use database::BpmExt;
 use mongodb::Database;
+use persistence_core::Transactional;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::super::definition_dto::{DefinitionDetailView, RetireDefinitionRequest};
 use super::super::policy::ProcessRequiredApprovalPolicy;

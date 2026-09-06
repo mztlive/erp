@@ -3,16 +3,16 @@ use entities::catalog::{
     EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuCoverageStatus,
     SkuRevision,
 };
-use entities::common::time::BusinessDate;
-use entities::ids::{
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
     FileAssetId, ProductBrandId, ProductCategoryId, ProductId, SkuId, SkuRevisionId, UnitOfMeasureId,
 };
-use entities::money::{Amount, Quantity};
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 use super::common::{non_blank, normalize_sort, validate_sales_price_range, PageParams};
 
@@ -626,9 +626,9 @@ pub struct SkuRevisionView {
     /// 来源 SKU 主图（已归档受控文件，D05）。
     pub source_main_image_asset_id: Option<String>,
     /// 重量（千克）。
-    pub weight_kg: Option<entities::money::Quantity>,
+    pub weight_kg: Option<erp_core::money::Quantity>,
     /// 体积（立方米）。
-    pub volume_m3: Option<entities::money::Quantity>,
+    pub volume_m3: Option<erp_core::money::Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
     /// 公司对销售可见的含税价格（字符串形态）。

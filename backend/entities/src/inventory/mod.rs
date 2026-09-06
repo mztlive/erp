@@ -20,11 +20,11 @@ pub mod stock_balance;
 pub mod stock_movement;
 pub mod stock_reservation;
 
-pub use crate::ids::{
+pub use approval_snapshot::StockAdjustmentApprovalSnapshot;
+pub use erp_core::ids::{
     StockAdjustmentId, StockAdjustmentLineId, StockBalanceId, StockMovementId, StockReservationEntryId,
     StockReservationId,
 };
-pub use approval_snapshot::StockAdjustmentApprovalSnapshot;
 pub use stock_adjustment::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentLineUpdate, StockAdjustmentState, StockAdjustmentUpdate,

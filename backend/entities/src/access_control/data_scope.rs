@@ -6,9 +6,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::DataScopeId;
-use crate::validation::normalize_required_text;
+use erp_core::ids::DataScopeId;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 主体 ID 最大长度。
 const SUBJECT_ID_MAX_LEN: usize = 128;
@@ -146,7 +146,7 @@ impl DataScope {
     /// 负责/协作参与不允许携带目标；范围目标逐项 trim、去重、保序、长度上限。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DataScopeId`）
+    /// * `id` - 实体主键（`erp_core::ids::DataScopeId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -217,7 +217,7 @@ fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> R
 #[cfg(test)]
 mod tests {
     use super::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-    use crate::ids::DataScopeId;
+    use erp_core::ids::DataScopeId;
 
     fn data() -> DataScopeData {
         DataScopeData {

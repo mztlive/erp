@@ -1,11 +1,12 @@
-use database::{NoTransaction, PurchaseOrderExt, SalesOrderExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::ids::PurchaseChangeSubmissionId;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseOrder,
     PurchaseOrderRevision,
 };
+use erp_core::ids::PurchaseChangeSubmissionId;
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 
 use super::super::change_adapter::document_approval_view;
 use super::super::dto::{PurchaseChangeOrderView, SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
@@ -29,7 +30,7 @@ impl PurchaseOrderService {
     /// 排序由单版本仓储查询保证；空版本校验和 DTO 转换仍由 Service 负责。
     pub(super) async fn change_lines_from_base_revision(
         &self,
-        revision_id: &entities::ids::PurchaseOrderRevisionId,
+        revision_id: &erp_core::ids::PurchaseOrderRevisionId,
     ) -> Result<Vec<SavePurchaseOrderLine>> {
         let lines = self
             .db
@@ -107,7 +108,7 @@ impl PurchaseOrderService {
             .db
             .sales_order_revision_lines()
             .list_lines_by_revision(
-                &entities::ids::SalesOrderRevisionId::new(revision_id.clone()),
+                &erp_core::ids::SalesOrderRevisionId::new(revision_id.clone()),
                 &mut NoTransaction,
             )
             .await?;

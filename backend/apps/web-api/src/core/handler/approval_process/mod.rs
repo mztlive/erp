@@ -4,6 +4,7 @@
 
 mod http;
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -16,7 +17,6 @@ use services::{
         CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
         PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
     },
-    audit::AuditActor,
 };
 
 use crate::{

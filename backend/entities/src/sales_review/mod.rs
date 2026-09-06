@@ -25,4 +25,4 @@ pub use types::{
 };
 
 /// 域内仍保留的 ID newtype 出口。
-pub use crate::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId};
+pub use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId};

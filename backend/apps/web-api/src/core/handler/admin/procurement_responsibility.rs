@@ -1,8 +1,8 @@
+use application_core::AuditActor;
 use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
-use services::audit::AuditActor;
 use services::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveRequest,
     ProcurementResponsibilityResolveView, ProcurementResponsibilityRuleListParams,

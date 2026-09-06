@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, ContractExt, CustomerExt, NoTransaction};
-use entities::common::time::BusinessDate;
+use database::{AccessControlExt, ContractExt, CustomerExt};
 use entities::customer::AssignmentRole;
-use entities::ids::CustomerAccountId;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::CustomerAccountId;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::errors::Result;

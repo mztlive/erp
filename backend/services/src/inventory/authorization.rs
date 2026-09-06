@@ -5,17 +5,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, Executor};
+use database::AccessControlExt;
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage},
-    ids::WarehouseId,
     Permission,
 };
+use erp_core::ids::WarehouseId;
 use mongodb::Database;
+use persistence_core::Executor;
 
-use crate::{
-    approval::approval_actor_is_active_with_executor, audit::AuditActor, errors::Result, iam::RbacService,
-};
+use crate::{approval::approval_actor_is_active_with_executor, errors::Result, iam::RbacService};
+use application_core::AuditActor;
 
 const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
 const ADJUSTMENT_LIST_PERMISSION: &str = "stock_adjustment:list";
@@ -311,7 +311,7 @@ mod tests {
 
     use super::{scope_from_role_facts, scopes_by_subject, InventoryAuthorization, WarehouseScope};
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-    use entities::ids::{DataScopeId, WarehouseId};
+    use erp_core::ids::{DataScopeId, WarehouseId};
 
     fn scope(
         id: &str,

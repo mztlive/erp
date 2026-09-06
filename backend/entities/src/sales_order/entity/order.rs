@@ -2,13 +2,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::ensure_transition;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
-use crate::money::Quantity;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::ensure_transition;
+use erp_core::common::time::Instant;
+use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::money::Quantity;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::super::types::{BusinessType, OriginSystem};
 use super::{
@@ -140,7 +140,7 @@ impl SalesOrder {
     /// 一期来源单 `source_identity_id`/`source_status_code` 只作追溯不参与业务判定。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///

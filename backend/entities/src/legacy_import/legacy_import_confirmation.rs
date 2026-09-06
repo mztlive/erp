@@ -6,11 +6,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{LegacyImportBatchId, WorkItemId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{LegacyImportBatchId, WorkItemId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 确认范围（销售、采购、运营、仓储、财务等）最大长度。
 const SCOPE_MAX_LEN: usize = 64;
@@ -281,7 +281,7 @@ pub struct LegacyImportConfirmation {
     /// 失效时间。
     pub invalidated_at: Option<Instant>,
     /// 替代确认事实。
-    pub replacement_confirmation_id: Option<crate::ids::LegacyImportConfirmationId>,
+    pub replacement_confirmation_id: Option<erp_core::ids::LegacyImportConfirmationId>,
 }
 
 impl LegacyImportConfirmation {
@@ -291,7 +291,7 @@ impl LegacyImportConfirmation {
     /// 非空、长度上限）；创建即 `PENDING`，决策与审计字段为空。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::LegacyImportConfirmationId`）
+    /// * `id` - 实体主键（`erp_core::ids::LegacyImportConfirmationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -300,7 +300,7 @@ impl LegacyImportConfirmation {
     /// # 错误
     /// 当必填文本为空或超长时返回错误。
     pub fn new(
-        id: crate::ids::LegacyImportConfirmationId,
+        id: erp_core::ids::LegacyImportConfirmationId,
         data: LegacyImportConfirmationData,
     ) -> Result<Self> {
         let confirmation_scope = normalize_required_text(
@@ -661,7 +661,7 @@ impl LegacyImportConfirmation {
     /// 非待确认状态时返回错误（已完成确认永久保留，不可失效）。
     pub fn invalidate(
         &mut self,
-        replacement_confirmation_id: crate::ids::LegacyImportConfirmationId,
+        replacement_confirmation_id: erp_core::ids::LegacyImportConfirmationId,
         invalidated_at: Instant,
     ) -> Result<()> {
         ensure_transition(self.status, ConfirmationStatus::Invalidated)?;
@@ -675,8 +675,8 @@ impl LegacyImportConfirmation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::ensure_transition;
-    use crate::ids::{LegacyImportConfirmationId, WorkItemId};
+    use erp_core::common::state::ensure_transition;
+    use erp_core::ids::{LegacyImportConfirmationId, WorkItemId};
 
     fn confirmation_data() -> LegacyImportConfirmationData {
         LegacyImportConfirmationData {

@@ -10,12 +10,12 @@ use serde::{Deserialize, Serialize};
 use super::business_category::{normalize_business_category, split_encoded_payment_term_snapshot};
 pub use super::payment_term::SettlementMode;
 use super::payment_term::SupplierPaymentTerm;
-use crate::common::revision::RevisionBase;
-use crate::errors::{Error, Result};
-use crate::money::Rate;
-use crate::validation::normalize_required_text;
+use erp_core::common::revision::RevisionBase;
+use erp_core::money::Rate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
-pub use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
 /// 付款条件快照最大长度。
 const PAYMENT_TERM_SNAPSHOT_MAX_LEN: usize = 64;
@@ -175,7 +175,7 @@ impl SupplierCommercialProfileRevision {
     /// 历史把经营类目编码进付款条件快照时，在此拆成独立字段。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierCommercialProfileRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierCommercialProfileRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -312,8 +312,8 @@ mod tests {
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
         SupplierCommercialProfileRevisionData,
     };
-    use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
-    use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
     fn profile_data() -> SupplierCommercialProfileRevisionData {
         SupplierCommercialProfileRevisionData {

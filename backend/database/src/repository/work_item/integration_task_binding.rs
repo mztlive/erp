@@ -10,9 +10,9 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
-use crate::executor::Executor;
 use crate::repository::Repository;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 构造集成错误任务唯一责任查询的精确过滤文档。
 ///

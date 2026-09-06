@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 结算复核驳回原因固定代码（FUL-E13）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

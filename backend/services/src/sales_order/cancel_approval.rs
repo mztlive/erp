@@ -6,12 +6,13 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{AccessControlExt, BpmExt, NoTransaction, SalesOrderExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, BpmExt, SalesOrderExt, WorkItemExt};
 use entities::sales_order::SalesOrder;
 use entities::work_item::WorkItem;
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
 use crate::approval::execution::authorization::converge_eligibility;
@@ -247,9 +248,9 @@ mod tests {
         ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition, IdempotencyKey,
         NewNodeExecution, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
-    use entities::common::time::Instant;
-    use entities::ids::WorkItemId;
     use entities::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     fn at(secs: i64) -> Timestamp {
         Timestamp::from_unix_secs(secs).expect("时间合法")

@@ -1,14 +1,15 @@
 //! 应收视图装配与跨用例共享的票款快照、金额和版本辅助。
 
-use database::{Executor, ReceivableExt, SalesOrderExt};
-use entities::ids::ReceivableAccountId;
-use entities::money::Amount;
+use database::{ReceivableExt, SalesOrderExt};
 use entities::receivable::{
     AllocationAction, CustomerReceipt, CustomerReceiptStatus, Invoice, InvoiceKind, InvoiceStatus,
     ReceiptAllocation, ReceivableAccount, ReceivableEntry, ReceivableFundsReview, ReceivableFundsReviewChain,
     ReceivableFundsSnapshot, SalesInvoiceAllocation,
 };
+use erp_core::ids::ReceivableAccountId;
+use erp_core::money::Amount;
 use mongodb::Database;
+use persistence_core::Executor;
 use std::str::FromStr;
 
 use super::dto::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
@@ -230,7 +231,7 @@ pub(super) fn card_funds_snapshot_of(snapshot: &CardFundsSnapshot) -> Result<Rec
 ///
 /// # 约束
 /// 不改写文案。
-pub(super) fn map_chain_error(error: entities::Error) -> Error {
+pub(super) fn map_chain_error(error: erp_core::Error) -> Error {
     Error::Internal(error.to_string())
 }
 
@@ -247,7 +248,7 @@ pub(super) fn map_chain_error(error: entities::Error) -> Error {
 ///
 /// # 约束
 /// 不得落到透明 Logic。
-pub(super) fn map_ledger_error(error: entities::Error) -> Error {
+pub(super) fn map_ledger_error(error: erp_core::Error) -> Error {
     Error::BusinessLogicError(error.to_string())
 }
 

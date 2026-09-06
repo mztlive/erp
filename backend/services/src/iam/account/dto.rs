@@ -147,7 +147,8 @@ impl AdminItem {
 
 #[cfg(test)]
 mod tests {
-    use entities::{AccountCore, AccountKind, AccountStatus, BaseModel, LoginAccount, Secret};
+    use entities::{AccountCore, AccountStatus, BaseModel, LoginAccount, Secret};
+    use erp_core::AccountKind;
     use serde_json::json;
     use validator::Validate;
 

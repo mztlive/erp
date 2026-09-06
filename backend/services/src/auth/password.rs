@@ -89,7 +89,7 @@ pub(crate) async fn hash_secret(account: LoginAccount, password: String) -> Resu
 pub(crate) async fn run_hashing<T, Work>(work: Work) -> Result<T>
 where
     T: Send + 'static,
-    Work: FnOnce() -> entities::Result<T> + Send + 'static,
+    Work: FnOnce() -> erp_core::Result<T> + Send + 'static,
 {
     run_password_work(work, Error::from).await
 }
@@ -100,8 +100,8 @@ where
 async fn run_password_work<T, Work, MapError>(work: Work, map_error: MapError) -> Result<T>
 where
     T: Send + 'static,
-    Work: FnOnce() -> entities::Result<T> + Send + 'static,
-    MapError: FnOnce(entities::Error) -> Error,
+    Work: FnOnce() -> erp_core::Result<T> + Send + 'static,
+    MapError: FnOnce(erp_core::Error) -> Error,
 {
     let permit = PASSWORD_WORK_SLOTS
         .acquire()
@@ -117,14 +117,14 @@ where
 }
 
 /// 完成单次同步密码工作；仅在 legacy 匹配时生成新 Argon2 哈希。
-fn verify_password_sync(secret: Option<Secret>, password: String) -> entities::Result<PasswordCheck> {
+fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::Result<PasswordCheck> {
     let verification = Secret::verify_password_or_dummy(secret.as_ref(), password.as_str());
     match verification {
         PasswordVerification::Mismatch => Ok(PasswordCheck::Mismatch),
         PasswordVerification::Current => Ok(PasswordCheck::Current),
         PasswordVerification::Legacy => {
             let Some(mut secret) = secret else {
-                return Err(entities::Error::LogicError("密码处理失败".to_string()));
+                return Err(erp_core::Error::LogicError("密码处理失败".to_string()));
             };
             secret.change_password(password)?;
             Ok(PasswordCheck::Upgraded(secret))

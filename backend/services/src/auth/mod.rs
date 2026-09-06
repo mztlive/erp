@@ -1,6 +1,8 @@
-use database::{AccessControlExt, NoTransaction};
-use entities::{AccountCore, AccountKind as DomainAccountKind, LoginAccount};
+use database::AccessControlExt;
+use entities::{AccountCore, LoginAccount};
+use erp_core::AccountKind as DomainAccountKind;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
@@ -191,7 +193,8 @@ pub use dto::{AuthRequest, AuthResponse, PasswordLoginPayload};
 #[cfg(test)]
 mod tests {
     use super::{password::verify_password, password::PasswordCheck, BackofficeAuthResult};
-    use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+    use erp_core::AccountKind;
 
     fn account(kind: AccountKind, status: AccountStatus) -> AccountCore {
         AccountCore::new(

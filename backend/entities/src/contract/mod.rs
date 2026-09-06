@@ -2,8 +2,8 @@
 //!
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.4；公共字段归属按 §4.3 判定：
-//! - `contract` 是「稳定基础资料」→ 组合 [`crate::common::stable::StableBase`]；
-//! - `contract_revision` 是「不可变修订」→ 组合 [`crate::common::revision::RevisionBase`]。
+//! - `contract` 是「稳定基础资料」→ 组合 [`erp_core::common::stable::StableBase`]；
+//! - `contract_revision` 是「不可变修订」→ 组合 [`erp_core::common::revision::RevisionBase`]。
 //! - 正式版本内联客户名称、合同编号、结算主体、税务与付款条件等结构化快照
 //!   （数据模型 §4.4 / P1 §2.2），禁止 JSON blob。
 //!
@@ -22,4 +22,4 @@ pub use snapshot::{
 };
 
 /// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{ContractId, ContractRevisionId};
+pub use erp_core::ids::{ContractId, ContractRevisionId};

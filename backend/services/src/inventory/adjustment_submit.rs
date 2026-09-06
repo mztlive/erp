@@ -1,12 +1,13 @@
-use database::{InventoryExt, NoTransaction, Transactional};
-use entities::common::time::Instant;
-use entities::ids::StockAdjustmentId;
+use database::InventoryExt;
 use entities::inventory::StockAdjustmentUpdate;
+use erp_core::common::time::Instant;
+use erp_core::ids::StockAdjustmentId;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::approval::execution::PreparedExecution;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::adapter::{
     execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,

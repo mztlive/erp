@@ -4,10 +4,10 @@
 //! 由本模块独占；任务主键、当前责任人与时间由调用方注入，责任解析与持久化
 //! 仍归服务；通用 BPM 不得拥有 ERP 责任路由。
 
-use crate::common::time::Instant;
-use crate::errors::Result;
-use crate::ids::WorkItemId;
 use crate::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
+use erp_core::Result;
 
 use super::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 
@@ -110,9 +110,7 @@ pub fn difference_owner_role(difference_type: &str) -> Result<&'static str> {
             Ok(W29_PROCUREMENT_ROLE)
         }
         "result_unknown" | "integration_result_unknown" => Ok(W29_SYSADMIN_ROLE),
-        _ => Err(crate::errors::Error::from(
-            "差异类型未注册固定责任规则，禁止创建任务",
-        )),
+        _ => Err(erp_core::Error::from("差异类型未注册固定责任规则，禁止创建任务")),
     }
 }
 
@@ -208,14 +206,14 @@ mod tests {
         new_difference_work_item, new_error_work_item, DIFFERENCE_WORK_ITEM_OBJECT_TYPE,
         ERROR_WORK_ITEM_OBJECT_TYPE, W29_OWNER_ORGANIZATION,
     };
-    use crate::common::time::Instant;
-    use crate::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId, WorkItemId};
     use crate::integration_ops::ErrorClass;
     use crate::integration_ops::{
         IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
     use crate::work_item::{AssignmentSource, WorkItemPriority, WorkItemType};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId, WorkItemId};
 
     const NOW: i64 = 1_700_000_000;
 

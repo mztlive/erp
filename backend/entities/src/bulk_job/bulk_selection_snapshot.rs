@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::BulkSelectionSnapshotId;
-use crate::validation::normalize_required_text;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::BulkSelectionSnapshotId;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 创建人标识最大长度。
 const CREATED_BY_MAX_LEN: usize = 128;
@@ -171,7 +171,7 @@ impl BulkSelectionSnapshot {
     /// 不变量，由 P3 事务保证（§6.1）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::BulkSelectionSnapshotId`）
+    /// * `id` - 实体主键（`erp_core::ids::BulkSelectionSnapshotId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -282,9 +282,9 @@ impl BulkSelectionSnapshot {
 #[cfg(test)]
 mod tests {
     use super::{BulkSelectionSnapshot, BulkSelectionSnapshotData, SelectionStatus, SelectionType};
-    use crate::common::state::ensure_transition;
-    use crate::common::time::Instant;
-    use crate::ids::BulkSelectionSnapshotId;
+    use erp_core::common::state::ensure_transition;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::BulkSelectionSnapshotId;
 
     fn data() -> BulkSelectionSnapshotData {
         BulkSelectionSnapshotData {

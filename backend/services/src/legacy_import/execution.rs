@@ -1,17 +1,19 @@
-use database::{AccessControlExt, BulkJobExt, Executor, LegacyImportExt, NoTransaction, Transactional};
+use database::{AccessControlExt, BulkJobExt, LegacyImportExt};
 use entities::bulk_job::{BackgroundJob, JobStatus};
-use entities::common::time::Instant;
 use entities::legacy_import::{
     ImportStatus, LegacyImportBatch, LegacyImportBatchStatus, LegacyImportCommandIdentity,
     LegacyImportConfirmation, LegacyImportRow,
 };
 use entities::AuditLog;
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use std::collections::BTreeSet;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::dto::{
     ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,
@@ -629,9 +631,9 @@ fn parse_background_job_status(value: &str) -> Result<JobStatus> {
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::BusinessDate;
-    use entities::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId};
     use entities::legacy_import::{LegacyImportBatchData, LegacyImportRowData, ParseStatus};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId};
 
     use super::*;
 
@@ -645,7 +647,7 @@ mod tests {
     /// 返回新建的后台任务实体。
     fn test_background_job(batch: &LegacyImportBatch, actor: &str) -> entities::bulk_job::BackgroundJob {
         entities::bulk_job::BackgroundJob::for_legacy_import(
-            entities::ids::BackgroundJobId::new(format!("job-{}", batch.batch_no)),
+            erp_core::ids::BackgroundJobId::new(format!("job-{}", batch.batch_no)),
             &batch.batch_no,
             &batch.base.id,
             batch.total_rows,
@@ -926,7 +928,7 @@ mod tests {
         let audit = AuditActor::new(
             "admin-1".to_string(),
             "admin".to_string(),
-            entities::AccountKind::Admin,
+            erp_core::AccountKind::Admin,
         )
         .resource_log_with_id(
             "audit-1".to_string(),

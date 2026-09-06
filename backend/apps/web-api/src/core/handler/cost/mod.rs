@@ -3,16 +3,14 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::cost` 的 DTO。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    cost::{
-        CostAllocationListParams, CostAllocationView, CostEntryListParams, CostEntryView, CostService,
-        CreateCostEntryRequest, PageView,
-    },
+use services::cost::{
+    CostAllocationListParams, CostAllocationView, CostEntryListParams, CostEntryView, CostService,
+    CreateCostEntryRequest, PageView,
 };
 
 use crate::{

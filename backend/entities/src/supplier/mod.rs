@@ -5,10 +5,10 @@
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.2；公共字段归属按 §4.3 判定：
 //! - `supplier_account` / `supplier_capability` / `supplier_qualification`
-//!   是「稳定基础资料」→ 组合 [`crate::common::StableBase`]；
+//!   是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；
 //! - `supplier_commercial_profile_revision` / `supplier_capability_revision` /
 //!   `supplier_qualification_revision` / `supplier_rating_revision` 是不可变修订
-//!   → 组合 [`crate::common::RevisionBase`]，快照字段按 §2.2 / §4.4 内联
+//!   → 组合 [`erp_core::common::RevisionBase`]，快照字段按 §2.2 / §4.4 内联
 //!   （付款条件、能力、资质证照、评分等，P3 填充）；
 //! - `supplier_qualification_capability` 是资质 ↔ 能力的纯关联行（§6.2）；
 //! - 跨聚合校验（资质失效不得用于新供给/采购单等）留给 P3，注释标注条目号。
@@ -28,13 +28,13 @@ pub mod supplier_qualification_capability;
 pub mod supplier_qualification_revision;
 pub mod supplier_rating_revision;
 
-pub use crate::ids::{
+pub use business_category::{
+    normalize_business_category, split_encoded_payment_term_snapshot, PaymentTermSnapshotParts,
+};
+pub use erp_core::ids::{
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
-};
-pub use business_category::{
-    normalize_business_category, split_encoded_payment_term_snapshot, PaymentTermSnapshotParts,
 };
 pub use payment_term::{SettlementMode, SupplierPaymentTerm};
 pub use supplier_account::{
@@ -70,13 +70,13 @@ pub use supplier_rating_revision::{SupplierRating, SupplierRatingRevision, Suppl
 ///
 /// # 错误
 /// 当前最大修订号已达到 `u32::MAX` 时返回业务错误。
-pub fn next_supplier_revision_no(revision_numbers: impl IntoIterator<Item = u32>) -> crate::Result<u32> {
+pub fn next_supplier_revision_no(revision_numbers: impl IntoIterator<Item = u32>) -> erp_core::Result<u32> {
     revision_numbers
         .into_iter()
         .max()
         .unwrap_or(0)
         .checked_add(1)
-        .ok_or_else(|| crate::Error::from("供应商资料修订号已达上限"))
+        .ok_or_else(|| erp_core::Error::from("供应商资料修订号已达上限"))
 }
 
 /// 根资料命令中的资质选择项借用视图。
@@ -104,24 +104,24 @@ pub struct SupplierQualificationSelection<'a> {
 pub fn validate_profile_selection(
     capability_codes: &[CapabilityCode],
     qualifications: &[SupplierQualificationSelection<'_>],
-) -> crate::Result<()> {
+) -> erp_core::Result<()> {
     let capability_set: std::collections::HashSet<CapabilityCode> =
         capability_codes.iter().copied().collect();
     if capability_set.len() != capability_codes.len() {
-        return Err(crate::Error::from("供应商能力不能重复"));
+        return Err(erp_core::Error::from("供应商能力不能重复"));
     }
     let mut qualification_keys = std::collections::HashSet::new();
     for qualification in qualifications {
         let key = qualification_identity_key(qualification.qualification_type, qualification.certificate_no);
         if !qualification_keys.insert(key) {
-            return Err(crate::Error::from("同类资质编号不能重复"));
+            return Err(erp_core::Error::from("同类资质编号不能重复"));
         }
         if qualification
             .capability_codes
             .iter()
             .any(|code| !capability_set.contains(code))
         {
-            return Err(crate::Error::from("资质引用了未启用的供应商能力"));
+            return Err(erp_core::Error::from("资质引用了未启用的供应商能力"));
         }
     }
     Ok(())

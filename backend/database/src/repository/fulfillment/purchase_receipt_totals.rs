@@ -20,12 +20,12 @@ use mongodb::Database;
 use serde::Deserialize;
 
 use entities::fulfillment::PurchaseReceiptState;
-use entities::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};
-use entities::money::Quantity;
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};
+use erp_core::money::Quantity;
 
-use crate::executor::Executor;
 use crate::repository::extensions::FulfillmentExt;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 已过账入库单 ID 投影行。
 #[derive(Debug, Deserialize)]

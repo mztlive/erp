@@ -1,7 +1,5 @@
-use entities::{
-    common::time::BusinessDate,
-    supplier::{SupplierProfileCommand, SupplierProfileCommandData},
-};
+use entities::supplier::{SupplierProfileCommand, SupplierProfileCommandData};
+use erp_core::common::time::BusinessDate;
 
 use super::{command_view, SaveSupplierProfileRequest};
 
@@ -77,9 +75,9 @@ fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
         payment_term_snapshot: "PREPAY_30".to_string(),
         business_category: None,
         invoice_type: entities::supplier::InvoiceType::VatSpecial,
-        invoice_tax_rate: entities::money::Rate::from_str("0.13").unwrap(),
-        signing_entity_party_id: entities::ids::PartyId::new("party-1"),
-        payment_entity_party_id: entities::ids::PartyId::new("party-2"),
+        invoice_tax_rate: erp_core::money::Rate::from_str("0.13").unwrap(),
+        signing_entity_party_id: erp_core::ids::PartyId::new("party-1"),
+        payment_entity_party_id: erp_core::ids::PartyId::new("party-2"),
         capability_codes: vec![],
         qualifications: vec![],
         rating: None,

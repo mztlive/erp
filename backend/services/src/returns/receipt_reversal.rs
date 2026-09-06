@@ -29,25 +29,26 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, ReturnsExt, Transactional,
-};
-use entities::common::time::Instant;
+use application_core::AuditActor;
+use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt, ReturnsExt};
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
-use entities::ids::{CustomerAccountId, CustomerReceiptId, ReceiptAllocationId, ReceiptReversalId};
-use entities::money::Amount;
 use entities::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     ReceiptAllocation, ReceiptAllocationData,
 };
 use entities::returns::{CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerAccountId, CustomerReceiptId, ReceiptAllocationId, ReceiptReversalId};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 impl ReturnsService {
@@ -700,7 +701,7 @@ pub(super) async fn apply_receipt_reversal_final_post(
         crate::sales_order::update_sales_order_money_progress(
             db,
             session,
-            &entities::ids::SalesOrderId::new(sales_order_id),
+            &erp_core::ids::SalesOrderId::new(sales_order_id),
             actor_id.to_string(),
             None,
         )
@@ -876,10 +877,10 @@ async fn persist_reverse_allocations(
 mod receipt_reversal_approval_tests {
     use super::{execute_receipt_reversal_domain_action, start_receipt_reversal_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
-    use entities::ids::{CustomerReceiptId, ReceiptReversalId};
-    use entities::money::Amount;
     use entities::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_reversal() -> ReceiptReversal {

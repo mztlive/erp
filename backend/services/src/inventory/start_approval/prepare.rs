@@ -4,13 +4,14 @@ use bpm::ids::{
 };
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction};
+use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, InventoryExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
 use super::super::adapter::require_frozen_binding;
 use super::super::approval_query::load_approval_binding;
@@ -33,9 +34,9 @@ use crate::approval::{
     approval_actor_is_active_with_executor, approval_decide_scope_with_executor,
     approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
 };
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
@@ -355,7 +356,7 @@ async fn legacy_start_payload_matches_result(
     let persisted_lines = db
         .inventory()
         .adjustment_lines_by_adjustment_ids(
-            &[entities::ids::StockAdjustmentId::new(adjustment.base.id.clone())],
+            &[erp_core::ids::StockAdjustmentId::new(adjustment.base.id.clone())],
             executor,
         )
         .await?;

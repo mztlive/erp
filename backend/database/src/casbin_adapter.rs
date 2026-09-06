@@ -10,7 +10,7 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{mongo_ops, Executor, Result, Transactional};
+use persistence_core::{mongo_ops, Executor, Result, Transactional};
 
 pub(crate) const CASBIN_RULES: &str = "casbin_rules";
 const CASBIN_POLICY_STATE: &str = "casbin_policy_state";
@@ -227,7 +227,7 @@ impl MongoCasbinAdapter {
             return Ok(0);
         };
         u64::try_from(state.revision)
-            .map_err(|_| crate::Error::EntityMetadataOutOfRange("casbin policy revision"))
+            .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("casbin policy revision"))
     }
 
     /// 读取指定主体的 Casbin 角色绑定。
@@ -300,7 +300,7 @@ impl MongoCasbinAdapter {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let expected_revision = i64::try_from(expected_revision)
-            .map_err(|_| crate::Error::EntityMetadataOutOfRange("casbin policy revision"))?;
+            .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("casbin policy revision"))?;
         let result = mongo_ops::update_one(
             &self.policy_state_collection(),
             doc! {
@@ -313,7 +313,7 @@ impl MongoCasbinAdapter {
         )
         .await?;
         if result.matched_count == 0 && result.upserted_id.is_none() {
-            return Err(crate::Error::OptimisticLockingError);
+            return Err(persistence_core::Error::OptimisticLockingError);
         }
         Ok(())
     }

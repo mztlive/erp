@@ -1,15 +1,15 @@
 //! DTO ↔ 实体/视图映射：构建稳定明细、工作副本、提交快照与视图转换。
 
-use entities::common::time::Instant;
-use entities::ids::{
-    SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
-    SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
-};
 use entities::sales_order::{
     SalesContentHash, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
     SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
     SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
     SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
+};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
+    SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
 };
 use id_generator::next_id;
 
@@ -17,8 +17,8 @@ use super::dto::{
     RevisionLineView, RevisionView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
     SalesOrderWorkingCopyLineView, SubmissionView,
 };
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 构建稳定明细行（订单创建时按草稿行号建立）。
 ///
@@ -510,16 +510,16 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::Instant;
-    use entities::ids::{
-        ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
-        SalesOrderRevisionLineId,
-    };
-    use entities::money::{Amount, Rate};
     use entities::sales_order::{
         HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
         SalesOrderRevisionLine, SalesOrderRevisionLineData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+        SalesOrderRevisionLineId,
+    };
+    use erp_core::money::{Amount, Rate};
 
     use super::{revision_line_summary, revision_view};
 

@@ -1,21 +1,23 @@
-use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional};
+use database::{AccessControlExt, CatalogExt};
 use entities::catalog::sku_attribute::{SkuAttribute, SkuAttributeData, SkuAttributeUpdate};
 use entities::catalog::sku_attribute_value::{
     SkuAttributeValue, SkuAttributeValueData, SkuAttributeValueUpdate,
 };
 use entities::catalog::{EnableStatus, SkuAttributeId, SkuAttributeValueId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateSkuAttributeRequest, CreateSkuAttributeValueRequest, PageView, SkuAttributeListParams,
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SortDir, UpdateSkuAttributeRequest,
     UpdateSkuAttributeValueRequest,
 };
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 规格属性列表筛选条件类型。
 type SkuAttributeFilter = <mongodb::Database as CatalogExt>::SkuAttributeFilter;

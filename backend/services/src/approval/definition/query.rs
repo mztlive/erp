@@ -1,11 +1,12 @@
 use bpm::ids::ApprovalProcessDefinitionId;
-use database::{BpmExt, NoTransaction};
+use database::BpmExt;
 use entities::document_registry::DocumentType;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
-use crate::audit::AuditActor;
 use crate::errors::Result;
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem};
 use super::super::policy::{policy_of, require_process_required, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};

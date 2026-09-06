@@ -4,19 +4,19 @@ use bpm::ids::{
 };
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, ReturnsExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, ReturnsExt, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::returns::SupplierRefund;
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 
 use super::super::adapter::supplier_refund_object_readable;
 use super::mapping::list_projection_from_execution;
@@ -27,8 +27,9 @@ use crate::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 读取供应商退款同载荷启动收据；不存在时返回 `None`。
 ///

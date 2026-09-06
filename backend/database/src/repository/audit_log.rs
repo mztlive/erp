@@ -1,10 +1,12 @@
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::errors::Result;
-use crate::{mongo_ops, Executor};
-use entities::{AuditLog, CommandReceiptFact};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use application_core::CommandReceiptFact;
+use entities::AuditLog;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Result;
+use persistence_core::{mongo_ops, Executor};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -86,7 +88,7 @@ impl<'a> Repository<'a, AuditLog> {
         if logs.is_empty() {
             return Ok(());
         }
-        crate::mongo_ops::insert_many(&self.collection(), logs.to_vec(), executor).await?;
+        persistence_core::mongo_ops::insert_many(&self.collection(), logs.to_vec(), executor).await?;
         Ok(())
     }
 
@@ -435,7 +437,7 @@ mod tests {
         let repository = super::Repository::new(&database, "audit_logs");
         let repository: super::Repository<'_, AuditLog> = repository;
         let facts = repository
-            .list_separation_facts_by_resources(&[], &mut crate::NoTransaction)
+            .list_separation_facts_by_resources(&[], &mut persistence_core::NoTransaction)
             .await
             .expect("空输入批量查询必须成功");
         assert!(facts.is_empty());

@@ -4,7 +4,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本目录按集合拆分投影行、筛选与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本目录按集合拆分投影行、筛选与
 //! 域特有查询，根模块承载跨集合批量查询与多步骤写入入口。集合名常量统一从
 //! `FulfillmentExt` 关联常量导入。
 //!
@@ -52,19 +52,19 @@ use entities::fulfillment::{
     DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
     PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
 };
-use entities::ids::{
+use entities::inventory::StockReservation;
+use entities::payable::{PayableAccount, PayableSourceType};
+use entities::sales_order::{SalesOrderLine, SalesOrderRevisionLine};
+use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
     PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
     SalesOrderRevisionLineId, ServiceFulfillmentId,
 };
-use entities::inventory::StockReservation;
-use entities::money::Quantity;
-use entities::payable::{PayableAccount, PayableSourceType};
-use entities::sales_order::{SalesOrderLine, SalesOrderRevisionLine};
+use erp_core::money::Quantity;
 
 use super::extensions::{FulfillmentExt, InventoryExt, PayableExt, SalesOrderExt};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `purchase_receipt_line` 集合名（单一来源：`FulfillmentExt` 关联常量）。
 const PURCHASE_RECEIPT_LINES: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPT_LINES;
@@ -128,7 +128,7 @@ impl<'a> FulfillmentRepository<'a> {
     )]
     pub async fn list_acceptance_eligible_deliveries(
         &self,
-        sales_order_id: &entities::ids::SalesOrderId,
+        sales_order_id: &erp_core::ids::SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<Delivery>> {
         let states: Vec<&str> = DeliveryState::acceptance_eligible_states()
@@ -249,7 +249,7 @@ impl<'a> FulfillmentRepository<'a> {
     )]
     pub async fn list_customer_acceptance_history(
         &self,
-        sales_order_id: &entities::ids::SalesOrderId,
+        sales_order_id: &erp_core::ids::SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAcceptance>> {
         mongo_ops::find_many(
@@ -533,7 +533,7 @@ impl<'a> FulfillmentRepository<'a> {
     )]
     pub async fn draft_delivery_for_sales_order(
         &self,
-        sales_order_id: &entities::ids::SalesOrderId,
+        sales_order_id: &erp_core::ids::SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Option<Delivery>> {
         mongo_ops::find_one(
@@ -574,8 +574,8 @@ impl<'a> FulfillmentRepository<'a> {
     )]
     pub async fn draft_warehouse_delivery(
         &self,
-        sales_order_id: &entities::ids::SalesOrderId,
-        warehouse_id: &entities::ids::WarehouseId,
+        sales_order_id: &erp_core::ids::SalesOrderId,
+        warehouse_id: &erp_core::ids::WarehouseId,
         executor: &mut dyn Executor,
     ) -> Result<Option<Delivery>> {
         mongo_ops::find_one(
@@ -757,7 +757,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// 依次写入 `purchase_receipts` 与 `purchase_receipt_lines`，保证表头与行
     /// 原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子边界，传入
     /// `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有行的
-    /// 半成品；Service 必须通过 `database::Transactional::with_transaction`
+    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
     /// # 参数
@@ -766,7 +766,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_purchase_receipt_with_lines",
@@ -805,7 +805,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// 依次写入 `deliveries` 与 `delivery_lines`，保证表头与行原子可见（§6.7）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，中途失败会留下只有表头没有行的半成品；Service
-    /// 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `delivery` - 待写入的发货单表头
@@ -813,7 +813,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_delivery_with_lines",
@@ -853,7 +853,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// 表头与行原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子
     /// 边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有
     /// 表头没有行的半成品；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `acceptance` - 待写入的验收单表头
@@ -861,7 +861,7 @@ impl<'a> FulfillmentRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_customer_acceptance_with_lines",
@@ -1047,7 +1047,7 @@ mod tests {
     use super::{ids_to_strings, sort_doc};
     use mongodb::bson::doc;
 
-    use entities::ids::PurchaseOrderId;
+    use erp_core::ids::PurchaseOrderId;
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {

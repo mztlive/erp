@@ -4,9 +4,9 @@
 //! 之间的唯一规则源。BPM 不得反向依赖本 crate。
 
 use crate::document_registry::DocumentType;
-use crate::errors::{Error, Result};
 use crate::sales_order::BusinessType;
 use bpm::{ProcessKind, SubjectRef};
+use erp_core::{Error, Result};
 
 /// 将 ERP 单据类型映射为 BPM 流程种类。
 ///

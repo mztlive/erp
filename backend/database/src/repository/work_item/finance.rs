@@ -4,8 +4,8 @@ use entities::work_item::{
 use mongodb::bson::doc;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> Repository<'a, WorkItem> {
     /// 查询应付子账全部付款执行任务并把最新任务排在前面。

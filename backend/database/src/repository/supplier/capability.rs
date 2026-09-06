@@ -1,12 +1,12 @@
-use entities::ids::SupplierAccountId;
 use entities::supplier::{CapabilityCode, CapabilityStatus, SupplierCapability};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{doc, Document};
 
 use super::super::{Pagination, QueryFilter, Repository};
 use super::{find_supplier_ids, SupplierRepository, SUPPLIER_CAPABILITIES};
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 供应商能力列表筛选条件。
 #[derive(Debug, Clone)]
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn capability_filter_applies_supplier_code_and_status() {
         let filter = SupplierCapabilityFilter {
-            supplier_id: Some(entities::ids::SupplierAccountId::new("supplier-1")),
+            supplier_id: Some(erp_core::ids::SupplierAccountId::new("supplier-1")),
             capability_code: Some(entities::supplier::CapabilityCode::Physical),
             status: Some(CapabilityStatus::Active),
             page: 1,

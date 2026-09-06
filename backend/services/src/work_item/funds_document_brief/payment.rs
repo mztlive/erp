@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use database::{Executor, PayableExt, ReturnsExt};
+use database::{PayableExt, ReturnsExt};
+use persistence_core::Executor;
 
 use super::super::brief::{
     format_instant_date, join_list_summary, non_empty, push_section, ObjectBriefSource, BRIEF_LINE_LIMIT,

@@ -3,10 +3,10 @@
 use bpm::ApprovalNodeExecutionId;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::WorkItemId;
-use crate::validation::normalize_required_text;
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::validation::USER_ID_MAX_LEN;
 use super::{
@@ -301,9 +301,9 @@ mod tests {
         approval_item, direct_data, ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, WorkItem,
         WorkItemStatus, WorkItemType,
     };
-    use crate::common::state::ensure_transition;
-    use crate::common::time::Instant;
-    use crate::ids::WorkItemId;
+    use erp_core::common::state::ensure_transition;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     /// 单据审批任务固定带个人责任与节点执行，且禁止通用改派。
     ///

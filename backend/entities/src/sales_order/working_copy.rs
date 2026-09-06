@@ -8,16 +8,16 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::ensure_transition;
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::ensure_transition;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
     ContractId, ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesOrderId,
     SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId,
 };
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
@@ -228,7 +228,7 @@ impl SalesOrderWorkingCopy {
     /// - 行清单按 [`validate_line_list`] 去重并断言行类型与业务性质一致。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderWorkingCopyId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderWorkingCopyId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人
     ///
@@ -610,7 +610,7 @@ impl SalesOrderWorkingCopy {
 mod tests {
     use super::super::working_copy_test_support::{amt, line_data};
     use super::*;
-    use crate::common::state::DocumentState;
+    use erp_core::common::state::DocumentState;
 
     fn header_data() -> SalesOrderWorkingCopyData {
         SalesOrderWorkingCopyData {

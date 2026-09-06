@@ -4,8 +4,8 @@ use bpm::ProcessKind;
 use entities::approval_integration::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
 };
-use entities::common::time::Instant;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::ReturnDocument;
@@ -18,8 +18,8 @@ use super::bpm::{
 };
 use super::extensions::{ApprovalIntegrationExt, BpmExt};
 use super::Repository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 const MAX_OUTBOX_BATCH: i64 = 50;
 const INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -734,7 +734,7 @@ mod tests {
     use bpm::model::types::ApprovalProcessInstanceStatus;
     use bpm::ProcessKind;
     use entities::approval_integration::ApprovalNotificationDeliveryStatus;
-    use entities::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     use mongodb::bson::{doc, Bson};
 

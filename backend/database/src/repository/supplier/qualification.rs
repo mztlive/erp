@@ -1,16 +1,16 @@
 use entities::file_asset::FileAsset;
-use entities::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 use entities::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 use mongodb::bson::{doc, Document};
 
 use super::super::extensions::FileAssetExt;
 use super::super::{Pagination, QueryFilter, Repository};
 use super::{find_supplier_ids, SupplierRepository, SUPPLIER_QUALIFICATIONS};
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 供应商资质列表筛选条件。
 #[derive(Debug, Clone)]

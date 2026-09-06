@@ -4,8 +4,8 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{BusinessDocumentId, DocumentRelationId};
+use erp_core::ids::{BusinessDocumentId, DocumentRelationId};
+use erp_core::{Error, Result};
 
 /// 关系类型（数据模型 §6.1：`CHANGES`、`RETURNS`、`REFUNDS`、`REVERSES`、
 /// `RED_OF`、`DERIVED_FROM`；固定枚举，无文档状态机）。
@@ -90,7 +90,7 @@ impl DocumentRelation {
     /// 创建单据关系。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::DocumentRelationId`）
+    /// * `id` - 实体主键（`erp_core::ids::DocumentRelationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -115,8 +115,8 @@ impl DocumentRelation {
 #[cfg(test)]
 mod tests {
     use super::{DocumentRelation, DocumentRelationData, DocumentRelationType};
-    use crate::errors::Error;
-    use crate::ids::{BusinessDocumentId, DocumentRelationId};
+    use erp_core::ids::{BusinessDocumentId, DocumentRelationId};
+    use erp_core::Error;
 
     fn data() -> DocumentRelationData {
         DocumentRelationData {

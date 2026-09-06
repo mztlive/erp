@@ -9,18 +9,19 @@ use super::dto::{
 use super::resolver::{load_owner_account, ResolutionInput};
 use super::rule_list::{apply_rule_list_facts, to_rule_list_views};
 use super::ProcurementResponsibilityService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 use database::{
-    AccessControlExt, CatalogExt, Executor, NoTransaction, ProcurementResponsibilityExt,
-    ProcurementResponsibilityRuleFilter,
+    AccessControlExt, CatalogExt, ProcurementResponsibilityExt, ProcurementResponsibilityRuleFilter,
 };
-use entities::ids::ProcurementResponsibilityRuleId;
 use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
     ProcurementResponsibilityRuleData, ProcurementResponsibilitySelectorReference,
 };
 use entities::AuditLog;
+use erp_core::ids::ProcurementResponsibilityRuleId;
+use persistence_core::{Executor, NoTransaction};
 
 impl ProcurementResponsibilityService {
     /// 分页查询采购责任规则。
@@ -246,7 +247,7 @@ impl ProcurementResponsibilityService {
             .lines
             .into_iter()
             .map(|line| ResolutionInput::new(line.line_key, line.sku_id, line.service_region))
-            .collect::<entities::Result<Vec<_>>>()
+            .collect::<erp_core::Result<Vec<_>>>()
             .map_err(Error::Logic)?;
         ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;
 

@@ -4,20 +4,18 @@
 //! 直接复用 `services::supplier_fulfillment` 的 DTO，禁止重复定义同构类型、
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    supplier_fulfillment::{
-        PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
-        SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
-        SupplierFulfillmentOrderDetailView, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
-        SupplierOrderInvestigationResultView, SupplierOrderObjectInvestigationCommand,
-        SupplierOrderStatusHistoryView, SupplierOrderTaskCompletionCommand,
-        SupplierOrderTaskCompletionResultView, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
-    },
+use services::supplier_fulfillment::{
+    PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
+    SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
+    SupplierFulfillmentOrderDetailView, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
+    SupplierOrderInvestigationResultView, SupplierOrderObjectInvestigationCommand,
+    SupplierOrderStatusHistoryView, SupplierOrderTaskCompletionCommand,
+    SupplierOrderTaskCompletionResultView, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
 };
 
 use crate::{

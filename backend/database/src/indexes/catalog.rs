@@ -14,7 +14,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::CatalogExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `product_category` 集合名。
 pub(crate) const PRODUCT_CATEGORIES: &str = <mongodb::Database as CatalogExt>::PRODUCT_CATEGORIES;

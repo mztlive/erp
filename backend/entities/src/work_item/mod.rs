@@ -12,7 +12,6 @@ mod fulfillment_responsibility;
 mod queue_context;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::WorkItemId;
 pub use card_funds_command::{
     CardFundsCommandIdentityError, CardFundsCommandLock, CardFundsCommandSubject, CardFundsReviewKind,
 };
@@ -23,6 +22,7 @@ pub use entity::{
     WorkItemBriefRelation, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
     WorkItemSubjectVersions, WorkItemType,
 };
+pub use erp_core::ids::WorkItemId;
 pub use finance_responsibility::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope,

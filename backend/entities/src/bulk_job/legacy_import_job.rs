@@ -3,8 +3,8 @@
 //! Service 只注入任务 ID、批次事实与发起人，本模块独占任务编号、
 //! 领域任务类型与幂等 `request_id` 合同。无 I/O、时钟或密钥。
 
-use crate::errors::Result;
-use crate::ids::BackgroundJobId;
+use erp_core::ids::BackgroundJobId;
+use erp_core::Result;
 
 use super::{BackgroundJob, BackgroundJobData, JobType};
 
@@ -84,7 +84,7 @@ impl BackgroundJob {
 mod tests {
     use super::{legacy_import_job_no, LEGACY_IMPORT_DOMAIN_JOB_TYPE};
     use crate::bulk_job::JobType;
-    use crate::ids::BackgroundJobId;
+    use erp_core::ids::BackgroundJobId;
     use std::collections::HashSet;
 
     #[test]

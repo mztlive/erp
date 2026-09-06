@@ -5,8 +5,8 @@ use mongodb::options::FindOptions;
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::ProcurementResponsibilityRuleFilter;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> Repository<'a, ProcurementResponsibilityRule> {
     /// 分页查询采购责任规则。

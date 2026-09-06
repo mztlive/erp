@@ -8,15 +8,15 @@ use entities::catalog::voucher_defaults::{
     VOUCHER_ROOT_CATEGORY_CODE,
 };
 use entities::catalog::{EnableStatus, ProductBrand, ProductCategory, UnitOfMeasure};
-use entities::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 
 use super::super::extensions::CatalogExt;
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::shared::{in_filter, sort_doc};
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 商品品牌列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

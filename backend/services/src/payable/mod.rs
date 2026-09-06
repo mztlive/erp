@@ -3,7 +3,7 @@
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 供应商付款必须在付款执行事务注册无审批 `BusinessDocument`；
 //! - 跨集合资金/票款过账（§8.3 不变量）→
-//!   `database::Transactional::with_transaction`。
+//!   `persistence_core::Transactional::with_transaction`。
 //! - 资金类入口（付款过账、进项发票登记）以业务唯一键
 //!   （付款单号/规范化发票号码）与状态迁移构成去重机制。
 //!   采购审批形成付款授权，付款任务由当前责任出纳直接登记并过账。
@@ -80,9 +80,9 @@ impl PayableService {
 mod purchase_invoice_allocation_list_tests {
     use std::str::FromStr;
 
-    use entities::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
-    use entities::money::Amount;
     use entities::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
+    use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
+    use erp_core::money::Amount;
 
     use super::invoice::purchase_invoice_allocation_view;
 

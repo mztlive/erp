@@ -8,15 +8,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use entities::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
 use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
 use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
-use crate::executor::Executor;
 use crate::repository::extensions::{AccessControlExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
 use crate::repository::PageResult;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 采购单列表关联事实。
 ///
@@ -231,8 +231,8 @@ fn split_pointer_ids(page: &PageResult<super::order::PurchaseOrderRow>) -> (Vec<
 
 #[cfg(test)]
 mod tests {
-    use entities::ids::{SalesOrderId, SupplierAccountId};
     use entities::purchase_order::{ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType};
+    use erp_core::ids::{SalesOrderId, SupplierAccountId};
 
     use super::{split_pointer_ids, unique_owner_ids, unique_sales_ids, unique_supplier_ids};
     use crate::repository::PageResult;
@@ -333,18 +333,18 @@ mod tests {
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
-    use entities::money::Amount;
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrder, PurchaseOrderData,
         PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseType,
         SupplierSnapshot,
     };
+    use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
+    use erp_core::money::Amount;
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
     use crate::repository::extensions::PurchaseOrderExt;
-    use crate::{NoTransaction, Transactional};
+    use persistence_core::{NoTransaction, Transactional};
 
     use super::super::order::PurchaseOrderFilter;
     use super::load_purchase_order_list_page;
@@ -424,14 +424,14 @@ mod isolation_tests {
                 PurchaseOrderData {
                     purchase_no: "PO-1".to_string(),
                     sales_order_id: SalesOrderId::new("so-1"),
-                    sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("rev-1"),
+                    sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),
                     creation_basis_id: "basis-1".to_string(),
                     supplier_id: SupplierAccountId::new("sup-1"),
                     purchase_type: PurchaseType::Physical,
                     payment_term_code: "NET-30".to_string(),
                     fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                     owner_user_id: "buyer-1".to_string(),
-                    target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
+                    target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
                 },
                 "buyer-1",
             )
@@ -445,14 +445,14 @@ mod isolation_tests {
                 .await
                 .expect("采购单写入失败");
             let current = PurchaseOrderSubmission::new(
-                entities::ids::PurchaseOrderSubmissionId::new("sub-current"),
+                erp_core::ids::PurchaseOrderSubmissionId::new("sub-current"),
                 PurchaseOrderSubmissionData {
                     purchase_order_id: PurchaseOrderId::new("po-1"),
                     submission_no: "SUB-current".to_string(),
                     supplier_id: SupplierAccountId::new("sup-1"),
                     purchase_type: PurchaseType::Physical,
                     fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
-                    supplier_revision_id: entities::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
+                    supplier_revision_id: erp_core::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
                     supplier_snapshot: SupplierSnapshot::new("供应商".to_string()).expect("快照构造失败"),
                     payment_term_snapshot: PaymentTermSnapshot::new("NET-30".to_string(), false, None, None)
                         .expect("条款构造失败"),
@@ -469,14 +469,14 @@ mod isolation_tests {
                 .await
                 .expect("提交写入失败");
             let history = PurchaseOrderSubmission::new(
-                entities::ids::PurchaseOrderSubmissionId::new("sub-history"),
+                erp_core::ids::PurchaseOrderSubmissionId::new("sub-history"),
                 PurchaseOrderSubmissionData {
                     purchase_order_id: PurchaseOrderId::new("po-1"),
                     submission_no: "SUB-history".to_string(),
                     supplier_id: SupplierAccountId::new("sup-1"),
                     purchase_type: PurchaseType::Physical,
                     fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
-                    supplier_revision_id: entities::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
+                    supplier_revision_id: erp_core::ids::SupplierCommercialProfileRevisionId::new("suprev-1"),
                     supplier_snapshot: SupplierSnapshot::new("供应商".to_string()).expect("快照构造失败"),
                     payment_term_snapshot: PaymentTermSnapshot::new("NET-30".to_string(), false, None, None)
                         .expect("条款构造失败"),
@@ -527,7 +527,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
                         let mut order = PurchaseOrder::new(
@@ -535,14 +535,14 @@ mod isolation_tests {
                             PurchaseOrderData {
                                 purchase_no: "PO-TXN".to_string(),
                                 sales_order_id: SalesOrderId::new("so-txn"),
-                                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("rev-1"),
+                                sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),
                                 creation_basis_id: "basis-txn".to_string(),
                                 supplier_id: SupplierAccountId::new("sup-txn"),
                                 purchase_type: PurchaseType::Physical,
                                 payment_term_code: "NET-30".to_string(),
                                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                                 owner_user_id: "buyer-txn".to_string(),
-                                target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
+                                target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
                             },
                             "buyer-txn",
                         )

@@ -16,18 +16,19 @@
 //!
 //! 跨域：无（依赖列为空；只经 `AccessControlExt` 访问本域仓储）。
 
-use database::{AccessControlExt, NoTransaction, Transactional};
+use database::AccessControlExt;
 use entities::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeId, Permission,
     PermissionId, UserRole, UserRoleId,
 };
-use entities::common::time::Instant;
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 

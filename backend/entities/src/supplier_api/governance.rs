@@ -8,14 +8,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use crate::supplier_api::{
     ConnectionEnvironment, SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection,
     SupplierApiConnectionStatus,
 };
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 const REFERENCE_MAX_LEN: usize = 512;
 const REASON_MAX_LEN: usize = 128;
@@ -900,7 +900,7 @@ mod tests {
         SupplierApiConnection::new(
             SupplierApiConnectionId::new("conn-1"),
             crate::supplier_api::SupplierApiConnectionData {
-                supplier_id: crate::ids::SupplierAccountId::new("supplier-1"),
+                supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
                 environment,
                 endpoint_reference: "endpoint://supplier-1".to_string(),
@@ -1060,7 +1060,7 @@ mod tests {
         let connection = SupplierApiConnection::new(
             SupplierApiConnectionId::new("conn-governance"),
             crate::supplier_api::SupplierApiConnectionData {
-                supplier_id: crate::ids::SupplierAccountId::new("supplier-1"),
+                supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
                 environment: ConnectionEnvironment::Testing,
                 endpoint_reference: String::new(),

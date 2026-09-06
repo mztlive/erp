@@ -4,25 +4,22 @@
 //! 直接复用 `services::fulfillment` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 履约对象快照查询指纹密钥取 `app.secret` 字节（Service 构造参数）。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use entities::file_asset::SensitivityClass;
-use services::{
-    audit::AuditActor,
-    fulfillment::{
-        AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
-        ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
-        CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
-        CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView,
-        DeliveryDetailView, DeliveryListParams, DeliveryView, ElectronicDeliveryListParams,
-        ElectronicDeliveryView, FulfillmentService, PageView, PostCustomerAcceptanceRequest,
-        PostDeliveryRequest, PostPurchaseReceiptRequest, PurchaseReceiptDetailView,
-        PurchaseReceiptListParams, PurchaseReceiptView, ReverseCustomerAcceptanceRequest,
-        ServiceFulfillmentListParams, ServiceFulfillmentView, UpdateDeliveryRequest,
-        UpdatePurchaseReceiptRequest,
-    },
+use services::fulfillment::{
+    AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
+    ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
+    CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
+    CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView,
+    DeliveryListParams, DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView,
+    FulfillmentService, PageView, PostCustomerAcceptanceRequest, PostDeliveryRequest,
+    PostPurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptListParams, PurchaseReceiptView,
+    ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
+    UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
 };
 
 use crate::{

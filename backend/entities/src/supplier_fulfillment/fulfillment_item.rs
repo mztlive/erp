@@ -9,10 +9,10 @@ use entity_macros::Entity;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId};
-use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId};
+use erp_core::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 供应商侧商品与 SKU 编码快照最大长度。
 const SUPPLIER_ITEM_CODE_MAX_LEN: usize = 128;
@@ -118,7 +118,7 @@ impl SupplierFulfillmentItem {
     /// 单位成本 × 数量后按分舍入）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierFulfillmentItemId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierFulfillmentItemId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

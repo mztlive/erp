@@ -8,14 +8,16 @@ use std::collections::HashSet;
 use database::{AccessControlExt, FileAssetExt};
 use entities::{
     file_asset::{FileAsset, PendingFileReference, PendingFileReferenceSet, SensitivityClass},
-    ids::FileAssetId,
     AuditLog,
 };
+use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use validator::Validate;
 
-use crate::{audit::AuditActor, errors::Result, file_asset::PendingFileAssetRequest};
+use crate::audit::AuditActorLogs;
+use crate::{errors::Result, file_asset::PendingFileAssetRequest};
+use application_core::AuditActor;
 
 /// 已完成实体构造、等待随业务聚合一起持久化的文件资产集合。
 pub(crate) struct PendingFileAssets {

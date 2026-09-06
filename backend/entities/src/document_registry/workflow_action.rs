@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{BusinessDocumentId, WorkflowActionId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::{BusinessDocumentId, WorkflowActionId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use bpm::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 
@@ -247,7 +247,7 @@ impl WorkflowAction {
     /// 非空、上限长度、只含大写字母/数字/下划线；动作类字段非空。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::WorkflowActionId`）
+    /// * `id` - 实体主键（`erp_core::ids::WorkflowActionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -403,7 +403,7 @@ mod tests {
         normalize_status_code, ApprovalBindingActionContext, WorkflowAction, WorkflowActionData,
         WorkflowActionType,
     };
-    use crate::ids::{BusinessDocumentId, WorkflowActionId};
+    use erp_core::ids::{BusinessDocumentId, WorkflowActionId};
 
     fn data() -> WorkflowActionData {
         WorkflowActionData {

@@ -1,12 +1,13 @@
-use database::{InventoryExt, Transactional};
+use database::InventoryExt;
 use entities::inventory::StockReservation;
+use persistence_core::Transactional;
 use validator::Validate;
 
 use super::authorization::inventory_authorization_with_executor;
 use super::dto::{PageView, SortDir, StockReservationListParams, StockReservationView};
 use super::InventoryService;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 库存预占列表筛选条件类型。
 type StockReservationFilter = <mongodb::Database as InventoryExt>::StockReservationFilter;

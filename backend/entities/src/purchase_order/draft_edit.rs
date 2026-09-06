@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use rust_decimal::Decimal;
 
-use crate::money::Quantity;
+use erp_core::money::Quantity;
 
 use super::coverage::SalesProcurementCoverageLine;
 use super::purchase_submission::PurchaseOrderSubmissionLine;
@@ -237,13 +237,6 @@ mod tests {
     use std::str::FromStr;
 
     use crate::catalog::ProductKind;
-    use crate::common::time::Instant;
-    use crate::ids::{
-        ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
-        SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId,
-        SkuRevisionId,
-    };
-    use crate::money::{Amount, Quantity, Rate, UnitPrice};
     use crate::purchase_order::coverage::SalesProcurementCoverageLine;
     use crate::purchase_order::purchase_submission::{
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
@@ -251,6 +244,13 @@ mod tests {
     use crate::purchase_order::PurchaseLineType;
     use crate::sales_order::revision::{SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
     use crate::sales_order::{LineType, ProcurementCoverageSummary};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
+        SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId,
+        SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     use super::{validate_draft_line_edits, DraftLineEdit, DraftLineEditViolation};
 
@@ -264,7 +264,7 @@ mod tests {
         submission_line_id: Option<&str>,
     ) -> PurchaseOrderSubmissionLine {
         let quantity = Quantity::from_str(allocated).unwrap();
-        let (gross, net, tax) = crate::money::line_amounts(
+        let (gross, net, tax) = erp_core::money::line_amounts(
             UnitPrice::from_str("5").unwrap(),
             quantity,
             Rate::from_str("0").unwrap(),

@@ -7,7 +7,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::ApprovalIntegrationExt;
-use crate::Result;
+use persistence_core::Result;
 
 const SNAPSHOTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
 const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOTIFICATION_OUTBOX;

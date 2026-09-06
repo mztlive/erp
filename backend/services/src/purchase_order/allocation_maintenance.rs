@@ -6,13 +6,14 @@
 
 use std::collections::HashMap;
 
-use database::{Executor, PurchaseOrderExt, SalesOrderExt};
-use entities::ids::{PurchaseLineSalesAllocationId, SalesOrderRevisionId, SalesOrderRevisionLineId};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     CurrentSalesAllocationLine, CurrentSalesAllocationPlan, CurrentSalesAllocationPlanError,
     PurchaseLineSalesAllocation, PurchaseLineType, PurchaseOrder, PurchaseOrderRevisionLine,
 };
+use erp_core::ids::{PurchaseLineSalesAllocationId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use id_generator::next_id;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 

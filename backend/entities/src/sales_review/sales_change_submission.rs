@@ -9,17 +9,17 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
     SalesChangeSubmissionLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
     SalesOrderWorkingCopyId, SkuId,
 };
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::snapshot::HeaderSnapshots;
 use super::types::{
@@ -329,7 +329,7 @@ impl SalesChangeSubmission {
     /// 去重并断言行类型与业务性质一致。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesChangeSubmissionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesChangeSubmissionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -659,7 +659,7 @@ pub struct SalesChangeSubmissionLine {
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
     /// 精确 SKU 修订。
-    pub sku_revision_id: Option<crate::ids::SkuRevisionId>,
+    pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
@@ -692,11 +692,11 @@ impl SalesChangeSubmissionLine {
     /// 创建变更提交行。
     ///
     /// 完成文本字段校验与规范化，行金额三元组按
-    /// [`crate::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
+    /// [`erp_core::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
     /// 校验面额小计、成交金额与配赠金额一致性。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesChangeSubmissionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesChangeSubmissionLineId`）
     /// * `sales_change_submission_id` - 所属变更提交
     /// * `data` - 创建数据
     ///
@@ -864,8 +864,8 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
-    use crate::money::Quantity;
+    use erp_core::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
+    use erp_core::money::Quantity;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -998,7 +998,7 @@ mod tests {
 
         let line = crate::sales_order::SalesOrderWorkingCopyLine {
             base: BaseModel::new("wcl-1".to_string()),
-            working_copy_id: crate::ids::SalesOrderWorkingCopyId::new("wc-1"),
+            working_copy_id: erp_core::ids::SalesOrderWorkingCopyId::new("wc-1"),
             sales_order_line_id: SalesOrderLineId::new("line-1"),
             line_no: 1,
             line_type: crate::sales_order::LineType::GoodsService,
@@ -1010,7 +1010,7 @@ mod tests {
             spec_snapshot: None,
             unit_snapshot: Some("件".to_string()),
             sku_id: Some(SkuId::new("sku-1")),
-            sku_revision_id: Some(crate::ids::SkuRevisionId::new("skurev-1")),
+            sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skurev-1")),
             welfare_scenario: Some(crate::sales_order::WelfareScenario::MealSubsidy),
             service_region: None,
             fulfillment_due_at: Some(Instant::from_unix_secs(1_800_000_000)),
@@ -1053,7 +1053,7 @@ mod tests {
             editor_user_id: "sales-1".to_string(),
             business_type: crate::sales_order::BusinessType::GoodsService,
             customer_id: CustomerAccountId::new("cust-1"),
-            contract_id: Some(crate::ids::ContractId::new("contract-1")),
+            contract_id: Some(erp_core::ids::ContractId::new("contract-1")),
             contract_revision_id: Some(ContractRevisionId::new("contract-rev-1")),
             settlement_party_id: PartyId::new("party-1"),
             customer_snapshot: crate::sales_order::CustomerSnapshot {

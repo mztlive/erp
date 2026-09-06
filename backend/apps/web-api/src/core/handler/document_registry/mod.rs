@@ -3,18 +3,16 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::document_registry` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    document_registry::{
-        AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
-        CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
-        DocumentRegistryService, DocumentRelationView, PageView, RegisterBusinessDocumentRequest,
-        WorkflowActionListParams, WorkflowActionView,
-    },
+use services::document_registry::{
+    AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
+    CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
+    DocumentRegistryService, DocumentRelationView, PageView, RegisterBusinessDocumentRequest,
+    WorkflowActionListParams, WorkflowActionView,
 };
 
 use crate::{
@@ -177,7 +175,7 @@ pub async fn document_relation_list(
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentRelationView>> {
     let relations = DocumentRegistryService::new(state.db())
-        .document_relation_list(&entities::ids::BusinessDocumentId::new(id))
+        .document_relation_list(&erp_core::ids::BusinessDocumentId::new(id))
         .await?;
 
     Ok(ApiResponse::ok_with_data(relations))

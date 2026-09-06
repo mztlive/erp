@@ -3,8 +3,8 @@
 //! 早期前端把经营类目编码进商务版本 `payment_term_snapshot`（`现结｜经营类目：礼盒`）。
 //! 经营类目现为独立字段；读写都必须把付款条件与类目拆开，禁止再混入付款条件代码。
 
-use crate::errors::Result;
-use crate::validation::normalize_optional_text;
+use erp_core::validation::normalize_optional_text;
+use erp_core::Result;
 
 /// 经营类目最大长度（字符）。
 const BUSINESS_CATEGORY_MAX_LEN: usize = 64;

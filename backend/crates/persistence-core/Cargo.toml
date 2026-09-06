@@ -1,0 +1,16 @@
+[package]
+name = "persistence-core"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+entity-core = { workspace = true }
+futures-util = { workspace = true }
+mongodb = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

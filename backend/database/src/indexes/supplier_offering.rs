@@ -10,7 +10,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SupplierOfferingExt;
-use crate::Result;
+use persistence_core::Result;
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;

@@ -1,19 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
-use entities::ids::{PartyId, SupplierAccountId};
 use entities::supplier::{SupplierAccount, SupplierAccountStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PartyId, SupplierAccountId};
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::super::extensions::PartyExt;
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::{SupplierRepository, SUPPLIER_ACCOUNTS};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -535,7 +535,7 @@ async fn aggregate_id_duplicates(
                 .await
         }
     }
-    .map_err(crate::Error::from)?;
+    .map_err(persistence_core::Error::from)?;
     Ok(rows)
 }
 
@@ -568,8 +568,8 @@ mod tests {
             party_id: None,
             party_ids: None,
             status: Some(SupplierAccountStatus::Active),
-            supplier_ids: Some(vec![entities::ids::SupplierAccountId::new("supplier-1")]),
-            excluded_supplier_ids: Some(vec![entities::ids::SupplierAccountId::new("supplier-2")]),
+            supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-1")]),
+            excluded_supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-2")]),
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -623,7 +623,8 @@ mod proc_r10_mongo_tests {
     use test_support::{require_mongo, TestDb};
 
     use super::{SupplierAccountIdDuplicate, SUPPLIER_ACCOUNTS};
-    use crate::{ensure_indexes, NoTransaction, SupplierExt};
+    use crate::{ensure_indexes, SupplierExt};
+    use persistence_core::NoTransaction;
 
     /// 插入仅携带索引相关字段的供应商账号原始文档。
     ///

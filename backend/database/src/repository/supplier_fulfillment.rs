@@ -14,15 +14,10 @@
 //! 筛选/行类型定义在本文件，经 `SupplierFulfillmentExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::common::time::Instant;
+use erp_core::common::time::Instant;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use entities::ids::{
-    SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
-    SupplierOrderActionId, SupplierRefundFactId,
-};
-use entities::money::Amount;
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
     SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
@@ -30,6 +25,11 @@ use entities::supplier_fulfillment::{
 };
 use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{
+    SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
+    SupplierOrderActionId, SupplierRefundFactId,
+};
+use erp_core::money::Amount;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -37,10 +37,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::{SupplierFulfillmentExt, SupplierOfferingExt};
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `supplier_fulfillment_order` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_FULFILLMENT_ORDERS: &str =
@@ -695,7 +695,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// 可见（§6.19）；唯一键冲突时服务层加载既有子订单继续原幂等动作。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时各笔写入各自自动提交，中途失败会留下只有订单没有明细的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `order` - 待写入的履约子订单
@@ -704,7 +704,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为幂等命中）或 MongoDB 写入失败时返回错误。
     pub async fn create_fulfillment_with_items_and_place_action(
         &self,
@@ -745,7 +745,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// 应付的唯一事实；纠错只追加成组 REVERSE 并引用原分配）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，中途失败会留下只有事实头没有分配行的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `fact` - 待写入的退款事实头
@@ -753,7 +753,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     pub async fn create_refund_fact_with_allocations(
         &self,
@@ -923,7 +923,7 @@ where
                 .await
         }
     }
-    .map_err(crate::Error::from)
+    .map_err(persistence_core::Error::from)
 }
 
 /// 执行订单金额合计管道并返回合计金额。
@@ -1073,8 +1073,8 @@ fn supplier_fulfillment_order_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{order_sort_doc, QueryFilter, SupplierFulfillmentOrderFilter};
-    use entities::ids::SupplierAccountId;
     use entities::supplier_fulfillment::FulfillmentStatus;
+    use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
 
     #[test]
@@ -1127,17 +1127,17 @@ mod refund_bundle_tests {
     use std::str::FromStr;
 
     use super::group_refund_allocations;
-    use entities::common::time::Instant;
-    use entities::ids::{
-        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
-        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierRefundAllocationId, SupplierRefundFactId,
-    };
-    use entities::money::{Amount, Quantity};
     use entities::supplier_fulfillment::{
         AllocationAction, SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact,
         SupplierRefundFactData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
+        SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierRefundAllocationId, SupplierRefundFactId,
+    };
+    use erp_core::money::{Amount, Quantity};
 
     fn sample_fact(id: &str) -> SupplierRefundFact {
         SupplierRefundFact::new(
@@ -1245,8 +1245,8 @@ mod snapshot_tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{financial_total_pipeline, first_total_or_zero, zero_total, AmountTotalRow};
-    use entities::ids::SupplierFulfillmentOrderId;
-    use entities::money::Amount;
+    use erp_core::ids::SupplierFulfillmentOrderId;
+    use erp_core::money::Amount;
 
     /// FUL-R05 金额合计管道：按订单过滤未删除文档、单值求和并移除分组键。
     #[test]

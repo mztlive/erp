@@ -3,12 +3,14 @@
 //! 销售变更单走统一审批启动/撤回/生效。采购二次确认、低毛利确认与卡券专用
 //! 审批运行时已删除，不得回退旧责任动作或旧集合。
 
-use database::{AccessControlExt, Executor, SalesReviewExt};
+use database::{AccessControlExt, SalesReviewExt};
 use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod adapter;
 mod cancel_approval;

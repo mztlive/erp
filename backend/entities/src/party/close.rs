@@ -7,9 +7,9 @@ use super::party_address::{PartyAddress, PartyAddressUpdate};
 use super::party_bank_account::{PartyBankAccount, PartyBankAccountUpdate};
 use super::party_contact::{PartyContact, PartyContactUpdate};
 use super::status::EffectiveRecordStatus;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::field_update::FieldUpdate;
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use erp_core::{Error, Result};
 
 /// 关闭日期相对生效开始日的生命周期计划。
 enum ClosePlan {
@@ -144,13 +144,13 @@ impl PartyBankAccount {
 #[cfg(test)]
 mod tests {
     use super::{PartyAddress, PartyBankAccount, PartyContact};
-    use crate::common::time::BusinessDate;
-    use crate::errors::Error;
-    use crate::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
     use crate::party::party_address::{AddressType, PartyAddressData};
     use crate::party::party_bank_account::PartyBankAccountData;
     use crate::party::party_contact::PartyContactData;
     use crate::party::status::EffectiveRecordStatus;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
+    use erp_core::Error;
 
     const KEY: &[u8] = b"close-at-test-key";
 

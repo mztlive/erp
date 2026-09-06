@@ -2,29 +2,31 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt, Transactional};
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
+use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
-};
-use entities::ids::{
-    DeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
-    SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId, StockReservationId,
-    WarehouseId,
 };
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
     StockMovement, StockMovementData, StockReservation, StockReservationData, StockReservationEntry,
     StockReservationEntryData, StockReservationSourceType,
 };
-use entities::money::Quantity;
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    DeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
+    SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId, StockReservationId,
+    WarehouseId,
+};
+use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
 use super::{FulfillmentService, PostPurchaseReceiptRequest, PurchaseReceiptView};
@@ -288,9 +290,9 @@ async fn post_receipt_line(
 async fn ensure_or_create_balance(
     db: &Database,
     session: &mut mongodb::ClientSession,
-    warehouse_id: &entities::ids::WarehouseId,
-    sku_id: &entities::ids::SkuId,
-    quantity: entities::money::Quantity,
+    warehouse_id: &erp_core::ids::WarehouseId,
+    sku_id: &erp_core::ids::SkuId,
+    quantity: erp_core::money::Quantity,
 ) -> Result<String> {
     if let Some(balance) = db
         .stock_balances()
@@ -347,7 +349,7 @@ async fn establish_reservations(
     receipt: &PurchaseReceipt,
     line: &PurchaseReceiptLine,
     revision_line: &entities::purchase_order::PurchaseOrderRevisionLine,
-    sku_id: &entities::ids::SkuId,
+    sku_id: &erp_core::ids::SkuId,
     balance_id: &str,
 ) -> Result<()> {
     let allocations = db

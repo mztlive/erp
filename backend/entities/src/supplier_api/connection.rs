@@ -1,17 +1,17 @@
 //! `supplier_api_connection`：供应商 API 连接配置（数据模型 §6.14，页面 W20）。
 //!
-//! 连接是稳定配置对象（字典含启停/连接状态）→ 组合 [`crate::common::stable::StableBase`]；
+//! 连接是稳定配置对象（字典含启停/连接状态）→ 组合 [`erp_core::common::stable::StableBase`]；
 //! 密钥只保存密钥管理系统引用，业务表和普通日志不得出现明文密钥。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierAccountId, SupplierApiConnectionId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 连接代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -301,7 +301,7 @@ impl SupplierApiConnection {
     /// 规范化（去首尾空白、非空、长度上限）；健康检查字段初始为空。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierApiConnectionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierApiConnectionId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -617,8 +617,8 @@ mod tests {
         ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
         SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
     };
-    use crate::common::time::Instant;
-    use crate::ids::{SupplierAccountId, SupplierApiConnectionId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 
     fn connection_data() -> SupplierApiConnectionData {
         SupplierApiConnectionData {

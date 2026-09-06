@@ -5,20 +5,21 @@
 //! 任务。付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按
 //! 当前责任规则创建新任务身份。
 
-use database::{Executor, PayableExt, SupplierExt, WorkItemExt};
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
+use database::{PayableExt, SupplierExt, WorkItemExt};
 use entities::payable::{PayableAccount, PayableEntry, PayableSourceType, PendingPaymentAllocation};
 use entities::work_item::{
     is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
     supplier_payment_impact_summary, FinanceResponsibilityOperation, SupplierPaymentTaskReason,
     SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
 };
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
 use id_generator::next_id;
+use persistence_core::Executor;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 /// 为采购最终通过形成的应付建立唯一开放付款执行任务。
 ///
@@ -391,7 +392,7 @@ fn duplicate_open_task_error() -> Error {
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     /// FIN-E06（应付部分）：时限仍为上海当日 23:59:59，由领域契约拥有。
     #[test]

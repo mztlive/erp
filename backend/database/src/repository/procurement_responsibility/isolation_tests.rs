@@ -1,16 +1,17 @@
 use crate::ensure_indexes;
-use crate::{CatalogExt, NoTransaction, Transactional};
+use crate::CatalogExt;
 use entities::catalog::product::ProductData;
 use entities::catalog::product_category::ProductCategoryData;
 use entities::catalog::product_revision::ProductRevisionData;
 use entities::catalog::sku::SkuData;
 use entities::catalog::{EnableStatus, ListingStatus, Product, ProductCategory, ProductRevision, Sku};
-use entities::common::time::BusinessDate;
-use entities::ids::{
+use entities::procurement_responsibility::{build_catalog_facts, ProcurementResponsibilityResolutionLine};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
     ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId, SkuId, UnitOfMeasureId,
 };
-use entities::procurement_responsibility::{build_catalog_facts, ProcurementResponsibilityResolutionLine};
 use mongodb::bson::doc;
+use persistence_core::{NoTransaction, Transactional};
 use test_support::{require_mongo, TestDb};
 
 use super::load_procurement_catalog_bundle;
@@ -587,7 +588,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
         let sku = test_sku("sku-txn", "prod-1");
         let sku_id = SkuId::new("sku-txn");
         client
-            .with_transaction::<_, (), crate::errors::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |session| {
                 let db = db.clone();
                 let sku = sku.clone();
                 let sku_id = sku_id.clone();
@@ -612,7 +613,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
                         &bundle.categories,
                     )
                     .map_err(|e| {
-                        crate::errors::Error::DatabaseError(mongodb::error::Error::custom(e.to_string()))
+                        persistence_core::Error::DatabaseError(mongodb::error::Error::custom(e.to_string()))
                     })?;
                     assert!(facts.contains_key("line-1"));
                     Ok(())

@@ -19,15 +19,15 @@ pub mod review_reason;
 pub mod source_evidence;
 pub mod statement;
 
-pub use crate::ids::{
-    SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
-};
 pub use difference::{
     SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementDifferenceStatus,
     SettlementDifferenceType, SupplierSettlementDifference, SupplierSettlementDifferenceData,
     SupplierSettlementDifferenceUpdate,
 };
 pub use draft_snapshot::SupplierSettlementDraftSnapshot;
+pub use erp_core::ids::{
+    SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+};
 pub use evidence::{SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData};
 pub use item::{SettlementCostDelta, SupplierSettlementItem, SupplierSettlementItemData};
 pub use review_reason::SettlementReviewRejectReason;

@@ -23,7 +23,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::InventoryExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `stock_movement` 集合名。
 pub(crate) const STOCK_MOVEMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_MOVEMENTS;

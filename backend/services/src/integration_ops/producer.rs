@@ -4,13 +4,13 @@
 //! 的 W29 政策与工厂独占；本模块只生成任务主键、传入当前责任人与时间并
 //! 映射错误，不维护第二份规则。
 
-use entities::common::time::Instant;
-use entities::ids::WorkItemId;
 use entities::integration_ops::{
     difference_owner_role, new_difference_work_item, new_error_work_item, IntegrationErrorTask,
     ReconciliationDifference,
 };
 use entities::work_item::WorkItem;
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
 use id_generator::next_id;
 
 use crate::errors::{Error, Result};
@@ -66,11 +66,11 @@ pub(super) fn difference_work_item(
 
 #[cfg(test)]
 mod tests {
-    use entities::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
     use entities::integration_ops::{
         ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
+    use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
     ///

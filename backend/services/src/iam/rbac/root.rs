@@ -1,5 +1,6 @@
-use database::{AccessControlExt, NoTransaction};
+use database::AccessControlExt;
 use entities::{Permission, Role, RoleData};
+use persistence_core::NoTransaction;
 
 use super::{
     policy::{permissions_for_role, root_role_is_current},

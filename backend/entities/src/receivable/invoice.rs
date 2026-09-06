@@ -7,12 +7,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::{InvoiceId, PartyId};
-use crate::money::{round_to_cent, Amount};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{InvoiceId, PartyId};
+use erp_core::money::{round_to_cent, Amount};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 发票代码最大长度。
 const INVOICE_CODE_MAX_LEN: usize = 32;
@@ -661,7 +661,7 @@ impl Invoice {
     /// `accounting_direction` 与规范化号码。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::InvoiceId`）
+    /// * `id` - 实体主键（`erp_core::ids::InvoiceId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///

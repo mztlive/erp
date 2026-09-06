@@ -1,12 +1,12 @@
 //! 供应商供给 HTTP DTO；Handler 直接复用本文件类型.
 
-use entities::common::time::Instant;
-use entities::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
-use entities::money::Quantity;
 use entities::supplier_offering::{
     AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
     SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevisionData,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
+use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
@@ -23,10 +23,10 @@ pub(crate) const REVISE_OFFERING_COMMAND: &str = "revise_offering";
 pub(crate) const UPDATE_OFFERING_AVAILABILITY_COMMAND: &str = "update_offering_availability";
 
 /// 分页响应。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 排序方向。
-pub(crate) use crate::query::SortDir;
+pub(crate) use application_core::SortDir;
 
 /// 规范化并校验排序字段与方向。
 ///
@@ -40,9 +40,9 @@ pub(crate) use crate::query::SortDir;
 ///
 /// # 错误
 /// 字段或方向不在合同范围时返回错误。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 供给列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -960,7 +960,7 @@ mod tests {
 
     #[test]
     fn terms_try_into_revision_data_covers_first_and_next_revision() {
-        use entities::ids::SupplierOfferingId;
+        use erp_core::ids::SupplierOfferingId;
         let req = create_request();
         let first = req
             .terms
@@ -977,7 +977,7 @@ mod tests {
 
     #[test]
     fn terms_try_into_revision_data_rejects_blank_and_illegal() {
-        use entities::ids::SupplierOfferingId;
+        use erp_core::ids::SupplierOfferingId;
         let mut bad = terms();
         bad.input_tax_rate = "  ".to_string();
         assert!(bad
@@ -1009,8 +1009,8 @@ mod tests {
 
     #[test]
     fn availability_try_into_data_keeps_nullable_quantity_and_caller_timestamps() {
-        use entities::common::time::Instant;
-        use entities::ids::SupplierOfferingId;
+        use erp_core::common::time::Instant;
+        use erp_core::ids::SupplierOfferingId;
         let req = create_request();
         let source = Instant::from_unix_secs(1_700_000_000);
         let received = Instant::from_unix_secs(1_700_000_010);
@@ -1050,7 +1050,7 @@ mod tests {
 
     #[test]
     fn terms_reject_illegal_valid_to_and_blank_nullable_amounts() {
-        use entities::ids::SupplierOfferingId;
+        use erp_core::ids::SupplierOfferingId;
         let mut bad_to = terms();
         bad_to.valid_to = Some("abc".to_string());
         let err = bad_to
@@ -1069,8 +1069,8 @@ mod tests {
 
     #[test]
     fn inverted_validity_window_fails_closed_at_entity_construction() {
-        use entities::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
         use entities::supplier_offering::SupplierOfferingRevision;
+        use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
         let mut window = terms();
         window.valid_from = "2026-02-01".to_string();
         window.valid_to = Some("2026-01-01".to_string());
@@ -1083,7 +1083,7 @@ mod tests {
 
     #[test]
     fn revision_parse_reports_first_error_in_documented_order() {
-        use entities::ids::SupplierOfferingId;
+        use erp_core::ids::SupplierOfferingId;
         let mut multi = terms();
         multi.input_tax_rate = "abc".to_string();
         multi.dropship_supply_price_gross = "abc".to_string();
@@ -1104,7 +1104,7 @@ mod tests {
 
     #[test]
     fn missing_source_time_falls_back_to_received_time() {
-        use entities::common::time::Instant;
+        use erp_core::common::time::Instant;
         let received = Instant::from_unix_secs(1_700_000_010);
         assert_eq!(super::resolve_source_updated_at(None, received), received);
         assert_eq!(

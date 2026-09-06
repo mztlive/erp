@@ -3,7 +3,7 @@
 //! 本值对象只派生历史 wire 字符串，不计算命令幂等 SHA-256 fingerprint。
 //! 正式版本 `sub:{id}` 语义与既有聚合工厂一致，不得更换算法或前缀。
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 已持久化内容指纹最大长度（与工作副本 `content_hash` 上限一致）。
 const CONTENT_HASH_MAX_LEN: usize = 128;

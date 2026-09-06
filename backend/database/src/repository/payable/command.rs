@@ -2,8 +2,8 @@ use entities::payable::{PayableAccount, PayableEntry, PaymentAllocation, Purchas
 
 use super::super::extensions::PayableExt;
 use super::{PayableRepository, PAYABLE_ENTRIES};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> PayableRepository<'a> {
     /// 建立应付往来子账与原始应付分录（跨集合多步骤写入）。
@@ -13,7 +13,7 @@ impl<'a> PayableRepository<'a> {
     /// 才形成原始应付）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有子账没有分录的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `account` - 待写入的应付往来子账
@@ -21,7 +21,7 @@ impl<'a> PayableRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_payable_with_entry(
         &self,
@@ -52,7 +52,7 @@ impl<'a> PayableRepository<'a> {
     /// 正式事实，`(supplier_payment_id, allocation_seq)` 唯一索引在并发重复
     /// 过账时抛出唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `allocations` - 待持久化的核销分配
@@ -62,7 +62,7 @@ impl<'a> PayableRepository<'a> {
     /// 全部写入成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_payment_allocations_many(
         &self,
@@ -85,7 +85,7 @@ impl<'a> PayableRepository<'a> {
     /// 正式事实，`(invoice_id, allocation_seq)` 唯一索引在并发重复登记时抛出
     /// 唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `allocations` - 待持久化的进项发票分配
@@ -95,7 +95,7 @@ impl<'a> PayableRepository<'a> {
     /// 全部写入成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_purchase_invoice_allocations_many(
         &self,
@@ -116,7 +116,7 @@ impl<'a> PayableRepository<'a> {
 #[cfg(test)]
 mod tests {
     use super::PayableRepository;
-    use crate::NoTransaction;
+    use persistence_core::NoTransaction;
 
     /// 空输入必须直接成功且不访问数据库。
     #[tokio::test]

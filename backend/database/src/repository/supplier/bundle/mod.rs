@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use entities::ids::PartyId;
 use entities::party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile};
 use entities::supplier::{
     CapabilityCode, QualificationType, SupplierAccount, SupplierAccountStatus, SupplierCapability,
     SupplierCommercialProfileRevision, SupplierQualification, SupplierQualificationCapability,
     SupplierRatingRevision,
 };
+use erp_core::ids::PartyId;
 
 use super::super::PageResult;
 use super::SupplierAccountRow;

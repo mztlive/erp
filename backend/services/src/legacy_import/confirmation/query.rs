@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
-use database::{LegacyImportExt, NoTransaction, WorkItemExt};
+use database::{LegacyImportExt, WorkItemExt};
 use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
 use entities::work_item::{WorkItem, WorkItemStatus};
+use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use crate::work_item::{ProcessingState, WorkItemAllowedAction, WorkItemService, WorkItemView};
+use application_core::AuditActor;
 
 use super::super::dto::{
     ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationListParams, LegacyImportConfirmationView,

@@ -2,7 +2,7 @@ use std::{borrow::Borrow, collections::HashSet, fmt};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 const MAX_ID_LEN: usize = 128;
 const MAX_PERMISSION_PART_LEN: usize = 128;

@@ -13,7 +13,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::PayableExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `payable_account` 集合名。
 pub(crate) const PAYABLE_ACCOUNTS: &str = <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS;

@@ -5,10 +5,8 @@ use axum::{
     Json,
 };
 use entities::AuditLogData;
-use services::{
-    audit::AuditLogService,
-    auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService},
-};
+use services::audit::AuditLogService;
+use services::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
 use tracing::{info, instrument, warn};
 
 use crate::app_state::AppState;
@@ -115,7 +113,8 @@ async fn record_login_audit(
 #[cfg(test)]
 mod tests {
     use super::token_payload_for_identity;
-    use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+    use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+    use erp_core::AccountKind;
     use services::auth::BackofficeAuthResult;
 
     fn identity(kind: AccountKind) -> BackofficeAuthResult {

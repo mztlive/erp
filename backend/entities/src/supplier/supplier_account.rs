@@ -4,13 +4,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::Result;
-use crate::field_update::FieldUpdate;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::field_update::FieldUpdate;
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
-pub use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
 /// 供应商编号最大长度。
 const SUPPLIER_NO_MAX_LEN: usize = 64;
@@ -154,7 +154,7 @@ impl SupplierAccount {
     /// 上限），结算条件引用规范化。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierAccountId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierAccountId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -297,7 +297,7 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
         return Ok(None);
     }
     if value.chars().count() > PAYMENT_TERM_ID_MAX_LEN {
-        return Err(crate::errors::Error::from("结算条件引用过长"));
+        return Err(erp_core::Error::from("结算条件引用过长"));
     }
     Ok(Some(value))
 }
@@ -308,9 +308,9 @@ mod tests {
         SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate,
         SupplierProfileUpdateViolation,
     };
-    use crate::common::state::assert_adjacency_closed;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use erp_core::common::state::assert_adjacency_closed;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
     fn account_data() -> SupplierAccountData {
         SupplierAccountData {

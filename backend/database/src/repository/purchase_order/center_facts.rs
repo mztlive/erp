@@ -7,19 +7,19 @@
 //! 审批 Repository 提供，本模块不读取审批定义、实例与历史，不做任何审批
 //! 政策判断。
 
-use entities::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use entities::payable::PayableAccount;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
+use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use mongodb::Database;
 
-use crate::executor::Executor;
 use crate::repository::extensions::{
     AccessControlExt, PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierExt,
 };
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 采购单对象中心事实 Bundle。
 ///
@@ -111,7 +111,7 @@ pub async fn load_purchase_order_center_facts(
         Some(revision) => {
             db.purchase_order()
                 .list_revision_lines(
-                    &entities::ids::PurchaseOrderRevisionId::new(revision.base.id.clone()),
+                    &erp_core::ids::PurchaseOrderRevisionId::new(revision.base.id.clone()),
                     executor,
                 )
                 .await?
@@ -245,15 +245,15 @@ mod tests {
 
 #[cfg(test)]
 mod isolation_tests {
-    use entities::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
     use entities::purchase_order::{
         FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseType,
     };
+    use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
     use crate::repository::extensions::PurchaseOrderExt;
-    use crate::{NoTransaction, Transactional};
+    use persistence_core::{NoTransaction, Transactional};
 
     use super::load_purchase_order_center_facts;
 
@@ -264,14 +264,14 @@ mod isolation_tests {
             PurchaseOrderData {
                 purchase_no: format!("PO-{id}"),
                 sales_order_id: SalesOrderId::new("so-missing"),
-                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("rev-1"),
+                sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),
                 creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-missing"),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".to_string(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                 owner_user_id: "buyer-1".to_string(),
-                target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
+                target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
             },
             "buyer-1",
         )
@@ -386,7 +386,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
                         db.purchase_orders()

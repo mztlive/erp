@@ -8,21 +8,21 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{
+use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
+use crate::purchase_order::purchase_submission::SubmissionStatus;
+use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
     ProcurementConfirmationLineId, PurchaseChangeOrderId, PurchaseChangeSubmissionId,
     PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId, SalesOrderLineId,
     SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId,
     SupplierCommercialProfileRevisionId,
 };
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
-use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
-use crate::purchase_order::purchase_submission::SubmissionStatus;
-use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
-use crate::validation::normalize_required_text;
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 变更原因最大长度。
 const REASON_MAX_LEN: usize = 500;
@@ -166,7 +166,7 @@ impl PurchaseChangeOrder {
     /// 完成变更原因校验与规范化；初始状态为 `Draft`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseChangeOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeOrderId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -529,7 +529,7 @@ impl PurchaseChangeSubmission {
     /// （`gross = net + tax`，§4.2 铁律 4）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseChangeSubmissionId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeSubmissionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -822,7 +822,7 @@ impl PurchaseChangeSubmissionLine {
     /// 商品行必须携带销售提交行引用与分配数量。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseChangeSubmissionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeSubmissionLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -905,17 +905,17 @@ mod tests {
         PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,
         PurchaseChangeSubmissionLineData,
     };
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{
+    use crate::purchase_order::purchase_submission::SubmissionStatus;
+    use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseChangeOrderId, PurchaseChangeSubmissionId,
         PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId, SalesOrderLineId,
         SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SupplierAccountId,
         SupplierCommercialProfileRevisionId,
     };
-    use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
-    use crate::purchase_order::purchase_submission::SubmissionStatus;
-    use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
@@ -963,7 +963,7 @@ mod tests {
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
             sku_id: Some(SkuId::new("sku-1")),
-            sku_revision_id: Some(crate::ids::SkuRevisionId::new("skur-1")),
+            sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
             product_name_snapshot: Some("慰问礼包".to_string()),
             specification_snapshot: Some("500g×2".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),

@@ -6,9 +6,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::AuditEventId;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::AuditEventId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 操作者 ID 最大长度。
 const ACTOR_ID_MAX_LEN: usize = 128;
@@ -159,7 +159,7 @@ impl AuditEvent {
     /// 逐项 trim、去重、保序，数量不超过上限（防审计膨胀）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::AuditEventId`）
+    /// * `id` - 实体主键（`erp_core::ids::AuditEventId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -253,7 +253,7 @@ fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{AuditEvent, AuditEventData, AuditEventResult};
-    use crate::ids::AuditEventId;
+    use erp_core::ids::AuditEventId;
 
     fn data() -> AuditEventData {
         AuditEventData {

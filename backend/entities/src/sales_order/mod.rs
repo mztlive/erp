@@ -5,9 +5,9 @@
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.4；公共字段归属按 §4.3 判定：
 //! - `sales_order` / `sales_order_working_copy` / `sales_order_submission` 是可编辑
-//!   草稿与提交状态对象 → 组合 [`crate::common::stable::StableBase`]；
+//!   草稿与提交状态对象 → 组合 [`erp_core::common::stable::StableBase`]；
 //! - `sales_order_revision` 是「不可变修订」→ 组合
-//!   [`crate::common::revision::RevisionBase`]；
+//!   [`erp_core::common::revision::RevisionBase`]；
 //! - 各 `*_line` 与子类型修订行是版本的组成部分，只用 `BaseModel` 持久化元数据
 //!   （与 P0 `external_identity_map` 先例一致）。
 //! - 正式版本与提交内联客户名称、合同编号、结算主体、税务、付款条件、商品名称、
@@ -73,7 +73,7 @@ pub use working_copy::{
 };
 
 /// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{
+pub use erp_core::ids::{
     SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
     SalesOrderRevisionLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
     SalesOrderVoucherLineRevisionId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,

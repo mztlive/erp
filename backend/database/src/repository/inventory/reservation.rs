@@ -7,15 +7,15 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use entities::ids::{SalesOrderLineId, SkuId, WarehouseId};
 use entities::inventory::{ReservationStatus, StockReservation, StockReservationSourceType};
-use entities::money::Quantity;
+use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
+use erp_core::money::Quantity;
 
 use super::shared::{ids_to_strings, negate_bson, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_RESERVATIONS};
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 库存预占列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -515,7 +515,7 @@ fn stock_reservation_projection() -> Document {
 mod filter_tests {
     use super::{stock_reservation_sort, StockReservationFilter};
     use crate::repository::QueryFilter;
-    use entities::ids::WarehouseId;
+    use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {

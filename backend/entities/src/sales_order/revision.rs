@@ -10,16 +10,16 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     ContractRevisionId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId,
     SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId,
     SkuRevisionId,
 };
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
@@ -172,7 +172,7 @@ impl SalesOrderRevision {
     /// - `gross = net + tax` 精确成立（§4.2 表头只汇总已舍入行金额）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -355,7 +355,7 @@ impl SalesOrderRevisionLine {
     /// 金额」属于跨行断言（§6.4），P3 在形成版本时校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderRevisionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderRevisionLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -496,7 +496,7 @@ impl SalesOrderGoodsServiceLineRevision {
     /// 完成基础单位代码的校验与规范化（trim、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderGoodsServiceLineRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderGoodsServiceLineRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -578,7 +578,7 @@ impl SalesOrderVoucherLineRevision {
     /// `gift_rate = gift_amount / transaction_amount`（成交金额为零时拒绝生效）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderVoucherLineRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderVoucherLineRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -612,7 +612,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

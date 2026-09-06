@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::BusinessDate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
 /// 当前供应商资料请求指纹版本前缀（规范 JSON 的 SHA-256）。
@@ -247,7 +247,7 @@ fn fingerprints_match(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     use super::{SupplierProfileCommand, SupplierProfileCommandData, FINGERPRINT_V1_PREFIX};
 

@@ -2,11 +2,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    errors::{Error, Result},
-    validation::{normalize_optional_text, normalize_required_text},
-    RoleId,
-};
+use crate::RoleId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 const NAME_MAX_LEN: usize = 32;
 const DESCRIPTION_MAX_LEN: usize = 256;

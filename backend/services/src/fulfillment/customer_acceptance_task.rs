@@ -4,14 +4,15 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
-use database::{AccessControlExt, Executor, SalesOrderExt, WorkItemExt};
-use entities::ids::SalesOrderId;
+use database::{AccessControlExt, SalesOrderExt, WorkItemExt};
 use entities::sales_order::{BusinessType, SalesOrder};
 use entities::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 use entities::{Permission, PermissionSet};
+use erp_core::ids::SalesOrderId;
 use id_generator::next_id;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
@@ -80,7 +81,7 @@ pub(crate) async fn prepare_customer_acceptance_task_command(
     .await?;
     ensure_command_identity(&task, work_item_id, expected_task_version)?;
     ensure_current_owner_execution_access(db, &task, actor_id, executor).await?;
-    task.record_activity(actor_id, entities::common::time::Instant::now())?;
+    task.record_activity(actor_id, erp_core::common::time::Instant::now())?;
     Ok(task)
 }
 
@@ -93,7 +94,7 @@ pub(crate) async fn persist_customer_acceptance_task_after_posting(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if !has_remaining_eligible {
-        task.complete_by_domain_command(actor_id, entities::common::time::Instant::now())?;
+        task.complete_by_domain_command(actor_id, erp_core::common::time::Instant::now())?;
     }
     db.work_items().update(&mut task, executor).await?;
     Ok(())
@@ -109,7 +110,7 @@ async fn create_customer_acceptance_task(
     let rbac = crate::iam::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
     let task = WorkItem::new_with_responsibility_key(
-        entities::ids::WorkItemId::new(next_id()),
+        erp_core::ids::WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: WorkItemType::CustomerAcceptanceRegistration,
             business_object_type: OBJECT_TYPE.to_string(),
@@ -249,7 +250,7 @@ async fn ensure_current_owner_execution_access(
 
 #[cfg(test)]
 mod tests {
-    use entities::ids::WorkItemId;
+    use erp_core::ids::WorkItemId;
 
     use super::*;
 

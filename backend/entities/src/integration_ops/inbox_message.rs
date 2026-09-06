@@ -10,9 +10,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::{InboxMessageId, SourceSystemId};
 
@@ -229,7 +229,7 @@ impl InboxMessage {
     /// 接收时间由调用方注入，实体不读取全局时钟。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::InboxMessageId`）
+    /// * `id` - 实体主键（`erp_core::ids::InboxMessageId`）
     /// * `data` - 登记数据（不含处理状态与处理完成时间）
     ///
     /// # 返回
@@ -262,7 +262,7 @@ impl InboxMessage {
     /// 提供处理完成时间（关联一致性）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::InboxMessageId`）
+    /// * `id` - 实体主键（`erp_core::ids::InboxMessageId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -348,8 +348,8 @@ impl InboxMessage {
 #[cfg(test)]
 mod tests {
     use super::{InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, MessageType};
-    use crate::common::time::Instant;
-    use crate::ids::{InboxMessageId, SourceSystemId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{InboxMessageId, SourceSystemId};
 
     const RECEIVED_AT: i64 = 1_700_000_000;
     const SENT_AT: i64 = 1_699_999_900;

@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use std::str::FromStr;
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
-use crate::money::Amount;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 分配动作（数据模型 §6.9：`APPLY` 或 `REVERSE`）。
 ///
@@ -98,7 +98,7 @@ impl PaymentAllocation {
     /// `REVERSE` 必填 `reverses_allocation_id`，`APPLY` 不得携带。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PaymentAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::PaymentAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -533,10 +533,10 @@ mod tests {
     #[test]
     fn payment_and_receipt_mirror_consistency() {
         let r_a1 = crate::receivable::ReceiptAllocation::new(
-            crate::ids::ReceiptAllocationId::new("rc-1"),
+            erp_core::ids::ReceiptAllocationId::new("rc-1"),
             crate::receivable::ReceiptAllocationData {
-                customer_receipt_id: crate::ids::CustomerReceiptId::new("cr-1"),
-                receivable_entry_id: crate::ids::ReceivableEntryId::new("re-1"),
+                customer_receipt_id: erp_core::ids::CustomerReceiptId::new("cr-1"),
+                receivable_entry_id: erp_core::ids::ReceivableEntryId::new("re-1"),
                 allocation_seq: 2,
                 allocation_action: crate::receivable::AllocationAction::Apply,
                 allocated_amount: Amount::from_str("100.00").unwrap(),
@@ -546,10 +546,10 @@ mod tests {
         )
         .unwrap();
         let r_a2 = crate::receivable::ReceiptAllocation::new(
-            crate::ids::ReceiptAllocationId::new("rc-2"),
+            erp_core::ids::ReceiptAllocationId::new("rc-2"),
             crate::receivable::ReceiptAllocationData {
-                customer_receipt_id: crate::ids::CustomerReceiptId::new("cr-1"),
-                receivable_entry_id: crate::ids::ReceivableEntryId::new("re-2"),
+                customer_receipt_id: erp_core::ids::CustomerReceiptId::new("cr-1"),
+                receivable_entry_id: erp_core::ids::ReceivableEntryId::new("re-2"),
                 allocation_seq: 1,
                 allocation_action: crate::receivable::AllocationAction::Apply,
                 allocated_amount: Amount::from_str("100.00").unwrap(),

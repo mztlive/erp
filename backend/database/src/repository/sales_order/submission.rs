@@ -11,8 +11,8 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
 use super::super::{Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 提交历史筛选条件。
 #[derive(Debug, Clone)]

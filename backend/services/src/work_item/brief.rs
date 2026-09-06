@@ -4,8 +4,8 @@
 //! 与前几行明细；采购财务审核通过 `extra_sections` 补充供应商、税额和付款条件。
 
 use chrono::{Datelike, FixedOffset, Timelike};
-use entities::common::time::{BusinessDate, Instant};
-use entities::money::Quantity;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::money::Quantity;
 
 /// 简报最多展开的销售明细行数。
 pub(crate) const BRIEF_LINE_LIMIT: usize = 3;

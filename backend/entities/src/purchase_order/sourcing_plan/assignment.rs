@@ -3,9 +3,9 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::money::Quantity;
+use erp_core::common::time::BusinessDate;
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 use super::plan::zero_quantity;
 

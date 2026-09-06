@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::FileAssetExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `file_asset` 集合名。
 pub(crate) const FILE_ASSETS: &str = <mongodb::Database as FileAssetExt>::FILE_ASSETS;

@@ -1,8 +1,9 @@
-use entities::{AccountKind, AuditLog};
+use entities::AuditLog;
+use erp_core::AccountKind;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 审计日志列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -85,7 +86,7 @@ impl From<AuditLog> for AuditLogItem {
 
 #[cfg(test)]
 mod tests {
-    use entities::AccountKind;
+    use erp_core::AccountKind;
     use serde_json::json;
     use validator::Validate;
 

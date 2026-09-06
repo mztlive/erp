@@ -1,14 +1,15 @@
 //! 采购版本形成、版本号与变更差额构造。
 
-use database::{NoTransaction, PurchaseOrderExt};
-use entities::common::time::Instant;
-use entities::ids::{PayableEntryId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId};
-use entities::money::Amount;
+use database::PurchaseOrderExt;
 use entities::purchase_order::{
     PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrder, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{PayableEntryId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId};
+use erp_core::money::Amount;
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 
 use super::shared::zero_amount;
 use super::PurchaseOrderService;
@@ -58,7 +59,7 @@ impl PurchaseOrderService {
                     line,
                 )
             })
-            .collect::<entities::Result<Vec<_>>>()?;
+            .collect::<erp_core::Result<Vec<_>>>()?;
         Ok((revision, revision_lines))
     }
 
@@ -87,7 +88,7 @@ impl PurchaseOrderService {
                     line,
                 )
             })
-            .collect::<entities::Result<Vec<_>>>()?;
+            .collect::<erp_core::Result<Vec<_>>>()?;
         Ok((revision, revision_lines))
     }
 
@@ -107,7 +108,7 @@ impl PurchaseOrderService {
         .expect("金额差值小数位不超过 2 位");
         let payable_delta = if delta_amount.to_decimal() != zero_amount().to_decimal() {
             let account = entities::payable::PayableAccount::new(
-                entities::ids::PayableAccountId::new(next_id()),
+                erp_core::ids::PayableAccountId::new(next_id()),
                 entities::payable::PayableAccountData {
                     source_document_id: order.base.id.clone(),
                     supplier_id: order.supplier_id.clone(),
@@ -131,7 +132,7 @@ impl PurchaseOrderService {
                     },
                     amount: Amount::try_from(delta_amount.to_decimal().abs())
                         .expect("差额绝对值小数位不超过 2 位"),
-                    due_date: entities::common::time::BusinessDate::today(),
+                    due_date: erp_core::common::time::BusinessDate::today(),
                     source_fact_type: "purchase_change_order".to_string(),
                     source_document_id: order.base.id.clone(),
                     source_revision_id: new_revision.base.id.clone(),

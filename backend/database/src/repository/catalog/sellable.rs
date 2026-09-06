@@ -4,16 +4,16 @@ use mongodb::bson::{doc, Bson, Document};
 use serde::{Deserialize, Serialize};
 
 use entities::catalog::{EnableStatus, ListingStatus, ProductKind, Sku};
-use entities::common::time::BusinessDate;
-use entities::money::Amount;
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
+use erp_core::common::time::BusinessDate;
+use erp_core::money::Amount;
 
 use super::super::extensions::{CatalogExt, SupplierOfferingExt};
 use super::super::PageResult;
 use super::shared::{PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// `supplier_offering_revision` 集合名（公司商品池资格依赖的当前供给修订）。
 const SUPPLIER_OFFERING_REVISIONS: &str =
@@ -603,8 +603,8 @@ mod tests {
     use std::str::FromStr;
 
     use entities::catalog::ProductKind;
-    use entities::common::time::BusinessDate;
-    use entities::money::Amount;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::Amount;
 
     /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]

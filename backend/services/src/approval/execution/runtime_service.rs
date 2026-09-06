@@ -16,19 +16,20 @@ use std::sync::Arc;
 use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalProcessInstance};
-use database::{ApprovalIntegrationExt, BpmExt, Executor, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::document_registry::DocumentType;
 use mongodb::Database;
+use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::idempotency::PreparedCommandIdentity;
 use super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 pub use query::{
     RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListPage, RuntimeInstanceListQuery,
@@ -253,11 +254,11 @@ mod tests {
         ApprovalInstanceListView, ApprovalInstanceSummary, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
     };
     use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-    use entities::common::time::Instant;
     use entities::document_registry::DocumentType;
-    use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-    use entities::money::Quantity;
-    use entities::AccountKind;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+    use erp_core::money::Quantity;
+    use erp_core::AccountKind;
 
     use entities::work_item::{
         ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData, WorkItem,
@@ -269,8 +270,8 @@ mod tests {
         command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
     };
     use crate::approval::ApprovalCancelBlockedCommand;
-    use crate::audit::AuditActor;
     use crate::errors::{Error, ErrorCode};
+    use application_core::AuditActor;
 
     use super::super::runtime_query::RuntimeInstanceListView;
     use super::cancel_blocked::{
@@ -736,7 +737,7 @@ mod tests {
         );
     }
 
-    fn duplicate_key_error(index_name: Option<&str>) -> database::Error {
+    fn duplicate_key_error(index_name: Option<&str>) -> persistence_core::Error {
         let message = index_name.map_or_else(
             || "E11000 duplicate key error".to_string(),
             |index| format!("E11000 duplicate key error collection: erp.receipts index: {index} dup key"),
@@ -749,7 +750,7 @@ mod tests {
         }))
         .expect("duplicate key fixture");
         let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
-        database::Error::from(mongo_error)
+        persistence_core::Error::from(mongo_error)
     }
 
     fn runtime_source_fn(start: &str, end: &str) -> &'static str {
@@ -789,13 +790,13 @@ mod tests {
             assert!(!command_may_have_committed(&error));
             assert!(matches!(error, Error::ConflictError(_)));
         }
-        let transient = Error::from(database::Error::TransientTransactionConflict(
+        let transient = Error::from(persistence_core::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("write conflict"),
         ));
         assert!(command_may_have_committed(&transient));
         assert!(matches!(transient, Error::TransientTransaction(_)));
         assert!(command_may_have_committed(&Error::OutcomeUnknown(
-            database::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
+            persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
         )));
         assert!(!command_may_have_committed(&Error::ConflictError(
             "数据已存在，请勿重复提交".to_string()

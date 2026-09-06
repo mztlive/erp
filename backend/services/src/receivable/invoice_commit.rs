@@ -168,9 +168,9 @@ pub(crate) fn convert_post_allocations(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entities::common::time::BusinessDate;
-    use entities::ids::{PartyId, ReceivableAccountId};
-    use entities::money::Amount;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyId, ReceivableAccountId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn valid_invoice() -> CreateInvoiceRequest {
@@ -199,7 +199,7 @@ mod tests {
     }
 
     fn base_request() -> CommitInvoiceRequest {
-        use entities::ids::WorkItemId;
+        use erp_core::ids::WorkItemId;
         CommitInvoiceRequest {
             work_item_id: WorkItemId::new("wi-1"),
             expected_task_version: "1".to_string(),
@@ -398,8 +398,8 @@ mod tests {
 
     #[test]
     fn two_entries_same_facts_produce_identical_plan() {
-        use entities::ids::{InvoiceId, SalesInvoiceAllocationId};
         use entities::receivable::SalesInvoiceAllocationPlan;
+        use erp_core::ids::{InvoiceId, SalesInvoiceAllocationId};
 
         let lines = vec![alloc("60.00", "52.80", "7.20"), alloc("40.00", "35.20", "4.80")];
         let invoice_id = InvoiceId::new("inv-plan-1");
@@ -473,10 +473,10 @@ mod tests {
 
     #[test]
     fn ensure_sales_invoice_rejects_non_sales() {
-        use entities::common::time::BusinessDate;
-        use entities::ids::InvoiceId;
-        use entities::ids::PartyId;
         use entities::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
+        use erp_core::common::time::BusinessDate;
+        use erp_core::ids::InvoiceId;
+        use erp_core::ids::PartyId;
 
         let purchase_invoice = Invoice::new(
             InvoiceId::new("inv-purchase"),

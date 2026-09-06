@@ -13,8 +13,8 @@ use super::{
     DefinitionGraph, LatestDefinitionVersionProjection, DEFINITIONS, MAX_CATALOG_STATUS_ROWS,
     MAX_DEFINITION_GRAPH_DOCS, MAX_DEFINITION_VERSIONS, NODE_DEFINITIONS, TRANSITION_DEFINITIONS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 查询同一流程种类当前唯一已发布定义。

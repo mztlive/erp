@@ -2,26 +2,24 @@
 // 销售变更单（W05 变更轨；§8.1.3 本批部分）
 // ---------------------------------------------------------------------
 
-use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
 use entities::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
-};
-use entities::ids::{
-    BusinessDocumentId, ReceivableAccountId, SalesChangeOrderId, SalesChangeSubmissionId,
-    SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-    SalesOrderWorkingCopyId,
 };
 use entities::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
     SalesChangeSubmissionLine,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    BusinessDocumentId, ReceivableAccountId, SalesChangeOrderId, SalesChangeSubmissionId,
+    SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
+    SalesOrderWorkingCopyId,
+};
 use id_generator::next_id;
 use mongodb::ClientSession;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::adapter::{
@@ -55,10 +53,11 @@ use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 impl SalesReviewService {
     /// 分页查询销售变更单。
@@ -792,7 +791,7 @@ fn build_change_working_copy_lines_from_revision(
     let mut built = Vec::with_capacity(datas.len());
     for data in &datas {
         built.push(entities::sales_order::SalesOrderWorkingCopyLine::new(
-            entities::ids::SalesOrderWorkingCopyLineId::new(next_id()),
+            erp_core::ids::SalesOrderWorkingCopyLineId::new(next_id()),
             working_copy_id.clone(),
             data.clone(),
         )?);

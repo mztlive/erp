@@ -1,12 +1,14 @@
-use database::{AccessControlExt, NoTransaction, SalesOrderExt, Transactional};
-use entities::ids::SalesOrderId;
+use database::{AccessControlExt, SalesOrderExt};
 use entities::sales_order::WorkingPurpose;
+use erp_core::ids::SalesOrderId;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::dto::{SalesOrderDetailView, VoidSalesOrderRequest};
 use super::super::SalesOrderService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl SalesOrderService {
     /// 作废销售单草稿（主状态 `DRAFT → VOIDED`；放弃有效工作副本）。

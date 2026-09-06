@@ -5,14 +5,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, PurchaseOrderExt, SalesOrderExt};
-use entities::ids::PurchaseOrderSubmissionId;
-use entities::money::{Amount, Quantity};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
 use entities::supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
+use erp_core::ids::PurchaseOrderSubmissionId;
+use erp_core::money::{Amount, Quantity};
+use persistence_core::Executor;
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
@@ -978,12 +979,12 @@ fn non_empty(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-    };
     use entities::purchase_order::{
         FulfillmentResponsibility, PurchaseOrderSubmissionData, PurchaseType, SupplierSnapshot,
+    };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
 
     use super::*;

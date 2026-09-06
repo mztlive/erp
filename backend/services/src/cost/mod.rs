@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 跨集合写入（成本事实 + 分配行）→
-//!   `database::Transactional::with_transaction`；
+//!   `persistence_core::Transactional::with_transaction`；
 //! - 列表查询单集合 → `&mut NoTransaction`。
 //!
 //! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_order()`
@@ -10,19 +10,21 @@
 //! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
 //! `CostExt` 直接写入）。
 
-use database::{AccessControlExt, CostExt, NoTransaction, SalesOrderExt, Transactional};
+use database::{AccessControlExt, CostExt, SalesOrderExt};
 use entities::cost::{
     CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
     CostScope,
 };
-use entities::ids::{CostAllocationId, CostEntryId, SalesOrderId};
+use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use std::collections::{HashMap, HashSet};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 
@@ -388,7 +390,7 @@ fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
 
 /// 将成本事实投影与已批量加载的分配事实装配为列表视图。
 ///
-/// 金额字段均直接复制持久化金额（`entities::money::Amount`）；分配缺失时保持
+/// 金额字段均直接复制持久化金额（`erp_core::money::Amount`）；分配缺失时保持
 /// 既有空列表语义。
 ///
 /// # 参数
@@ -422,7 +424,7 @@ fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> C
 
 /// 将持久化成本分配事实无损映射为服务响应视图。
 ///
-/// 金额字段直接复制原始金额（`entities::money::Amount`），不得在读取路径归一化、
+/// 金额字段直接复制原始金额（`erp_core::money::Amount`），不得在读取路径归一化、
 /// 重算或改变小数位。
 ///
 /// # 参数
@@ -488,8 +490,8 @@ mod tests {
     use super::{
         cost_allocation_entity_view, cost_entry_row_view, CostAllocation, CostAllocationData, CostEntryRow,
     };
-    use entities::ids::{CostAllocationId, CostEntryId, SalesOrderId};
-    use entities::money::Amount;
+    use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
+    use erp_core::money::Amount;
     use serde_json::json;
     use std::str::FromStr;
 

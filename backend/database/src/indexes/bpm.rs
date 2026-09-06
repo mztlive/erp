@@ -7,7 +7,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::BpmExt;
-use crate::Result;
+use persistence_core::Result;
 
 const DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_PROCESS_DEFINITIONS;
 const NODE_DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_NODE_DEFINITIONS;

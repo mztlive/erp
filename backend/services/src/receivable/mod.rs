@@ -6,7 +6,7 @@
 //! - 单集合草稿写入（复核缓存更新）→ `&mut NoTransaction`；
 //! - 客户回款创建必须在同一事务注册 `BusinessDocument` 并绑定发布定义；
 //! - 跨集合资金/票款过账（§8.3 不变量）→
-//!   `database::Transactional::with_transaction`，闭包内按稳定顺序锁定两侧，
+//!   `persistence_core::Transactional::with_transaction`，闭包内按稳定顺序锁定两侧，
 //!   不执行外部 HTTP/文件 IO。
 //! - 资金类入口（回款过账、发票登记、红冲）以业务唯一键
 //!   （回款单号/规范化发票号码）与状态迁移构成去重机制，重复提交只产生一条

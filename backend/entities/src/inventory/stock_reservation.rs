@@ -12,13 +12,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseReceiptLineId, SalesOrderLineId, SkuId, StockReservationEntryId,
     StockReservationId, WarehouseId,
 };
-use crate::money::Quantity;
-use crate::validation::normalize_required_text;
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源单据标识最大长度。
 const SOURCE_DOCUMENT_MAX_LEN: usize = 256;
@@ -234,7 +234,7 @@ impl StockReservation {
     /// （§6.7）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::StockReservationId`）
+    /// * `id` - 实体主键（`erp_core::ids::StockReservationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -431,7 +431,7 @@ impl StockReservationEntry {
     /// 值对象），P3 按单据类型解析并校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::StockReservationEntryId`）
+    /// * `id` - 实体主键（`erp_core::ids::StockReservationEntryId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -462,7 +462,7 @@ impl StockReservationEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{StockReservationEntryId, StockReservationId};
+    use erp_core::ids::{StockReservationEntryId, StockReservationId};
     use std::str::FromStr;
 
     fn data() -> StockReservationData {

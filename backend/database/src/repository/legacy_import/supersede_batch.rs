@@ -5,13 +5,13 @@
 //! `invalidate` 的确认与已就地 `close` 的任务。空集合零写，任一版本冲突
 //! 由调用方事务整体回滚。全部使用调用方 executor，不开事务。
 
-use entities::ids::LegacyImportConfirmationId;
 use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
 use entities::work_item::WorkItem;
+use erp_core::ids::LegacyImportConfirmationId;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 impl<'a> Repository<'a, LegacyImportConfirmation> {
     /// 批量写回本轮已失效的确认事实（INT-R28 批量写）。
@@ -88,8 +88,8 @@ impl<'a> Repository<'a, WorkItem> {
 
 #[cfg(test)]
 mod tests {
-    use entities::ids::LegacyImportConfirmationId;
     use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
+    use erp_core::ids::LegacyImportConfirmationId;
 
     #[test]
     fn invalidated_filter_pins_current_replacement_round() {
@@ -104,8 +104,8 @@ mod tests {
     }
 
     fn pending_confirmation() -> LegacyImportConfirmation {
-        use entities::ids::{LegacyImportBatchId, WorkItemId};
         use entities::legacy_import::LegacyImportConfirmationData;
+        use erp_core::ids::{LegacyImportBatchId, WorkItemId};
         LegacyImportConfirmation::new(
             LegacyImportConfirmationId::new("c-1"),
             LegacyImportConfirmationData {
@@ -122,7 +122,7 @@ mod tests {
     }
 
     fn invalidated_confirmation(replacement: &str) -> LegacyImportConfirmation {
-        use entities::common::time::Instant;
+        use erp_core::common::time::Instant;
         let mut confirmation = pending_confirmation();
         confirmation
             .invalidate(

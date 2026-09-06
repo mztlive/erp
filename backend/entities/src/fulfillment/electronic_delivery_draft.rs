@@ -5,14 +5,14 @@
 use serde::{Deserialize, Serialize};
 
 use super::electronic_delivery::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
-use crate::common::source::SourceType;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     ElectronicDeliveryId, FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
 };
-use crate::money::Quantity;
-use crate::validation::normalize_required_text;
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::fingerprint::FINGERPRINT_HEX_LEN;
 

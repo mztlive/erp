@@ -11,11 +11,12 @@ use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
     ApprovalInstanceSummary, ApprovalInstanceTextQuery,
 };
-use database::{ApprovalIntegrationExt, BpmExt, NoTransaction, WorkItemExt};
+use database::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::work_item::WorkItem;
+use erp_core::common::time::Instant;
+use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
 use super::super::apply_plan::PlannedWrites;
@@ -37,8 +38,8 @@ use crate::approval::policy::{policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TY
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::scope::definition_management_visibility;
 use crate::approval::{approval_actor_is_active, approval_document_read_scope};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 实例列表默认页大小。
 const DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT: u32 = 20;

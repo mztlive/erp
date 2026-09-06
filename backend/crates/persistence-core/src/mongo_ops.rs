@@ -27,7 +27,7 @@ use crate::{errors::Result, Executor};
 ///
 /// # 错误
 /// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
-pub(crate) async fn insert_one<T>(
+pub async fn insert_one<T>(
     collection: &Collection<T>,
     document: &T,
     executor: &mut dyn Executor,
@@ -56,7 +56,7 @@ where
 ///
 /// # 错误
 /// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
-pub(crate) async fn insert_many<T>(
+pub async fn insert_many<T>(
     collection: &Collection<T>,
     documents: Vec<T>,
     executor: &mut dyn Executor,
@@ -89,7 +89,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 更新失败时返回错误。
-pub(crate) async fn update_one<T>(
+pub async fn update_one<T>(
     collection: &Collection<T>,
     filter: Document,
     update: Document,
@@ -129,7 +129,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 更新或文档反序列化失败时返回错误。
-pub(crate) async fn find_one_and_update_pipeline<T>(
+pub async fn find_one_and_update_pipeline<T>(
     collection: &Collection<T>,
     filter: Document,
     pipeline: Vec<Document>,
@@ -160,7 +160,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 删除失败时返回错误。
-pub(crate) async fn delete_many<T>(
+pub async fn delete_many<T>(
     collection: &Collection<T>,
     filter: Document,
     executor: &mut dyn Executor,
@@ -187,7 +187,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 删除失败时返回错误。
-pub(crate) async fn delete_one<T>(
+pub async fn delete_one<T>(
     collection: &Collection<T>,
     filter: Document,
     executor: &mut dyn Executor,
@@ -214,7 +214,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询或反序列化失败时返回错误。
-pub(crate) async fn find_one<T>(
+pub async fn find_one<T>(
     collection: &Collection<T>,
     filter: Document,
     executor: &mut dyn Executor,
@@ -244,7 +244,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询、游标读取或反序列化失败时返回错误。
-pub(crate) async fn find_many<T>(
+pub async fn find_many<T>(
     collection: &Collection<T>,
     filter: Document,
     options: FindOptions,
@@ -289,7 +289,7 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询失败时返回错误。
-pub(crate) async fn exists(
+pub async fn exists(
     collection: &Collection<Document>,
     filter: Document,
     executor: &mut dyn Executor,
@@ -320,7 +320,7 @@ pub(crate) async fn exists(
 ///
 /// # 错误
 /// 当 MongoDB 统计失败时返回错误。
-pub(crate) async fn count_documents<T>(
+pub async fn count_documents<T>(
     collection: &Collection<T>,
     filter: Document,
     executor: &mut dyn Executor,

@@ -11,12 +11,12 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::status::EnableStatus;
-use crate::common::revision::RevisionBase;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, SkuId, SkuRevisionId};
-use crate::money::{Amount, Quantity};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{FileAssetId, SkuId, SkuRevisionId};
+use erp_core::money::{Amount, Quantity};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// SKU 名称最大长度。
 const NAME_MAX_LEN: usize = 128;
@@ -103,7 +103,7 @@ impl SkuRevision {
     /// 并要求重量/体积/销售可见价/市场价均为非负定点数。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SkuRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SkuRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -274,9 +274,9 @@ fn ensure_non_negative_amount(value: Option<Amount>, label: &str) -> Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::SkuRevisionId;
-    use crate::money::{line_amounts, Rate, UnitPrice};
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::SkuRevisionId;
+    use erp_core::money::{line_amounts, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn data() -> SkuRevisionData {

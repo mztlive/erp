@@ -2,16 +2,16 @@
 //!
 //! 双指纹分别计算、类型不可混用；领域工厂只收强类型结果。
 
-use entities::common::time::Instant;
 use entities::fulfillment::{
     ServiceFulfillment, ServiceFulfillmentDraft, ServiceFulfillmentDraftData, ServiceLocationFingerprint,
     ServiceRecipientFingerprint,
 };
-use entities::ids::ServiceFulfillmentId;
+use erp_core::common::time::Instant;
+use erp_core::ids::ServiceFulfillmentId;
 use id_generator::next_id;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::CreateServiceFulfillmentRequest;
 

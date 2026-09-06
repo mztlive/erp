@@ -5,13 +5,13 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+persistence-core = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 mongodb = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-database = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

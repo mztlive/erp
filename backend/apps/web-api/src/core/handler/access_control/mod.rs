@@ -3,18 +3,16 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::access_control` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    access_control::{
-        AccessControlService, AssignUserRoleRequest, AuditEventListParams, AuditEventView,
-        CreateDataScopeRequest, CreatePermissionRequest, DataScopeListParams, DataScopeView, PageView,
-        PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest,
-        UserRoleListParams, UserRoleView,
-    },
-    audit::AuditActor,
+use services::access_control::{
+    AccessControlService, AssignUserRoleRequest, AuditEventListParams, AuditEventView,
+    CreateDataScopeRequest, CreatePermissionRequest, DataScopeListParams, DataScopeView, PageView,
+    PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
+    UserRoleView,
 };
 
 use crate::{

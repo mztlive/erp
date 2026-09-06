@@ -1,5 +1,7 @@
-use database::{AccessControlExt, NoTransaction};
-use entities::{AccountCore, AccountCoreUpdate, AccountKind};
+use database::AccessControlExt;
+use entities::{AccountCore, AccountCoreUpdate};
+use erp_core::AccountKind;
+use persistence_core::NoTransaction;
 
 use super::dto::ResetAdminPasswordParams;
 use super::AdminService;
@@ -91,7 +93,8 @@ fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<Acc
 
 #[cfg(test)]
 mod tests {
-    use entities::{AccountCore, AccountKind, AccountStatus, BaseModel, LoginAccount, Secret};
+    use entities::{AccountCore, AccountStatus, BaseModel, LoginAccount, Secret};
+    use erp_core::AccountKind;
 
     use super::existing_admin_for_password_reset;
 

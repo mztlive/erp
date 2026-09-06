@@ -4,8 +4,9 @@
 //! `assigned` 范围与销售单创建的 `ensure_customer_access` 一致：当前用户作为
 //! OWNER 或 COLLABORATOR 的有效归属客户。
 
-use database::{CustomerExt, NoTransaction};
-use entities::common::time::BusinessDate;
+use database::CustomerExt;
+use erp_core::common::time::BusinessDate;
+use persistence_core::NoTransaction;
 
 use crate::errors::Result;
 

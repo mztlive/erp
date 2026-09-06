@@ -1,18 +1,20 @@
 use crate::ensure_indexes;
-use crate::{AccessControlExt, CatalogExt, NoTransaction, ProcurementResponsibilityExt, Transactional};
+use crate::{AccessControlExt, CatalogExt, ProcurementResponsibilityExt};
 use entities::catalog::product_category::ProductCategoryData;
 use entities::catalog::sku::SkuData;
 use entities::catalog::sku_revision::SkuRevisionData;
 use entities::catalog::{EnableStatus, ListingStatus, ProductCategory, Sku, SkuRevision};
-use entities::common::time::BusinessDate;
-use entities::ids::{
-    ProcurementResponsibilityRuleId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId,
-};
 use entities::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
 };
-use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+use entities::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    ProcurementResponsibilityRuleId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId,
+};
+use erp_core::AccountKind;
 use mongodb::bson::doc;
+use persistence_core::{NoTransaction, Transactional};
 use test_support::{require_mongo, TestDb};
 
 use super::{
@@ -112,7 +114,7 @@ fn test_sku(id: &str, revision_id: &str) -> Sku {
         SkuId::new(id),
         SkuData {
             sku_no: format!("SKU-{id}"),
-            product_id: entities::ids::ProductId::new("prod-1"),
+            product_id: erp_core::ids::ProductId::new("prod-1"),
             base_unit_id: UnitOfMeasureId::new("unit-1"),
             specification_signature: format!("spec-{id}"),
             status: EnableStatus::Active,
@@ -660,7 +662,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
         );
         let filter = page_filter(None, 1, 10);
         client
-            .with_transaction::<_, (), crate::errors::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |session| {
                 let db = db.clone();
                 let rule = rule.clone();
                 let filter = ProcurementResponsibilityRuleFilter {

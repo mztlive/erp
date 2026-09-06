@@ -27,7 +27,7 @@ pub(super) use query::{
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     use super::create::{ensure_expected_delivery_within_sales_due, parse_basis_sales_order_id};
     use super::mapping::business_date_of;
@@ -73,9 +73,9 @@ mod tests {
     /// 采购预计交付日可以早于或等于销售承诺期限，但不得晚于该期限。
     #[test]
     fn expected_delivery_must_not_exceed_sales_due() {
-        let sales_due = entities::common::time::BusinessDate::from_str("2026-09-10").unwrap();
-        let earlier = entities::common::time::BusinessDate::from_str("2026-09-09").unwrap();
-        let later = entities::common::time::BusinessDate::from_str("2026-09-11").unwrap();
+        let sales_due = erp_core::common::time::BusinessDate::from_str("2026-09-10").unwrap();
+        let earlier = erp_core::common::time::BusinessDate::from_str("2026-09-09").unwrap();
+        let later = erp_core::common::time::BusinessDate::from_str("2026-09-11").unwrap();
 
         assert!(ensure_expected_delivery_within_sales_due(earlier, sales_due).is_ok());
         assert!(ensure_expected_delivery_within_sales_due(sales_due, sales_due).is_ok());

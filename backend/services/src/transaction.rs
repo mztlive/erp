@@ -5,9 +5,10 @@
 
 use std::{future::Future, pin::Pin};
 
-use database::{AccessControlExt, Transactional};
+use database::AccessControlExt;
 use entities::AuditLog;
 use mongodb::{ClientSession, Database};
+use persistence_core::Transactional;
 
 use crate::errors::Result;
 

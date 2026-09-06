@@ -1,13 +1,7 @@
 //! W13 当前责任任务内的历史回款/销项发票原子登记。
 
-use database::{AccessControlExt, Executor, ReceivableExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, ReceivableExt, WorkItemExt};
 use entities::document_registry::DocumentType;
-use entities::ids::{
-    CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId,
-    SalesInvoiceAllocationId,
-};
-use entities::money::Amount;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CardFundsRegistrationAllocationInput,
     CardFundsRegistrationAllocations, CardFundsRegistrationAllocationsError, CardFundsRegistrationKind,
@@ -17,8 +11,15 @@ use entities::receivable::{
     CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
 };
 use entities::work_item::WorkItemType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId,
+    SalesInvoiceAllocationId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use std::collections::HashMap;
@@ -39,11 +40,12 @@ use super::mapping::{
 use super::{invoice_task, ReceivableService};
 use crate::approval::binding::BindPublishedDefinitionCommand;
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 impl ReceivableService {
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
@@ -464,7 +466,7 @@ impl ReceivableService {
 /// 加载 W13 历史票款登记上下文所需的任务版本与责任人事实。
 struct CardFundsRegistrationContextInput<'a> {
     rbac: SharedRbacService,
-    work_item_id: &'a entities::ids::WorkItemId,
+    work_item_id: &'a erp_core::ids::WorkItemId,
     expected_task_version: u64,
     expected_subject_version: &'a str,
     expected_funds_fact_version: &'a str,
@@ -662,7 +664,7 @@ async fn persist_card_funds_receipt_plan(
 ///
 /// # 约束
 /// 文案与原 `plan_card_funds_receipt_allocations` 一致。
-fn map_plan_error(error: entities::Error) -> Error {
+fn map_plan_error(error: erp_core::Error) -> Error {
     let message = error.to_string();
     if message == "回款金额必须大于零" {
         Error::ValidationError(message)

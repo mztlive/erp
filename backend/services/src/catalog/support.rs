@@ -1,9 +1,10 @@
-use database::{CatalogExt, NoTransaction};
+use database::CatalogExt;
 use entities::catalog::product::Product;
 use entities::catalog::product_brand::ProductBrand;
 use entities::catalog::product_category::ProductCategory;
 use entities::catalog::unit_of_measure::UnitOfMeasure;
 use entities::catalog::{ProductBrandId, UnitOfMeasureId};
+use persistence_core::NoTransaction;
 
 use super::CatalogService;
 use crate::errors::{Error, Result};

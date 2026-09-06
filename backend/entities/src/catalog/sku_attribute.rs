@@ -5,10 +5,10 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::status::EnableStatus;
-use crate::common::stable::StableBase;
-use crate::errors::Result;
-use crate::ids::SkuAttributeId;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::SkuAttributeId;
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
 /// 属性代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -113,7 +113,7 @@ impl SkuAttribute {
     /// 完成 attribute_code/name 的校验与规范化（去首尾空白、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SkuAttributeId`）
+    /// * `id` - 实体主键（`erp_core::ids::SkuAttributeId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -179,8 +179,8 @@ impl SkuAttribute {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::SkuAttributeId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::SkuAttributeId;
 
     fn data() -> SkuAttributeData {
         SkuAttributeData {

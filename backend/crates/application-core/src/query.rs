@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 
 /// 列表排序方向。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,7 +12,7 @@ pub enum SortDir {
 }
 
 /// 按领域白名单归一化列表排序字段与方向。
-pub(crate) fn normalize_sort(
+pub fn normalize_sort(
     sort_by: &Option<String>,
     sort_dir: &Option<String>,
     allowed_fields: &'static [&'static str],
@@ -58,7 +58,7 @@ pub struct PageView<T> {
 }
 
 /// 校验文本去除首尾空白后非空。
-pub(crate) fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
+pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
     if value.trim().is_empty() {
         return Err(validator::ValidationError::new("不能为空白"));
     }
@@ -66,7 +66,7 @@ pub(crate) fn non_blank(value: &str) -> std::result::Result<(), validator::Valid
 }
 
 /// 归一化可选的文本查询条件。
-pub(crate) fn normalized_text(value: Option<&str>) -> Option<String> {
+pub fn normalized_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -74,12 +74,12 @@ pub(crate) fn normalized_text(value: Option<&str>) -> Option<String> {
 }
 
 /// 返回有效页码；未提供时使用第一页。
-pub(crate) fn page_or_default(page: Option<u64>) -> u64 {
+pub fn page_or_default(page: Option<u64>) -> u64 {
     page.unwrap_or(1)
 }
 
 /// 返回分页大小；未提供时使用默认大小。
-pub(crate) fn page_size_or_default(page_size: Option<u32>) -> u32 {
+pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
     page_size.unwrap_or(20).clamp(1, 100)
 }
 

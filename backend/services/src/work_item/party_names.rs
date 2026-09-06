@@ -6,7 +6,8 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, Executor, NoTransaction};
+use database::AccessControlExt;
+use persistence_core::{Executor, NoTransaction};
 
 use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;

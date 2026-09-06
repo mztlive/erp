@@ -13,15 +13,15 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, FileAssetId, SalesOrderId, SalesOrderLineId,
 };
-use crate::money::Quantity;
-use crate::validation::normalize_optional_text;
-use crate::validation::normalize_required_text;
+use erp_core::money::Quantity;
+use erp_core::validation::normalize_optional_text;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 验收单号最大长度。
 const ACCEPTANCE_NO_MAX_LEN: usize = 64;
@@ -177,7 +177,7 @@ impl CustomerAcceptance {
     /// 完成验收单号规范化。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerAcceptanceId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerAcceptanceId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -447,7 +447,7 @@ impl CustomerAcceptanceLine {
     /// 行不可再变更由 P3 按表头状态把关（§6.7）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::CustomerAcceptanceLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::CustomerAcceptanceLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -511,7 +511,7 @@ impl CustomerAcceptanceLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::CustomerAcceptanceId;
+    use erp_core::ids::CustomerAcceptanceId;
     use std::str::FromStr;
 
     fn data() -> CustomerAcceptanceData {

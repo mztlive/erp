@@ -1,21 +1,20 @@
 //! 客户回款单查询、创建、提交审批、撤回与过账编排。
 
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, Transactional,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::ids::{
-    CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, SalesOrderId,
-};
-use entities::money::Amount;
 use entities::receivable::{
     AllocationAction, CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus, ReceiptAllocation,
     ReceivableAccount, ReceivableEntry, ReceivableFundsLedger,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, SalesOrderId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use std::collections::{HashMap, HashSet};
@@ -52,10 +51,12 @@ use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------
@@ -1019,12 +1020,12 @@ pub(super) async fn persist_bound_customer_receipt_document(
 mod customer_receipt_approval_tests {
     use super::{execute_customer_receipt_domain_action, start_customer_receipt_approval, ReceivableService};
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
-    use entities::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
-    use entities::money::Amount;
     use entities::receivable::{
         CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus, PendingReceiptAllocation,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_receipt() -> CustomerReceipt {

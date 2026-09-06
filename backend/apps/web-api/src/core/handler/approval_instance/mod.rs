@@ -8,6 +8,7 @@ pub mod approval_process;
 pub mod error;
 pub mod http;
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -16,7 +17,6 @@ use axum::{
 use entities::document_registry::DocumentType;
 use services::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
 use services::approval::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
-use services::audit::AuditActor;
 
 use crate::{
     app_state::AppState,

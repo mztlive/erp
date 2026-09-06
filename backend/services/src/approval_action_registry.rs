@@ -4,14 +4,14 @@
 //! [`ApprovalDomainActionPort`]；本注册表负责把合同动作路由到所属业务域，
 //! 并强制复用审批运行时持有的唯一事务执行器。
 
-use database::Executor;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::approval::policy::ApprovalDomainAction;
 use crate::approval::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort};
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 审批强类型领域动作注册表。
 pub struct ApprovalActionRegistry {

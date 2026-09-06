@@ -18,14 +18,14 @@ use create::{
 use query::{append_confirmation_actions, read_only_work_item_view};
 
 #[cfg(test)]
-use entities::common::time::Instant;
-#[cfg(test)]
 use entities::legacy_import::{
     confirmation_work_item, ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationStatus,
     LegacyImportBatch, LegacyImportBatchStatus, LegacyImportConfirmation,
 };
 #[cfg(test)]
 use entities::work_item::{WorkItem, WorkItemCloseData};
+#[cfg(test)]
+use erp_core::common::time::Instant;
 
 #[cfg(test)]
 use crate::work_item::WorkItemAllowedAction;

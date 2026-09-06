@@ -3,11 +3,12 @@ use super::invoicing::invoicing_guard;
 use super::settlement::settlement_guard;
 use super::write::{amount_bson, progress_pipeline};
 use super::{PayableAccountFilter, QueryFilter};
-use crate::{NoTransaction, PayableExt, Repository, Transactional};
-use entities::ids::{PayableAccountId, SupplierAccountId};
-use entities::money::Amount;
+use crate::{PayableExt, Repository};
 use entities::payable::{PayableAccount, PayableAccountData, PayableAccountStatus, PayableSourceType};
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson};
+use persistence_core::{NoTransaction, Transactional};
 use std::str::FromStr;
 
 #[test]
@@ -311,7 +312,7 @@ async fn batch_settlement_rejected_rolls_back_whole_transaction() {
         let db_handle = fixture.db().clone();
         let outcome = fixture
             .client()
-            .with_transaction::<_, _, crate::Error>(move |session| {
+            .with_transaction::<_, _, persistence_core::Error>(move |session| {
                 Box::pin(async move {
                     let accounts: Repository<'_, entities::payable::PayableAccount> =
                         Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
@@ -319,9 +320,9 @@ async fn batch_settlement_rejected_rolls_back_whole_transaction() {
                         .apply_settlements_many(&deltas, "tester", session)
                         .await?;
                     if !result.rejected.is_empty() {
-                        return Err(crate::Error::DatabaseError(mongodb::error::Error::custom(
-                            "expected rejection",
-                        )));
+                        return Err(persistence_core::Error::DatabaseError(
+                            mongodb::error::Error::custom("expected rejection"),
+                        ));
                     }
                     Ok(())
                 })
@@ -633,15 +634,15 @@ async fn batch_invoicing_rejected_rolls_back_whole_transaction() {
         let db_handle = fixture.db().clone();
         let outcome = fixture
             .client()
-            .with_transaction::<_, _, crate::Error>(move |session| {
+            .with_transaction::<_, _, persistence_core::Error>(move |session| {
                 Box::pin(async move {
                     let accounts: Repository<'_, entities::payable::PayableAccount> =
                         Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
                     let result = accounts.apply_invoicings_many(&deltas, "tester", session).await?;
                     if !result.rejected.is_empty() {
-                        return Err(crate::Error::DatabaseError(mongodb::error::Error::custom(
-                            "expected rejection",
-                        )));
+                        return Err(persistence_core::Error::DatabaseError(
+                            mongodb::error::Error::custom("expected rejection"),
+                        ));
                     }
                     Ok(())
                 })

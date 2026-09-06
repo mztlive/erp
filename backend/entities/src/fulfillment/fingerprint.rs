@@ -7,7 +7,7 @@
 //! （地基修订候选：将 `hmac`/`sha2` 提升为正式依赖并把本实现下沉到 common/，
 //! 供 D07/D28 等域复用）。
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 密钥上限（HMAC 规范块长度；超过则先对密钥做一次 SHA-256）。
 const HMAC_BLOCK_LEN: usize = 64;

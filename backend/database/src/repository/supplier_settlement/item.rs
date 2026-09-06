@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{item_sort_doc, supplier_settlement_item_projection};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 供应商结算明细列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -15,33 +15,33 @@ pub struct SupplierSettlementItemRow {
     /// 实体主键。
     pub id: String,
     /// 所属结算单。
-    pub statement_id: entities::ids::SupplierSettlementStatementId,
+    pub statement_id: erp_core::ids::SupplierSettlementStatementId,
     /// 供应商子订单。
-    pub supplier_fulfillment_order_id: entities::ids::SupplierFulfillmentOrderId,
+    pub supplier_fulfillment_order_id: erp_core::ids::SupplierFulfillmentOrderId,
     /// 供应商履约明细。
-    pub supplier_fulfillment_item_id: entities::ids::SupplierFulfillmentItemId,
+    pub supplier_fulfillment_item_id: erp_core::ids::SupplierFulfillmentItemId,
     /// 来源快照冻结数量。
-    pub quantity: entities::money::Quantity,
+    pub quantity: erp_core::money::Quantity,
     /// 订单结算金额。
-    pub order_amount: entities::money::Amount,
+    pub order_amount: erp_core::money::Amount,
     /// 运费金额。
-    pub freight_amount: entities::money::Amount,
+    pub freight_amount: erp_core::money::Amount,
     /// 服务费金额。
-    pub service_fee_amount: entities::money::Amount,
+    pub service_fee_amount: erp_core::money::Amount,
     /// 供应商退款金额。
-    pub refund_amount: entities::money::Amount,
+    pub refund_amount: erp_core::money::Amount,
     /// ERP 计算含税金额。
-    pub erp_calculated_amount: entities::money::Amount,
+    pub erp_calculated_amount: erp_core::money::Amount,
     /// ERP 计算不含税金额。
-    pub erp_calculated_net_amount: entities::money::Amount,
+    pub erp_calculated_net_amount: erp_core::money::Amount,
     /// ERP 计算税额。
-    pub erp_calculated_tax_amount: entities::money::Amount,
+    pub erp_calculated_tax_amount: erp_core::money::Amount,
     /// 供应商账单含税金额。
-    pub supplier_billed_amount: entities::money::Amount,
+    pub supplier_billed_amount: erp_core::money::Amount,
     /// 供应商账单不含税金额。
-    pub supplier_billed_net_amount: entities::money::Amount,
+    pub supplier_billed_net_amount: erp_core::money::Amount,
     /// 供应商账单税额。
-    pub supplier_billed_tax_amount: entities::money::Amount,
+    pub supplier_billed_tax_amount: erp_core::money::Amount,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -52,7 +52,7 @@ pub struct SupplierSettlementItemRow {
 #[derive(Debug, Clone)]
 pub struct SupplierSettlementItemFilter {
     /// 所属结算单；`None` 表示不筛选。
-    pub statement_id: Option<entities::ids::SupplierSettlementStatementId>,
+    pub statement_id: Option<erp_core::ids::SupplierSettlementStatementId>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。

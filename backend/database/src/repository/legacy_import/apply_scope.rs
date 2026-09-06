@@ -5,14 +5,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use entities::ids::{LegacyImportBatchId, LegacyImportRowId};
 use entities::legacy_import::{ImportStatus, LegacyImportRow};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use mongodb::bson::doc;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 一次应用请求对应的导入行持久化范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,9 +199,9 @@ fn index_rows(rows: Vec<LegacyImportRow>) -> HashMap<String, LegacyImportRow> {
 #[cfg(test)]
 mod tests {
     use super::{missing_row_ids, pending_outside_filter, unique_row_ids};
-    use entities::ids::{LegacyImportBatchId, LegacyImportRowId};
     use entities::legacy_import::{LegacyImportRow, LegacyImportRowData};
     use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+    use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 
     fn row(id: &str) -> LegacyImportRow {
         LegacyImportRow::new(
@@ -276,7 +276,7 @@ mod tests {
             .apply_row_scope(
                 &LegacyImportBatchId::new("batch-1"),
                 &[],
-                &mut crate::NoTransaction,
+                &mut persistence_core::NoTransaction,
             )
             .await
             .unwrap();
@@ -288,8 +288,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn apply_row_scope_reports_missing_soft_deleted_and_pending_outside() {
+        use crate::ensure_indexes;
         use crate::repository::extensions::LegacyImportExt;
-        use crate::{ensure_indexes, NoTransaction};
+        use persistence_core::NoTransaction;
         use test_support::{require_mongo, TestDb};
 
         require_mongo!(async {

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::query::non_blank;
+use application_core::non_blank;
 
 use super::query::TotalsView;
 use super::SupplySourceType;

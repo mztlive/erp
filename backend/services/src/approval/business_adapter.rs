@@ -605,7 +605,7 @@ mod tests {
         targets: &[&str],
     ) -> DataScope {
         DataScope::new(
-            entities::ids::DataScopeId::new(id),
+            erp_core::ids::DataScopeId::new(id),
             entities::access_control::DataScopeData {
                 subject_type,
                 subject_id: subject_id.to_string(),

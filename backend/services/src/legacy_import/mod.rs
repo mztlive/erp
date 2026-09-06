@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 创建批次（批次 + 来源行 + D04 后台任务 + 审计日志）→ 跨集合，
-//!   `database::Transactional::with_transaction` 内经 `LegacyImportRepository::create_batch_with_rows`
+//!   `persistence_core::Transactional::with_transaction` 内经 `LegacyImportRepository::create_batch_with_rows`
 //!   与 D04/D02 仓储写入，保证「批次 + 明细 + 后台任务」原子可见；
 //! - 创建确认任务（确认 + `work_item` + 批次摘要 + 审计日志）→ 跨集合事务；
 //! - 完成确认（确认决策 + `workflow_action` + 批次 + 任务终态 + 稳定收据）

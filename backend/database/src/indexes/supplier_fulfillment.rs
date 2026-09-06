@@ -13,7 +13,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SupplierFulfillmentExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `supplier_fulfillment_order` 集合名。
 pub(crate) const SUPPLIER_FULFILLMENT_ORDERS: &str =

@@ -14,14 +14,14 @@ use std::collections::{HashMap, HashSet};
 use rust_decimal::Decimal;
 
 use crate::catalog::{Product, ProductKind, Sku};
-use crate::errors::{Error, Result};
-use crate::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
 use crate::inventory::StockReservation;
-use crate::money::Quantity;
 use crate::sales_order::{
     LineType, ProcurementCoverageSummary, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
 };
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 use super::allocation::PurchaseLineSalesAllocation;
 use super::order::{PurchaseOrder, PurchaseOrderStatus};
@@ -593,22 +593,22 @@ mod tests {
     use crate::catalog::product::ProductData;
     use crate::catalog::sku::SkuData;
     use crate::catalog::{EnableStatus, ListingStatus, Product, Sku};
-    use crate::common::revision::RevisionBase;
-    use crate::common::time::Instant;
-    use crate::ids::{
+    use crate::inventory::stock_reservation::{
+        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
+    };
+    use crate::sales_order::revision::{
+        SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
+    };
+    use crate::sales_order::{LineType, ProcurementCoverageSummary, RevisionSource};
+    use erp_core::common::revision::RevisionBase;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
         ProductId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseOrderRevisionId,
         PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
         SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId, StockReservationId,
         SupplierAccountId, UnitOfMeasureId, WarehouseId,
     };
-    use crate::inventory::stock_reservation::{
-        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
-    };
-    use crate::money::{Amount, Quantity, Rate};
-    use crate::sales_order::revision::{
-        SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
-    };
-    use crate::sales_order::{LineType, ProcurementCoverageSummary, RevisionSource};
+    use erp_core::money::{Amount, Quantity, Rate};
 
     use super::{
         add_covered, build_procurement_coverage, coverage_summary, current_revision_ids,
@@ -716,13 +716,13 @@ mod tests {
             base: entity_core::BaseModel::new(format!("goods-{revision_line_id}")),
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new(sku_id),
-            sku_revision_id: crate::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
+            sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
             welfare_scenario: None,
             service_region: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str(quantity).unwrap(),
             base_unit_code: "件".to_string(),
-            unit_price_gross: crate::money::UnitPrice::from_str("5").unwrap(),
+            unit_price_gross: erp_core::money::UnitPrice::from_str("5").unwrap(),
         }
     }
 
@@ -770,16 +770,16 @@ mod tests {
                 purchase_order_submission_id: PurchaseOrderSubmissionId::new(submission_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,
-                procurement_confirmation_line_id: Some(crate::ids::ProcurementConfirmationLineId::new(
+                procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "pcl-1",
                 )),
                 sku_id: Some(SkuId::new("sku-1")),
-                sku_revision_id: Some(crate::ids::SkuRevisionId::new("skur-1")),
+                sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("2").unwrap()),
                 base_unit_code: Some("件".to_string()),
-                unit_cost_gross: Some(crate::money::UnitPrice::from_str("5").unwrap()),
+                unit_cost_gross: Some(erp_core::money::UnitPrice::from_str("5").unwrap()),
                 gross_amount: Amount::from_str("10").unwrap(),
                 net_amount: Amount::from_str("10").unwrap(),
                 tax_amount: Amount::from_str("0").unwrap(),
@@ -807,16 +807,16 @@ mod tests {
                 purchase_order_revision_id: PurchaseOrderRevisionId::new(revision_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,
-                procurement_confirmation_line_id: Some(crate::ids::ProcurementConfirmationLineId::new(
+                procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "pcl-1",
                 )),
                 sku_id: Some(SkuId::new("sku-1")),
-                sku_revision_id: Some(crate::ids::SkuRevisionId::new("skur-1")),
+                sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("2").unwrap()),
                 base_unit_code: Some("件".to_string()),
-                unit_cost_gross: Some(crate::money::UnitPrice::from_str("5").unwrap()),
+                unit_cost_gross: Some(erp_core::money::UnitPrice::from_str("5").unwrap()),
                 gross_amount: Amount::from_str("10").unwrap(),
                 net_amount: Amount::from_str("10").unwrap(),
                 tax_amount: Amount::from_str("0").unwrap(),

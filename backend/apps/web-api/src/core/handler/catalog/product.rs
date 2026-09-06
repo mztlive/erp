@@ -4,12 +4,12 @@
 //! 直接复用 `services::catalog` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 商品字典接口见同目录 `mod.rs`。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use entities::file_asset::SensitivityClass;
-use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView,
     ProductListParams, ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView,

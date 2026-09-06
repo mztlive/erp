@@ -4,10 +4,10 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::{Error, Result};
-use crate::ids::{ExternalIdentityMapId, LegacyImportBatchId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 来源对象类型最大长度（客户、供应商、SPU、SKU、卡券销售等）。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
@@ -231,7 +231,7 @@ impl LegacyImportRow {
     /// （去首尾空白、非空、长度上限）；三个处理维度均从待处理状态开始。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::LegacyImportRowId`）
+    /// * `id` - 实体主键（`erp_core::ids::LegacyImportRowId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -239,7 +239,7 @@ impl LegacyImportRow {
     ///
     /// # 错误
     /// 当必填文本为空或超长时返回错误。
-    pub fn new(id: crate::ids::LegacyImportRowId, data: LegacyImportRowData) -> Result<Self> {
+    pub fn new(id: erp_core::ids::LegacyImportRowId, data: LegacyImportRowData) -> Result<Self> {
         let source_object_type = normalize_required_text(
             data.source_object_type,
             "来源对象类型不能为空",
@@ -577,8 +577,8 @@ impl LegacyImportRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::ensure_transition;
-    use crate::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
+    use erp_core::common::state::ensure_transition;
+    use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
 
     fn row_data() -> LegacyImportRowData {
         LegacyImportRowData {

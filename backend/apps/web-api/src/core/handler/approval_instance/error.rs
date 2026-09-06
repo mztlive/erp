@@ -2,12 +2,13 @@
 //!
 //! Handler 不得把 BPM 或数据库错误直接暴露给客户端；只识别服务层结构化稳定码。
 
+use application_core::ErrorClass;
 use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde_json::Value;
-use services::{ErrorClass, ErrorCode};
+use services::ErrorCode;
 use uuid::Uuid;
 
 use crate::core::{errors::Error as HttpError, response::ApiResponse};

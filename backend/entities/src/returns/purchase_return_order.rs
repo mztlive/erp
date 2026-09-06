@@ -7,10 +7,10 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::errors::{Error, Result};
-use crate::ids::{PurchaseOrderId, PurchaseReturnOrderId, SalesReturnCaseId};
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{PurchaseOrderId, PurchaseReturnOrderId, SalesReturnCaseId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 采购退货单号最大长度。
 const RETURN_NO_MAX_LEN: usize = 64;
@@ -172,7 +172,7 @@ impl PurchaseReturnOrder {
     /// 完成采购退货单号的 trim/非空/长度校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseReturnOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseReturnOrderId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///

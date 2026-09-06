@@ -17,12 +17,13 @@
 
 use std::str::FromStr;
 
-use database::{Executor, NoTransaction, SupplierSettlementExt};
-use entities::money::Amount;
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
+use erp_core::money::Amount;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 use sha2::{Digest, Sha256};
 
 use crate::errors::{Error, Result};
@@ -145,7 +146,7 @@ pub(super) async fn load_statement_differences(
 ) -> Result<Vec<SupplierSettlementDifference>> {
     let item_ids = items
         .iter()
-        .map(|item| entities::ids::SupplierSettlementItemId::new(item.base.id.as_str()))
+        .map(|item| erp_core::ids::SupplierSettlementItemId::new(item.base.id.as_str()))
         .collect::<Vec<_>>();
     db.supplier_settlement_differences()
         .list_by_statement_item_ids(&item_ids, executor)
@@ -236,14 +237,8 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
-    use crate::audit::AuditActor;
-    use database::{NoTransaction, SupplierSettlementExt};
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId, WorkItemId,
-    };
-    use entities::money::Quantity;
+    use application_core::AuditActor;
+    use database::SupplierSettlementExt;
     use entities::supplier_settlement::{
         SettlementCostDelta, SettlementDifferenceStatus, SettlementDifferenceType,
         SupplierSettlementDifferenceData, SupplierSettlementDifferenceEvidence,
@@ -251,7 +246,14 @@ mod tests {
         SupplierSettlementStatementData,
     };
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
-    use entities::AccountKind;
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId, WorkItemId,
+    };
+    use erp_core::money::Quantity;
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
     use test_support::{require_mongo, TestDb};
 
     fn sample_statement() -> SupplierSettlementStatement {

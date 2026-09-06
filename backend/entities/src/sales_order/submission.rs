@@ -9,16 +9,16 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
     SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId,
 };
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::amount_validation::sum_line_amounts;
 use super::amount_validation::validate_amount_triple;
@@ -269,7 +269,7 @@ impl SalesOrderSubmission {
     /// 去重并断言行类型与业务性质一致（§6.4/§6.5 跨行断言）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderSubmissionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderSubmissionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -579,7 +579,7 @@ pub struct SalesOrderSubmissionLine {
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
     /// 精确 SKU 修订。
-    pub sku_revision_id: Option<crate::ids::SkuRevisionId>,
+    pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
@@ -612,11 +612,11 @@ impl SalesOrderSubmissionLine {
     /// 创建提交行。
     ///
     /// 完成文本字段校验与规范化，行金额三元组按
-    /// [`crate::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
+    /// [`erp_core::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
     /// 校验面额小计、成交金额与配赠金额一致性。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderSubmissionLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesOrderSubmissionLineId`）
     /// * `submission_id` - 所属提交
     /// * `data` - 创建数据
     ///
@@ -777,8 +777,8 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
-    use crate::money::Quantity;
+    use erp_core::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
+    use erp_core::money::Quantity;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

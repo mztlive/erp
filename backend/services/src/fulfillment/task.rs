@@ -4,7 +4,7 @@
 //! 责任人或仓库分操作经办人。任务创建、活动记录和完成必须复用调用方事务，
 //! 禁止责任池、创建人或任意默认仓库回退。
 
-use database::{AccessControlExt, Executor, PurchaseOrderExt, SalesOrderExt, WarehouseExt, WorkItemExt};
+use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt, WarehouseExt, WorkItemExt};
 use entities::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
@@ -14,6 +14,7 @@ use entities::work_item::{
 };
 use entities::{Permission, PermissionSet};
 use id_generator::next_id;
+use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
@@ -188,7 +189,7 @@ pub(crate) async fn ensure_fulfillment_task(
     )
     .await?;
     let task = WorkItem::new_with_responsibility_key(
-        entities::ids::WorkItemId::new(next_id()),
+        erp_core::ids::WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: WorkItemType::FulfillmentOperation,
             business_object_type: object.business_object_type().to_string(),
@@ -237,7 +238,7 @@ pub(crate) async fn record_fulfillment_activity(
     )
     .await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
-    task.record_activity(actor_id, entities::common::time::Instant::now())?;
+    task.record_activity(actor_id, erp_core::common::time::Instant::now())?;
     ensure_current_owner_execution_access(db, &task, actor_id, executor).await?;
     db.work_items().update(&mut task, executor).await?;
     Ok(())
@@ -270,7 +271,7 @@ pub(crate) async fn complete_fulfillment_task(
     )
     .await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
-    task.complete_by_domain_command(actor_id, entities::common::time::Instant::now())?;
+    task.complete_by_domain_command(actor_id, erp_core::common::time::Instant::now())?;
     ensure_current_owner_execution_access(db, &task, actor_id, executor).await?;
     db.work_items().update(&mut task, executor).await?;
     Ok(())
@@ -403,7 +404,7 @@ async fn resolve_task_owner(
 
 async fn warehouse_owner(
     db: &mongodb::Database,
-    warehouse_id: &entities::ids::WarehouseId,
+    warehouse_id: &erp_core::ids::WarehouseId,
     operation: WarehouseFulfillmentOperation,
     executor: &mut dyn Executor,
 ) -> Result<FulfillmentTaskOwner> {
@@ -433,7 +434,7 @@ async fn purchase_order_owner(
     let order = db
         .purchase_orders()
         .find_by_id(
-            &entities::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
+            &erp_core::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
             executor,
         )
         .await?
@@ -512,7 +513,7 @@ async fn ensure_current_owner_execution_access(
 
 #[cfg(test)]
 mod tests {
-    use entities::ids::WorkItemId;
+    use erp_core::ids::WorkItemId;
 
     use super::{ensure_frozen_identity_fields, AssignmentSource, WorkItem, WorkItemData};
     use entities::work_item::{WorkItemPriority, WorkItemType};

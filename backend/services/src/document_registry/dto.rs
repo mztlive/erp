@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 单据注册列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const BUSINESS_DOCUMENT_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -20,7 +20,7 @@ pub(crate) const BUSINESS_DOCUMENT_SORT_FIELDS: &[&str] = &["created_at", "updat
 pub(crate) const WORKFLOW_ACTION_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,14 +47,14 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
 /// 不生效，空编号需要按「空白视为空」拒绝，落入 HTTP 400）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 单据注册创建请求（HTTP 契约：`{ id?, document_type, document_no }`）。
 ///
@@ -512,7 +512,7 @@ mod tests {
         let data = request.into_data();
         assert!(
             entities::document_registry::DocumentRelation::new(
-                entities::ids::DocumentRelationId::new("rel-1"),
+                erp_core::ids::DocumentRelationId::new("rel-1"),
                 data,
             )
             .is_err(),

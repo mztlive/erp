@@ -5,20 +5,18 @@
 //! 权限键 `resource` 用域内对象单数名；人工动作只暴露 W29 强命令，责任迁移和
 //! 关闭由 W02 责任 API 承担。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::{
-    audit::AuditActor,
-    integration_ops::{
-        CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
-        DifferenceView, DirectReconciliationCommand, DirectReconciliationResult, ErrorTaskDetailView,
-        ErrorTaskListParams, ErrorTaskView, InboxMessageListParams, InboxMessageListView, InboxMessageView,
-        IntegrationOpsService, IntegrationTaskActionCommand, IntegrationTaskActionResult,
-        IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView,
-        RegisterInboxMessageRequest, WriteBackInboxResultRequest,
-    },
+use services::integration_ops::{
+    CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
+    DifferenceView, DirectReconciliationCommand, DirectReconciliationResult, ErrorTaskDetailView,
+    ErrorTaskListParams, ErrorTaskView, InboxMessageListParams, InboxMessageListView, InboxMessageView,
+    IntegrationOpsService, IntegrationTaskActionCommand, IntegrationTaskActionResult,
+    IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView, RegisterInboxMessageRequest,
+    WriteBackInboxResultRequest,
 };
 
 use crate::{

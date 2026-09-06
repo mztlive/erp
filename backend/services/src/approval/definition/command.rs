@@ -10,15 +10,17 @@ use bpm::model::{
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
 use database::repository::bpm::{CasWriteOutcome, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX};
-use database::{AccessControlExt, BpmExt, Executor, NoTransaction, Transactional};
+use database::{AccessControlExt, BpmExt};
 use entities::document_registry::DocumentType;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::super::definition_dto::{DefinitionDetailView, DefinitionNodeRequest, DraftSource};
 use super::super::policy::{require_process_required, ProcessRequiredApprovalPolicy};
@@ -708,9 +710,9 @@ pub(super) async fn ensure_definition_admin_permission(
 }
 
 /// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。
-pub(super) fn mark_receipt_duplicate(error: database::Error) -> Error {
+pub(super) fn mark_receipt_duplicate(error: persistence_core::Error) -> Error {
     match error {
-        error @ database::Error::DuplicateKey(_)
+        error @ persistence_core::Error::DuplicateKey(_)
             if error.duplicate_index_name() == Some(APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX) =>
         {
             Error::ReceiptDuplicate(error)
@@ -762,7 +764,7 @@ mod tests {
     use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
     use serde_json::json;
 
-    fn duplicate_key_error(index: Option<&str>) -> database::Error {
+    fn duplicate_key_error(index: Option<&str>) -> persistence_core::Error {
         let message = index.map_or_else(
             || "E11000 duplicate key".to_string(),
             |index| format!("E11000 duplicate key index: {index} dup key"),
@@ -775,7 +777,7 @@ mod tests {
         }))
         .expect("duplicate fixture");
         let mongo: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
-        database::Error::DuplicateKey(mongo)
+        persistence_core::Error::DuplicateKey(mongo)
     }
 
     /// 四条定义命令固定 v3 golden，Create/Replace domain 隔离且完整载荷可区分。

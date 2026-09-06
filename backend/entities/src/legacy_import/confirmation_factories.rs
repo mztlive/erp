@@ -7,9 +7,9 @@
 use crate::document_registry::{
     BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
-use crate::errors::Result;
-use crate::ids::WorkItemId;
 use crate::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use erp_core::ids::WorkItemId;
+use erp_core::Result;
 
 use super::{ConfirmationDecision, ConfirmationScope, LegacyImportBatchId, LegacyImportConfirmation};
 
@@ -102,7 +102,7 @@ pub fn confirmation_workflow_action(
             confirmation.reason_code.clone(),
         ),
         None => {
-            return Err(crate::errors::Error::from("导入确认动作缺少领域决策"));
+            return Err(erp_core::Error::from("导入确认动作缺少领域决策"));
         }
     };
     WorkflowAction::new(
@@ -123,9 +123,9 @@ pub fn confirmation_workflow_action(
 mod tests {
     use super::{confirmation_work_item, confirmation_workflow_action};
     use crate::document_registry::WorkflowActionType;
-    use crate::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
     use crate::legacy_import::LegacyImportConfirmationData;
     use crate::work_item::WorkItemType;
+    use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
 
     fn confirmation(
         decision: crate::legacy_import::ConfirmationDecision,
@@ -150,7 +150,7 @@ mod tests {
                     .decide(
                         decision,
                         "user-1",
-                        crate::common::time::Instant::from_unix_secs(1_700_000_000),
+                        erp_core::common::time::Instant::from_unix_secs(1_700_000_000),
                         None,
                         Some("确认".to_string()),
                     )
@@ -161,7 +161,7 @@ mod tests {
                     .decide(
                         decision,
                         "user-1",
-                        crate::common::time::Instant::from_unix_secs(1_700_000_000),
+                        erp_core::common::time::Instant::from_unix_secs(1_700_000_000),
                         Some("REWORK".to_string()),
                         None,
                     )

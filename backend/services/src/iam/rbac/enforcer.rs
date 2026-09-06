@@ -4,8 +4,9 @@ use std::{
 };
 
 use casbin::{CoreApi, DefaultModel, Enforcer};
-use database::{Executor, NoTransaction};
-use entities::{AccountKind, Permission};
+use entities::Permission;
+use erp_core::AccountKind;
+use persistence_core::{Executor, NoTransaction};
 use tokio::sync::RwLock;
 
 use super::{

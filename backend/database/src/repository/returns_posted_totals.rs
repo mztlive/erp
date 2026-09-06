@@ -3,17 +3,17 @@
 //! 草稿与审批中不占正式额度，已冲正单据不再计入；四个聚合均使用 Decimal128
 //! `$sum`，不得加载完整实体后在内存折叠。
 
-use entities::ids::{CustomerReceiptId, SupplierPaymentId};
-use entities::money::Amount;
 use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{CustomerReceiptId, SupplierPaymentId};
+use erp_core::money::Amount;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
 use super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 已过账金额聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]

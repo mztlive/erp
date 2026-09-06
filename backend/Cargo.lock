@@ -143,6 +143,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "application-core"
+version = "0.1.0"
+dependencies = [
+ "erp-core",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1054,6 +1069,7 @@ dependencies = [
  "clap",
  "config",
  "database",
+ "persistence-core",
  "rpassword",
  "services",
  "thiserror 2.0.20",
@@ -1397,14 +1413,17 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 name = "database"
 version = "0.1.0"
 dependencies = [
+ "application-core",
  "async-trait",
  "bpm",
  "casbin",
  "chrono",
  "entities",
  "entity-core",
+ "erp-core",
  "futures-util",
  "mongodb",
+ "persistence-core",
  "regex",
  "serde",
  "test-support",
@@ -1584,12 +1603,14 @@ dependencies = [
 name = "entities"
 version = "0.1.0"
 dependencies = [
+ "application-core",
  "argon2",
  "bpm",
  "bson",
  "chrono",
  "entity-core",
  "entity-macros",
+ "erp-core",
  "hex",
  "hmac 0.13.0",
  "md5",
@@ -1624,6 +1645,22 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "erp-core"
+version = "0.1.0"
+dependencies = [
+ "bson",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "regex",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "validator",
+]
 
 [[package]]
 name = "errno"
@@ -2368,8 +2405,8 @@ name = "id-generator"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "database",
  "mongodb",
+ "persistence-core",
  "serde",
  "thiserror 2.0.20",
  "tokio",
@@ -3135,6 +3172,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.4",
+]
+
+[[package]]
+name = "persistence-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "entity-core",
+ "futures-util",
+ "mongodb",
+ "regex",
+ "serde",
+ "thiserror 2.0.20",
+ "tracing",
 ]
 
 [[package]]
@@ -3996,16 +4048,19 @@ name = "services"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "application-core",
  "base64 0.23.1",
  "bpm",
  "casbin",
  "chrono",
  "database",
  "entities",
+ "erp-core",
  "hex",
  "hmac 0.13.0",
  "id-generator",
  "mongodb",
+ "persistence-core",
  "regex",
  "rust_decimal",
  "serde",
@@ -4328,6 +4383,7 @@ dependencies = [
  "axum",
  "chrono",
  "entities",
+ "erp-core",
  "hmac 0.12.1",
  "jwt",
  "mongodb",
@@ -5154,11 +5210,13 @@ dependencies = [
 name = "web-api"
 version = "0.1.0"
 dependencies = [
+ "application-core",
  "axum",
  "chrono",
  "config",
  "database",
  "entities",
+ "erp-core",
  "hmac 0.12.1",
  "id-generator",
  "jwt",
@@ -5167,6 +5225,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "permission-macros",
+ "persistence-core",
  "serde",
  "serde_json",
  "services",

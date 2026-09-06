@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::errors::{Error, Result};
-use crate::ids::{PayableAccountId, SupplierAccountId};
-use crate::money::Amount;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use erp_core::money::Amount;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源单据 ID 最大长度。
 const DOCUMENT_ID_MAX_LEN: usize = 128;
@@ -168,7 +168,7 @@ impl PayableAccount {
     /// `open_total`、`open_invoiceable_total` 与 `status`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PayableAccountId`）
+    /// * `id` - 实体主键（`erp_core::ids::PayableAccountId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -315,7 +315,7 @@ fn derive_status(open_total: Amount, settled_total: Amount) -> PayableAccountSta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn data() -> PayableAccountData {

@@ -2,28 +2,29 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `extensions::DocumentRegistryExt`
 //! 关联常量导入（conventions §4.3）。
 //!
 //! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
 
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
     WorkflowAction, WorkflowActionType,
 };
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
+use erp_core::common::time::Instant;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
-use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Error, Result};
+use super::{PageResult, Pagination, QueryFilter, Repository};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Error, Result};
 
 /// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -338,7 +339,7 @@ impl<'a> Repository<'a, BusinessDocument> {
     /// 始终最多一行，由 `uk_business_documents_id` 仲裁；非空
     /// `(document_type, document_no)` 由部分唯一索引 `uk_business_documents_identity`
     /// 承担并发仲裁。已存在同 ID 的注册视为幂等成功并返回已存在行；
-    /// 同身份但 ID 不同的重复注册透出 [`crate::Error::DuplicateKey`]。
+    /// 同身份但 ID 不同的重复注册透出 [`persistence_core::Error::DuplicateKey`]。
     ///
     /// 本方法采用「先插后查」：唯一索引保证并发下同 ID 最多一条注册行，不存在
     /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
@@ -355,7 +356,7 @@ impl<'a> Repository<'a, BusinessDocument> {
     /// 同 ID 的幂等命中，返回已存在的注册行。
     ///
     /// # 错误
-    /// 同身份不同 ID（含已软删除身份）写入时返回 [`crate::Error::DuplicateKey`]；
+    /// 同身份不同 ID（含已软删除身份）写入时返回 [`persistence_core::Error::DuplicateKey`]；
     /// 其他 MongoDB 写入或查询失败时返回错误。
     pub async fn register(
         &self,
@@ -828,8 +829,8 @@ mod tests {
     use crate::repository::bpm::{
         assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome,
     };
-    use entities::common::time::Instant;
     use entities::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
+    use erp_core::common::time::Instant;
     use mongodb::bson::doc;
 
     #[test]

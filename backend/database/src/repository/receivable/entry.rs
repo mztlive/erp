@@ -1,14 +1,14 @@
-use entities::common::time::BusinessDate;
-use entities::ids::{ReceivableAccountId, ReceivableEntryId};
 use entities::receivable::{ReceivableEntry, ReceivableEntryOffset, ReceivableFundsReview};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
 use super::super::Repository;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 应收账户最早到期日聚合行。
 #[derive(Debug, Deserialize)]

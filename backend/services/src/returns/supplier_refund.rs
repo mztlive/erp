@@ -33,30 +33,30 @@ use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PayableExt, ReturnsExt, SupplierExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use application_core::AuditActor;
+use database::{AccessControlExt, DocumentRegistryExt, PayableExt, ReturnsExt, SupplierExt};
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
-use entities::ids::{
-    PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierAccountId, SupplierPaymentId,
-    SupplierRefundId,
-};
-use entities::money::Amount;
 use entities::payable::{
     AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableEntry,
     PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType, PaymentAllocation,
     PaymentAllocationData, SupplierPaymentStatus,
 };
 use entities::returns::{CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierAccountId, SupplierPaymentId,
+    SupplierRefundId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 impl ReturnsService {
@@ -989,7 +989,7 @@ async fn revert_supplier_refund_settlement(
 /// 分录字段校验失败时返回错误。
 fn build_decrease_entry(
     refund: &SupplierRefund,
-    payable_account_id: &entities::ids::PayableAccountId,
+    payable_account_id: &erp_core::ids::PayableAccountId,
 ) -> Result<PayableEntry> {
     Ok(PayableEntry::new(
         PayableEntryId::new(next_id()),
@@ -998,7 +998,7 @@ fn build_decrease_entry(
             entry_type: PayableEntryType::SupplierRefund,
             direction: PayableEntryDirection::Decrease,
             amount: refund.amount,
-            due_date: entities::common::time::BusinessDate::today(),
+            due_date: erp_core::common::time::BusinessDate::today(),
             source_fact_type: "supplier_refund".to_string(),
             source_document_id: refund.base.id.clone(),
             source_revision_id: refund.base.id.clone(),
@@ -1046,10 +1046,10 @@ async fn persist_decrease_offset(
 mod supplier_refund_approval_tests {
     use super::{execute_supplier_refund_domain_action, start_supplier_refund_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
-    use entities::ids::{SupplierAccountId, SupplierPaymentId, SupplierRefundId};
-    use entities::money::Amount;
     use entities::returns::{SupplierRefund, SupplierRefundData, SupplierRefundStatus};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierAccountId, SupplierPaymentId, SupplierRefundId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_refund() -> SupplierRefund {

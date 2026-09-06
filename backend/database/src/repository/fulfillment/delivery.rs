@@ -1,17 +1,18 @@
 //! `delivery` 发货单仓储：列表投影查询与按物流单号查询。
 
-use entities::common::time::Instant;
 use entities::fulfillment::{Delivery, DeliveryState, DeliveryType};
-use entities::ids::{PurchaseOrderId, SalesOrderId, WarehouseId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseOrderId, SalesOrderId, WarehouseId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 发货单排序白名单（查询与测试共用）。
 const DELIVERY_SORT_FIELDS: &[&str] = &["created_at", "shipped_at"];

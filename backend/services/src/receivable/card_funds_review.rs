@@ -1,12 +1,7 @@
 //! W13 卡券票款正式复核命令、岗位分离与复核链匹配。
 
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, FileAssetExt, NoTransaction, ReceivableExt,
-    Transactional, WorkItemExt,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt, ReceivableExt, WorkItemExt};
 use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
-use entities::ids::{BusinessDocumentId, ReceivableAccountId, ReceivableFundsReviewId, WorkflowActionId};
 use entities::receivable::{
     AccountReviewStatus, CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
     CustomerReceiptStatus, EntityCardFundsReviewConclusion, EntityCardFundsReviewResult,
@@ -14,8 +9,11 @@ use entities::receivable::{
     ReceivableFundsReviewChain, ReceivableFundsReviewData, ReviewResult, CARD_FUNDS_REVIEW_ACTION,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::{BusinessDocumentId, ReceivableAccountId, ReceivableFundsReviewId, WorkflowActionId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use std::collections::HashMap;
@@ -36,9 +34,10 @@ use super::mapping::{
     parse_task_version, CardFundsSnapshot,
 };
 use super::{card_funds_task, ReceivableService};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 impl ReceivableService {
     /// 以 W13 强类型领域命令完成卡券票款正式复核。
@@ -320,7 +319,7 @@ impl ReceivableService {
         &self,
         audit_id: &str,
         expected_fingerprint: &str,
-        work_item_id: &entities::ids::WorkItemId,
+        work_item_id: &erp_core::ids::WorkItemId,
     ) -> Result<Option<CompleteCardFundsReviewResult>> {
         let Some(audit) = self
             .db
@@ -377,7 +376,7 @@ impl ReceivableService {
     async fn ensure_legacy_rejected_card_funds_follow_up(
         &self,
         review_id: &str,
-        work_item_id: &entities::ids::WorkItemId,
+        work_item_id: &erp_core::ids::WorkItemId,
         account_id: &str,
     ) -> Result<WorkItem> {
         let db = self.db.clone();
@@ -778,11 +777,11 @@ fn map_entity_conclusion(conclusion: CardFundsReviewConclusion) -> EntityCardFun
 
 #[cfg(test)]
 mod card_funds_review_tests {
-    use entities::common::time::Instant;
     use entities::file_asset::{
         ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
     };
-    use entities::ids::{FileAssetId, ReceivableAccountId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{FileAssetId, ReceivableAccountId};
 
     use super::super::card_funds_decision::{
         canonical_evidence, validate_evidence_assets, validated_from_dto,

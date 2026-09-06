@@ -1,24 +1,26 @@
-use database::{AccessControlExt, InventoryExt, Transactional, WarehouseExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, InventoryExt, WarehouseExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::ids::{StockAdjustmentId, StockAdjustmentLineId};
 use entities::inventory::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentUpdate,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Transactional;
 use validator::Validate;
 
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::adapter::document_approval_view_with_history;
 use super::authorization::inventory_authorization_with_executor;
@@ -428,9 +430,9 @@ fn build_adjustment_lines(
 #[cfg(test)]
 mod tests {
     use super::{build_adjustment_lines, StockAdjustmentLineInput};
-    use entities::ids::{SkuId, StockAdjustmentId};
     use entities::inventory::{AdjustmentReasonType, MovementDirection};
-    use entities::money::Quantity;
+    use erp_core::ids::{SkuId, StockAdjustmentId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     #[test]

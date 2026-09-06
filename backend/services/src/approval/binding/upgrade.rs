@@ -2,8 +2,7 @@ use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ModelError;
 use bpm::model::{ApprovalCommandReceipt, Timestamp};
 use database::repository::bpm::DefinitionGraph;
-use database::{AccessControlExt, BpmExt, DocumentRegistryExt, Executor};
-use entities::common::time::Instant;
+use database::{AccessControlExt, BpmExt, DocumentRegistryExt};
 use entities::document_registry::business_document::{
     ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
 };
@@ -11,11 +10,14 @@ use entities::document_registry::workflow_action::ApprovalBindingActionContext;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::Executor;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::super::execution::idempotency::{payload_conflict_error, ReceiptBranch};
 use super::super::execution::{

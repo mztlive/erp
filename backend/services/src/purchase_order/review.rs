@@ -3,35 +3,34 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::{
-    AccessControlExt, CostExt, Executor, FulfillmentExt, NoTransaction, PayableExt, PurchaseOrderExt,
-    Transactional,
-};
-use entities::common::source::SourceType;
-use entities::common::time::Instant;
+use database::{AccessControlExt, CostExt, FulfillmentExt, PayableExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
     PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
 };
-use entities::ids::{
-    CostEntryId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId,
-    SalesOrderLineId,
-};
-use entities::money::Quantity;
 use entities::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision,
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use entities::work_item::WorkItemStatus;
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CostEntryId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId,
+    SalesOrderLineId,
+};
+use erp_core::money::Quantity;
 use id_generator::next_id;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::allocation_maintenance::{persist_current_sales_allocations, prepare_current_sales_allocations};
 use super::dto::PurchaseReviewResult;
 use super::shared::{zero_amount, zero_rate};
 use super::PurchaseOrderService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl PurchaseOrderService {
     /// 最终通过并生效：形成采购版本、应付与成本事实。
@@ -167,12 +166,12 @@ impl PurchaseOrderService {
         let due_date = submission
             .payment_term_snapshot
             .payable_due_date(
-                entities::common::time::BusinessDate::today(),
+                erp_core::common::time::BusinessDate::today(),
                 expected_delivery_on,
             )
             .map_err(Error::Logic)?;
         let account = entities::payable::PayableAccount::new(
-            entities::ids::PayableAccountId::new(next_id()),
+            erp_core::ids::PayableAccountId::new(next_id()),
             entities::payable::PayableAccountData {
                 source_document_id: order.base.id.clone(),
                 supplier_id: order.supplier_id.clone(),
@@ -411,7 +410,7 @@ async fn create_receipt_draft_for_order(
         receipt_id.clone(),
         PurchaseReceiptData {
             receipt_no: crate::fulfillment::document_number::next_purchase_receipt_no(db).await?,
-            purchase_order_id: entities::ids::PurchaseOrderId::new(order.base.id.clone()),
+            purchase_order_id: erp_core::ids::PurchaseOrderId::new(order.base.id.clone()),
             warehouse_id,
         },
     )?;
@@ -428,7 +427,7 @@ async fn create_receipt_draft_for_order(
                 PurchaseReceiptLineData {
                     purchase_receipt_id: receipt_id.clone(),
                     line_no: (index + 1) as u32,
-                    purchase_order_revision_line_id: entities::ids::PurchaseOrderRevisionLineId::new(
+                    purchase_order_revision_line_id: erp_core::ids::PurchaseOrderRevisionLineId::new(
                         line.base.id.clone(),
                     ),
                     received_quantity: quantity,

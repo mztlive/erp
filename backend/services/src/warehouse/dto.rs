@@ -8,17 +8,17 @@
 //! source_registry、D10 catalog 同构；抽取到冻结的 `services/src/query.rs`
 //! 属地基修订候选（见域报告）。
 
-use entities::common::time::BusinessDate;
-use entities::ids::{SkuId, WarehouseId};
-use entities::money::Quantity;
 use entities::warehouse::status::EnableStatus;
 use entities::warehouse::warehouse_entity::Warehouse;
 use entities::warehouse::warehouse_sku_policy::WarehouseSkuPolicy;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SkuId, WarehouseId};
+use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 仓库列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const WAREHOUSE_SORT_FIELDS: &[&str] = &["created_at", "warehouse_code"];
@@ -28,7 +28,7 @@ pub(crate) const WAREHOUSE_REVISION_SORT_FIELDS: &[&str] = &["created_at", "revi
 pub(crate) const WAREHOUSE_SKU_POLICY_SORT_FIELDS: &[&str] = &["created_at", "effective_from"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,14 +55,14 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
 /// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 仓库创建请求（仓库稳定身份 + 首个仓库修订快照）。
 ///

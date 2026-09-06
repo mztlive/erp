@@ -11,13 +11,13 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use crate::catalog::ProductKind;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierAccountId, WarehouseId};
-use crate::money::{Quantity, UnitPrice};
 use crate::sales_order::{SalesOrder, SalesOrderRevision};
 use crate::supplier::{SupplierAccount, SupplierCommercialProfileRevision};
 use crate::supplier_offering::{SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SupplierAccountId, WarehouseId};
+use erp_core::money::{Quantity, UnitPrice};
+use erp_core::{Error, Result};
 
 use super::command_receipt::digest_parts;
 use super::coverage::SalesProcurementCoverageLine;
@@ -400,12 +400,6 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use crate::common::time::Instant;
-    use crate::ids::{
-        SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId, SupplierAccountId,
-        SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId, WarehouseId,
-    };
-    use crate::money::{Amount, Quantity, Rate, UnitPrice};
     use crate::sales_order::revision::{
         SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
         SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
@@ -417,6 +411,12 @@ mod tests {
         SupplierOfferingAvailability, SupplierOfferingAvailabilityData, SupplierOfferingData,
         SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId, SupplierAccountId,
+        SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId, WarehouseId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     use super::{
         basis_id_for, basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
@@ -467,7 +467,7 @@ mod tests {
             SalesOrderRevisionLineId::new(id),
             SalesOrderRevisionLineData {
                 sales_order_revision_id: SalesOrderRevisionId::new("rev-1"),
-                sales_order_line_id: crate::ids::SalesOrderLineId::new(stable_line_id),
+                sales_order_line_id: erp_core::ids::SalesOrderLineId::new(stable_line_id),
                 line_no: 1,
                 line_type: LineType::GoodsService,
                 gross_amount: Amount::from_str("10").unwrap(),
@@ -485,11 +485,11 @@ mod tests {
     /// 构造销售当前版本商品/服务子类型行。
     fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
         SalesOrderGoodsServiceLineRevision::new(
-            crate::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
+            erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
             SalesOrderGoodsServiceLineRevisionData {
                 revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
                 sku_id: SkuId::new("sku-1"),
-                sku_revision_id: crate::ids::SkuRevisionId::new("skur-1"),
+                sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
                 welfare_scenario: None,
                 service_region: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
@@ -552,8 +552,9 @@ mod tests {
                 bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
                 supply_region: vec!["全国".to_string()],
                 product_capabilities: Vec::new(),
-                valid_from: crate::common::time::BusinessDate::from_str(valid_from).unwrap(),
-                valid_to: valid_to.map(|value| crate::common::time::BusinessDate::from_str(value).unwrap()),
+                valid_from: erp_core::common::time::BusinessDate::from_str(valid_from).unwrap(),
+                valid_to: valid_to
+                    .map(|value| erp_core::common::time::BusinessDate::from_str(value).unwrap()),
                 prefill_source_refs: PrefillSourceRefs {
                     input_tax_rate: None,
                     supply_region: None,
@@ -601,9 +602,9 @@ mod tests {
                 business_type: crate::sales_order::BusinessType::GoodsService,
                 origin_system: crate::sales_order::OriginSystem::Erp,
                 source_identity_id: None,
-                customer_id: crate::ids::CustomerAccountId::new("customer-1"),
+                customer_id: erp_core::ids::CustomerAccountId::new("customer-1"),
                 contract_id: None,
-                settlement_party_id: crate::ids::PartyId::new("party-1"),
+                settlement_party_id: erp_core::ids::PartyId::new("party-1"),
                 source_status_code: None,
             },
             "seller-1",
@@ -791,7 +792,7 @@ mod tests {
         assert_eq!(line.quantity, Quantity::from_str("2.5").unwrap());
         assert_eq!(
             line.expected_delivery_date,
-            crate::common::time::BusinessDate::from_str("2026-08-25").unwrap()
+            erp_core::common::time::BusinessDate::from_str("2026-08-25").unwrap()
         );
         assert!(RequestedLine::parse("sol-1", "abc", "2026-08-25").is_err());
         assert!(RequestedLine::parse("sol-1", "1", "not-a-date").is_err());

@@ -7,6 +7,7 @@
 //! Service 只编排元数据
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
+use application_core::AuditActor;
 use axum::{
     body::Body,
     extract::{Multipart, Path, Query, State},
@@ -18,13 +19,10 @@ use axum::{
     Extension, Json,
 };
 use serde::de::DeserializeOwned;
-use services::{
-    audit::AuditActor,
-    file_asset::{
-        AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
-        FileAssetListParams, FileAssetService, FileAssetView, MarkScanResultRequest, PageView,
-        PendingFileAssetRequest, RegisterFileAssetRequest,
-    },
+use services::file_asset::{
+    AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
+    FileAssetListParams, FileAssetService, FileAssetView, MarkScanResultRequest, PageView,
+    PendingFileAssetRequest, RegisterFileAssetRequest,
 };
 use tracing::error;
 
@@ -313,7 +311,7 @@ pub async fn document_attachment_list(
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentAttachmentView>> {
     let items = FileAssetService::new(state.db())
-        .document_attachment_list(&entities::ids::BusinessDocumentId::new(id))
+        .document_attachment_list(&erp_core::ids::BusinessDocumentId::new(id))
         .await?;
 
     Ok(ApiResponse::ok_with_data(items))
@@ -667,7 +665,7 @@ pub(crate) struct FileAssetFormFields {
     /// 到期时间（秒级时间戳）。
     pub expires_at: Option<u64>,
     /// 业务单据 ID（携带时同事务建立附件关联）。
-    pub document_id: Option<entities::ids::BusinessDocumentId>,
+    pub document_id: Option<erp_core::ids::BusinessDocumentId>,
     /// 附件用途。
     pub usage: entities::file_asset::AttachmentUsage,
 }
@@ -727,7 +725,7 @@ impl FileAssetFormFields {
                     );
                 }
                 "document_id" => {
-                    fields.document_id = Some(entities::ids::BusinessDocumentId::new(text));
+                    fields.document_id = Some(erp_core::ids::BusinessDocumentId::new(text));
                 }
                 "usage" => {
                     fields.usage = serde_json::from_value(serde_json::Value::String(text))
@@ -824,8 +822,9 @@ mod tests {
 
     #[test]
     fn unknown_commit_outcome_keeps_uploaded_object() {
-        let database_error =
-            database::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit result"));
+        let database_error = persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
+            "unknown commit result",
+        ));
         let unknown = services::Error::OutcomeUnknown(database_error);
         let definite = services::Error::ConflictError("已确定回滚".to_string());
 

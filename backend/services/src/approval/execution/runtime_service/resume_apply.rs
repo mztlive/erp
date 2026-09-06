@@ -4,15 +4,14 @@ use bpm::engine::{CommitRequired, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::Timestamp;
 use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, Transactional, WorkItemExt,
-};
+use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use entities::approval_integration::ApprovalSubjectSnapshot;
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::work_item::WorkItemStatus;
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::{converge_eligibility, AuthorizationFailure};
@@ -41,10 +40,11 @@ use crate::approval::business_adapter::{
 };
 use crate::approval::policy::STATIC_APPROVE_PERMISSION;
 use crate::approval::{approval_recovery_scope, ApprovalResumeCommand};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::subject;
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 人员恢复时对旧关闭任务执行的只读并发守卫。
 struct ClosedTaskGuard {

@@ -1,13 +1,13 @@
-use crate::common::time::BusinessDate;
-use crate::ids::{
-    SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId, SupplierQualificationCapabilityId,
-    SupplierQualificationId, SupplierQualificationRevisionId,
-};
 use crate::supplier::{
     CapabilityCode, CapabilityStatus, QualificationStatus, SupplierCapability, SupplierCapabilityData,
     SupplierCapabilityRevision, SupplierQualification, SupplierQualificationCapability,
     SupplierQualificationCapabilityData, SupplierQualificationData, SupplierQualificationRevision,
     SupplierQualificationUpdate,
+};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId, SupplierQualificationCapabilityId,
+    SupplierQualificationId, SupplierQualificationRevisionId,
 };
 
 use super::types::option_as_authoritative_update;
@@ -38,7 +38,7 @@ pub fn new_capability(
     actor_id: &str,
     capability_id: SupplierCapabilityId,
     revision_id: SupplierCapabilityRevisionId,
-) -> crate::Result<(SupplierCapability, SupplierCapabilityRevision)> {
+) -> erp_core::Result<(SupplierCapability, SupplierCapabilityRevision)> {
     let mut capability = SupplierCapability::new(
         capability_id,
         SupplierCapabilityData {
@@ -81,9 +81,9 @@ pub fn apply_qualification_input(
     issuer: Option<String>,
     valid_from: BusinessDate,
     valid_to: Option<BusinessDate>,
-    attachment_id: Option<crate::ids::FileAssetId>,
+    attachment_id: Option<erp_core::ids::FileAssetId>,
     actor_id: &str,
-) -> crate::Result<()> {
+) -> erp_core::Result<()> {
     let status = (!qualification.is_valid()).then_some(QualificationStatus::Active);
     qualification.update(
         SupplierQualificationUpdate {
@@ -114,7 +114,7 @@ pub struct NewQualificationParams<'a> {
     /// 失效日。
     pub valid_to: Option<BusinessDate>,
     /// 附件。
-    pub attachment_id: Option<crate::ids::FileAssetId>,
+    pub attachment_id: Option<erp_core::ids::FileAssetId>,
     /// 适用能力代码。
     pub capability_codes: &'a [CapabilityCode],
     /// 能力代码到稳定 ID 的映射。
@@ -144,7 +144,7 @@ pub struct NewQualificationParams<'a> {
 /// 纯内存，不触及 DB；`supplier_id` 与 `capability_ids` 由 Service 保证为当前有效能力。
 pub fn new_qualification(
     params: NewQualificationParams<'_>,
-) -> crate::Result<(
+) -> erp_core::Result<(
     SupplierQualification,
     SupplierQualificationRevision,
     Vec<SupplierQualificationCapability>,
@@ -165,7 +165,7 @@ pub fn new_qualification(
         link_ids,
     } = params;
     if capability_codes.len() != link_ids.len() {
-        return Err(crate::Error::from("资质适用能力与关联 ID 数量不一致"));
+        return Err(erp_core::Error::from("资质适用能力与关联 ID 数量不一致"));
     }
     let mut qualification = SupplierQualification::new(
         qualification_id.clone(),
@@ -187,7 +187,7 @@ pub fn new_qualification(
     for (code, link_id) in capability_codes.iter().zip(link_ids) {
         let capability_id = capability_ids
             .get(code.as_str())
-            .ok_or_else(|| crate::Error::from("资质适用能力不存在"))?;
+            .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))?;
         links.push(SupplierQualificationCapability::new(
             link_id,
             SupplierQualificationCapabilityData {

@@ -1,6 +1,6 @@
 //! 履约工作项冻结责任键的强类型合同。
 
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 履约责任键。
 #[derive(Debug, Clone, PartialEq, Eq)]

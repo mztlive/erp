@@ -4,21 +4,21 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::common::time::Instant;
-use entities::ids::{StockAdjustmentId, WarehouseId};
 use entities::inventory::{
     AdjustmentReasonType, MovementDirection, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
 };
-use entities::money::Quantity;
+use erp_core::common::time::Instant;
+use erp_core::ids::{StockAdjustmentId, WarehouseId};
+use erp_core::money::Quantity;
 
 use super::shared::{
     active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, sort_doc, to_bson,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENTS, STOCK_ADJUSTMENT_LINES};
-use crate::executor::Executor;
 use crate::repository::extensions::InventoryExt;
 use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 库存调整单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -325,7 +325,7 @@ impl<'a> InventoryRepository<'a> {
     /// 明细原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子边界，
     /// 传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头
     /// 没有明细的半成品；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `adjustment` - 待写入的调整单表头
@@ -333,7 +333,7 @@ impl<'a> InventoryRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     #[tracing::instrument(
         name = "repository.inventory.create_stock_adjustment_with_lines",
@@ -472,7 +472,7 @@ fn stock_adjustment_projection() -> Document {
 mod filter_tests {
     use super::{stock_adjustment_sort, StockAdjustmentFilter};
     use crate::repository::QueryFilter;
-    use entities::ids::WarehouseId;
+    use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockAdjustmentFilter {

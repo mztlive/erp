@@ -1,12 +1,13 @@
 //! 采购单写命令的授权快照与事务内账号重验。
 
-use database::{AccessControlExt, Executor, NoTransaction};
+use database::AccessControlExt;
 use entities::Permission;
+use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderService;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::{subject, SharedRbacService};
+use application_core::AuditActor;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 

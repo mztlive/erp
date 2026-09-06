@@ -5,8 +5,8 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 
 use super::{clamp_limit, find_limited, BpmWorkflowRepository, ASSIGNEES, EXECUTIONS, MAX_EXECUTION_HISTORY};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批节点执行。

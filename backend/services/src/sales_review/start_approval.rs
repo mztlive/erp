@@ -7,18 +7,19 @@ use bpm::ids::{
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
-    SalesOrderExt, SalesReviewExt, Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, SalesReviewExt,
+    WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
-use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
+use erp_core::common::time::Instant;
+use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};

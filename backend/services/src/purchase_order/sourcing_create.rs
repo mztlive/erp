@@ -7,25 +7,24 @@
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
-use database::{
-    AccessControlExt, Executor, FulfillmentExt, InventoryExt, NoTransaction, SalesOrderExt, WorkItemExt,
-};
+use database::{AccessControlExt, FulfillmentExt, InventoryExt, SalesOrderExt, WorkItemExt};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
-use entities::ids::{
-    DeliveryId, DeliveryLineId, SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId,
-    WarehouseId,
-};
 use entities::inventory::{
     ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
     StockReservationEntryData, StockReservationSourceType,
 };
-use entities::money::Quantity;
 use entities::purchase_order::{
     payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
 };
 use entities::work_item::{WorkItemStatus, WorkItemType};
+use erp_core::ids::{
+    DeliveryId, DeliveryLineId, SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId,
+    WarehouseId,
+};
+use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::ClientSession;
+use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -44,9 +43,10 @@ use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
 use super::PurchaseOrderService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 use entities::purchase_order::{
     basis_id_for, SourcingAssignmentSet, SourcingPlan, SourcingPlanError, StockAllocationPlan,
     StockBasisGroup,

@@ -10,18 +10,18 @@ use entities::catalog::{
     EnableStatus, Product, ProductKind, ProductListingStatus, ProductRevision, ProductRevisionMedia,
     SkuCoverageStatus,
 };
-use entities::common::time::BusinessDate;
-use entities::ids::{FileAssetId, ProductId, ProductRevisionId};
-use entities::money::Amount;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{FileAssetId, ProductId, ProductRevisionId};
+use erp_core::money::Amount;
 
 use super::super::extensions::{CatalogExt, FileAssetExt};
-use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::product_pipeline::product_list_pipeline;
 use super::shared::{in_filter, sort_doc, PRODUCT_REVISIONS};
 use super::CatalogRepository;
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// `product_revision_media` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
@@ -696,7 +696,7 @@ impl<'a> CatalogRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
     pub async fn create_product_revision_with_media(
         &self,

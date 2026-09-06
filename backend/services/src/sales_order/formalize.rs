@@ -3,16 +3,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, SalesOrderExt,
-    Transactional, WorkItemExt,
-};
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{
-    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId,
-    WorkItemId,
-};
-use entities::money::Amount;
+use database::{AccessControlExt, DocumentRegistryExt, ReceivableExt, SalesOrderExt, WorkItemExt};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
@@ -23,19 +14,27 @@ use entities::sales_order::{
     SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
+    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId,
+    WorkItemId,
+};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::{ensure_final_approve_formalize, sales_order_responsible_org_id};
 use super::dto::SalesOrderDetailView;
 use super::procurement::submission_procurement_inputs;
 use super::SalesOrderService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::procurement_responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
 };
 use crate::purchase_order::sync_procurement_tasks_for_sales_order;
+use application_core::AuditActor;
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 struct ProcurementFormalizationPlan {
@@ -547,7 +546,7 @@ fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> Fo
             .iter()
             .map(|line| {
                 FormalRevisionLineIdentity::new(
-                    entities::ids::SalesOrderRevisionLineId::new(next_id()),
+                    erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
                     FormalRevisionSubtypeIdentity::from_line_type(line.line_type, next_id()),
                 )
             })
@@ -584,9 +583,9 @@ fn build_revision_for_order(
 #[cfg(test)]
 mod tests {
     use super::{ensure_final_approve_formalize, procurement_responsibility_key};
-    use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use entities::receivable::AccountReviewStatus;
     use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
 
     fn draft_order() -> SalesOrder {
         SalesOrder::new(

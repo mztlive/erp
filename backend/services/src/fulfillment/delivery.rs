@@ -1,11 +1,10 @@
-use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
-};
+use database::{AccessControlExt, DocumentRegistryExt, FulfillmentExt};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
-use entities::ids::DeliveryId;
+use erp_core::ids::DeliveryId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::approval::binding::{
@@ -14,10 +13,11 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 use super::delivery_lines::delivery_line_specs;
 use super::dto::SortDir;
@@ -439,8 +439,8 @@ mod tests {
     use super::delivery_line_specs;
     use crate::fulfillment::DeliveryLineInput;
     use entities::fulfillment::{DeliveryLineBatch, DeliveryType};
-    use entities::ids::{DeliveryId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId};
-    use entities::money::Quantity;
+    use erp_core::ids::{DeliveryId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId};
+    use erp_core::money::Quantity;
     use std::str::FromStr;
 
     #[test]
@@ -503,9 +503,9 @@ mod delivery_no_approval_tests {
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use entities::common::time::Instant;
     use entities::fulfillment::DeliveryType;
-    use entities::ids::{DeliveryId, SalesOrderId, WarehouseId};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{DeliveryId, SalesOrderId, WarehouseId};
 
     fn draft_delivery() -> Delivery {
         Delivery::new(

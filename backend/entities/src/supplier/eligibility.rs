@@ -3,8 +3,8 @@
 //! 集中“供应商-能力-修订在业务日是否合格”的纯领域规则；不依赖
 //! 数据库、HTTP、全局时钟或全局 ID，仅对已加载事实做确定性校验。
 
-use crate::common::time::BusinessDate;
 use crate::supplier::{CapabilityStatus, SupplierAccount, SupplierCapability, SupplierCapabilityRevision};
+use erp_core::common::time::BusinessDate;
 
 /// 供应商能力修订的不合格原因。
 ///
@@ -112,14 +112,14 @@ pub fn ensure_capability_qualified(
 #[cfg(test)]
 mod tests {
     use super::{ensure_capability_qualified, CapabilityEligibilityViolation};
-    use crate::common::time::BusinessDate;
-    use crate::ids::PartyId;
-    use crate::ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
     use crate::supplier::{
         CapabilityCode, CapabilityStatus, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
         SupplierCapability, SupplierCapabilityData, SupplierCapabilityRevision,
         SupplierCapabilityRevisionData,
     };
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::PartyId;
+    use erp_core::ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
 
     fn test_supplier(status: SupplierAccountStatus) -> SupplierAccount {
         SupplierAccount::new(

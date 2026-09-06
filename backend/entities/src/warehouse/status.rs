@@ -2,13 +2,13 @@
 //! `warehouse_sku_policy.status`：启用、停用）。
 //!
 //! 状态机：`Active ↔ Disabled` 双向迁移（对称状态机，可用
-//! [`crate::common::state::assert_adjacency_closed`] 验证闭包）；
+//! [`erp_core::common::state::assert_adjacency_closed`] 验证闭包）；
 //! 数据模型第 7 章未定义本域文档状态机，第 13.3 条要求邻接矩阵固化、
 //! 禁止运行时扩展。
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::DocumentState;
+use erp_core::common::state::DocumentState;
 
 /// 启用/停用状态（数据模型 §6.3：启用、停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -66,7 +66,7 @@ impl DocumentState for EnableStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
 
     /// 启用/停用双向迁移与幂等迁移合法，邻接矩阵对称闭合。
     #[test]

@@ -8,26 +8,26 @@
 //! 契约来源：erp-client `features/sales-orders`（W05）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
-use entities::common::time::BusinessDate;
-use entities::ids::{ContractId, CustomerAccountId, SkuId};
-use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
     VoucherLineDraft, WelfareScenario,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ContractId, CustomerAccountId, SkuId};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SALES_ORDER_SORT_FIELDS: &[&str] = &["created_at", "order_no"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,13 +54,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 建单意图（W05 M5：保存草稿或直接提交）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,7 +107,7 @@ pub struct SalesOrderDraftRequest {
     /// 合同编号快照；无合同时省略。
     pub contract_no: Option<String>,
     /// 用户明确选择的合同不可变版本；有合同时必填。
-    pub requested_contract_revision_id: Option<entities::ids::ContractRevisionId>,
+    pub requested_contract_revision_id: Option<erp_core::ids::ContractRevisionId>,
     /// 结算主体名称快照；与 `settlement_party_id` 同时提供。
     pub settlement_party_name: Option<String>,
     /// 付款条件代码。
@@ -148,7 +148,7 @@ pub struct SalesOrderEditableDraftRequest {
     #[validate(custom(function = "non_blank", message = "编辑人不能为空"))]
     pub editor_user_id: String,
     /// 用户明确选择的合同不可变版本。
-    pub requested_contract_revision_id: entities::ids::ContractRevisionId,
+    pub requested_contract_revision_id: erp_core::ids::ContractRevisionId,
     /// 客户项目名称。
     pub project_name: Option<String>,
     /// 业务备注。
@@ -559,7 +559,7 @@ pub struct SalesOrderWorkingCopyLineView {
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
     /// 下单锁定的精确 SKU 修订。
-    pub sku_revision_id: Option<entities::ids::SkuRevisionId>,
+    pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。

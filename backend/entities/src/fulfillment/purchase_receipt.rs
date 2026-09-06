@@ -14,19 +14,19 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
-    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
-    SalesOrderRevisionLineId, WarehouseId,
-};
-use crate::money::{round_to_cent, Amount, Quantity};
 use crate::purchase_order::{
     PaymentTermSnapshot, ProgressStatus, PurchaseLineSalesAllocation, PurchaseOrderRevisionLine,
     PurchaseOrderStatus,
 };
-use crate::validation::normalize_required_text;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
+    SalesOrderRevisionLineId, WarehouseId,
+};
+use erp_core::money::{round_to_cent, Amount, Quantity};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 入库单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
@@ -296,7 +296,7 @@ impl PurchaseReceipt {
     /// 完成 receipt_no 的规范化（去首尾空白、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseReceiptId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseReceiptId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -534,7 +534,7 @@ impl PurchaseReceiptLine {
     /// 保证；入库单已过账后行不可再变更由 P3 按表头状态把关。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PurchaseReceiptLineId`）
+    /// * `id` - 实体主键（`erp_core::ids::PurchaseReceiptLineId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -673,7 +673,7 @@ fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::PurchaseReceiptId;
+    use erp_core::ids::PurchaseReceiptId;
     use std::str::FromStr;
 
     fn line_data() -> PurchaseReceiptLineData {
@@ -707,23 +707,23 @@ mod tests {
         PurchaseOrderRevisionLine::new(
             PurchaseOrderRevisionLineId::new("po-line-1"),
             crate::purchase_order::PurchaseOrderRevisionLineData {
-                purchase_order_revision_id: crate::ids::PurchaseOrderRevisionId::new("po-rev-1"),
+                purchase_order_revision_id: erp_core::ids::PurchaseOrderRevisionId::new("po-rev-1"),
                 line_no: 1,
                 line_type: crate::purchase_order::PurchaseLineType::ItemService,
-                procurement_confirmation_line_id: Some(crate::ids::ProcurementConfirmationLineId::new(
+                procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "confirmation-line-1",
                 )),
-                sku_id: Some(crate::ids::SkuId::new("sku-1")),
+                sku_id: Some(erp_core::ids::SkuId::new("sku-1")),
                 sku_revision_id: None,
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("默认规格".to_string()),
                 quantity: Some(quantity),
                 base_unit_code: Some("PCS".to_string()),
-                unit_cost_gross: Some(crate::money::UnitPrice::from_str("10.0000").unwrap()),
+                unit_cost_gross: Some(erp_core::money::UnitPrice::from_str("10.0000").unwrap()),
                 gross_amount: Amount::from_str("100.00").unwrap(),
                 net_amount: Amount::from_str("87.00").unwrap(),
                 tax_amount: Amount::from_str("13.00").unwrap(),
-                input_tax_rate: Some(crate::money::Rate::from_str("0.130000").unwrap()),
+                input_tax_rate: Some(erp_core::money::Rate::from_str("0.130000").unwrap()),
                 expected_delivery_date: None,
                 sales_order_line_id: Some(SalesOrderLineId::new("sales-line-1")),
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sales-revision-line-1")),
@@ -960,7 +960,7 @@ mod tests {
             "PREPAY_50".to_string(),
             true,
             Some(Amount::from_str("50.00").unwrap()),
-            Some(crate::money::Rate::from_str("0.500000").unwrap()),
+            Some(erp_core::money::Rate::from_str("0.500000").unwrap()),
         )
         .unwrap();
         assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
@@ -979,7 +979,7 @@ mod tests {
             "PREPAY_100".to_string(),
             true,
             None,
-            Some(crate::money::Rate::from_str("0.750000").unwrap()),
+            Some(erp_core::money::Rate::from_str("0.750000").unwrap()),
         )
         .unwrap();
         assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
@@ -1003,7 +1003,7 @@ mod tests {
         .is_ok());
 
         let allocation = PurchaseLineSalesAllocation::new(
-            crate::ids::PurchaseLineSalesAllocationId::new("allocation-1"),
+            erp_core::ids::PurchaseLineSalesAllocationId::new("allocation-1"),
             crate::purchase_order::PurchaseLineSalesAllocationData {
                 purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("po-line-1"),
                 sales_order_revision_line_id: SalesOrderRevisionLineId::new("sales-revision-line-1"),

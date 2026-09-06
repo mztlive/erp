@@ -8,12 +8,12 @@ use mongodb::bson::{doc, Document};
 use serde::Deserialize;
 
 use entities::catalog::ProductCategory;
-use entities::ids::ProductCategoryId;
+use erp_core::ids::ProductCategoryId;
 
 use super::super::Repository;
 use super::shared::PRODUCT_CATEGORIES;
-use crate::executor::Executor;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 祖先链最大节点数（含起始父节点）。超出即视为异常链并失败关闭。
 const PARENT_CHAIN_MAX_NODES: usize = 32;

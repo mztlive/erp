@@ -1,4 +1,5 @@
-use database::{CatalogExt, NoTransaction};
+use database::CatalogExt;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::CatalogService;

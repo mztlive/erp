@@ -1,22 +1,24 @@
 //! 客户资料修订用例与事务载荷。
 
-use database::{AccessControlExt, CustomerExt, NoTransaction, PartyExt, Transactional};
+use database::{AccessControlExt, CustomerExt, PartyExt};
 use entities::{
     customer::{
         CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileCommandResultData,
         CustomerProfileOperation, CustomerProfileReplayContext,
     },
+    party::{Party, PartyRevision, PartyRevisionData, PartyUpdate},
+};
+use erp_core::{
     field_update::FieldUpdate,
     ids::{PartyId, PartyRevisionId},
-    party::{Party, PartyRevision, PartyRevisionData, PartyUpdate},
 };
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 
-use crate::{
-    audit::AuditActor,
-    errors::{Error, Result},
-};
+use crate::audit::AuditActorLogs;
+use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{

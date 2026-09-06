@@ -3,8 +3,8 @@
 //! 四类过账（客户退款、供应商退款、回款冲正、付款冲正）复用同一精确金额规则；
 //! 权威累计由 Repository 按原单聚合已过账净额提供，本值对象只做纯判断。
 
-use crate::errors::{Error, Result};
-use crate::money::Amount;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 /// 退款与冲正共享的累计限额判断。
 pub struct CumulativeAmountLimit;
@@ -39,7 +39,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::CumulativeAmountLimit;
-    use crate::money::Amount;
+    use erp_core::money::Amount;
 
     /// 把字符串解析为测试金额。
     ///

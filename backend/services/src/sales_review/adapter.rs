@@ -6,15 +6,15 @@
 
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::CustomerAccountId;
-use entities::money::Quantity;
 use entities::sales_order::SalesOrder;
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::CustomerAccountId;
+use erp_core::money::Quantity;
 
 use crate::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
@@ -138,7 +138,7 @@ pub fn sales_change_order_subject_ref(business_object_id: &str) -> Result<Subjec
 /// 状态不允许或指纹非法时返回冲突。
 pub fn start_sales_change_approval(
     order: &mut SalesChangeOrder,
-    submission_id: entities::ids::SalesChangeSubmissionId,
+    submission_id: erp_core::ids::SalesChangeSubmissionId,
     target_content_hash: impl Into<String>,
     updated_by: &str,
 ) -> Result<()> {
@@ -436,17 +436,17 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
-    use entities::ids::{
-        CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
-        SalesOrderId, SalesOrderLineId, SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-    };
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::sales_order::{BusinessType, OriginSystem, SalesOrderData};
     use entities::sales_review::{
         GoodsLineFields, HeaderSnapshotData, LineType, SalesChangeOrderData, SalesChangeSubmissionData,
         SalesChangeSubmissionLineData, SalesChangeType, WelfareScenario,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
+        SalesOrderId, SalesOrderLineId, SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn draft_order() -> SalesChangeOrder {

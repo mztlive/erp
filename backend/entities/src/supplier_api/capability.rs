@@ -7,9 +7,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
-use crate::validation::normalize_optional_text;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+use erp_core::validation::normalize_optional_text;
+use erp_core::Result;
 
 /// 能力约束快照最大长度。
 const CONSTRAINT_SNAPSHOT_MAX_LEN: usize = 2000;
@@ -171,7 +171,7 @@ impl SupplierApiCapability {
     /// 完成 constraint_snapshot 的校验与规范化（去首尾空白、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierApiCapabilityId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierApiCapabilityId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -256,7 +256,7 @@ mod tests {
         SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData,
         SupplierApiCapabilityStatus, SupplierApiCapabilityUpdate,
     };
-    use crate::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 
     fn capability_data() -> SupplierApiCapabilityData {
         SupplierApiCapabilityData {

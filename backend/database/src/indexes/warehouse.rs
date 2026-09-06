@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::WarehouseExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `warehouse` 集合名。
 pub(crate) const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;

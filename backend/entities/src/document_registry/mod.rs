@@ -17,8 +17,8 @@ pub mod document_relation;
 pub mod workflow_action;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{BusinessDocumentId, DocumentParticipantId, DocumentRelationId, WorkflowActionId};
 pub use business_document::{BusinessDocument, BusinessDocumentData, DocumentType};
 pub use document_participant::{DocumentParticipant, DocumentParticipantData, ParticipantRole};
 pub use document_relation::{DocumentRelation, DocumentRelationData, DocumentRelationType};
+pub use erp_core::ids::{BusinessDocumentId, DocumentParticipantId, DocumentRelationId, WorkflowActionId};
 pub use workflow_action::{WorkflowAction, WorkflowActionData, WorkflowActionType};

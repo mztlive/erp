@@ -11,20 +11,20 @@
 
 use std::collections::HashMap;
 
-use entities::common::time::BusinessDate;
 use entities::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
 };
-use entities::ids::{CustomerAccountId, PartyId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{CustomerAccountId, PartyId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -736,8 +736,8 @@ mod tests {
         active_customer_user_assignment_filter, distinct_sorted_customer_ids, sort_doc,
         CustomerAccountFilter, QueryFilter,
     };
-    use entities::common::time::BusinessDate;
     use entities::customer::CustomerAccountStatus;
+    use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
 
     #[test]

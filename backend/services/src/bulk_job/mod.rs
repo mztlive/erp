@@ -16,23 +16,22 @@
 
 use std::collections::HashSet;
 
-use database::{
-    AccessControlExt, BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt, NoTransaction,
-    Transactional,
-};
+use database::{AccessControlExt, BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt};
 use entities::bulk_job::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
     BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
     BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
 use entities::document_registry::DocumentType;
-use entities::ids::FileAssetId;
+use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 
@@ -152,7 +151,7 @@ impl BulkJobService {
             .items
             .into_iter()
             .map(|item| BulkSelectionItemDraft {
-                id: entities::ids::BulkSelectionItemId::new(next_id()),
+                id: erp_core::ids::BulkSelectionItemId::new(next_id()),
                 object_type: item.object_type,
                 object_id: item.object_id,
                 expected_version: item.expected_version,
@@ -163,9 +162,9 @@ impl BulkJobService {
             snapshot_id.clone(),
             BulkSelectionSnapshotAggregateData {
                 selection_type: req.selection_type,
-                data_cutoff_at: entities::common::time::Instant::from_unix_secs(req.data_cutoff_at as i64),
+                data_cutoff_at: erp_core::common::time::Instant::from_unix_secs(req.data_cutoff_at as i64),
                 created_by: actor.id().to_string(),
-                expires_at: entities::common::time::Instant::from_unix_secs(req.expires_at as i64),
+                expires_at: erp_core::common::time::Instant::from_unix_secs(req.expires_at as i64),
             },
             drafts,
         )?;
@@ -418,7 +417,7 @@ impl BulkJobService {
             .items
             .into_iter()
             .map(|item| BackgroundJobItemDraft {
-                id: entities::ids::BackgroundJobItemId::new(next_id()),
+                id: erp_core::ids::BackgroundJobItemId::new(next_id()),
                 object_type: item.object_type,
                 object_id: item.object_id,
                 expected_version: item.expected_version,
@@ -460,7 +459,7 @@ impl BulkJobService {
                         .create_job_with_items(&job_for_tx, items, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<BackgroundJobRegistration, database::Error>(registration)
+                    Ok::<BackgroundJobRegistration, persistence_core::Error>(registration)
                 })
             })
             .await;
@@ -471,7 +470,7 @@ impl BulkJobService {
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
                 "同一请求身份已用于不同后台任务载荷".to_string(),
             )),
-            Err(database::Error::DuplicateKey(_)) => {
+            Err(persistence_core::Error::DuplicateKey(_)) => {
                 match self
                     .db
                     .bulk_job()
@@ -517,7 +516,7 @@ impl BulkJobService {
     ) -> Result<BackgroundJobView> {
         req.validate()?;
         let mut job = self.load_job_with_version(id, req.version).await?;
-        job.cancel(entities::common::time::Instant::now())?;
+        job.cancel(erp_core::common::time::Instant::now())?;
         let audit =
             actor
                 .clone()

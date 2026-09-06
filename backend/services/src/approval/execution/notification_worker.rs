@@ -1,11 +1,12 @@
 //! 通知 outbox worker：租约、幂等发送、退避与死信。
 
-use database::{ApprovalIntegrationExt, NoTransaction};
+use database::ApprovalIntegrationExt;
 use entities::approval_integration::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
 };
-use entities::common::time::Instant;
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 
@@ -337,8 +338,8 @@ mod tests {
         ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
         ApprovalNotificationTemplateParams,
     };
-    use entities::common::time::Instant;
-    use entities::ids::ApprovalNotificationOutboxId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::ApprovalNotificationOutboxId;
 
     /// 未接线发送口必须失败关闭，不得伪造成功。
     #[test]

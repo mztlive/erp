@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 依据/选源创建采购单并提交审批、保存草稿、提交启动审批、最终通过生效、撤回与采购变更提交
-//!   均为跨集合写入 → `database::Transactional::with_transaction`；
+//!   均为跨集合写入 → `persistence_core::Transactional::with_transaction`；
 //! - 最终通过（§8.1.4）在单事务内：锁定提交 → 逐行复验采购确认来源 →
 //!   复制为生效版本与版本行 → 形成销售分配 → 推进采购状态与版本指针 →
 //!   形成应付原始分录与 `CONFIRMED` 成本事实 → 审计；
@@ -19,8 +19,9 @@
 //! - D20 `cost`：`CONFIRMED` 成本事实（审核通过、变更差额）；
 //! - D03 `work_item`：采购审核待办（提交创建、审核完成）。
 
-use database::{AccessControlExt, Executor, PurchaseOrderExt};
+use database::{AccessControlExt, PurchaseOrderExt};
 use mongodb::Database;
+use persistence_core::Executor;
 
 mod adapter;
 mod allocation_maintenance;
@@ -67,9 +68,10 @@ pub use self::dto::{
 pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 /// 采购单服务。
 ///

@@ -94,7 +94,7 @@ impl std::fmt::Display for SupplierCommandShapeRejection {
 
 impl std::error::Error for SupplierCommandShapeRejection {}
 
-impl From<SupplierCommandShapeRejection> for crate::errors::Error {
+impl From<SupplierCommandShapeRejection> for erp_core::Error {
     /// 将形态拒绝转换为实体层通用错误（保留展示文本）。
     ///
     /// # 参数
@@ -605,7 +605,7 @@ mod tests {
             SupplierCommandShapeRejection::TechnicalReferenceOnCreate.to_string(),
             "创建连接只建立身份；技术引用必须通过不透明引用绑定命令提交"
         );
-        let error: crate::errors::Error = rejection.into();
+        let error: erp_core::Error = rejection.into();
         assert_eq!(error.to_string(), "连接版本必须大于0");
     }
 }

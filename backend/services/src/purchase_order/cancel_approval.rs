@@ -3,12 +3,13 @@
 use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use database::{AccessControlExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
-use entities::common::time::Instant;
+use database::{AccessControlExt, BpmExt, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::PurchaseOrder;
 use entities::work_item::WorkItem;
+use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::adapter::{
     execute_purchase_order_domain_action, purchase_order_adapter, purchase_order_subject_ref,
@@ -26,9 +27,10 @@ use crate::approval::execution::{
     PreparedExecution,
 };
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use validator::Validate;
 
@@ -394,7 +396,7 @@ mod tests {
         ApprovalBlockerCode, ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus, ModelError,
     };
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
-    use entities::common::time::Instant;
+    use erp_core::common::time::Instant;
 
     use crate::approval::execution::{prepare_document_cancel, PreparedExecution};
     use crate::errors::Error;

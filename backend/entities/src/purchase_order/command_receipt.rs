@@ -9,7 +9,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::audit_log::AuditLog;
-use crate::errors::{Error, Result};
+use erp_core::{Error, Result};
 
 /// 收据消息的前缀；历史持久化形态，禁止变更。
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
@@ -418,8 +418,8 @@ mod tests {
         PurchaseCommandReceiptError, PurchaseReceiptWire,
     };
     use crate::audit_log::{AuditLog, AuditLogData};
-    use crate::errors::Result;
-    use crate::AccountKind;
+    use erp_core::AccountKind;
+    use erp_core::Result;
 
     /// 标准 JSON 形态的测试结果载荷。
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

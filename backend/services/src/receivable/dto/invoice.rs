@@ -1,13 +1,13 @@
 //! 销项/进项发票登记、过账与红冲命令 DTO。
 
-use entities::common::time::BusinessDate;
-use entities::ids::{PartyId, ReceivableAccountId, WorkItemId};
-use entities::money::Amount;
 use entities::receivable::{InvoiceDirection, InvoiceKind};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::query::non_blank;
+use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // 发票（invoice，D18 拥有实体；D19 经本域 Repository 复用）

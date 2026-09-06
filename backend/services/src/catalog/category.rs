@@ -1,17 +1,19 @@
-use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional};
+use database::{AccessControlExt, CatalogExt};
 use entities::catalog::product_category::{ProductCategory, ProductCategoryData, ProductCategoryUpdate};
 use entities::catalog::{EnableStatus, ProductCategoryId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::catalog::dto::{
     CreateProductCategoryRequest, MoveProductCategoryRequest, PageView, ProductCategoryListParams,
     ProductCategoryView, SortDir, UpdateProductCategoryRequest,
 };
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;

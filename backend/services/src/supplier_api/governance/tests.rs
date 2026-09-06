@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use entities::common::time::Instant;
-use entities::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
     CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, SupplierApiCapability,
     SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
     SupplierCommandShapeRejection, SupplierConnectionAction, SupplierHealthCheckType,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 
 use crate::errors::Error;
 use crate::supplier_api::SupplierConnectionCommand;

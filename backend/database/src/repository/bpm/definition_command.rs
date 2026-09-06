@@ -3,8 +3,8 @@ use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTran
 use mongodb::bson::doc;
 
 use super::{BpmWorkflowRepository, CasWriteOutcome, NODE_DEFINITIONS, TRANSITION_DEFINITIONS};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 以 `id + DRAFT + expected_definition_lock_version` 更新草稿定义字段。

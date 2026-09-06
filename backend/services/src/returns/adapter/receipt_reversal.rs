@@ -1,10 +1,10 @@
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::CustomerAccountId;
 use entities::returns::{ReceiptReversal, ReceiptReversalStatus};
+use erp_core::common::time::Instant;
+use erp_core::ids::CustomerAccountId;
 
 use super::super::dto::{
     DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView,
@@ -357,8 +357,8 @@ mod receipt_reversal_tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::ids::{CustomerReceiptId, ReceiptReversalId};
     use entities::returns::ReceiptReversalData;
+    use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
     use std::str::FromStr;
 
     fn draft_reversal() -> ReceiptReversal {
@@ -369,7 +369,7 @@ mod receipt_reversal_tests {
                 original_customer_receipt_id: CustomerReceiptId::new("cr-1"),
                 reason_code: None,
                 reason_text: "错记回款冲正".into(),
-                amount: entities::money::Amount::from_str("100").expect("金额合法"),
+                amount: erp_core::money::Amount::from_str("100").expect("金额合法"),
                 handled_by: "handler-1".into(),
                 reviewed_by: "reviewer-1".into(),
                 occurred_at: Instant::from_unix_secs(10),

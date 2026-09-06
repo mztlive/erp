@@ -1,10 +1,10 @@
 //! 采购责任规则管理与逐行预览 DTO。
 
 use entities::catalog::{EnableStatus, ProductKind};
-use entities::ids::{ProductCategoryId, SkuId};
 use entities::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
 };
+use erp_core::ids::{ProductCategoryId, SkuId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

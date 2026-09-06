@@ -1,7 +1,8 @@
 //! 客户资料命令幂等记录、事务恢复与返回视图映射。
 
-use database::{CustomerExt, NoTransaction};
+use database::CustomerExt;
 use entities::customer::{CustomerProfileCommand, CustomerProfileReplayContext};
+use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
 
@@ -82,14 +83,13 @@ pub(super) fn command_view(command: CustomerProfileCommand) -> CustomerProfileMu
 mod tests {
     use std::sync::Arc;
 
-    use database::{ensure_indexes, CustomerExt, NoTransaction, Transactional};
-    use entities::{
-        common::time::BusinessDate,
-        customer::{
-            CustomerProfileCommand, CustomerProfileCommandResultData, CustomerProfileOperation,
-            CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
-        },
+    use database::{ensure_indexes, CustomerExt};
+    use entities::customer::{
+        CustomerProfileCommand, CustomerProfileCommandResultData, CustomerProfileOperation,
+        CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
     };
+    use erp_core::common::time::BusinessDate;
+    use persistence_core::{NoTransaction, Transactional};
     use test_support::{require_mongo, TestDb};
 
     use crate::{errors::Result, party::SensitiveDataCodec};

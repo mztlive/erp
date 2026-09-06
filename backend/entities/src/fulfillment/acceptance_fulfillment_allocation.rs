@@ -12,9 +12,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId};
-use crate::money::Quantity;
+use erp_core::ids::{AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 履约事实类型（数据模型 §6.7：发货、电子交付或服务履约事实）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,7 +137,7 @@ impl AcceptanceFulfillmentAllocation {
     /// `FulfillmentLineRef` 值对象），P3 按类型解析并校验存在性。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::AcceptanceFulfillmentAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::AcceptanceFulfillmentAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -284,7 +284,7 @@ impl AcceptanceFulfillmentAllocation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::AcceptanceFulfillmentAllocationId;
+    use erp_core::ids::AcceptanceFulfillmentAllocationId;
     use std::str::FromStr;
 
     fn apply_data() -> AcceptanceFulfillmentAllocationData {

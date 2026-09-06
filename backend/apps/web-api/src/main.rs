@@ -115,12 +115,12 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let config = cfg.snapshot();
     let storage = build_storage(&config.s3)?;
 
-    let (_, db) = database::connect(&config.database.uri, &config.database.db_name).await?;
+    let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;
 
     let app_port = config.app.port;
 
     let state = AppState::new(db, cfg.clone(), storage);
-    database::ensure_transaction_support(&state.db()).await?;
+    persistence_core::ensure_transaction_support(&state.db()).await?;
     database::ensure_indexes(&state.db()).await?;
     ensure_registered_approval_policies()?;
     services::iam::ensure_root_role(&state.rbac()).await?;

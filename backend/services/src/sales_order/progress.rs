@@ -1,9 +1,9 @@
 //! 销售单回款/开票进度与关闭状态的派生刷新（§9.3）。
 
 use database::{ReceivableExt, SalesOrderExt};
-use entities::common::time::Instant;
-use entities::ids::SalesOrderId;
 use entities::sales_order::{CollectionProgress, FulfillmentProgress, InvoiceProgress};
+use erp_core::common::time::Instant;
+use erp_core::ids::SalesOrderId;
 use mongodb::Database;
 
 use crate::errors::{Error, Result};

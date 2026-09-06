@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, Executor, NoTransaction, ProcurementResponsibilityExt};
+use database::{AccessControlExt, ProcurementResponsibilityExt};
 use entities::catalog::{Product, ProductCategory, ProductRevision, Sku};
 use entities::procurement_responsibility::{
     build_catalog_facts, EligibleProcurementOwner, ProcurementResponsibilityContext,
@@ -10,7 +10,9 @@ use entities::procurement_responsibility::{
     ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRuleSet,
     ProcurementResponsibilityRuleType,
 };
-use entities::{AccountCore, AccountKind, Permission};
+use entities::{AccountCore, Permission};
+use erp_core::AccountKind;
+use persistence_core::{Executor, NoTransaction};
 
 use super::dto::ProcurementResponsibilityResolutionView;
 use super::ProcurementResponsibilityService;
@@ -375,7 +377,7 @@ fn plan_identities(
 ///
 /// # 错误
 /// 无。
-fn unique_sku_ids(inputs: &[ResolutionInput]) -> Vec<entities::ids::SkuId> {
+fn unique_sku_ids(inputs: &[ResolutionInput]) -> Vec<erp_core::ids::SkuId> {
     let mut unique = Vec::new();
     for input in inputs {
         if !unique.contains(&input.sku_id) {

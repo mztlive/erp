@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-pub use entities::AccountKind;
+pub use erp_core::AccountKind;
 
 /// ERP 操作人员 ID 包装类型。
 #[derive(Debug, Clone, Default, Deserialize)]

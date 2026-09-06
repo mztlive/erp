@@ -1,11 +1,5 @@
 use std::str::FromStr;
 
-use entities::common::time::BusinessDate;
-use entities::ids::{
-    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCommercialProfileRevisionId,
-    SupplierQualificationCapabilityId, SupplierQualificationId, SupplierRatingRevisionId,
-};
-use entities::money::Rate;
 use entities::party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use entities::supplier::{
     CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
@@ -15,12 +9,19 @@ use entities::supplier::{
     SupplierQualificationCapabilityData, SupplierQualificationData, SupplierRating, SupplierRatingRevision,
     SupplierRatingRevisionData,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{
+    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCommercialProfileRevisionId,
+    SupplierQualificationCapabilityId, SupplierQualificationId, SupplierRatingRevisionId,
+};
+use erp_core::money::Rate;
 use mongodb::bson::doc;
 use test_support::{require_mongo, TestDb};
 
 use super::super::{SUPPLIER_ACCOUNTS, SUPPLIER_CAPABILITIES};
 use super::{SupplierListSearchInput, SupplierQualificationHealthFilter};
-use crate::{ensure_indexes, NoTransaction, PartyExt, SupplierExt, Transactional};
+use crate::{ensure_indexes, PartyExt, SupplierExt};
+use persistence_core::{NoTransaction, Transactional};
 
 /// 列表与详情验收的业务日。
 const AS_OF: &str = "2026-08-31";
@@ -690,7 +691,7 @@ async fn supplier_bundles_see_same_session_writes() {
         let db = fixture.db().clone();
         let client = db.client().clone();
         client
-            .with_transaction::<_, (), crate::errors::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |session| {
                 let db = db.clone();
                 let party = party.clone();
                 let revision = revision.clone();

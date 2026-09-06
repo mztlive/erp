@@ -7,21 +7,21 @@
 
 use std::future::Future;
 
-use entities::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
 use entities::purchase_order::{CreationBasisFacts, ProcurementCoverageFacts};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseLineSalesAllocation,
     PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
 use mongodb::Database;
 
 use super::super::purchase_order::{
     PurchaseOrderFilter, PurchaseOrderRepository, PurchaseOrderSubmissionFilter,
 };
-use crate::executor::Executor;
 use crate::Repository;
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 域 D15 仓储访问器。
 pub trait PurchaseOrderExt: Sized {

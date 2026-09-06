@@ -3,18 +3,15 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use entities::file_asset::{RetentionClass, SensitivityClass};
-use services::{
-    audit::AuditActor,
-    contract::{
-        ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractService,
-        ContractView, CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest,
-        UploadContractView,
-    },
+use services::contract::{
+    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractService, ContractView,
+    CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest, UploadContractView,
 };
 
 use super::file_asset::{extract_asset_file_with_limit, should_compensate_pending_assets, store_asset_file};

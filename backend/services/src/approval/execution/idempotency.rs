@@ -1049,7 +1049,7 @@ pub fn payload_conflict_error() -> Error {
 ///
 /// 仅审批命令收据 identity 唯一索引竞争允许退出失败会话后回读；收据主键、
 /// 未知索引或其他业务集合唯一冲突均失败关闭。
-pub fn map_receipt_first_write_error(error: database::Error) -> Error {
+pub fn map_receipt_first_write_error(error: persistence_core::Error) -> Error {
     if error.duplicate_index_name()
         == Some(database::repository::bpm::APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX)
     {

@@ -11,7 +11,7 @@ use mongodb::{
 };
 
 use crate::repository::extensions::SourceRegistryExt;
-use crate::Result;
+use persistence_core::Result;
 
 /// `source_system` 集合名。
 pub(crate) const SOURCE_SYSTEMS: &str = <mongodb::Database as SourceRegistryExt>::SOURCE_SYSTEMS;

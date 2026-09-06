@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{InventoryExt, NoTransaction, Transactional};
+use database::InventoryExt;
 use entities::inventory::{StockBalance, StockMovement};
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::authorization::inventory_authorization_with_executor;
@@ -11,8 +12,8 @@ use super::dto::{
 };
 use super::movement::load_movement_source_document_nos;
 use super::InventoryService;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 库存余额列表筛选条件类型（经 `InventoryExt` 关联类型跨 crate 可达）。
 type StockBalanceFilter = <mongodb::Database as InventoryExt>::StockBalanceFilter;

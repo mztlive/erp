@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 文件资产列表允许的排序字段白名单。
 pub(crate) const FILE_ASSET_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,13 +44,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 文件资产列表响应视图（列表不暴露敏感对象存储键，§6.1）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -261,7 +261,7 @@ impl RegisterFileAssetRequest {
             retention_class: self.retention_class,
             expires_at: self
                 .expires_at
-                .map(|secs| entities::common::time::Instant::from_unix_secs(secs as i64)),
+                .map(|secs| erp_core::common::time::Instant::from_unix_secs(secs as i64)),
             created_by: created_by.to_string(),
         })
     }
@@ -272,9 +272,9 @@ impl RegisterFileAssetRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AttachToDocumentRequest {
     /// 业务单据（`business_document` 稳定注册）。
-    pub document_id: entities::ids::BusinessDocumentId,
+    pub document_id: erp_core::ids::BusinessDocumentId,
     /// 受控文件资产。
-    pub file_asset_id: entities::ids::FileAssetId,
+    pub file_asset_id: erp_core::ids::FileAssetId,
     /// 用途。
     pub usage: AttachmentUsage,
 }

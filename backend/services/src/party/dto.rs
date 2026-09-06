@@ -5,15 +5,15 @@
 //! 敏感值（手机号、地址、银行账号）只出现在创建入参，响应视图不返回明文
 //! （数据模型 §4.5.5：实体只保存带密钥 HMAC 指纹，明文永不入库）。
 
-use entities::common::time::BusinessDate;
 use entities::party::{
     AddressType, EffectiveRecordStatus, Party, PartyContact, PartyKind, PartyRevision, PartyStatus,
 };
+use erp_core::common::time::BusinessDate;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 主体列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const PARTY_SORT_FIELDS: &[&str] = &["created_at", "party_no", "status"];
@@ -29,7 +29,7 @@ pub(crate) const PARTY_TAX_PROFILE_SORT_FIELDS: &[&str] = &["created_at", "tax_n
 pub(crate) const PARTY_BANK_ACCOUNT_SORT_FIELDS: &[&str] = &["created_at", "bank_account_no", "valid_from"];
 
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,13 +56,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 主体创建请求（HTTP 契约：`{ party_no, legal_name, ... }`）。
 ///

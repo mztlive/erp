@@ -9,11 +9,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::{Error, Result};
-use crate::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId, SalesOrderRevisionId};
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 变更原因最大长度。
 const REASON_MAX_LEN: usize = 512;
@@ -223,7 +223,7 @@ impl SalesChangeOrder {
     /// 完成变更原因的校验与规范化（trim、非空、长度上限）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesChangeOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesChangeOrderId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人
     ///
@@ -308,7 +308,7 @@ impl SalesChangeOrder {
     /// 状态非 `Draft`，或变更原因为空、超长时返回错误。
     pub fn update(&mut self, update: SalesChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status != SalesChangeOrderStatus::Draft {
-            return Err(crate::errors::Error::InvalidStateTransition {
+            return Err(erp_core::Error::InvalidStateTransition {
                 from: format!("{:?}", self.stable.status),
                 to: format!("{:?}", SalesChangeOrderStatus::Draft),
             });
@@ -346,7 +346,7 @@ impl SalesChangeOrder {
         updated_by: impl Into<String>,
     ) -> Result<()> {
         if self.stable.status != SalesChangeOrderStatus::Draft {
-            return Err(crate::errors::Error::InvalidStateTransition {
+            return Err(erp_core::Error::InvalidStateTransition {
                 from: format!("{:?}", self.stable.status),
                 to: format!("{:?}", SalesChangeOrderStatus::InApproval),
             });

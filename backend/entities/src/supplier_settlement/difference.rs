@@ -9,11 +9,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierSettlementDifferenceId, SupplierSettlementItemId};
-use crate::money::Amount;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementItemId};
+use erp_core::money::Amount;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 /// 处理结果文本最大长度。
 const RESOLUTION_MAX_LEN: usize = 512;
@@ -326,7 +326,7 @@ impl SupplierSettlementDifference {
     /// 已补偿或已关闭必填。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierSettlementDifferenceId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierSettlementDifferenceId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -533,7 +533,7 @@ fn validate_resolution_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::SupplierSettlementDifferenceId;
+    use erp_core::ids::SupplierSettlementDifferenceId;
     use std::str::FromStr;
 
     fn sample_data() -> SupplierSettlementDifferenceData {

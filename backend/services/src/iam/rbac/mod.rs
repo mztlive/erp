@@ -23,7 +23,8 @@ use std::{
 
 use casbin::Enforcer;
 use database::MongoCasbinAdapter;
-use entities::{AccountKind, Permission, PermissionSet};
+use entities::{Permission, PermissionSet};
+use erp_core::AccountKind;
 use mongodb::Database;
 use tokio::sync::{Mutex, OnceCell, RwLock};
 

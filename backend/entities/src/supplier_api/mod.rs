@@ -3,7 +3,7 @@
 //! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与约束见数据模型 §6.14；公共字段归属按 §4.3 判定：
 //! - `supplier_api_connection` 是稳定连接配置（字典含启停/连接状态）→ 组合
-//!   [`crate::common::stable::StableBase`]，连接键与健康检查字段按字典精确建模；
+//!   [`erp_core::common::stable::StableBase`]，连接键与健康检查字段按字典精确建模；
 //! - `supplier_api_capability` 是连接下的能力声明注册行（字典含启停状态，无版本
 //!   对象与审计字段）→ 只用 `BaseModel` 持久化元数据，`status` 按 §6.14 建模，
 //!   不硬套 StableBase 的 `current_revision_id`/`created_by` 语义
@@ -52,4 +52,4 @@ pub use prepared_commands::{
 };
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use crate::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+pub use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};

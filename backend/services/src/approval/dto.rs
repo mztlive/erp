@@ -2,7 +2,7 @@
 //!
 //! 旧步骤实例、旧决定枚举和旧责任模式投影已删除。
 
-use entities::AccountKind;
+use erp_core::AccountKind;
 use serde::{Deserialize, Serialize};
 
 /// 阻塞审批恢复的不可伪造授权锚点。

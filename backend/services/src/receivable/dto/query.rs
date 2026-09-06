@@ -1,12 +1,12 @@
 //! 应收查询参数、列表/详情视图与分页归一化。
 
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
-use entities::money::Amount;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CustomerReceiptStatus, EntryDirection, FundsReviewType,
     InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus, ReceivableEntryType, ReviewResult,
 };
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -16,8 +16,8 @@ use super::card_funds::{
 };
 use super::{normalize_sort, SortDir};
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
 use crate::work_item::WorkItemView;
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 应收往来子账列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[

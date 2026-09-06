@@ -6,30 +6,30 @@
 
 use std::collections::HashMap;
 
-use database::{
-    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt,
-    Transactional, WorkItemExt,
-};
+use database::{AccessControlExt, CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt, WorkItemExt};
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
-use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{
-    SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
-};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
     SupplierOfferingRevision,
 };
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
+    SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
+};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::errors::{Error, Result};
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
 mod dto;
@@ -631,7 +631,7 @@ impl SupplierOfferingService {
             .stable
             .current_revision_id
             .as_deref()
-            .map(entities::ids::SupplierCapabilityRevisionId::new)
+            .map(erp_core::ids::SupplierCapabilityRevisionId::new)
             .ok_or_else(|| Error::BusinessLogicError("供应商能力缺少当前版本".to_string()))?;
         crate::supplier::eligibility::ensure_capability_qualified(
             &self.db,
@@ -887,13 +887,13 @@ mod tests {
         ensure_supply_exception_work_item, CreateSupplierOfferingRequest, CreateSupplierOfferingResult,
     };
     use crate::supplier_offering::dto::{CREATE_OFFERING_COMMAND, REVISE_OFFERING_COMMAND};
-    use entities::common::time::Instant;
-    use entities::ids::WorkItemId;
     use entities::supplier_offering::{
         AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingCommand,
         SupplierOfferingCommandData,
     };
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     /// 覆盖存量命令重放：历史裸指纹命令与 DTO 新指纹同键同载荷可重放，跨操作必须冲突。
     #[test]
@@ -957,8 +957,8 @@ mod tests {
 
     #[test]
     fn write_paths_use_dto_try_into_data_with_money_precision() {
-        use entities::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
         use entities::supplier_offering::SupplierOfferingRevision;
+        use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
         let req = create_request();
         let data = req
             .terms

@@ -1,26 +1,25 @@
 use std::time::Instant as MonotonicInstant;
 
-use database::{
-    AccessControlExt, BulkJobExt, IntegrationOpsExt, NoTransaction, SupplierApiExt, Transactional,
-    WorkItemExt,
-};
+use database::{AccessControlExt, BulkJobExt, IntegrationOpsExt, SupplierApiExt, WorkItemExt};
 use entities::bulk_job::{
     BackgroundJob, JobStatus, SupplierGovernanceJobKind, SupplierGovernanceJobSpec,
     SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };
-use entities::common::time::Instant;
-use entities::ids::{BackgroundJobId, IntegrationErrorTaskId, SupplierApiConnectionId};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData};
 use entities::supplier_api::{
     CapabilityVersionSnapshot, HealthCheckResult, SupplierApiConnection, SupplierCommandOutcome,
     SupplierConnectionAction, SupplierConnectionGovernance, SupplierHealthCheckRun,
     SupplierHealthCheckRunData, SupplierHealthCheckType,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{BackgroundJobId, IntegrationErrorTaskId, SupplierApiConnectionId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::integration_ops::{error_owner_role, error_work_item};
+use application_core::AuditActor;
 
 use super::super::dto::{SupplierConnectionCommandResult, SupplierConnectionJobView};
 use super::super::{ClassifiedError, SupplierApiService};
@@ -469,7 +468,7 @@ async fn persist_health_failure_task(
     job: &BackgroundJob,
     error: &ClassifiedError,
     actor: &AuditActor,
-    executor: &mut dyn database::Executor,
+    executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
     let task = IntegrationErrorTask::new(
         IntegrationErrorTaskId::new(format!("w20-error-{}", digest(&[&job.base.id]))),

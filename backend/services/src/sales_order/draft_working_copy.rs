@@ -1,18 +1,20 @@
 //! 草稿工作副本补开：驳回回草稿后没有 `Editing` 副本时，按本次草稿新建一份。
 
-use database::{AccessControlExt, NoTransaction, SalesOrderExt, Transactional};
-use entities::ids::{SalesOrderId, SalesOrderLineId};
+use database::{AccessControlExt, SalesOrderExt};
 use entities::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
     WorkingPurpose,
 };
+use erp_core::ids::{SalesOrderId, SalesOrderLineId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::dto::{SalesOrderDraftLineRequest, SalesOrderDraftRequest};
 use super::mapper::build_working_copy;
 use super::SalesOrderService;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 草稿保存用的稳定明细：已有行 + 本次需要新建的行。
 pub(super) struct DraftStableLines {

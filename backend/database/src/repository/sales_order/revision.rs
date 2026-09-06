@@ -20,8 +20,8 @@ use super::{
     SalesOrderRepository, SALES_ORDERS, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS, SALES_ORDER_REVISIONS,
     SALES_ORDER_REVISION_LINES, SALES_ORDER_VOUCHER_LINE_REVISIONS,
 };
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 销售版本号最小投影行。
 #[derive(Debug, Deserialize)]
@@ -325,7 +325,7 @@ impl<'a> SalesOrderRepository<'a> {
     /// 实体上完成 `approve` + `attach_revision` 状态迁移（本层不做业务判定）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 中途失败会留下缺明细的版本或状态未推进的销售单；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `order` - 已迁移到生效态并绑定版本指针的销售单（成功后内存版本递增）
@@ -336,7 +336,7 @@ impl<'a> SalesOrderRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、乐观锁冲突或
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.sales_order.formalize_submission",
@@ -399,7 +399,7 @@ mod tests {
         latest_sales_order_revision_filter, latest_sales_order_revision_options,
         sales_order_revision_no_from_rows, SalesOrderRevisionNoRow,
     };
-    use entities::ids::SalesOrderId;
+    use erp_core::ids::SalesOrderId;
     use mongodb::bson::doc;
 
     #[test]

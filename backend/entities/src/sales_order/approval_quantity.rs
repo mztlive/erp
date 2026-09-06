@@ -6,8 +6,8 @@
 
 use rust_decimal::Decimal;
 
-use crate::errors::{Error, Result};
-use crate::money::Quantity;
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 use super::submission::{SalesOrderSubmission, SalesOrderSubmissionLine};
 use super::types::{integer_quantity, validate_line_list, BusinessType, LineSummary};
@@ -155,15 +155,15 @@ mod tests {
     use rust_decimal::Decimal;
 
     use super::*;
-    use crate::common::time::{BusinessDate, Instant};
-    use crate::ids::{
-        ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
-        SalesOrderSubmissionId, SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-    };
-    use crate::money::{Amount, Rate, UnitPrice};
     use crate::sales_order::snapshot::HeaderSnapshotData;
     use crate::sales_order::submission::SalesOrderSubmissionData;
     use crate::sales_order::types::{CardForm, GoodsLineFields, LineType, VoucherLineDraft};
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
+        SalesOrderSubmissionId, SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Rate, UnitPrice};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

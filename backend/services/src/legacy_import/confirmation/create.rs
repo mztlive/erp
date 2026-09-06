@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, Executor, LegacyImportExt, NoTransaction, Transactional, WorkItemExt};
-use entities::common::time::Instant;
-use entities::ids::WorkItemId;
+use database::{AccessControlExt, LegacyImportExt, WorkItemExt};
 use entities::legacy_import::{
     confirmation_work_item, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,
     LegacyImportBatch, LegacyImportConfirmation, LegacyImportConfirmationData, LegacyImportConfirmationId,
 };
 use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::super::dto::{
     CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep, LegacyImportConfirmationView,

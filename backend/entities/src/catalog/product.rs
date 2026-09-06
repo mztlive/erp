@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use crate::catalog::product_kind::ProductKind;
 use crate::catalog::product_revision::ProductRevision;
 use crate::catalog::status::EnableStatus;
-use crate::common::stable::StableBase;
-use crate::errors::Result;
-use crate::ids::ProductId;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::ProductId;
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
 /// 商品编号最大长度。
 const PRODUCT_NO_MAX_LEN: usize = 64;
@@ -74,7 +74,7 @@ impl Product {
     /// `product_kind` 必须显式提交并永久保持不变（数据模型 §6.3）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ProductId`）
+    /// * `id` - 实体主键（`erp_core::ids::ProductId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -205,8 +205,8 @@ impl Product {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::ProductId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::ProductId;
 
     fn data() -> ProductData {
         ProductData {
@@ -268,17 +268,17 @@ mod tests {
     fn version_revision_and_disable_rules_are_enforced() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
         let revision = ProductRevision::new(
-            crate::ids::ProductRevisionId::new("rev-1"),
+            erp_core::ids::ProductRevisionId::new("rev-1"),
             crate::catalog::product_revision::ProductRevisionData {
                 product_id: ProductId::new("prod-1"),
                 revision_no: 1,
                 name: "商品".to_string(),
                 description: None,
                 specification: None,
-                category_id: crate::ids::ProductCategoryId::new("cat-1"),
-                brand_id: crate::ids::ProductBrandId::new("brand-1"),
+                category_id: erp_core::ids::ProductCategoryId::new("cat-1"),
+                brand_id: erp_core::ids::ProductBrandId::new("brand-1"),
                 status: EnableStatus::Active,
-                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_from: erp_core::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
                 effective_to: None,
             },
         )
@@ -298,17 +298,17 @@ mod tests {
     fn attach_revision_rejects_foreign_product_revision() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
         let revision = ProductRevision::new(
-            crate::ids::ProductRevisionId::new("rev-1"),
+            erp_core::ids::ProductRevisionId::new("rev-1"),
             crate::catalog::product_revision::ProductRevisionData {
                 product_id: ProductId::new("prod-2"),
                 revision_no: 1,
                 name: "商品".to_string(),
                 description: None,
                 specification: None,
-                category_id: crate::ids::ProductCategoryId::new("cat-1"),
-                brand_id: crate::ids::ProductBrandId::new("brand-1"),
+                category_id: erp_core::ids::ProductCategoryId::new("cat-1"),
+                brand_id: erp_core::ids::ProductBrandId::new("brand-1"),
                 status: EnableStatus::Active,
-                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_from: erp_core::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
                 effective_to: None,
             },
         )

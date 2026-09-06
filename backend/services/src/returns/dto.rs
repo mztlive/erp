@@ -4,22 +4,22 @@
 //! 时间戳；金额一律十进制字符串；数量一律十进制字符串。
 //! 契约来源：W05 销售单、W09 收货发货、W11 客户往来、W12 供应商往来。
 
-use entities::common::time::Instant;
-use entities::ids::{
-    CustomerAcceptanceId, CustomerAccountId, CustomerReceiptId, PayableEntryId, PurchaseOrderId,
-    PurchaseOrderRevisionLineId, PurchaseReturnOrderId, ReceivableEntryId, SalesOrderId, SalesOrderLineId,
-    SalesReturnCaseId, SupplierAccountId, SupplierPaymentId, WarehouseId,
-};
-use entities::money::{Amount, Quantity};
 use entities::returns::{
     CaseType, CustomerRefundStatus, PaymentReversalStatus, PurchaseReturnStatus, ReceiptReversalStatus,
     ReturnMode, ReturnRoute, SalesReturnCaseStatus, SupplierRefundStatus,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CustomerAcceptanceId, CustomerAccountId, CustomerReceiptId, PayableEntryId, PurchaseOrderId,
+    PurchaseOrderRevisionLineId, PurchaseReturnOrderId, ReceivableEntryId, SalesOrderId, SalesOrderLineId,
+    SalesReturnCaseId, SupplierAccountId, SupplierPaymentId, WarehouseId,
+};
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 销售退货处理单列表允许的排序字段白名单。
 pub(crate) const SALES_RETURN_CASE_SORT_FIELDS: &[&str] = &["discovered_at", "created_at"];
@@ -28,7 +28,7 @@ pub(crate) const PURCHASE_RETURN_ORDER_SORT_FIELDS: &[&str] = &["created_at"];
 /// 客户退款列表允许的排序字段白名单。
 pub(crate) const CUSTOMER_REFUND_SORT_FIELDS: &[&str] = &["occurred_at", "amount", "created_at"];
 /// 排序方向。
-pub use crate::query::SortDir;
+pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,13 +55,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // 销售退货/拒收处理单（sales_return_case）

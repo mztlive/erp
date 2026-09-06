@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::common::time::Instant;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::validation::{CLOSE_REASON_MAX_LEN, USER_ID_MAX_LEN};
 use super::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
@@ -274,8 +274,8 @@ impl WorkItem {
 #[cfg(test)]
 mod tests {
     use super::super::{direct_data, AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType};
-    use crate::common::time::Instant;
-    use crate::ids::WorkItemId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
 
     #[test]
     fn reassign_and_complete_preserve_first_times() {

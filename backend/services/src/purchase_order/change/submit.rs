@@ -1,16 +1,14 @@
-use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, SupplierExt,
-    Transactional,
-};
-use entities::common::time::Instant;
+use database::{AccessControlExt, DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::ids::PurchaseChangeOrderId;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseOrder,
     PurchaseOrderRevision,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::PurchaseChangeOrderId;
 use id_generator::next_id;
 use mongodb::ClientSession;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::change_adapter::{
@@ -42,10 +40,11 @@ use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{
     command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 impl PurchaseOrderService {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -77,7 +76,7 @@ impl PurchaseOrderService {
             PurchaseChangeOrderId::new(next_id()),
             PurchaseChangeOrderData {
                 purchase_order_id: order.base.id.clone().into(),
-                base_revision_id: entities::ids::PurchaseOrderRevisionId::new(base_revision.base.id.clone()),
+                base_revision_id: erp_core::ids::PurchaseOrderRevisionId::new(base_revision.base.id.clone()),
                 reason: req.reason.clone(),
             },
             actor.id(),

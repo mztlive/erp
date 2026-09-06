@@ -11,9 +11,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, ProductRevisionId, ProductRevisionMediaId};
-use crate::validation::normalize_optional_text;
+use erp_core::ids::{FileAssetId, ProductRevisionId, ProductRevisionMediaId};
+use erp_core::validation::normalize_optional_text;
+use erp_core::{Error, Result};
 
 /// 无障碍替代文本最大长度。
 const ALT_TEXT_MAX_LEN: usize = 256;
@@ -94,7 +94,7 @@ impl ProductRevisionMedia {
     /// 完成 alt_text 的可选校验与规范化，并要求 `sort_order` 非负。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ProductRevisionMediaId`）
+    /// * `id` - 实体主键（`erp_core::ids::ProductRevisionMediaId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -185,7 +185,7 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::ProductRevisionId;
+    use erp_core::ids::ProductRevisionId;
 
     fn data() -> ProductRevisionMediaData {
         ProductRevisionMediaData {

@@ -1,22 +1,22 @@
 //! 客户资料创建用例与事务载荷。
 
-use database::{AccessControlExt, CustomerExt, NoTransaction, PartyExt, Transactional};
+use database::{AccessControlExt, CustomerExt, PartyExt};
 use entities::{
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
         CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerProfileCommand,
         CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
     },
-    ids::{PartyId, PartyRevisionId},
     party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus},
 };
+use erp_core::ids::{PartyId, PartyRevisionId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 
-use crate::{
-    audit::AuditActor,
-    errors::{Error, Result},
-};
+use crate::audit::AuditActorLogs;
+use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{

@@ -302,17 +302,17 @@ pub(crate) struct WorkItemFields {
     pub owner_organization_id: String,
     pub owner_user_id: Option<String>,
     pub assignment_source: AssignmentSource,
-    pub assigned_at: Option<entities::common::time::Instant>,
-    pub started_at: Option<entities::common::time::Instant>,
-    pub current_assignment_at: Option<entities::common::time::Instant>,
-    pub last_activity_at: Option<entities::common::time::Instant>,
+    pub assigned_at: Option<erp_core::common::time::Instant>,
+    pub started_at: Option<erp_core::common::time::Instant>,
+    pub current_assignment_at: Option<erp_core::common::time::Instant>,
+    pub last_activity_at: Option<erp_core::common::time::Instant>,
     pub priority: WorkItemPriority,
-    pub due_at: Option<entities::common::time::Instant>,
+    pub due_at: Option<erp_core::common::time::Instant>,
     pub reason_code: Option<String>,
     pub impact_summary: Option<String>,
-    pub completed_at: Option<entities::common::time::Instant>,
+    pub completed_at: Option<erp_core::common::time::Instant>,
     pub completed_by: Option<String>,
-    pub closed_at: Option<entities::common::time::Instant>,
+    pub closed_at: Option<erp_core::common::time::Instant>,
     pub closed_by: Option<String>,
     pub close_reason: Option<String>,
     pub task_version: u64,
@@ -542,7 +542,7 @@ fn document_approval_route(business_object_type: &str) -> Result<(&'static str, 
     }
 }
 
-fn seconds(value: Option<entities::common::time::Instant>) -> Option<u64> {
+fn seconds(value: Option<erp_core::common::time::Instant>) -> Option<u64> {
     value.and_then(|instant| u64::try_from(instant.unix_secs()).ok())
 }
 

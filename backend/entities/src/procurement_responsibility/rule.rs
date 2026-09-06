@@ -5,9 +5,9 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::{EnableStatus, ProductKind};
-use crate::errors::{Error, Result};
-use crate::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 const SERVICE_REGION_MAX_LEN: usize = 128;
 const ACTOR_MAX_LEN: usize = 128;

@@ -2,7 +2,7 @@
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `LegacyImportExt` 关联常量取。
 //!
 //! 保留期语义（数据模型 §4.5.7/§6.12）：批次元数据、汇总计数、成功结果行与
@@ -19,22 +19,22 @@ mod apply_scope;
 mod failed_retry;
 mod supersede_batch;
 
-use entities::common::time::BusinessDate;
 use entities::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchId,
     LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportRow, MappingStatus, ParseStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::BusinessDate;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::LegacyImportExt;
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 /// `legacy_import_batch` 集合名（单一来源：`LegacyImportExt` 关联常量）。
 const LEGACY_IMPORT_BATCHES: &str = <mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_BATCHES;
 /// `legacy_import_row` 集合名（单一来源：`LegacyImportExt` 关联常量）。
@@ -47,7 +47,7 @@ pub struct LegacyImportBatchRow {
     /// 导入批次号。
     pub batch_no: String,
     /// 来源系统。
-    pub source_system_id: entities::ids::SourceSystemId,
+    pub source_system_id: erp_core::ids::SourceSystemId,
     /// 本批来源对象集合。
     pub source_object_set: String,
     /// 期初业务基准日。
@@ -78,7 +78,7 @@ pub struct LegacyImportBatchFilter {
     /// 批次号模糊匹配（字面量、忽略大小写）；`None` 表示不筛选。
     pub batch_no: Option<String>,
     /// 来源系统；`None` 表示不筛选。
-    pub source_system_id: Option<entities::ids::SourceSystemId>,
+    pub source_system_id: Option<erp_core::ids::SourceSystemId>,
     /// 批次状态；`None` 表示不筛选。
     pub status: Option<LegacyImportBatchStatus>,
     /// 期初基准日起（含）；`None` 表示不限。
@@ -222,7 +222,7 @@ pub struct LegacyImportRowRow {
     /// 导入状态。
     pub import_status: ImportStatus,
     /// 来源稳定身份。
-    pub external_identity_map_id: Option<entities::ids::ExternalIdentityMapId>,
+    pub external_identity_map_id: Option<erp_core::ids::ExternalIdentityMapId>,
     /// 失败原因错误码。
     pub error_code: Option<String>,
     /// 成功结果目标单据 ID。
@@ -376,7 +376,7 @@ pub struct LegacyImportConfirmationRow {
     /// 退回原因代码。
     pub reason_code: Option<String>,
     /// 对应 `IMPORT_BUSINESS_CONFIRMATION` 正式任务。
-    pub work_item_id: entities::ids::WorkItemId,
+    pub work_item_id: erp_core::ids::WorkItemId,
     /// 实际确认或退回人。
     pub decided_by: Option<String>,
     /// 实际确认或退回时间。
@@ -489,7 +489,7 @@ impl<'a> Repository<'a, LegacyImportConfirmation> {
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_by_work_item(
         &self,
-        work_item_id: &entities::ids::WorkItemId,
+        work_item_id: &erp_core::ids::WorkItemId,
         executor: &mut dyn Executor,
     ) -> Result<Option<LegacyImportConfirmation>> {
         self.find_one(
@@ -589,7 +589,7 @@ impl<'a> LegacyImportRepository<'a> {
     /// 的修复批次并保持来源行幂等）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，行唯一索引冲突会留下只有批次没有行的
-    /// 半成品；Service 必须通过 `database::Transactional::with_transaction`
+    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
     /// # 参数
@@ -598,7 +598,7 @@ impl<'a> LegacyImportRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当行唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service
+    /// 当行唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service
     /// 映射为幂等/冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_batch_with_rows(
         &self,
@@ -712,14 +712,14 @@ fn legacy_import_confirmation_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{sort_doc, LegacyImportBatchFilter, QueryFilter};
-    use entities::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
 
     #[test]
     fn batch_filter_applies_optional_fields_and_deleted_filter() {
         let filter = LegacyImportBatchFilter {
             batch_no: Some("IMP-2026-001".to_string()),
-            source_system_id: Some(entities::ids::SourceSystemId::new("sys-mall")),
+            source_system_id: Some(erp_core::ids::SourceSystemId::new("sys-mall")),
             status: Some(entities::legacy_import::LegacyImportBatchStatus::Completed),
             baseline_date_from: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
             baseline_date_to: Some(BusinessDate::from_ymd(2026, 12, 31).unwrap()),

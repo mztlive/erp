@@ -10,27 +10,27 @@
 //! 类型对外暴露（`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加
 //! re-export）。
 
-use entities::common::stable::StableBase;
-use entities::common::time::Instant;
-use entities::ids::{
-    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
-};
 use entities::returns::{
     CaseType, CustomerRefund, CustomerRefundStatus, PaymentReversal, PurchaseReturnLine, PurchaseReturnOrder,
     PurchaseReturnStatus, ReceiptReversal, ReturnMode, ReturnRoute, SalesReturnCase, SalesReturnCaseStatus,
     SalesReturnLine, SupplierRefund,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
+};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::ReturnsExt;
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 #[path = "returns_posted_totals.rs"]
 mod posted_totals;
@@ -212,7 +212,7 @@ pub struct CustomerRefundRow {
     /// 原因说明。
     pub reason_text: String,
     /// 退款金额。
-    pub amount: entities::money::Amount,
+    pub amount: erp_core::money::Amount,
     /// 财务经办人。
     pub handled_by: String,
     /// 财务复核人。
@@ -327,7 +327,7 @@ impl<'a> Repository<'a, SalesReturnLine> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_lines_by_cases(
         &self,
-        case_ids: &[entities::ids::SalesReturnCaseId],
+        case_ids: &[erp_core::ids::SalesReturnCaseId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesReturnLine>> {
         if case_ids.is_empty() {
@@ -394,7 +394,7 @@ impl<'a> Repository<'a, PurchaseReturnLine> {
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_lines_by_orders(
         &self,
-        order_ids: &[entities::ids::PurchaseReturnOrderId],
+        order_ids: &[erp_core::ids::PurchaseReturnOrderId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseReturnLine>> {
         if order_ids.is_empty() {
@@ -495,7 +495,7 @@ impl<'a> Repository<'a, SupplierRefund> {
     pub async fn find_refunds_by_originals(
         &self,
         payment_ids: &[SupplierPaymentId],
-        entry_ids: &[entities::ids::PayableEntryId],
+        entry_ids: &[erp_core::ids::PayableEntryId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierRefund>> {
         let mut filter = Document::new();
@@ -595,7 +595,7 @@ impl<'a> ReturnsRepository<'a> {
     /// 原子可见（数据模型 §6.11）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有处理单没有明细的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `case_entity` - 待写入的处理单
@@ -603,7 +603,7 @@ impl<'a> ReturnsRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_sales_return_with_line(
         &self,
@@ -634,7 +634,7 @@ impl<'a> ReturnsRepository<'a> {
     /// 「退货单 + 明细」原子可见（数据模型 §6.11）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有退货单没有明细的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `order` - 待写入的采购退货单
@@ -642,7 +642,7 @@ impl<'a> ReturnsRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_purchase_return_with_line(
         &self,
@@ -765,7 +765,7 @@ mod tests {
     fn case_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SalesReturnCaseFilter {
             return_no: Some("RT-2026".to_string()),
-            sales_order_id: Some(entities::ids::SalesOrderId::new("so-1")),
+            sales_order_id: Some(erp_core::ids::SalesOrderId::new("so-1")),
             status: Some(entities::returns::SalesReturnCaseStatus::Processing),
             page: 1,
             page_size: 20,
@@ -785,7 +785,7 @@ mod tests {
     fn purchase_return_filter_filters_by_order_and_status() {
         let filter = PurchaseReturnOrderFilter {
             purchase_return_no: None,
-            purchase_order_id: Some(entities::ids::PurchaseOrderId::new("po-1")),
+            purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
             status: Some(PurchaseReturnStatus::Returned),
             page: 1,
             page_size: 20,

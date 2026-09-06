@@ -13,15 +13,15 @@ use entity_macros::Entity;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{
+use erp_core::common::time::Instant;
+use erp_core::ids::{
     CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
     SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
     SupplierRefundAllocationId, SupplierRefundFactId, SupplierRefundId,
 };
-use crate::money::{Amount, Quantity};
-use crate::validation::normalize_required_text;
+use erp_core::money::{Amount, Quantity};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 外部退款号最大长度。
 const EXTERNAL_REFUND_NO_MAX_LEN: usize = 64;
@@ -118,7 +118,7 @@ impl SupplierRefundFact {
     /// 完成外部退款身份与来源事件的校验和规范化，并强制退款金额大于零。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierRefundFactId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierRefundFactId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -278,7 +278,7 @@ impl SupplierRefundAllocation {
     /// 同时强制 `REVERSE` 必填原分配、`APPLY` 不得引用原分配。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierRefundAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierRefundAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -349,7 +349,7 @@ fn ensure_non_negative(value: Amount, message: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{
+    use erp_core::ids::{
         CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, PaymentAllocationId,
         SupplierRefundAllocationId, SupplierRefundFactId, SupplierRefundId,
     };

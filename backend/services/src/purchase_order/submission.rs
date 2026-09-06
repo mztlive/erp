@@ -1,14 +1,15 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, Transactional};
-use entities::common::time::Instant;
-use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
+use database::{AccessControlExt, PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
     PurchaseOrderSubmissionLine, PurchaseReceiptWire,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::adapter::{
@@ -30,9 +31,10 @@ use super::start_approval::{
 use super::PurchaseOrderService;
 use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
 use crate::approval::policy::ApprovalDomainAction;
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 
@@ -562,7 +564,7 @@ impl PurchaseReceiptWire for PurchaseSubmitReceipt {
     ///
     /// # 关键业务约束
     /// 字段顺序与存量收据一致，变更会破坏幂等回放。
-    fn encode_wire(&self) -> entities::Result<String> {
+    fn encode_wire(&self) -> erp_core::Result<String> {
         Ok(format!(
             "{}|{}|{}|{}|{}|{}|{}",
             self.purchase_no,
@@ -609,7 +611,8 @@ mod tests {
     use entities::purchase_order::{
         LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     };
-    use entities::{AccountKind, AuditLog, AuditLogData};
+    use entities::{AuditLog, AuditLogData};
+    use erp_core::AccountKind;
     use sha2::{Digest, Sha256};
 
     use super::{PurchaseSubmitReceipt, PURCHASE_SUBMIT_RECEIPT_PREFIX};

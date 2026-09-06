@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::query::non_blank;
+use application_core::non_blank;
 
 use super::command::SavePurchaseOrderLine;
 use super::query::DocumentApprovalView;

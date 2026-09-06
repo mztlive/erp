@@ -9,11 +9,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{CustomerAcceptanceId, SalesOrderId, SalesReturnCaseId};
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerAcceptanceId, SalesOrderId, SalesReturnCaseId};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 退货处理号最大长度。
 const RETURN_NO_MAX_LEN: usize = 64;
@@ -250,7 +250,7 @@ impl SalesReturnCase {
     /// 完成退货处理号与原因的 trim/非空/长度校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesReturnCaseId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesReturnCaseId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///

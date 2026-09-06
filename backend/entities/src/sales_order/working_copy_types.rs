@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::DocumentState;
+use erp_core::common::state::DocumentState;
 
 /// 工作副本编辑目的（数据模型 §6.5：首次提交或销售变更）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

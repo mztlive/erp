@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{ReceivableAccountId, ReceivableEntryId};
-use crate::money::Amount;
-use crate::validation::normalize_required_text;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
+use erp_core::money::Amount;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -161,7 +161,7 @@ impl ReceivableEntry {
     /// （原始应收必须是增加，冲减类分录必须是减少，销售变更差额双向均可）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::ReceivableEntryId`）
+    /// * `id` - 实体主键（`erp_core::ids::ReceivableEntryId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

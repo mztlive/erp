@@ -1,8 +1,8 @@
 //! 域 D03 `work_item` 仓储：指定责任人的人工任务队列查询。
 
-use entities::common::time::Instant;
 use entities::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
 use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 
@@ -265,8 +265,8 @@ mod tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{QueryFilter, WorkItemFilter};
-    use entities::common::time::Instant;
     use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+    use erp_core::common::time::Instant;
 
     #[test]
     fn scope_filter_supports_direct_owner_and_history_facts() {

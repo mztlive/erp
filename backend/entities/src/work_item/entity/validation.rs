@@ -3,10 +3,10 @@
 use entity_core::BaseModel;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::WorkItemId;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 
@@ -459,9 +459,10 @@ mod tests {
         account, direct_data, AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData,
         WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
     };
-    use crate::common::time::Instant;
-    use crate::ids::WorkItemId;
-    use crate::{AccountKind, AccountStatus};
+    use crate::AccountStatus;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use erp_core::AccountKind;
 
     #[test]
     fn account_and_subject_version_value_objects_fail_closed() {

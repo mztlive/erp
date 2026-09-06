@@ -8,12 +8,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::validation::normalize_required_text;
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::BusinessDate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
-pub use crate::ids::{SupplierAccountId, SupplierRatingRevisionId};
+pub use erp_core::ids::{SupplierAccountId, SupplierRatingRevisionId};
 
 /// 变更原因最大长度。
 const CHANGE_REASON_MAX_LEN: usize = 500;
@@ -113,7 +113,7 @@ impl SupplierRatingRevision {
     /// 强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierRatingRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierRatingRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -219,8 +219,8 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData};
-    use crate::common::time::BusinessDate;
-    use crate::ids::{SupplierAccountId, SupplierRatingRevisionId};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{SupplierAccountId, SupplierRatingRevisionId};
 
     fn rating_data() -> SupplierRatingRevisionData {
         SupplierRatingRevisionData {

@@ -3,24 +3,22 @@
 //! Handler 只做协议适配：HTTP 十进制字符串版本在边界解析为 Service 数值类型，
 //! 其余字段复用 `services::inventory` 类型；禁止在 Handler 承载业务规则或直连数据库。
 
+use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
     Extension, Json,
 };
-use entities::ids::WarehouseId;
 use entities::inventory::AdjustmentReasonType;
+use erp_core::ids::WarehouseId;
 use serde::Deserialize;
-use services::{
-    audit::AuditActor,
-    inventory::{
-        CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, ExpectedStockBalanceVersion,
-        InventoryService, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
-        StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentSubmitResultQuery,
-        StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
-        StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
-        SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
-    },
+use services::inventory::{
+    CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, ExpectedStockBalanceVersion,
+    InventoryService, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
+    StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentSubmitResultQuery,
+    StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
+    StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
+    SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
 };
 
 use crate::{

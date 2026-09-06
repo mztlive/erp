@@ -4,15 +4,15 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::{Error, Result};
-use crate::field_update::FieldUpdate;
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::field_update::FieldUpdate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 use super::{PartyOwned, PartyRevision};
 
-pub use crate::ids::PartyId;
+pub use erp_core::ids::PartyId;
 
 /// 主体编号最大长度。
 const PARTY_NO_MAX_LEN: usize = 64;
@@ -167,7 +167,7 @@ impl Party {
     /// 统一社会信用代码按规范化为大写并校验 18 位字母数字（允许为空）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PartyId`）
+    /// * `id` - 实体主键（`erp_core::ids::PartyId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -329,10 +329,10 @@ fn normalize_credit_code(value: Option<String>) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::{normalize_credit_code, Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
-    use crate::common::state::assert_adjacency_closed;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{PartyId, PartyRevisionId};
     use crate::party::{PartyRevision, PartyRevisionData};
+    use erp_core::common::state::assert_adjacency_closed;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{PartyId, PartyRevisionId};
 
     fn party_data() -> PartyData {
         PartyData {

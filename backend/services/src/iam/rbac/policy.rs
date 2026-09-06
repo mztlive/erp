@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
 use casbin::{Enforcer, RbacApi};
-use entities::{AccountKind, Permission, PermissionSet, Role};
+use entities::{Permission, PermissionSet, Role};
+use erp_core::AccountKind;
 
 use super::{subject, ROLE_PREFIX};
-use crate::{
-    audit::AuditActor,
-    errors::{Error, Result},
-};
+use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 pub(super) fn role_key(role_id: &str) -> String {
     format!("{ROLE_PREFIX}{role_id}")

@@ -4,10 +4,10 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Result;
-use crate::ids::PermissionId;
 use crate::rbac;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::ids::PermissionId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::Result;
 
 /// 权限名称最大长度。
 const NAME_MAX_LEN: usize = 64;
@@ -72,7 +72,7 @@ impl Permission {
     /// （trim、小写、白名单字符、长度上限），完成 name/description 的规范化。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PermissionId`）
+    /// * `id` - 实体主键（`erp_core::ids::PermissionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -130,7 +130,7 @@ impl Permission {
     /// 系统内建权限禁止删除时返回业务错误。
     pub fn ensure_deletable(&self) -> Result<()> {
         if self.system {
-            return Err(crate::errors::Error::from("系统权限不能删除"));
+            return Err(erp_core::Error::from("系统权限不能删除"));
         }
         Ok(())
     }
@@ -139,7 +139,7 @@ impl Permission {
 #[cfg(test)]
 mod tests {
     use super::{Permission, PermissionData, PermissionUpdate};
-    use crate::ids::PermissionId;
+    use erp_core::ids::PermissionId;
 
     fn data() -> PermissionData {
         PermissionData {

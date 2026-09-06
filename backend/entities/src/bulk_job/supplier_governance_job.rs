@@ -8,8 +8,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::background_job::{BackgroundJob, BackgroundJobData, JobType};
-use crate::errors::Result;
-use crate::ids::BackgroundJobId;
+use erp_core::ids::BackgroundJobId;
+use erp_core::Result;
 
 /// W20 健康检查任务的领域任务类型代码。
 pub const SUPPLIER_HEALTH_CHECK_JOB_TYPE: &str = "SUPPLIER_HEALTH_CHECK";
@@ -87,16 +87,16 @@ impl BackgroundJob {
     /// 确定性构造；不访问 MongoDB、时钟、全局 ID 生成器、密钥或外部网关。
     pub fn for_supplier_governance(spec: SupplierGovernanceJobSpec) -> Result<Self> {
         if spec.connection_id.trim().is_empty() {
-            return Err(crate::errors::Error::from("连接 ID 不能为空"));
+            return Err(erp_core::Error::from("连接 ID 不能为空"));
         }
         if spec.requested_by.trim().is_empty() {
-            return Err(crate::errors::Error::from("发起人不能为空"));
+            return Err(erp_core::Error::from("发起人不能为空"));
         }
         let hash_prefix = spec
             .idempotency_hash
             .get(..JOB_NO_HASH_LEN)
             .filter(|prefix| prefix.len() == JOB_NO_HASH_LEN)
-            .ok_or_else(|| crate::errors::Error::from("幂等摘要长度不足以派生任务编号"))?;
+            .ok_or_else(|| erp_core::Error::from("幂等摘要长度不足以派生任务编号"))?;
         Self::new(
             spec.job_id,
             BackgroundJobData {
@@ -122,7 +122,7 @@ mod tests {
         SUPPLIER_HEALTH_CHECK_JOB_TYPE,
     };
     use crate::bulk_job::{BackgroundJob, JobStatus, JobType};
-    use crate::ids::BackgroundJobId;
+    use erp_core::ids::BackgroundJobId;
 
     /// 构造 W20 任务规格测试夹具。
     fn job_spec(kind: SupplierGovernanceJobKind, hash: &str) -> SupplierGovernanceJobSpec {

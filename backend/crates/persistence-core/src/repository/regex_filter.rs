@@ -1,7 +1,7 @@
 use mongodb::bson::{doc, Document};
 
 /// 写入按字面量匹配且忽略大小写的 MongoDB 正则条件。
-pub(super) fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Option<&str>) {
+pub fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Option<&str>) {
     if let Some(value) = value {
         filter.insert(
             field,

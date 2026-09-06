@@ -1,6 +1,6 @@
-use entities::common::time::BusinessDate;
-use entities::ids::{LegacyImportBatchId, LegacyImportConfirmationId, SourceSystemId, WorkItemId};
 use entities::legacy_import::{LegacyImportBatchData, LegacyImportConfirmationData};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, SourceSystemId, WorkItemId};
 
 use super::*;
 

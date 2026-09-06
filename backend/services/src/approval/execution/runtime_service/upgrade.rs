@@ -1,9 +1,9 @@
 //! 未提交单据绑定升级。
 
 use bpm::ids::ApprovalCommandReceiptId;
-use database::Transactional;
 use entities::document_registry::{DocumentType, WorkflowActionId};
 use id_generator::next_id;
+use persistence_core::Transactional;
 
 use super::super::idempotency::{
     command_may_have_committed, command_recovery_delay, normalize_idempotency_key, upgrade_binding_identity,
@@ -13,8 +13,8 @@ use crate::approval::binding::{
     replay_unsubmitted_document_definition_upgrade, upgrade_unsubmitted_document_definition,
     UpgradeBindingResultView, UpgradeUnsubmittedDefinitionCommand,
 };
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 /// 绑定升级命令。
 #[derive(Debug, Clone, PartialEq, Eq)]

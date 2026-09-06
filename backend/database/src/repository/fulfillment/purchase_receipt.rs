@@ -1,17 +1,18 @@
 //! `purchase_receipt` 采购入库单仓储：列表投影查询与按入库单号身份查询。
 
-use entities::common::time::Instant;
 use entities::fulfillment::{PurchaseReceipt, PurchaseReceiptState};
-use entities::ids::{PurchaseOrderId, WarehouseId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseOrderId, WarehouseId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
+use crate::Repository;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 采购入库单排序白名单（查询与测试共用）。
 const PURCHASE_RECEIPT_SORT_FIELDS: &[&str] = &["created_at", "posted_at"];
@@ -177,7 +178,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use entities::fulfillment::PurchaseReceiptState;
-    use entities::ids::PurchaseOrderId;
+    use erp_core::ids::PurchaseOrderId;
 
     #[test]
     fn receipt_filter_applies_optional_fields_and_deleted_filter() {

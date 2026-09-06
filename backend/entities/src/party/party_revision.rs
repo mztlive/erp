@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::errors::Result;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::revision::RevisionBase;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::Result;
 
-pub use crate::ids::{PartyId, PartyRevisionId};
+pub use erp_core::ids::{PartyId, PartyRevisionId};
 
 /// 法定名称最大长度。
 const LEGAL_NAME_MAX_LEN: usize = 200;
@@ -69,7 +69,7 @@ impl PartyRevision {
     /// 修订属于其他 Party 或修订号已达到上限时返回错误。
     pub fn next_revision_no(party_id: &PartyId, revisions: &[Self]) -> Result<u32> {
         if revisions.iter().any(|revision| &revision.party_id != party_id) {
-            return Err(crate::errors::Error::from("主体修订归属不一致"));
+            return Err(erp_core::Error::from("主体修订归属不一致"));
         }
         revisions
             .iter()
@@ -77,7 +77,7 @@ impl PartyRevision {
             .max()
             .unwrap_or(0)
             .checked_add(1)
-            .ok_or_else(|| crate::errors::Error::from("主体修订号已达到上限"))
+            .ok_or_else(|| erp_core::Error::from("主体修订号已达到上限"))
     }
 
     /// 创建主体修订。
@@ -86,7 +86,7 @@ impl PartyRevision {
     /// 长度上限），short_name 可选。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PartyRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::PartyRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -123,8 +123,8 @@ impl PartyRevision {
 #[cfg(test)]
 mod tests {
     use super::{PartyRevision, PartyRevisionData};
-    use crate::common::revision::RevisionBase;
-    use crate::ids::{PartyId, PartyRevisionId};
+    use erp_core::common::revision::RevisionBase;
+    use erp_core::ids::{PartyId, PartyRevisionId};
 
     fn revision_data() -> PartyRevisionData {
         PartyRevisionData {

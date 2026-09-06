@@ -357,7 +357,7 @@ pub(super) fn amount_reason_brief(
 
 #[cfg(test)]
 mod tests {
-    use entities::money::Amount;
+    use erp_core::money::Amount;
 
     use super::*;
     use crate::work_item::brief::BriefLine;

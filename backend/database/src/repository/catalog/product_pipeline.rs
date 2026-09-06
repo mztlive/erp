@@ -2,8 +2,8 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 
 use entities::catalog::{EnableStatus, ProductListingStatus, SkuCoverageStatus};
-use entities::money::Amount;
 use entities::supplier_offering::OfferingStatus;
+use erp_core::money::Amount;
 
 use super::super::{Pagination, QueryFilter};
 use super::listing::sku_is_listed_expr;
@@ -312,7 +312,7 @@ fn product_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
 mod tests {
     use super::*;
     use entities::catalog::{EnableStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
-    use entities::money::Amount;
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     /// 商品列表统一搜索必须覆盖商品与 SKU 字段，并在分页前应用聚合筛选。

@@ -1,8 +1,8 @@
-use entities::ids::{PartyId, ReceivableAccountId};
 use entities::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,
     ReceivableAccount, ReceivableEntry, ReceivableFundsReview, SalesInvoiceAllocation,
 };
+use erp_core::ids::{PartyId, ReceivableAccountId};
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
 
@@ -11,8 +11,8 @@ use super::super::{PageResult, Repository};
 use super::invoice::{InvoiceFilter, InvoiceRow};
 use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
 use super::{ReceivableRepository, RECEIVABLE_ENTRIES, RECEIVABLE_FUNDS_REVIEWS};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 回款/发票列表的账户关联作用域（FIN-R08）。
 ///
@@ -90,7 +90,7 @@ impl<'a> ReceivableRepository<'a> {
     /// 应收」原子可见（数据模型 §6.8 销售单生效后才形成原始应收）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有子账没有分录的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `account` - 待写入的应收往来子账
@@ -98,7 +98,7 @@ impl<'a> ReceivableRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_receivable_with_entry(
         &self,
@@ -128,7 +128,7 @@ impl<'a> ReceivableRepository<'a> {
     /// 复核链按数据模型 §6.8 逐号递增：`review_no = 1` 必须是链头（此前无任何
     /// 复核），`review_no > 1` 必须引用当前链尾且复核号连续。方法先读当前链尾
     /// （同子账最大 `review_no`）再插入新记录；链尾已被其他并发复核占用时
-    /// 返回 [`crate::Error::OptimisticLockingError`]（链尾锁定失败），
+    /// 返回 [`persistence_core::Error::OptimisticLockingError`]（链尾锁定失败），
     /// 并发写同号复核由 `uk_receivable_funds_reviews_account_no` 唯一索引兜底。
     /// **必须收到事务执行器**：读后写构成两步骤，传入 `NoTransaction` 时
     /// 链尾判定与插入各自自动提交，并发场景下可能读出旧链尾后插入失败留下
@@ -139,8 +139,8 @@ impl<'a> ReceivableRepository<'a> {
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 链尾不匹配时返回 [`crate::Error::OptimisticLockingError`]；
-    /// 复核号重复时返回 [`crate::Error::DuplicateKey`]。
+    /// 链尾不匹配时返回 [`persistence_core::Error::OptimisticLockingError`]；
+    /// 复核号重复时返回 [`persistence_core::Error::DuplicateKey`]。
     pub async fn append_funds_review(
         &self,
         review: &ReceivableFundsReview,
@@ -171,7 +171,7 @@ impl<'a> ReceivableRepository<'a> {
             _ => false,
         };
         if !chain_locked {
-            return Err(crate::Error::OptimisticLockingError);
+            return Err(persistence_core::Error::OptimisticLockingError);
         }
         mongo_ops::insert_one(&collection, review, executor).await
     }
@@ -180,7 +180,7 @@ impl<'a> ReceivableRepository<'a> {
     ///
     /// 唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
     /// * `allocations` - 待持久化的销项发票分配
@@ -190,7 +190,7 @@ impl<'a> ReceivableRepository<'a> {
     /// 全部写入成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_sales_invoice_allocations_many(
         &self,
@@ -399,7 +399,7 @@ impl<'a> ReceivableRepository<'a> {
 #[cfg(test)]
 mod tests {
     use super::ReceivableListScope;
-    use entities::ids::ReceivableAccountId;
+    use erp_core::ids::ReceivableAccountId;
 
     #[test]
     fn list_scope_empty_only_when_both_dimensions_absent() {

@@ -1,18 +1,18 @@
-use entities::common::time::Instant;
-use entities::ids::SupplierSettlementItemId;
 use entities::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceEvidence,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierSettlementItemId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::projection::{difference_sort_doc, supplier_settlement_difference_projection};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 供应商结算差异列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -24,7 +24,7 @@ pub struct SupplierSettlementDifferenceRow {
     /// 差异类型。
     pub difference_type: SettlementDifferenceType,
     /// 差异金额。
-    pub difference_amount: entities::money::Amount,
+    pub difference_amount: erp_core::money::Amount,
     /// 差异状态。
     pub status: SettlementDifferenceStatus,
     /// 处理结果文本。

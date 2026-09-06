@@ -4,30 +4,30 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；金额/数量使用
 //! `entities::money` 定点类型（serde_json 下自动字符串化）。
 
-use entities::common::source::SourceType;
-use entities::ids::{
-    CostAllocationId, CostEntryId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
-    SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-    SupplierOfferingRevisionId, SupplierOrderActionId, WorkItemId,
-};
-use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::supplier_fulfillment::{
     AllocationAction, CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
     SupplierOrderAction, SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderStatusHistory,
 };
+use erp_core::common::source::SourceType;
+use erp_core::ids::{
+    CostAllocationId, CostEntryId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
+    SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+    SupplierOfferingRevisionId, SupplierOrderActionId, WorkItemId,
+};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::query::{normalized_text, page_or_default, page_size_or_default};
 use crate::work_item::WorkItemView;
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 供应商履约订单列表允许的排序字段白名单（Service 层校验，禁止任意字段透传）。
 pub(crate) const FULFILLMENT_ORDER_SORT_FIELDS: &[&str] =
     &["created_at", "submitted_at", "accepted_at", "completed_at"];
 
 /// 排序方向。
-pub(crate) use crate::query::SortDir;
+pub(crate) use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,10 +58,10 @@ pub(crate) struct PageParams {
 /// # 说明
 /// 跨域复用入口：D33 的列表参数同样使用本函数（后续若出现第三处使用，
 /// 应走地基修订把该逻辑下沉到 `services::query`）。
-pub(crate) use crate::query::normalize_sort;
+pub(crate) use application_core::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use crate::query::PageView;
+pub use application_core::PageView;
 
 /// 供应商履约订单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -235,7 +235,7 @@ pub struct PlaceFulfillmentOrderRequest {
 }
 
 /// 校验文本去除首尾空白后非空。
-use crate::query::non_blank;
+use application_core::non_blank;
 
 /// 供应商履约明细响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

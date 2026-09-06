@@ -2,13 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{CatalogExt, Executor, InventoryExt, SupplierSettlementExt, WarehouseExt};
-use entities::ids::SupplierSettlementItemId;
+use database::{CatalogExt, InventoryExt, SupplierSettlementExt, WarehouseExt};
 use entities::inventory::{StockAdjustment, StockAdjustmentLine};
 use entities::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
     SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
+use erp_core::ids::SupplierSettlementItemId;
+use persistence_core::Executor;
 
 use super::brief::{
     format_instant_datetime, format_quantity, join_list_summary, non_empty, push_section, BriefLine,
@@ -695,7 +696,7 @@ fn sku_brief_title(sku_no: &str, name: Option<&str>, specification: Option<&str>
 #[cfg(test)]
 mod tests {
     use entities::inventory::MovementDirection;
-    use entities::money::Quantity;
+    use erp_core::money::Quantity;
 
     use super::*;
 

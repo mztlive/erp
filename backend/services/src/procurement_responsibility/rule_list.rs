@@ -66,10 +66,10 @@ mod tests {
     use std::collections::HashMap;
 
     use entities::catalog::EnableStatus;
-    use entities::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
     use entities::procurement_responsibility::{
         ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
+    use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 
     use super::*;
 

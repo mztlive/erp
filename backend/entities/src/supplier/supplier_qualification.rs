@@ -8,14 +8,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::field_update::FieldUpdate;
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
-pub use crate::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
+pub use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 
 /// 证书编号最大长度。
 const CERTIFICATE_NO_MAX_LEN: usize = 128;
@@ -263,7 +263,7 @@ impl SupplierQualification {
     /// 强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierQualificationId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -336,7 +336,7 @@ impl SupplierQualification {
     ///
     /// # 错误
     /// 当前状态不是 `Active` 时返回
-    /// [`crate::errors::Error::InvalidStateTransition`]。
+    /// [`erp_core::Error::InvalidStateTransition`]。
     pub fn mark_expired(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, QualificationStatus::Expired)?;
         self.stable.status = QualificationStatus::Expired;
@@ -490,7 +490,7 @@ impl SupplierQualification {
     /// 纯内存，不触及 MongoDB 或 ID 生成器；快照字段必须与实体当前状态完全一致。
     pub fn snapshot_revision(
         &self,
-        revision_id: crate::ids::SupplierQualificationRevisionId,
+        revision_id: erp_core::ids::SupplierQualificationRevisionId,
         revision_no: u32,
     ) -> Result<crate::supplier::SupplierQualificationRevision> {
         crate::supplier::SupplierQualificationRevision::new(
@@ -548,10 +548,10 @@ mod tests {
         QualificationAttachmentSensitivity, QualificationStatus, QualificationType, SupplierQualification,
         SupplierQualificationData, SupplierQualificationUpdate,
     };
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::common::time::BusinessDate;
-    use crate::field_update::FieldUpdate;
-    use crate::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 
     fn qualification_data() -> SupplierQualificationData {
         SupplierQualificationData {
@@ -775,7 +775,7 @@ mod tests {
         .unwrap();
         let rev = qualification
             .snapshot_revision(
-                crate::ids::SupplierQualificationRevisionId::new("qual-rev-snap"),
+                erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-snap"),
                 7,
             )
             .unwrap();
@@ -793,7 +793,7 @@ mod tests {
     /// 修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
     #[test]
     fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
-        use crate::common::revision::RevisionBase;
+        use erp_core::common::revision::RevisionBase;
         assert!(RevisionBase::next_revision_no(Some(u32::MAX)).is_err());
         let qualification = SupplierQualification::new(
             SupplierQualificationId::new("qual-overflow"),
@@ -805,7 +805,7 @@ mod tests {
         assert!(overflow.is_err());
         let rev = qualification
             .snapshot_revision(
-                crate::ids::SupplierQualificationRevisionId::new("qual-rev-overflow"),
+                erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-overflow"),
                 1,
             )
             .unwrap();

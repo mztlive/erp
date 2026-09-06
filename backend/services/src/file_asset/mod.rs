@@ -11,15 +11,17 @@
 //! D02：附件关联前经 `db.business_documents()` 校验业务单据已注册；文件资产的
 //! 安全检查、保留期与销毁状态只作治理记录，不阻断业务对象关联。
 
-use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, Transactional};
+use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt};
 use entities::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
-use entities::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
+use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 mod dto;
 
@@ -380,7 +382,7 @@ impl FileAssetService {
     ) -> Result<FileAssetView> {
         req.validate()?;
         let mut asset = self.load_with_version(id, req.version).await?;
-        asset.destroy(entities::common::time::Instant::now())?;
+        asset.destroy(erp_core::common::time::Instant::now())?;
         self.update_with_audit(asset, "file_asset.destroy", actor).await
     }
 

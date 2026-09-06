@@ -2,15 +2,15 @@
 //!
 //! 指纹密钥不出本文件；领域工厂只收强类型指纹结果。
 
-use entities::common::time::Instant;
 use entities::fulfillment::{
     ElectronicDelivery, ElectronicDeliveryDraft, ElectronicDeliveryDraftData, ElectronicRecipientFingerprint,
 };
-use entities::ids::ElectronicDeliveryId;
+use erp_core::common::time::Instant;
+use erp_core::ids::ElectronicDeliveryId;
 use id_generator::next_id;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::CreateElectronicDeliveryRequest;
 

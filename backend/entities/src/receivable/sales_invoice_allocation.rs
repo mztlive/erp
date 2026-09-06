@@ -4,9 +4,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{Error, Result};
-use crate::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
-use crate::money::Amount;
+use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 
 use super::receipt_allocation::{validate_action_reference, AllocationAction};
 
@@ -66,7 +66,7 @@ impl SalesInvoiceAllocation {
     /// 引用」一致性校验。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesInvoiceAllocationId`）
+    /// * `id` - 实体主键（`erp_core::ids::SalesInvoiceAllocationId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -147,7 +147,7 @@ fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::money::{line_amounts, Quantity, Rate, UnitPrice};
+    use erp_core::money::{line_amounts, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn data() -> SalesInvoiceAllocationData {
@@ -181,14 +181,14 @@ mod tests {
         );
         assert_eq!(
             allocation.allocated_gross_amount,
-            crate::money::Amount::from_str("29.97").unwrap()
+            erp_core::money::Amount::from_str("29.97").unwrap()
         );
     }
 
     #[test]
     fn new_rejects_amount_mismatch_and_zero_seq() {
         let mismatch = SalesInvoiceAllocationData {
-            allocated_tax_amount: crate::money::Amount::from_str("3.89").unwrap(),
+            allocated_tax_amount: erp_core::money::Amount::from_str("3.89").unwrap(),
             ..data()
         };
         assert!(SalesInvoiceAllocation::new(SalesInvoiceAllocationId::new("si-2"), mismatch).is_err());

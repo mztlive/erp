@@ -2,7 +2,7 @@
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 仓库创建与修订追加：跨集合（warehouses + warehouse_revisions + 审计）→
-//!   `database::Transactional::with_transaction`，保证「仓库身份 + 当前修订指针 +
+//!   `persistence_core::Transactional::with_transaction`，保证「仓库身份 + 当前修订指针 +
 //!   修订快照」原子可见（数据模型 §6.3）；
 //! - 仓库-SKU 预警策略单集合 CRUD → `&mut NoTransaction`（审计日志按 D01
 //!   既有写法独立写入）。
@@ -14,26 +14,29 @@
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
-use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional, WarehouseExt};
-use entities::common::time::BusinessDate;
+use database::{AccessControlExt, CatalogExt, WarehouseExt};
 use entities::file_asset::content_fingerprint;
-use entities::ids::WarehouseId;
-use entities::ids::{WarehouseRevisionId, WarehouseSkuPolicyId};
 use entities::warehouse::status::EnableStatus;
 use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use entities::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
 use entities::warehouse::warehouse_sku_policy::{
     WarehouseSkuPolicy, WarehouseSkuPolicyData, WarehouseSkuPolicyUpdate,
 };
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::WarehouseId;
+use erp_core::ids::{WarehouseRevisionId, WarehouseSkuPolicyId};
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
 use crate::iam::{self, SharedRbacService};
+use application_core::AuditActor;
 use entities::work_item::{AvailableWorkItemAccount, WorkItemType};
-use entities::{AccountKind, Permission};
+use entities::Permission;
+use erp_core::AccountKind;
 
 mod dto;
 

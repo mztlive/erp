@@ -31,10 +31,6 @@ pub mod service_evidence;
 pub mod service_fulfillment;
 pub mod service_fulfillment_draft;
 
-pub use crate::ids::{
-    AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId,
-    DeliveryLineId, ElectronicDeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, ServiceFulfillmentId,
-};
 pub use acceptance_eligibility::{AcceptanceFactEligibility, AcceptanceLineEligibility, AcceptanceProgress};
 pub use acceptance_fulfillment_allocation::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AllocationAction,
@@ -57,6 +53,10 @@ pub use electronic_delivery::{
 };
 pub use electronic_delivery_draft::{
     ElectronicDeliveryDraft, ElectronicDeliveryDraftData, ElectronicRecipientFingerprint,
+};
+pub use erp_core::ids::{
+    AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId,
+    DeliveryLineId, ElectronicDeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, ServiceFulfillmentId,
 };
 pub use purchase_receipt::{
     PurchaseFulfillmentEligibility, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,

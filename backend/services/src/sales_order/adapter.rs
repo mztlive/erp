@@ -5,13 +5,13 @@
 //! 运行时不得按采购确认或卡券运营节点用途分支。
 
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::CustomerAccountId;
 use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::CustomerAccountId;
 
 use crate::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
@@ -579,16 +579,16 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{
-        CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
-        SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-    };
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::sales_order::{
         CardForm, GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
         SalesOrderSubmissionLineData, VoucherLineDraft, WelfareScenario,
     };
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
+        SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn draft_order() -> SalesOrder {

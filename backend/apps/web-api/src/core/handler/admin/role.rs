@@ -1,11 +1,9 @@
+use application_core::AuditActor;
 use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use services::{
-    audit::AuditActor,
-    iam::{CreateRoleParams, RoleItem, UpdateRoleParams},
-};
+use services::iam::{CreateRoleParams, RoleItem, UpdateRoleParams};
 use validator::Validate;
 
 use crate::{

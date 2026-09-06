@@ -1,9 +1,10 @@
-use database::{Executor, IntegrationOpsExt, WorkItemExt};
-use entities::common::time::Instant;
+use database::{IntegrationOpsExt, WorkItemExt};
 use entities::integration_ops::{
     DirectConclusion, ErrorTaskStatus, IntegrationCommandIdentity, ResolutionType,
 };
+use erp_core::common::time::Instant;
 use mongodb::Database;
+use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::super::evidence::{
@@ -20,9 +21,9 @@ use super::guard::{
     latest_resolution, load_bound_work_item, load_difference, load_error_task,
 };
 use super::{append_resolution, store_receipt, DirectFact, TASK_COMPLETION_AUDIT};
-use crate::audit::AuditActor;
 use crate::errors::Result;
 use crate::work_item::WorkItemService;
+use application_core::AuditActor;
 
 #[derive(Debug)]
 struct TerminalFact {

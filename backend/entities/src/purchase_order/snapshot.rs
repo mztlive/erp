@@ -5,12 +5,12 @@
 use chrono::{Datelike, Days};
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::money::{Amount, Rate};
 use crate::supplier::business_category::split_encoded_payment_term_snapshot;
 use crate::supplier::SupplierPaymentTerm;
-use crate::validation::normalize_required_text;
+use erp_core::common::time::BusinessDate;
+use erp_core::money::{Amount, Rate};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 供应商名称最大长度。
 const SUPPLIER_NAME_MAX_LEN: usize = 256;
@@ -154,7 +154,7 @@ impl PaymentTermSnapshot {
 #[cfg(test)]
 mod tests {
     use super::{PaymentTermSnapshot, SupplierSnapshot};
-    use crate::common::time::BusinessDate;
+    use erp_core::common::time::BusinessDate;
 
     #[test]
     fn supplier_snapshot_trims_and_requires_name() {
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn payment_term_snapshot_normalizes_and_rejects_negative_gates() {
-        use crate::money::Amount;
+        use erp_core::money::Amount;
         use std::str::FromStr;
 
         let snapshot = PaymentTermSnapshot::new(

@@ -14,9 +14,9 @@ use serde::Deserialize;
 
 use super::extensions::{ContractExt, SalesOrderExt};
 use super::Repository;
-use crate::executor::Executor;
-use crate::{Error, Result};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use persistence_core::Executor;
+use persistence_core::{Error, Result};
 
 const CONTRACTS: &str = <Database as ContractExt>::CONTRACTS;
 const SALES_ORDERS: &str = <Database as SalesOrderExt>::SALES_ORDERS;

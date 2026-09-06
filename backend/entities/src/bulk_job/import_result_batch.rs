@@ -3,8 +3,8 @@
 //! 禁止 Service 连续组合 `mark_partially_succeeded` 与 `mark_succeeded`：
 //! 后者会把含失败项的任务覆盖成纯 `Succeeded`。
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
+use erp_core::common::time::Instant;
+use erp_core::{Error, Result};
 
 use super::background_job::{BackgroundJob, JobStatus};
 
@@ -124,8 +124,8 @@ fn next_processed_count(processed: u64, success: u64, skipped: u64, failed: u64)
 mod tests {
     use super::BackgroundJob;
     use crate::bulk_job::background_job::{BackgroundJobData, JobStatus, JobType};
-    use crate::common::time::Instant;
-    use crate::ids::BackgroundJobId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::BackgroundJobId;
 
     fn job() -> BackgroundJob {
         let mut job = BackgroundJob::new(

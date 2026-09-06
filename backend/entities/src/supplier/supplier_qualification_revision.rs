@@ -8,14 +8,14 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::revision::RevisionBase;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::time::BusinessDate;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::supplier_qualification::{QualificationStatus, QualificationType};
 
-pub use crate::ids::{
+pub use erp_core::ids::{
     FileAssetId, SupplierAccountId, SupplierQualificationId, SupplierQualificationRevisionId,
 };
 
@@ -79,7 +79,7 @@ impl SupplierQualificationRevision {
     /// 强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierQualificationRevisionId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationRevisionId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -135,9 +135,9 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{SupplierQualificationRevision, SupplierQualificationRevisionData};
-    use crate::common::time::BusinessDate;
-    use crate::ids::{FileAssetId, SupplierAccountId, SupplierQualificationRevisionId};
     use crate::supplier::supplier_qualification::{QualificationStatus, QualificationType};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationRevisionId};
 
     fn revision_data() -> SupplierQualificationRevisionData {
         SupplierQualificationRevisionData {

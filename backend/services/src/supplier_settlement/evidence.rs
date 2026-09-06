@@ -1,20 +1,22 @@
 //! W27 结算差异的不可变补证强命令。
 
-use database::{AccessControlExt, NoTransaction, SupplierSettlementExt, Transactional};
-use entities::common::time::Instant;
-use entities::ids::{SupplierSettlementDifferenceId, SupplierSettlementStatementId};
+use database::{AccessControlExt, SupplierSettlementExt};
 use entities::supplier_settlement::{
     SettlementStatus, SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData,
 };
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementStatementId};
 use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::{
     digest_parts, SettlementDifferenceEvidenceRequest, SettlementDifferenceEvidenceResult,
     SettlementDifferenceEvidenceView, SupplierSettlementService,
 };
-use crate::audit::AuditActor;
+use crate::audit::AuditActorLogs;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 impl SupplierSettlementService {
     /// 为一个精确差异追加不可变证据引用与业务意见。

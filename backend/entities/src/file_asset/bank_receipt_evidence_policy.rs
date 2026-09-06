@@ -7,8 +7,8 @@
 //! （pending 路径恒为 `false`，stored 路径为 `destroyed_at.is_some()`），
 //! 校验不依赖当前时间。
 
-use crate::errors::{Error, Result};
 use crate::file_asset::{RetentionClass, SensitivityClass};
+use erp_core::{Error, Result};
 
 /// 银行回单证据策略。
 ///

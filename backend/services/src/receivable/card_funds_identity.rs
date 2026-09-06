@@ -3,11 +3,11 @@
 //! 领域方法 [`entities::work_item::WorkItem::lock_card_funds_command`] 是唯一规则源；
 //! 本文件只把类型化失败映射为既有 HTTP 错误合同。RBAC、DataScope 与队列查询仍在调用方。
 
-use entities::ids::ReceivableAccountId;
 use entities::work_item::{
     CardFundsCommandIdentityError, CardFundsCommandLock, CardFundsCommandSubject, CardFundsReviewKind,
     WorkItem,
 };
+use erp_core::ids::ReceivableAccountId;
 
 use super::dto::CardFundsReviewType;
 use crate::errors::{Error, Result};
@@ -131,12 +131,12 @@ mod tests {
     use super::{lock_registration_work_item, lock_review_work_item, map_identity_error};
     use crate::errors::Error;
     use crate::receivable::dto::CardFundsReviewType;
-    use entities::common::time::Instant;
-    use entities::ids::{ReceivableAccountId, WorkItemId};
     use entities::work_item::{
         AssignmentSource, CardFundsCommandIdentityError, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemType,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ReceivableAccountId, WorkItemId};
 
     fn item() -> WorkItem {
         WorkItem::new_at(

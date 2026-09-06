@@ -113,8 +113,8 @@ impl CommitCustomerReceiptRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entities::ids::{CustomerAccountId, PartyId, ReceivableEntryId};
-    use entities::money::Amount;
+    use erp_core::ids::{CustomerAccountId, PartyId, ReceivableEntryId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn valid_receipt() -> CreateCustomerReceiptRequest {
@@ -122,7 +122,7 @@ mod tests {
             receipt_no: "RC-TEST-001".to_string(),
             counterparty_party_id: PartyId::new("party-1"),
             customer_id: Some(CustomerAccountId::new("cust-1")),
-            received_at: entities::common::time::Instant::from_unix_secs(1_700_000_000),
+            received_at: erp_core::common::time::Instant::from_unix_secs(1_700_000_000),
             amount: Amount::from_str("1000.00").unwrap(),
             bank_reference: Some("BANK-REF".to_string()),
         }

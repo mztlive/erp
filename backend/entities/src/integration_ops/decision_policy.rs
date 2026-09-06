@@ -435,11 +435,11 @@ mod tests {
         DifferenceActionProjection, DirectConclusion, ErrorActionProjection, FundsImpact, ProjectionOutcome,
         ProjectionSubject, RequiredEvidenceKind,
     };
-    use crate::ids::{InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId};
     use crate::integration_ops::{
         ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
+    use erp_core::ids::{InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     fn error_task(with_message: bool) -> IntegrationErrorTask {
         IntegrationErrorTask::new(

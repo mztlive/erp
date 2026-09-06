@@ -6,16 +6,16 @@
 //! Service 基于本事实解释执行；本模块只做持久化读取，查询次数与任务数、销售
 //! 行数及供给数无关，不得出现逐行 N+1。
 
-use entities::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use entities::purchase_order::CreationBasisFacts;
 use entities::supplier_offering::OfferingStatus;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use mongodb::bson::doc;
 use mongodb::Database;
 
-use crate::executor::Executor;
 use crate::repository::extensions::{SupplierExt, SupplierOfferingExt};
-use crate::Result;
+use persistence_core::Executor;
+use persistence_core::Result;
 
 /// 批量加载采购创建依据计算所需的最小持久化事实。
 ///
@@ -164,12 +164,6 @@ fn unique_supplier_ids(
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::common::time::Instant;
-    use entities::ids::{
-        PartyId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-        SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
-    };
-    use entities::money::{Quantity, Rate, UnitPrice};
     use entities::party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
     use entities::supplier::{
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData,
@@ -180,11 +174,17 @@ mod isolation_tests {
         SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
         SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        PartyId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+        SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
+    };
+    use erp_core::money::{Quantity, Rate, UnitPrice};
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
     use crate::repository::extensions::{PartyExt, SupplierExt, SupplierOfferingExt};
-    use crate::{NoTransaction, Transactional};
+    use persistence_core::{NoTransaction, Transactional};
 
     use super::load_creation_basis_facts;
 
@@ -221,7 +221,7 @@ mod isolation_tests {
                 bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
                 supply_region: vec!["全国".to_string()],
                 product_capabilities: Vec::new(),
-                valid_from: entities::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
+                valid_from: erp_core::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
                 valid_to: None,
                 prefill_source_refs: PrefillSourceRefs {
                     input_tax_rate: None,
@@ -303,7 +303,7 @@ mod isolation_tests {
         )
         .unwrap();
         let revision = PartyRevision::new(
-            entities::ids::PartyRevisionId::new(revision_id),
+            erp_core::ids::PartyRevisionId::new(revision_id),
             PartyRevisionData {
                 party_id: PartyId::new(id),
                 revision_no: 1,
@@ -546,7 +546,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), crate::errors::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
                         let mut fresh = offering("offering-txn", "sku-1", "sup-a");

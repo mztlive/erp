@@ -9,8 +9,8 @@ use mongodb::{
 };
 
 use crate::repository::extensions::WorkItemExt;
-use crate::Result;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use persistence_core::Result;
 
 /// `work_items` 集合名。
 pub(crate) const WORK_ITEMS: &str = <mongodb::Database as WorkItemExt>::WORK_ITEMS;

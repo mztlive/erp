@@ -2,7 +2,7 @@
 //!
 //! 履约主线、取消与退款是三条正交状态机（§7.6），定义与邻接矩阵见 [`super::status`]；
 //! 明细见 [`super::fulfillment_item`]。`COMPLETED`/`REJECTED` 是终态，乱序或重复回调
-//! 经 [`crate::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
+//! 经 [`erp_core::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
 
 use std::fmt;
 
@@ -10,11 +10,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::ensure_transition;
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::{SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::state::ensure_transition;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 // 兼容既有深层导入路径：`supplier_fulfillment::fulfillment_order::{...}`。
 pub use super::fulfillment_item::{SupplierFulfillmentItem, SupplierFulfillmentItemData};
@@ -161,7 +161,7 @@ impl SupplierFulfillmentOrder {
     /// 提交后 `submitted_at` 必填、接单后 `accepted_at` 必填、完成后 `completed_at` 必填）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierFulfillmentOrderId`）
+    /// * `id` - 实体主键（`erp_core::ids::SupplierFulfillmentOrderId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -253,7 +253,7 @@ impl SupplierFulfillmentOrder {
     ///
     /// # 错误
     /// 目标不在合法后继中（含从高状态回低状态）时返回
-    /// [`crate::errors::Error::InvalidStateTransition`]。
+    /// [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_fulfillment(&mut self, to: FulfillmentStatus) -> Result<()> {
         ensure_transition(self.fulfillment_status, to)?;
         self.fulfillment_status = to;
@@ -286,7 +286,7 @@ impl SupplierFulfillmentOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标不在合法后继中时返回 [`crate::errors::Error::InvalidStateTransition`]。
+    /// 目标不在合法后继中时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_cancel(&mut self, to: CancelStatus) -> Result<()> {
         ensure_transition(self.cancel_status, to)?;
         self.cancel_status = to;
@@ -302,7 +302,7 @@ impl SupplierFulfillmentOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标不在合法后继中时返回 [`crate::errors::Error::InvalidStateTransition`]。
+    /// 目标不在合法后继中时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_refund(&mut self, to: RefundStatus) -> Result<()> {
         ensure_transition(self.refund_status, to)?;
         self.refund_status = to;
@@ -539,7 +539,7 @@ mod tests {
 
     fn place_action(status: SupplierOrderActionStatus) -> SupplierOrderAction {
         SupplierOrderAction::new(
-            crate::ids::SupplierOrderActionId::new("action-1"),
+            erp_core::ids::SupplierOrderActionId::new("action-1"),
             crate::supplier_fulfillment::SupplierOrderActionData {
                 supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
                 action_type: SupplierOrderActionType::Place,

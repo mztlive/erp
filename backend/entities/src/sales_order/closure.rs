@@ -2,7 +2,7 @@
 //!
 //! 仓储事实（进行中变更单、应收摘要读取）不得进入本模块；中文 View 文案留在 Service。
 
-use crate::money::Amount;
+use erp_core::money::Amount;
 
 use super::entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, SalesOrder,
@@ -175,8 +175,8 @@ mod tests {
     };
     use super::super::types::{BusinessType, OriginSystem};
     use super::{SalesOrderClosureFacts, SalesOrderClosureTerminal, SalesOrderFulfillmentBlocker};
-    use crate::ids::{CustomerAccountId, PartyId, SalesOrderId};
-    use crate::money::Amount;
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use erp_core::money::Amount;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

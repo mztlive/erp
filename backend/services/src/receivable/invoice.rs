@@ -1,17 +1,18 @@
 //! 发票列表、详情、草稿创建、销项提交与过账编排。
 
-use database::{AccessControlExt, Executor, NoTransaction, PayableExt, ReceivableExt, Transactional};
+use database::{AccessControlExt, PayableExt, ReceivableExt};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
-use entities::money::Amount;
 use entities::payable::PurchaseInvoiceAllocation;
 use entities::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceStatus, ReceivableAccount,
     SalesInvoiceAllocation,
 };
+use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
+use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use std::collections::HashMap;
@@ -29,10 +30,12 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
+use crate::audit::AuditActorLogs;
+use crate::audit::{CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use application_core::AuditActor;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------
@@ -398,7 +401,7 @@ impl ReceivableService {
                         crate::sales_order::update_sales_order_money_progress(
                             &db,
                             session,
-                            &entities::ids::SalesOrderId::new(sales_order_id),
+                            &erp_core::ids::SalesOrderId::new(sales_order_id),
                             actor_id.clone(),
                             None,
                         )
@@ -574,7 +577,7 @@ impl ReceivableService {
                     crate::sales_order::update_sales_order_money_progress(
                         &db,
                         session,
-                        &entities::ids::SalesOrderId::new(sales_order_id),
+                        &erp_core::ids::SalesOrderId::new(sales_order_id),
                         actor_id.clone(),
                         None,
                     )
@@ -922,10 +925,10 @@ mod invoice_no_approval_tests {
     use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{InvoiceId, PartyId};
-    use entities::money::Amount;
     use entities::receivable::{InvoiceDirection, InvoiceKind};
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{InvoiceId, PartyId};
+    use erp_core::money::Amount;
     use std::str::FromStr;
 
     fn draft_invoice() -> Invoice {

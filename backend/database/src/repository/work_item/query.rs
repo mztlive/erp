@@ -6,8 +6,8 @@ use mongodb::options::FindOptions;
 
 use super::super::{QueryFilter, Repository};
 use super::{WorkItemFilter, WorkItemRow};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 impl<'a> Repository<'a, WorkItem> {
     /// 按固定批次读取队列候选任务投影。
@@ -148,7 +148,7 @@ impl<'a> Repository<'a, WorkItem> {
     /// 仅查询本仓储拥有的 `work_items` 集合，按主键 `$in` 批量读取，不访问确认事实集合。
     pub async fn list_legacy_import_confirmations_by_ids(
         &self,
-        work_item_ids: &[entities::ids::WorkItemId],
+        work_item_ids: &[erp_core::ids::WorkItemId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>> {
         if work_item_ids.is_empty() {

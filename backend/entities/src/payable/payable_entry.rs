@@ -4,11 +4,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::{BusinessDate, Instant};
-use crate::errors::{Error, Result};
-use crate::ids::{PayableAccountId, PayableEntryId};
-use crate::money::Amount;
-use crate::validation::normalize_required_text;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{PayableAccountId, PayableEntryId};
+use erp_core::money::Amount;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -161,7 +161,7 @@ impl PayableEntry {
     /// 校验（原始应付必须是增加，供应商退款/冲正是减少，差额类双向均可）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::PayableEntryId`）
+    /// * `id` - 实体主键（`erp_core::ids::PayableEntryId`）
     /// * `data` - 创建数据
     ///
     /// # 返回

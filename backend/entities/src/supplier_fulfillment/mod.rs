@@ -19,7 +19,7 @@ pub mod refund;
 pub mod status;
 pub mod status_history;
 
-pub use crate::ids::{
+pub use erp_core::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
     SupplierOrderStatusHistoryId, SupplierRefundAllocationId, SupplierRefundFactId,
 };

@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use crate::catalog::sku_revision::SkuRevision;
 use crate::catalog::specification::validate_specification_signature;
 use crate::catalog::status::{EnableStatus, ListingStatus};
-use crate::common::stable::StableBase;
-use crate::errors::Result;
-use crate::ids::{ProductId, SkuId, SkuRevisionId, UnitOfMeasureId};
-use crate::validation::normalize_required_text;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{ProductId, SkuId, SkuRevisionId, UnitOfMeasureId};
+use erp_core::validation::normalize_required_text;
+use erp_core::Result;
 
 /// SKU 编号最大长度。
 const SKU_NO_MAX_LEN: usize = 64;
@@ -166,7 +166,7 @@ impl Sku {
     /// `specification_signature` 是规范化形态（空签名必须为固定空规格签名）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SkuId`）
+    /// * `id` - 实体主键（`erp_core::ids::SkuId`）
     /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
@@ -369,8 +369,8 @@ impl Sku {
 mod tests {
     use super::*;
     use crate::catalog::specification::EMPTY_SPEC_SIGNATURE;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::SkuId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::SkuId;
 
     fn data() -> SkuData {
         SkuData {
@@ -610,7 +610,7 @@ mod tests {
                 sales_visible_price_gross: None,
                 market_price: None,
                 status: EnableStatus::Active,
-                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_from: erp_core::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
                 effective_to: None,
             },
         )
@@ -633,7 +633,7 @@ mod tests {
                 sales_visible_price_gross: None,
                 market_price: None,
                 status: EnableStatus::Active,
-                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_from: erp_core::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
                 effective_to: None,
             },
         )

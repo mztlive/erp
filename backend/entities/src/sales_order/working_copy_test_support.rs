@@ -7,9 +7,9 @@
 
 use std::str::FromStr;
 
-use crate::common::time::Instant;
-use crate::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
 use super::types::{GoodsLineFields, LineType, WelfareScenario};
 use super::working_copy_line::SalesOrderWorkingCopyLineData;

@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 
 use entities::catalog::{Product, Sku, SkuRevision};
-use entities::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::SupplierAccount;
 use entities::supplier_offering::{
@@ -14,16 +13,17 @@ use entities::supplier_offering::{
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::extensions::{CatalogExt, PartyExt, SupplierExt, SupplierOfferingExt};
-use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
-use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use persistence_core::insert_literal_regex_filter;
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 pub mod list_filter;
 mod query;
@@ -77,7 +77,7 @@ pub struct SupplierOfferingRow {
     /// 登记来源。
     pub source_type: OfferingSourceType,
     /// API 来源连接。
-    pub source_connection_id: Option<entities::ids::SupplierApiConnectionId>,
+    pub source_connection_id: Option<erp_core::ids::SupplierApiConnectionId>,
     /// 供给关系状态。
     pub status: OfferingStatus,
     /// 当前商业条款修订。
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn offering_filter_combines_source_and_candidate_ids() {
         let filter = SupplierOfferingFilter {
-            offering_ids: Some(vec![entities::ids::SupplierOfferingId::new("offering-1")]),
+            offering_ids: Some(vec![erp_core::ids::SupplierOfferingId::new("offering-1")]),
             sku_id: None,
             supplier_id: None,
             status: None,
@@ -755,7 +755,7 @@ mod tests {
             status: None,
             source_type: None,
             supplier_sku_code: Some("SUP-1".to_string()),
-            keyword_sku_ids: Some(vec![entities::ids::SkuId::new("sku-1")]),
+            keyword_sku_ids: Some(vec![erp_core::ids::SkuId::new("sku-1")]),
             sku_ids: None,
             page: 1,
             page_size: 20,
@@ -830,8 +830,8 @@ mod tests {
         let rows = [
             super::SupplierOfferingRow {
                 id: "offering-1".to_string(),
-                sku_id: entities::ids::SkuId::new("sku-1"),
-                supplier_id: entities::ids::SupplierAccountId::new("supplier-1"),
+                sku_id: erp_core::ids::SkuId::new("sku-1"),
+                supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 supplier_product_code: None,
                 supplier_sku_code: "SUP-1".to_string(),
                 source_type: entities::supplier_offering::OfferingSourceType::Manual,
@@ -843,8 +843,8 @@ mod tests {
             },
             super::SupplierOfferingRow {
                 id: "offering-2".to_string(),
-                sku_id: entities::ids::SkuId::new("sku-2"),
-                supplier_id: entities::ids::SupplierAccountId::new("supplier-1"),
+                sku_id: erp_core::ids::SkuId::new("sku-2"),
+                supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 supplier_product_code: None,
                 supplier_sku_code: "SUP-2".to_string(),
                 source_type: entities::supplier_offering::OfferingSourceType::Manual,

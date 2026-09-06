@@ -8,9 +8,9 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::common::time::Instant;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 
 use super::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
 
@@ -367,9 +367,9 @@ mod tests {
         ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData, ResolutionAction,
         ResolutionVersionCheck, ResultingStatus,
     };
-    use crate::common::time::Instant;
-    use crate::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
     use crate::integration_ops::W29EvidenceReference;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
 
     fn data(action: ResolutionAction) -> ReconciliationDifferenceResolutionData {
         ReconciliationDifferenceResolutionData {

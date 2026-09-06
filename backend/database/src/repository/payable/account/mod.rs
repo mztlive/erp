@@ -1,8 +1,8 @@
-use entities::common::stable::StableBase;
-use entities::ids::{PayableAccountId, SupplierAccountId};
-use entities::money::Amount;
 use entities::payable::{PayableAccountStatus, PayableSourceType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use erp_core::money::Amount;
 use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 

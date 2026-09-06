@@ -8,11 +8,11 @@ use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
-use crate::errors::{Error, Result};
-use crate::ids::FileAssetId;
-use crate::validation::normalize_required_text;
+use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::time::Instant;
+use erp_core::ids::FileAssetId;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 
 /// 对象键最大长度。
 const OBJECT_KEY_MAX_LEN: usize = 512;
@@ -317,7 +317,7 @@ impl FileAsset {
     /// （§4.5.7：失败诊断与导出按保留期销毁）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::FileAssetId`）
+    /// * `id` - 实体主键（`erp_core::ids::FileAssetId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -446,9 +446,9 @@ mod tests {
         content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,
         SensitivityClass,
     };
-    use crate::common::state::ensure_transition;
-    use crate::common::time::Instant;
-    use crate::ids::FileAssetId;
+    use erp_core::common::state::ensure_transition;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::FileAssetId;
     use hmac::{Hmac, KeyInit, Mac};
     use sha2::{Digest, Sha256};
 

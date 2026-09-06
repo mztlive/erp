@@ -7,15 +7,15 @@
 use bpm::engine::DefinitionGraph;
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
-use entities::ids::SupplierAccountId;
-use entities::money::Quantity;
 use entities::purchase_order::{
     PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use entities::sales_order::SalesOrder;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierAccountId;
+use erp_core::money::Quantity;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -493,18 +493,18 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
-    use entities::ids::{
-        CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseOrderId,
-        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, SalesOrderSubmissionLineId,
-        SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-    };
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrderData,
         PurchaseOrderSubmissionData, PurchaseOrderSubmissionLineData, PurchaseType, SupplierSnapshot,
     };
     use entities::sales_order::{BusinessType, OriginSystem, SalesOrderData};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseOrderId,
+        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, SalesOrderSubmissionLineId,
+        SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
 
     fn draft_order() -> PurchaseOrder {
@@ -513,14 +513,14 @@ mod tests {
             PurchaseOrderData {
                 purchase_no: String::new(),
                 sales_order_id: SalesOrderId::new("so-1"),
-                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("sor-1"),
+                sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("sor-1"),
                 creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".into(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                 owner_user_id: "user-1".to_string(),
-                target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
+                target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
             },
             "user-1",
         )
@@ -586,8 +586,8 @@ mod tests {
                 tax_amount: Amount::from_str("0").expect("金额合法"),
                 input_tax_rate: Some(Rate::from_str("0").expect("税率合法")),
                 expected_delivery_date: None,
-                sales_order_line_id: Some(entities::ids::SalesOrderLineId::new("sol-1")),
-                sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new("sorl-1")),
+                sales_order_line_id: Some(erp_core::ids::SalesOrderLineId::new("sol-1")),
+                sales_order_revision_line_id: Some(erp_core::ids::SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
                 allocated_quantity: Some(Quantity::from_str("2").expect("数量合法")),
             },

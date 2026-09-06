@@ -3,12 +3,13 @@
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 
-use database::{BpmExt, NoTransaction, WorkItemExt};
+use database::{BpmExt, WorkItemExt};
 use entities::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use application_core::AuditActor;
 
 use super::access::{authorized_fields, authorized_item_fields, detail_scope, ActorAccess};
 use super::dto;

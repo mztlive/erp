@@ -4,15 +4,15 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::ids::{SkuId, StockMovementId, WarehouseId};
 use entities::inventory::StockBalance;
-use entities::money::Quantity;
+use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
+use erp_core::money::Quantity;
 
 use super::shared::{active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_BALANCES};
-use crate::executor::Executor;
 use crate::repository::{PageResult, Pagination, QueryFilter, Repository};
-use crate::{mongo_ops, Result};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -500,7 +500,7 @@ fn stock_balance_projection() -> Document {
 mod filter_tests {
     use super::{stock_balance_sort, StockBalanceFilter};
     use crate::repository::QueryFilter;
-    use entities::ids::WarehouseId;
+    use erp_core::ids::WarehouseId;
     use mongodb::bson::{doc, Bson};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {

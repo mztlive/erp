@@ -8,12 +8,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::ensure_transition;
-use crate::common::time::BusinessDate;
-use crate::errors::{Error, Result};
-use crate::ids::{SkuId, WarehouseId, WarehouseSkuPolicyId};
-use crate::money::Quantity;
 use crate::warehouse::status::EnableStatus;
+use erp_core::common::state::ensure_transition;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SkuId, WarehouseId, WarehouseSkuPolicyId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
 
 /// 仓库-SKU 策略的半开生效区间。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,7 +126,7 @@ impl WarehouseSkuPolicy {
     /// 完成预警阈值非负校验与生效区间校验（结束日晚于开始日）。
     ///
     /// # 参数
-    /// * `id` - 实体主键（`entities::ids::WarehouseSkuPolicyId`）
+    /// * `id` - 实体主键（`erp_core::ids::WarehouseSkuPolicyId`）
     /// * `data` - 创建数据
     ///
     /// # 返回
@@ -282,8 +282,8 @@ fn ensure_non_negative_quantity(value: Quantity) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::WarehouseSkuPolicyId;
+    use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+    use erp_core::ids::WarehouseSkuPolicyId;
     use std::str::FromStr;
 
     fn data() -> WarehouseSkuPolicyData {

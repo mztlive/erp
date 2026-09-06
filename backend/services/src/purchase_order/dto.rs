@@ -17,9 +17,9 @@ mod change_order;
 mod command;
 mod query;
 
-pub(crate) use crate::query::normalize_sort;
-pub use crate::query::PageView;
-pub use crate::query::SortDir;
+pub(crate) use application_core::normalize_sort;
+pub use application_core::PageView;
+pub use application_core::SortDir;
 pub use entities::purchase_order::SupplySourceType;
 
 pub use self::change_order::{
@@ -50,9 +50,9 @@ pub use self::query::{
 mod tests {
     use std::str::FromStr;
 
-    use entities::common::time::BusinessDate;
-    use entities::money::Quantity;
     use entities::purchase_order::PurchaseOrderStatus;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::Quantity;
     use serde_json::json;
     use validator::Validate;
 
@@ -391,14 +391,14 @@ mod tests {
 
     /// 构造当前草稿商品行。
     fn draft_line(id: &str, stable_line_id: &str, quantity: &str) -> PurchaseOrderSubmissionLine {
-        use entities::ids::{
+        use entities::purchase_order::PurchaseOrderSubmissionLineData;
+        use erp_core::ids::{
             ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
             SalesOrderLineId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
         };
-        use entities::money::{Rate, UnitPrice};
-        use entities::purchase_order::PurchaseOrderSubmissionLineData;
+        use erp_core::money::{Rate, UnitPrice};
         let quantity = Quantity::from_str(quantity).unwrap();
-        let (gross, net, tax) = entities::money::line_amounts(
+        let (gross, net, tax) = erp_core::money::line_amounts(
             UnitPrice::from_str("5").unwrap(),
             quantity,
             Rate::from_str("0").unwrap(),
