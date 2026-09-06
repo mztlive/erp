@@ -1,16 +1,199 @@
-=== check-bpm-boundaries ===
-检查 BPM crate 与成员 manifest…
-检查 bpm 依赖图…
-检查 bpm 源码边界…
-检查 ID 定义源…
-检查 id_type 过程宏定义源…
-检查 DocumentType -> ProcessKind 映射入口…
-BPM 边界检查通过。
-bpm_exit=0
-=== check-service-boundaries ===
-Service 边界检查通过；当前基线共 0 个受控命中。
-svc_exit=0
-=== check-domain-boundaries ===
+phase: 04
+status: 本地门禁通过
+never_mark: 已验收
+review_approved: true
+disclaimer: 真实数据库运行未验证
+cwd: backend/
+recorded_at: 2026-09-06T18:55:26Z
+implement_commit: c8b5f6b3f18430a36f1e35eca1992c01c25e4814
+integrator_commit: c8b5f6b3f18430a36f1e35eca1992c01c25e4814
+head: c8b5f6b3f18430a36f1e35eca1992c01c25e4814
+input_head: 56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a
+quality_passed: true
+unit_tests_passed: true
+
+=== cargo metadata ===
+command: cargo metadata --no-deps --format-version 1 --locked
+workspace_members: 22
+members: application-core, bpm, cli, config, database, entities, entity-core, entity-macros, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-support, erp-workflow, id-generator, permission-macros, persistence-core, services, storage, test-support, web-api
+kind=test: 0
+autotests: false on erp-support and remaining members
+instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-support, erp-workflow, persistence-core
+forbidden-edge contract: loaded
+old-source clearance: loaded, not applied as 已验收 (phase 00/01/02/03/04 are 本地门禁通过 or 执行中 at check time)
+exit: 0
+
+=== cargo tree erp-support -e normal,build,dev --depth 1 --locked ===
+erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── chrono v0.4.45
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── entity-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/entity-macros)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── hmac v0.13.0
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── sha2 v0.11.0
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+forbidden_direct_or_workspace_hits: none
+note: erp-support has no erp-processes / erp-read-models / erp-workflow / erp-identity / erp-audit / entities / database / services / test-support / bpm edge
+
+=== cargo tree erp-processes -e normal,build,dev --depth 1 --locked ===
+erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── serde v1.0.229
+├── services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+note: composition layer may depend on old three-layer and erp-support; services has no erp-processes / erp-read-models edge
+
+=== cargo tree services -e normal,build,dev --depth 1 --locked ===
+services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── aes-gcm v0.11.1
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── base64 v0.23.1
+├── bpm v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/bpm)
+├── casbin v2.20.0
+├── chrono v0.4.45
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── entity-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/entity-core)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── hex v0.4.3
+├── hmac v0.13.0
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── mongodb v3.8.1
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── regex v1.13.1
+├── rust_decimal v1.42.1
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── sha2 v0.11.0
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tracing v0.1.44
+└── validator v0.21.0
+[dev-dependencies]
+├── test-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/test-support)
+└── tokio v1.53.1 (*)
+note: services depends on erp-support for adapters (SupportAuditPort/BusinessDocumentPort) and remaining inner methods; no erp-processes reverse edge
+
+=== cargo tree web-api -e normal,build,dev --depth 1 --locked ===
+web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
+├── application-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/application-core)
+├── async-trait v0.1.92 (proc-macro)
+├── axum v0.8.9
+├── chrono v0.4.45
+├── config v0.1.0 (/Users/huangjiajiang/Development/erp/backend/config)
+├── database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
+├── entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
+├── erp-audit v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-audit)
+├── erp-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-core)
+├── erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+├── erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
+├── erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
+├── erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+├── erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+├── hmac v0.12.1
+├── id-generator v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/id-generator)
+├── jwt v0.16.0
+├── mongodb v3.8.1
+├── opentelemetry v0.32.0
+├── opentelemetry-otlp v0.32.0
+├── opentelemetry_sdk v0.32.1
+├── permission-macros v0.1.0 (proc-macro) (/Users/huangjiajiang/Development/erp/backend/crates/permission-macros)
+├── persistence-core v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/persistence-core)
+├── serde v1.0.229
+├── serde_json v1.0.151
+├── services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
+├── sha2 v0.10.9
+├── storage v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/storage)
+├── thiserror v2.0.20
+├── tokio v1.53.1
+├── tower v0.5.3
+├── tower-http v0.7.0
+├── tracing v0.1.44
+├── tracing-appender v0.2.5
+├── tracing-opentelemetry v0.33.0
+├── tracing-subscriber v0.3.23
+├── uuid v1.25.0
+└── validator v0.21.0
+[build-dependencies]
+└── syn v3.0.4
+[dev-dependencies]
+└── test-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/test-support)
+note: web-api composition root depends on erp-support and erp-processes
+
+=== old implementation clearance ===
+backend/entities/src/file_asset: absent
+backend/entities/src/bulk_job: absent
+backend/entities/src/source_registry: absent
+backend/services/src/file_asset: absent
+backend/services/src/bulk_job: absent
+backend/services/src/source_registry: absent
+backend/services/src/pending_file_assets.rs: absent
+backend/database/src/repository/file_asset.rs: absent
+backend/database/src/repository/bulk_job.rs: absent
+backend/database/src/repository/source_registry.rs: absent
+backend/database/src/indexes/file_asset.rs: absent
+backend/database/src/indexes/bulk_job.rs: absent
+backend/database/src/indexes/source_registry.rs: absent
+entities/src/lib.rs, services/src/lib.rs, database/src/repository/mod.rs, database/src/indexes/mod.rs, database/src/repository/extensions/mod.rs, database/src/repository/owned/mod.rs: FileAsset/BulkJob/SourceRegistry modules unwired
+historical tests/ archives byte-for-byte versus 56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a: true
+handler module comments still mention services::file_asset/bulk_job/source_registry (comments only; imports use erp_support)
+entities::file_asset / entities::bulk_job remain only in historical tests/ archives
+grep entity bson:: under crates/erp-support/src/entity: none
+erp-support Deref / type Repository alias / impl on foreign Repository: none
+
+=== grep production entities::file_asset|bulk_job|source_registry ===
+command: grep -R -n --include='*.rs' -E 'entities::(file_asset|bulk_job|source_registry)' backend --exclude-dir=tests --exclude-dir=target
+production_src_hits: none
+historical tests/ hits (byte-for-byte archives, not production):
+backend/database/tests/core_layering_remediation.rs:9:use entities::bulk_job::{
+backend/database/tests/core_layering_remediation.rs:291:    entities::bulk_job::BackgroundJob,
+backend/database/tests/core_layering_remediation.rs:292:    Vec<entities::bulk_job::BackgroundJobItem>,
+backend/services/tests/supplier_payment_posting.rs:19:use entities::file_asset::{ContentHmac, FileAsset, FileAssetData, RetentionClass, SensitivityClass};
+
+=== grep production services::file_asset|bulk_job|source_registry|pending_file_assets ===
+command: grep -R -n --include='*.rs' -E 'services::(file_asset|bulk_job|source_registry|pending_file_assets)' backend --exclude-dir=tests --exclude-dir=target
+production_code_hits: none
+comment-only handler module docs (imports use erp_support):
+backend/apps/web-api/src/core/handler/source_registry/mod.rs:4://! 直接复用 `services::source_registry` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+backend/apps/web-api/src/core/handler/bulk_job/mod.rs:4://! 直接复用 `services::bulk_job` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+backend/apps/web-api/src/core/handler/file_asset/mod.rs:4://! 直接复用 `services::file_asset` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+
+=== grep erp-support entity bson:: ===
+command: grep -R -n --include='*.rs' 'bson::' backend/crates/erp-support/src/entity
+hits: none
+
+=== check-domain-boundaries.sh (from quality gates) ===
 领域边界检查
 夹具: errors=0
 工作区: errors=0
@@ -19,25 +202,5 @@ svc_exit=0
   说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
 领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
 dom_exit=0
-=== check-permissions-drift ===
-重新构建 web-api 以生成权限定义…
-   Compiling erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
-   Compiling entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
-   Compiling database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
-   Compiling services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
-   Compiling erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
-   Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
-   Compiling web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
-warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
-  |
-  = note: `#[warn(linker_messages)]` on by default
 
-warning: `web-api` (bin "web-api") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 17s
-warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
-note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
-检查生成物: /Users/huangjiajiang/Development/erp/erp-client/lib/permissions.generated.ts
-权限生成物无漂移。
-perm_exit=0
-=== git diff --check ===
-diffcheck_exit=0
+真实数据库运行未验证

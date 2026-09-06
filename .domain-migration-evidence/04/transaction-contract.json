@@ -1,11 +1,92 @@
 {
-  "same_executor": true,
-  "no_nested_transactions": true,
-  "external_io_outside_session": true,
-  "pending_file_assets": "prepare constructs FileAsset+AuditLog before txn; persist uses caller Executor in the existing business transaction",
-  "with_assets_outer_use_cases": "HTTP handlers call erp-processes::attachments; old services keep inner methods taking PendingAttachmentBatch",
-  "s3": "upload/store_pending_asset_files remain HTTP-layer, outside Mongo session",
-  "source_registry_create": "create_source_system remains run_audited one Executor",
+  "phase": "04",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
-  "real_database_rollback_concurrency": "未验证"
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false,
+    "unchanged_versus_phase_03": true
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden",
+    "unchanged_versus_phase_03": true
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "sha256": "daae5edfd64c4e70bd11e28abb80d400e7da03f8c49114ff426bf3377ed67fb7",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true,
+    "source_registry_create": "create_source_system remains run_audited one Executor",
+    "note": "run_audited 仅在 erp-processes。source_registry 外层创建继续走命名流程。真实数据库运行未验证。"
+  },
+  "support_audit_port": {
+    "file": "crates/erp-support/src/ports/audit.rs",
+    "sha256": "8fafe6617177ffa28f03c27cb282093734d254d0b942e3d968ba249b32608ee1",
+    "adapter": "services/src/support_audit.rs",
+    "adapter_sha256": "dbf3700f91d6ca51668d5db89a4c3bf6918b507627964a79fc3860d389c386fd",
+    "same_executor": true,
+    "external_io_holds_session": false,
+    "note": "Support 不依赖 erp-audit 类型；组合根 adapter 在同一 Executor 上写入 AuditLog。"
+  },
+  "business_document_port": {
+    "file": "crates/erp-support/src/ports/business_document.rs",
+    "sha256": "6c0d0912e9797ac5ab9639afc2af4232e1e08727d1a7fa89bb2e9b182694a30d",
+    "adapter": "services/src/support_documents.rs",
+    "adapter_sha256": "c68f9b952ac623e29727f06378ffd7f871708e05eb19828f20570aa4bd1c36fc",
+    "same_executor": true
+  },
+  "pending_attachments": {
+    "port": "crates/erp-support/src/ports/pending.rs",
+    "port_sha256": "f64529d44993744f788daf4a3b90386f5655a98a4ec2df349c05486265ebaec8",
+    "process": "crates/erp-processes/src/attachments/pending.rs",
+    "process_sha256": "d06282722acc45280631b301a208ca7d2a18e3ae7cefb5105ce1b1fdb43198b8",
+    "prepare": "constructs FileAsset+AuditLog before txn; no Mongo session held",
+    "persist": "PendingAttachmentBatch::persist uses caller Executor in the existing business transaction",
+    "consumers": "business commands receive attachment IDs/sensitivity/consume-once checks; they must not receive FileAsset entities or S3 clients",
+    "with_assets_outer_use_cases": "HTTP handlers call erp-processes::attachments; old services keep inner methods taking PendingAttachmentBatch",
+    "s3": "upload/store_pending_asset_files remain HTTP-layer, outside Mongo session",
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "external_io_outside_session": true
+  },
+  "owned_repositories_moved": {
+    "count": 9,
+    "types": [
+      "BackgroundJobRepository",
+      "BackgroundJobItemRepository",
+      "BulkSelectionItemRepository",
+      "BulkSelectionSnapshotRepository",
+      "DocumentAttachmentRepository",
+      "ExternalIdentityMapRepository",
+      "ExternalIdentityTargetRepository",
+      "FileAssetRepository",
+      "SourceSystemRepository"
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true,
+    "no_entity_bson": true
+  },
+  "source_contains_with_transaction": true,
+  "real_database_rollback_concurrency": "未验证",
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 SupportAuditPort/PendingAttachmentBatch 同一 Executor。真实数据库运行未验证。"
 }

@@ -1,5 +1,56 @@
 {
-  "workspace_members": [
+  "phase": "04",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "review_approved": true,
+  "branch": "chore/domain-crate-04-support",
+  "evidence_dir": ".domain-migration-evidence/04",
+  "input_head": "56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a",
+  "implement_commits": [
+    "c8b5f6b3f18430a36f1e35eca1992c01c25e4814"
+  ],
+  "implement_commit": "c8b5f6b3f18430a36f1e35eca1992c01c25e4814",
+  "integrator_commit": "c8b5f6b3f18430a36f1e35eca1992c01c25e4814",
+  "head": "c8b5f6b3f18430a36f1e35eca1992c01c25e4814",
+  "unique_integration_owner": "chore/domain-crate-04-support integrator",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "remaining_issues": [],
+  "files_tsv_rows": 169,
+  "path_changes": {
+    "add": 73,
+    "delete": 40,
+    "modify": 56,
+    "total": 169,
+    "versus": "56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a",
+    "rename_detection": false
+  },
+  "owned_repositories_moved": [
+    "BackgroundJobRepository",
+    "BackgroundJobItemRepository",
+    "BulkSelectionItemRepository",
+    "BulkSelectionSnapshotRepository",
+    "DocumentAttachmentRepository",
+    "ExternalIdentityMapRepository",
+    "ExternalIdentityTargetRepository",
+    "FileAssetRepository",
+    "SourceSystemRepository"
+  ],
+  "no_support_to_old_three_layer_edge": true,
+  "no_support_to_processes_edge": true,
+  "no_support_to_read_models_edge": true,
+  "no_support_to_workflow_edge": true,
+  "no_support_to_identity_audit_edge": true,
+  "no_services_to_processes_edge": true,
+  "composition_may_depend_on_old_three_layer": true,
+  "no_e0116": true,
+  "no_deref": true,
+  "no_type_alias": true,
+  "autotests": false,
+  "workspace_members": 22,
+  "workspace_member_names": [
     "application-core",
     "bpm",
     "cli",
@@ -23,111 +74,73 @@
     "test-support",
     "web-api"
   ],
-  "erp-support_dependencies": [
-    {
-      "name": "application-core",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "async-trait",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "chrono",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "entity-core",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "entity-macros",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "erp-core",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "hmac",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "id-generator",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "mongodb",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "persistence-core",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "serde",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "serde_json",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "sha2",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "thiserror",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "tokio",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "tracing",
-      "kind": "normal",
-      "optional": false
-    },
-    {
-      "name": "validator",
-      "kind": "normal",
-      "optional": false
-    }
-  ],
   "kind_test_targets": 0,
-  "lockfile_third_party_versions_unchanged": true,
-  "lockfile_note": "Cargo.lock only added path crate erp-support",
-  "instantiated_planned_crates": [
-    "application-core",
-    "erp-audit",
-    "erp-core",
-    "erp-identity",
-    "erp-processes",
-    "erp-read-models",
-    "erp-support",
-    "erp-workflow",
-    "persistence-core"
-  ],
+  "recorded_at": "2026-09-06T18:55:26Z",
   "unit_tests": {
+    "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+    "exit_code": 0,
     "passed": 3277,
     "failed": 0,
-    "ignored": 71
+    "ignored": 71,
+    "crates": 21,
+    "mongodb_started": false,
+    "include_ignored": false,
+    "log": ".domain-migration-evidence/04/unit-tests.log",
+    "source_log": "backend/logs/phase-04-qg-gates/04-test-lib.log"
   },
-  "disclaimer": "真实数据库运行未验证"
+  "quality_gates": {
+    "fmt": 0,
+    "check": 0,
+    "clippy": 0,
+    "unit-tests": 0,
+    "bpm": 0,
+    "service": 0,
+    "domain": 0,
+    "permissions": 0,
+    "git-diff-check": 0,
+    "all_exit_0": true,
+    "files_changed": [],
+    "log": ".domain-migration-evidence/04/quality-gates.log",
+    "source_dir": "backend/logs/phase-04-qg-gates",
+    "summary": "Phase 04 public gates all passed from backend/. fmt --check, check --locked, clippy -D warnings, lib tests without Mongo, BPM/service/domain boundaries, permissions drift, and git diff --check each exited 0. No business code or lockfile changes. Logs: backend/logs/phase-04-qg-gates/. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "error_codes": 21,
+    "indexes": 368,
+    "versus_phase_03_permissions_equal": true,
+    "versus_phase_03_index_names_keys_unique_equal": true,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "comparison": ".domain-migration-evidence/04/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/04/transaction-contract.json"
+  },
+  "compile_baseline": {
+    "applicable": false,
+    "reason": "阶段 04 不要求编译收益复测；阈值在阶段 17 判定。"
+  },
+  "toolchain": {
+    "quality_gate_run": {
+      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
+      "host": "aarch64-apple-darwin",
+      "profile": "dev"
+    }
+  },
+  "shards": [
+    {
+      "shard": "support",
+      "branch": "chore/domain-crate-03-workflow-composition",
+      "committed": false,
+      "commit_sha": "",
+      "summary": "Unique-cut FileAsset/BulkJob/SourceRegistry into crates/erp-support; workspace/AppState wiring left to integrator."
+    },
+    {
+      "shard": "integrate",
+      "branch": "chore/domain-crate-04-support",
+      "committed": true,
+      "commit_sha": "c8b5f6b3f18430a36f1e35eca1992c01c25e4814",
+      "summary": "Integrated erp-support, unwired old modules, moved PendingFileAssets and *_with_assets HTTP entries to erp-processes/attachments, wired AppState/handlers."
+    }
+  ],
+  "implement_summary": "Phase 04 support unique-cut and integrator wiring on chore/domain-crate-04-support (HEAD/implement c8b5f6b3). erp-support owns FileAsset/BulkJob/SourceRegistry with 9 owned repositories; PendingFileAssets lives in erp-processes/attachments; AppState/handlers switched. Public gates passed (3277 lib tests, 0 failed, 71 ignored). review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
 }

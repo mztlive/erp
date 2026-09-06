@@ -1,130 +1,170 @@
-change	path
-added	.domain-migration-evidence/04/boundary.log
-added	.domain-migration-evidence/04/check.log
-added	.domain-migration-evidence/04/clippy.log
-added	.domain-migration-evidence/04/contract-comparison.json
-added	.domain-migration-evidence/04/files.tsv
-added	.domain-migration-evidence/04/fmt.log
-added	.domain-migration-evidence/04/input.json
-added	.domain-migration-evidence/04/metadata.json
-added	.domain-migration-evidence/04/quality-gates.log
-added	.domain-migration-evidence/04/transaction-contract.json
-added	.domain-migration-evidence/04/unit-tests.log
-modified	backend/Cargo.lock
-modified	backend/Cargo.toml
-modified	backend/apps/web-api/Cargo.toml
-modified	backend/apps/web-api/src/app_state.rs
-modified	backend/apps/web-api/src/core/errors.rs
-modified	backend/apps/web-api/src/core/handler/bulk_job/mod.rs
-modified	backend/apps/web-api/src/core/handler/catalog/mod.rs
-modified	backend/apps/web-api/src/core/handler/catalog/product.rs
-modified	backend/apps/web-api/src/core/handler/contract/mod.rs
-modified	backend/apps/web-api/src/core/handler/file_asset/mod.rs
-modified	backend/apps/web-api/src/core/handler/fulfillment/mod.rs
-modified	backend/apps/web-api/src/core/handler/payable/mod.rs
-modified	backend/apps/web-api/src/core/handler/source_registry/mod.rs
-modified	backend/apps/web-api/src/core/handler/supplier/mod.rs
-modified	backend/crates/erp-processes/Cargo.toml
-added	backend/crates/erp-processes/src/attachments/catalog.rs
-added	backend/crates/erp-processes/src/attachments/fulfillment.rs
-added	backend/crates/erp-processes/src/attachments/mod.rs
-added	backend/crates/erp-processes/src/attachments/payable.rs
-added	backend/crates/erp-processes/src/attachments/pending.rs
-added	backend/crates/erp-processes/src/attachments/supplier.rs
-modified	backend/crates/erp-processes/src/lib.rs
-modified	backend/crates/erp-processes/src/source_registry.rs
-added	backend/crates/erp-support/Cargo.toml
-modified	backend/services/src/bulk_job/dto.rs	backend/crates/erp-support/src/dto/bulk_job.rs
-modified	backend/services/src/file_asset/dto.rs	backend/crates/erp-support/src/dto/file_asset.rs
-added	backend/crates/erp-support/src/dto/mod.rs
-modified	backend/services/src/source_registry/dto.rs	backend/crates/erp-support/src/dto/source_registry.rs
-modified	backend/entities/src/bulk_job/aggregate.rs	backend/crates/erp-support/src/entity/bulk_job/aggregate.rs
-modified	backend/entities/src/bulk_job/background_job.rs	backend/crates/erp-support/src/entity/bulk_job/background_job.rs
-modified	backend/entities/src/bulk_job/background_job_item.rs	backend/crates/erp-support/src/entity/bulk_job/background_job_item.rs
-modified	backend/entities/src/bulk_job/bulk_selection_item.rs	backend/crates/erp-support/src/entity/bulk_job/bulk_selection_item.rs
-modified	backend/entities/src/bulk_job/bulk_selection_snapshot.rs	backend/crates/erp-support/src/entity/bulk_job/bulk_selection_snapshot.rs
-modified	backend/entities/src/bulk_job/import_result_batch.rs	backend/crates/erp-support/src/entity/bulk_job/import_result_batch.rs
-modified	backend/entities/src/bulk_job/legacy_import_job.rs	backend/crates/erp-support/src/entity/bulk_job/legacy_import_job.rs
-modified	backend/entities/src/bulk_job/mod.rs	backend/crates/erp-support/src/entity/bulk_job/mod.rs
-modified	backend/entities/src/bulk_job/supplier_governance_job.rs	backend/crates/erp-support/src/entity/bulk_job/supplier_governance_job.rs
-modified	backend/entities/src/file_asset/bank_receipt_evidence_policy.rs	backend/crates/erp-support/src/entity/file_asset/bank_receipt_evidence_policy.rs
-modified	backend/entities/src/file_asset/document_attachment.rs	backend/crates/erp-support/src/entity/file_asset/document_attachment.rs
-modified	backend/entities/src/file_asset/entity.rs	backend/crates/erp-support/src/entity/file_asset/entity.rs
-modified	backend/entities/src/file_asset/mod.rs	backend/crates/erp-support/src/entity/file_asset/mod.rs
-modified	backend/entities/src/file_asset/pending_reference.rs	backend/crates/erp-support/src/entity/file_asset/pending_reference.rs
-added	backend/crates/erp-support/src/entity/mod.rs
-modified	backend/entities/src/source_registry/mod.rs	backend/crates/erp-support/src/entity/source_registry/mod.rs
-added	backend/crates/erp-support/src/error.rs
-modified	backend/database/src/indexes/bulk_job.rs	backend/crates/erp-support/src/indexes/bulk_job.rs
-modified	backend/database/src/indexes/file_asset.rs	backend/crates/erp-support/src/indexes/file_asset.rs
-added	backend/crates/erp-support/src/indexes/mod.rs
-modified	backend/database/src/indexes/source_registry.rs	backend/crates/erp-support/src/indexes/source_registry.rs
-added	backend/crates/erp-support/src/lib.rs
-added	backend/crates/erp-support/src/ports/audit.rs
-added	backend/crates/erp-support/src/ports/business_document.rs
-added	backend/crates/erp-support/src/ports/mod.rs
-added	backend/crates/erp-support/src/ports/pending.rs
-modified	backend/database/src/repository/bulk_job.rs	backend/crates/erp-support/src/repository/bulk_job.rs
-modified	backend/database/src/repository/extensions/bulk_job.rs	backend/crates/erp-support/src/repository/extensions/bulk_job.rs
-modified	backend/database/src/repository/extensions/file_asset.rs	backend/crates/erp-support/src/repository/extensions/file_asset.rs
-added	backend/crates/erp-support/src/repository/extensions/mod.rs
-modified	backend/database/src/repository/extensions/source_registry.rs	backend/crates/erp-support/src/repository/extensions/source_registry.rs
-modified	backend/database/src/repository/file_asset.rs	backend/crates/erp-support/src/repository/file_asset.rs
-added	backend/crates/erp-support/src/repository/mod.rs
-modified	backend/database/src/repository/owned/background_job.rs	backend/crates/erp-support/src/repository/owned/background_job.rs
-modified	backend/database/src/repository/owned/background_job_item.rs	backend/crates/erp-support/src/repository/owned/background_job_item.rs
-modified	backend/database/src/repository/owned/bulk_selection_item.rs	backend/crates/erp-support/src/repository/owned/bulk_selection_item.rs
-modified	backend/database/src/repository/owned/bulk_selection_snapshot.rs	backend/crates/erp-support/src/repository/owned/bulk_selection_snapshot.rs
-modified	backend/database/src/repository/owned/document_attachment.rs	backend/crates/erp-support/src/repository/owned/document_attachment.rs
-modified	backend/database/src/repository/owned/external_identity_map.rs	backend/crates/erp-support/src/repository/owned/external_identity_map.rs
-modified	backend/database/src/repository/owned/external_identity_target.rs	backend/crates/erp-support/src/repository/owned/external_identity_target.rs
-modified	backend/database/src/repository/owned/file_asset.rs	backend/crates/erp-support/src/repository/owned/file_asset.rs
-added	backend/crates/erp-support/src/repository/owned/mod.rs
-modified	backend/database/src/repository/owned/source_system.rs	backend/crates/erp-support/src/repository/owned/source_system.rs
-modified	backend/database/src/repository/source_registry.rs	backend/crates/erp-support/src/repository/source_registry.rs
-modified	backend/services/src/bulk_job/mod.rs	backend/crates/erp-support/src/service/bulk_job/mod.rs
-modified	backend/services/src/file_asset/mod.rs	backend/crates/erp-support/src/service/file_asset/mod.rs
-added	backend/crates/erp-support/src/service/mod.rs
-modified	backend/services/src/source_registry/mod.rs	backend/crates/erp-support/src/service/source_registry/mod.rs
-modified	backend/database/Cargo.toml
-modified	backend/database/src/indexes/mod.rs
-modified	backend/database/src/lib.rs
-modified	backend/database/src/repository/catalog/product.rs
-modified	backend/database/src/repository/extensions/mod.rs
-modified	backend/database/src/repository/mod.rs
-modified	backend/database/src/repository/owned/mod.rs
-modified	backend/database/src/repository/supplier/qualification.rs
-modified	backend/database/src/repository/supplier_api.rs
-modified	backend/docs/superpowers/plans/domain-crate-migration/04-support.md
-modified	backend/docs/superpowers/plans/domain-crate-migration/README.md
-modified	backend/entities/Cargo.toml
-modified	backend/entities/src/fulfillment/service_evidence.rs
-modified	backend/entities/src/lib.rs
-modified	backend/entities/src/receivable/card_funds_review_decision.rs
-modified	backend/services/Cargo.toml
-modified	backend/services/src/catalog/brand.rs
-modified	backend/services/src/catalog/product_workflow.rs
-modified	backend/services/src/contract/mod.rs
-modified	backend/services/src/errors.rs
-modified	backend/services/src/fulfillment/service_fulfillment_confirm.rs
-modified	backend/services/src/integration_ops/inbox_message.rs
-modified	backend/services/src/legacy_import/apply_batch.rs
-modified	backend/services/src/legacy_import/batch.rs
-modified	backend/services/src/legacy_import/dto.rs
-modified	backend/services/src/legacy_import/execution.rs
-modified	backend/services/src/legacy_import/query.rs
-modified	backend/services/src/lib.rs
-modified	backend/services/src/payable/mod.rs
-modified	backend/services/src/payable/payment.rs
-deleted	backend/services/src/pending_file_assets.rs
-modified	backend/services/src/receivable/card_funds_decision.rs
-modified	backend/services/src/receivable/card_funds_review.rs
-modified	backend/services/src/supplier/profile/create.rs
-modified	backend/services/src/supplier/profile/update.rs
-modified	backend/services/src/supplier/profile/validation.rs
-modified	backend/services/src/supplier_api/dto.rs
-modified	backend/services/src/supplier_api/governance/jobs.rs
-added	backend/services/src/support_audit.rs
-added	backend/services/src/support_documents.rs
-modified	backend/services/src/warehouse/mod.rs
-modified	backend/services/src/workflow_compose.rs
+action	path	note
+add	.domain-migration-evidence/04/boundary.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/check.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/clippy.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/contract-comparison.json	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/files.tsv	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/fmt.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/input.json	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/metadata.json	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/quality-gates.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/quality-gates.tsv	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/transaction-contract.json	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/04/unit-tests.log	阶段 04 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.lock	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/app_state.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/errors.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/bulk_job/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/catalog/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/catalog/product.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/contract/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/file_asset/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/fulfillment/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/payable/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/source_registry/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/supplier/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/catalog.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/fulfillment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/payable.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/pending.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/attachments/supplier.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/lib.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/dto/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/dto/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/dto/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/dto/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/aggregate.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/background_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/background_job_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/bulk_selection_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/bulk_selection_snapshot.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/import_result_batch.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/legacy_import_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/bulk_job/supplier_governance_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/file_asset/bank_receipt_evidence_policy.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/file_asset/document_attachment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/file_asset/entity.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/file_asset/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/file_asset/pending_reference.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/entity/source_registry/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/error.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/indexes/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/indexes/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/indexes/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/indexes/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/lib.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/ports/audit.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/ports/business_document.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/ports/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/ports/pending.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/extensions/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/extensions/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/extensions/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/extensions/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/background_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/background_job_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/bulk_selection_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/bulk_selection_snapshot.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/document_attachment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/external_identity_map.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/external_identity_target.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/owned/source_system.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/repository/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/service/bulk_job/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/service/file_asset/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/service/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-support/src/service/source_registry/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/indexes/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/indexes/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/lib.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/catalog/product.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/bulk_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/extensions/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/extensions/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/background_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/background_job_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/bulk_selection_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/bulk_selection_snapshot.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/document_attachment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/external_identity_map.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/external_identity_target.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/file_asset.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/owned/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/owned/source_system.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/source_registry.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/supplier/qualification.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/supplier_api.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/04-support.md	阶段 04 状态与证据核销；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 04 状态与证据核销；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/aggregate.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/background_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/background_job_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/bulk_selection_item.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/bulk_selection_snapshot.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/import_result_batch.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/legacy_import_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/bulk_job/supplier_governance_job.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/file_asset/bank_receipt_evidence_policy.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/file_asset/document_attachment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/file_asset/entity.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/file_asset/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/file_asset/pending_reference.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/fulfillment/service_evidence.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/lib.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/receivable/card_funds_review_decision.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/source_registry/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/Cargo.toml	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/bulk_job/dto.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/bulk_job/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/catalog/brand.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/catalog/product_workflow.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/contract/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/errors.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/file_asset/dto.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/file_asset/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/fulfillment/service_fulfillment_confirm.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/integration_ops/inbox_message.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/legacy_import/apply_batch.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/legacy_import/batch.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/legacy_import/dto.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/legacy_import/execution.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/legacy_import/query.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/lib.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/payable/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/payable/payment.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/pending_file_assets.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/receivable/card_funds_decision.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/receivable/card_funds_review.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/source_registry/dto.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/source_registry/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier/profile/create.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier/profile/update.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier/profile/validation.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier_api/dto.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/supplier_api/governance/jobs.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/services/src/support_audit.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+add	backend/services/src/support_documents.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/warehouse/mod.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/workflow_compose.rs	阶段 04 erp-support unique-cut / 集成接线；禁止标记已验收；真实数据库运行未验证
