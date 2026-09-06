@@ -14,18 +14,16 @@
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
-use database::{CatalogExt, WarehouseExt};
+use database::WarehouseExt;
 use entities::file_asset::content_fingerprint;
 use entities::warehouse::status::EnableStatus;
 use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use entities::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
-use entities::warehouse::warehouse_sku_policy::{
-    WarehouseSkuPolicy, WarehouseSkuPolicyData, WarehouseSkuPolicyUpdate,
-};
+use entities::warehouse::warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyUpdate};
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::WarehouseId;
-use erp_core::ids::{WarehouseRevisionId, WarehouseSkuPolicyId};
+use erp_core::ids::WarehouseRevisionId;
 use erp_identity::AccessControlExt;
 use id_generator::next_id;
 use mongodb::Database;
@@ -35,11 +33,11 @@ use validator::Validate;
 use crate::errors::{Error, Result};
 use crate::identity_compose::shared_rbac_service;
 use application_core::AuditActor;
-use entities::work_item::{AvailableWorkItemAccount, WorkItemType};
 use erp_audit::AuditActorLogs;
 use erp_core::AccountKind;
 use erp_identity::Permission;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::work_item::{AvailableWorkItemAccount, WorkItemType};
 
 mod dto;
 
@@ -400,7 +398,9 @@ impl WarehouseService {
             .await?;
         let mut options = Vec::new();
         for account in accounts {
-            if AvailableWorkItemAccount::from_account(&account).is_err() {
+            if AvailableWorkItemAccount::from_account(&crate::workflow_compose::account_fact(&account))
+                .is_err()
+            {
                 continue;
             }
             let permissions = self
@@ -538,76 +538,6 @@ impl WarehouseService {
         })
     }
 
-    /// 创建仓库-SKU 预警策略（单集合写入，无事务）。
-    ///
-    /// 校验仓库与 SKU 存在，且与同 (仓库, SKU) 既有策略的启用区间不重叠
-    /// （数据模型 §6.3：同一仓库和 SKU 的启用区间不得重叠）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建策略的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 仓库或 SKU 不存在
-    /// * `BusinessLogicError` - 与既有策略的启用区间重叠
-    pub async fn warehouse_sku_policy_create(
-        &self,
-        req: CreateWarehouseSkuPolicyRequest,
-        actor: &AuditActor,
-    ) -> Result<WarehouseSkuPolicyView> {
-        req.validate()?;
-        self.db
-            .warehouse()
-            .warehouse(req.warehouse_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        self.db
-            .skus()
-            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
-        let id = WarehouseSkuPolicyId::new(next_id());
-        let policy = WarehouseSkuPolicy::new(
-            id.clone(),
-            WarehouseSkuPolicyData {
-                warehouse_id: req.warehouse_id,
-                sku_id: req.sku_id,
-                minimum_available_quantity: req.minimum_available_quantity,
-                status: req.status.unwrap_or(EnableStatus::Active),
-                effective_from: req.effective_from,
-                effective_to: req.effective_to,
-            },
-        )?;
-        let existing = self
-            .db
-            .warehouse()
-            .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
-            .await?;
-        policy
-            .ensure_no_overlap(&existing)
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-        let audit = actor.clone().resource_log(
-            "warehouse_sku_policy.create",
-            "warehouse_sku_policy",
-            id.to_string(),
-        )?;
-        let policy_for_tx = policy.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.warehouse_sku_policies()
-                    .create(&policy_for_tx, session)
-                    .await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(policy.into())
-    }
-
     /// 更新仓库-SKU 预警策略（乐观锁语义；`warehouse_id`/`sku_id` 是策略身份）。
     ///
     /// # 参数
@@ -725,9 +655,9 @@ impl WarehouseService {
             .ok_or_else(|| {
                 Error::BusinessLogicError(format!("{operation_label}经办人账号不存在或已停用，请重新选择"))
             })?;
-        AvailableWorkItemAccount::from_account(&account).map_err(|_| {
-            Error::BusinessLogicError(format!("{operation_label}经办人账号不可用，请重新选择"))
-        })?;
+        AvailableWorkItemAccount::from_account(&crate::workflow_compose::account_fact(&account)).map_err(
+            |_| Error::BusinessLogicError(format!("{operation_label}经办人账号不可用，请重新选择")),
+        )?;
         let required = handler_permissions(required_permissions);
         let permissions = self.rbac.permissions(account.kind, account_id).await?;
         if required

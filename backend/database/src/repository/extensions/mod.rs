@@ -3,14 +3,11 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod approval_integration;
-mod bpm;
 mod bulk_job;
 mod catalog;
 mod contract;
 mod cost;
 mod customer;
-mod document_registry;
 mod file_asset;
 mod fulfillment;
 mod integration_ops;
@@ -31,16 +28,12 @@ mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_settlement;
 mod warehouse;
-mod work_item;
 
-pub use approval_integration::ApprovalIntegrationExt;
-pub use bpm::BpmExt;
 pub use bulk_job::BulkJobExt;
 pub use catalog::CatalogExt;
 pub use contract::ContractExt;
 pub use cost::CostExt;
 pub use customer::CustomerExt;
-pub use document_registry::DocumentRegistryExt;
 pub use file_asset::FileAssetExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
@@ -61,7 +54,6 @@ pub use supplier_fulfillment::SupplierFulfillmentExt;
 pub use supplier_offering::SupplierOfferingExt;
 pub use supplier_settlement::SupplierSettlementExt;
 pub use warehouse::WarehouseExt;
-pub use work_item::WorkItemExt;
 
 /// Database 的统一仓储访问入口：聚合全部 34 个域的访问器 trait。
 ///
@@ -70,14 +62,14 @@ pub use work_item::WorkItemExt;
 pub trait DatabaseExt:
     erp_identity::AccessControlExt
     + erp_audit::AuditExt
-    + ApprovalIntegrationExt
-    + BpmExt
+    + erp_workflow::ApprovalIntegrationExt
+    + erp_workflow::BpmExt
     + BulkJobExt
     + CatalogExt
     + ContractExt
     + CostExt
     + CustomerExt
-    + DocumentRegistryExt
+    + erp_workflow::DocumentRegistryExt
     + FileAssetExt
     + FulfillmentExt
     + IntegrationOpsExt
@@ -98,21 +90,21 @@ pub trait DatabaseExt:
     + SupplierFulfillmentExt
     + SupplierSettlementExt
     + WarehouseExt
-    + WorkItemExt
+    + erp_workflow::WorkItemExt
 {
 }
 
 impl<
         T: erp_identity::AccessControlExt
             + erp_audit::AuditExt
-            + ApprovalIntegrationExt
-            + BpmExt
+            + erp_workflow::ApprovalIntegrationExt
+            + erp_workflow::BpmExt
             + BulkJobExt
             + CatalogExt
             + ContractExt
             + CostExt
             + CustomerExt
-            + DocumentRegistryExt
+            + erp_workflow::DocumentRegistryExt
             + FileAssetExt
             + FulfillmentExt
             + IntegrationOpsExt
@@ -133,7 +125,7 @@ impl<
             + SupplierFulfillmentExt
             + SupplierSettlementExt
             + WarehouseExt
-            + WorkItemExt,
+            + erp_workflow::WorkItemExt,
     > DatabaseExt for T
 {
 }

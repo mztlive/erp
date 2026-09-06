@@ -1,6 +1,5 @@
 //! Domain object-read branches for approval binding.
 
-use entities::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::DocumentType as WorkflowDocumentType;
 use erp_workflow::ports::ApprovalObjectReadPort;
 use erp_workflow::service::approval::business_adapter::{ApprovalAdapterSpec, BindingRevalidationContext};
@@ -51,56 +50,43 @@ fn adapter_object_read_for_type(
     if organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
         return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
     }
-    let old = match document_type {
-        WorkflowDocumentType::SalesOrder => DocumentType::SalesOrder,
-        WorkflowDocumentType::VoucherSalesOrder => DocumentType::VoucherSalesOrder,
-        WorkflowDocumentType::SalesChangeOrder => DocumentType::SalesChangeOrder,
-        WorkflowDocumentType::PurchaseOrder => DocumentType::PurchaseOrder,
-        WorkflowDocumentType::PurchaseChangeOrder => DocumentType::PurchaseChangeOrder,
-        WorkflowDocumentType::CustomerReceipt => DocumentType::CustomerReceipt,
-        WorkflowDocumentType::CustomerRefund => DocumentType::CustomerRefund,
-        WorkflowDocumentType::SupplierRefund => DocumentType::SupplierRefund,
-        WorkflowDocumentType::ReceiptReversal => DocumentType::ReceiptReversal,
-        WorkflowDocumentType::PaymentReversal => DocumentType::PaymentReversal,
-        _ => return Ok(None),
-    };
-    match old {
-        DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Ok(Some(
+    match document_type {
+        WorkflowDocumentType::SalesOrder | WorkflowDocumentType::VoucherSalesOrder => Ok(Some(
             services::sales_order::sales_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::SalesChangeOrder => Ok(Some(
+        WorkflowDocumentType::SalesChangeOrder => Ok(Some(
             services::sales_review::sales_change_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::PurchaseOrder => Ok(Some(
+        WorkflowDocumentType::PurchaseOrder => Ok(Some(
             services::purchase_order::purchase_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::PurchaseChangeOrder => Ok(Some(
+        WorkflowDocumentType::PurchaseChangeOrder => Ok(Some(
             services::purchase_order::purchase_change_order_object_readable(
                 organization_id,
                 assignee_user_id,
             )
             .map_err(map_workflow_error)?,
         )),
-        DocumentType::CustomerReceipt => Ok(Some(
+        WorkflowDocumentType::CustomerReceipt => Ok(Some(
             services::receivable::customer_receipt_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::CustomerRefund => Ok(Some(
+        WorkflowDocumentType::CustomerRefund => Ok(Some(
             services::returns::customer_refund_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::SupplierRefund => Ok(Some(
+        WorkflowDocumentType::SupplierRefund => Ok(Some(
             services::returns::supplier_refund_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::ReceiptReversal => Ok(Some(
+        WorkflowDocumentType::ReceiptReversal => Ok(Some(
             services::returns::receipt_reversal_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        DocumentType::PaymentReversal => Ok(Some(
+        WorkflowDocumentType::PaymentReversal => Ok(Some(
             services::returns::payment_reversal_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),

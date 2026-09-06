@@ -21,7 +21,7 @@ use super::brief::{
 };
 use super::change_order_brief::{change_diff_lines, purchase_order_submission_line_states, LineStateMap};
 use super::presentation::{format_yuan, purchase_review_impact_summary};
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief, WorkItemService};
+use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
 use crate::errors::Result;
 
 /// 采购审核在对象事实中按提交版本保存的展示包。
@@ -46,7 +46,7 @@ struct PurchaseSubmissionComparison<'a> {
     changed_line_count: Option<usize>,
 }
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 读取采购单身份，并按提交版本写入供应商、金额、付款条件和明细简报。
     ///
     /// # 参数

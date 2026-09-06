@@ -265,7 +265,8 @@ impl PayableService {
         sensitive_data: &SensitiveDataCodec,
     ) -> Result<PaymentRecipientRevealView> {
         req.validate()?;
-        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version =
+            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let account_id = PayableAccountId::new(id);
         let (_, account) = payment_task::authorize_payment_execution(
             &self.db,

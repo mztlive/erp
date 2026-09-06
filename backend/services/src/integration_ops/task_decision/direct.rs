@@ -1,8 +1,9 @@
-use database::{IntegrationOpsExt, WorkItemExt};
+use database::IntegrationOpsExt;
 use entities::integration_ops::{
     DirectConclusion, IntegrationCommandIdentity, ReconciliationDifference,
     ReconciliationDifferenceResolution,
 };
+use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};

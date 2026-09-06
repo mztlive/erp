@@ -12,9 +12,9 @@ use erp_identity::Permission;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::{approval::approval_actor_is_active_with_executor, errors::Result};
+use crate::errors::Result;
 use application_core::AuditActor;
-use erp_identity::RbacService;
+use erp_workflow::service::approval::approval_actor_is_active_with_executor;
 
 const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
 const ADJUSTMENT_LIST_PERMISSION: &str = "stock_adjustment:list";
@@ -136,11 +136,17 @@ impl InventoryAuthorization {
 /// 动作的范围，禁止把不同角色的权限或 DataScope 拼接。
 pub(crate) async fn inventory_authorization_with_executor(
     db: &Database,
-    rbac: &RbacService,
+    rbac: &erp_identity::SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<InventoryAuthorization> {
-    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+    if !approval_actor_is_active_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), std::sync::Arc::clone(rbac)),
+        actor,
+        executor,
+    )
+    .await?
+    {
         return Ok(InventoryAuthorization::inactive());
     }
     let detail = Permission::parse(DETAIL_PERMISSION)?;

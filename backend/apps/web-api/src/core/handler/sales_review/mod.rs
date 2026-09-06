@@ -38,6 +38,7 @@ pub async fn sales_change_order_list(
     Query(params): Query<SalesChangeOrderListParams>,
 ) -> Result<PageView<SalesChangeOrderView>> {
     let page = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .sales_change_order_list(&params)
         .await?;
 
@@ -64,6 +65,7 @@ pub async fn sales_change_order_detail(
     Path(id): Path<String>,
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .sales_change_order_detail(&id)
         .await?;
 
@@ -93,6 +95,7 @@ pub async fn sales_change_order_create(
 ) -> Result<SalesChangeOrderDetailView> {
     let rbac = state.rbac();
     let view = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_sales_change_order(req, &actor, &rbac)
         .await?;
 
@@ -123,6 +126,7 @@ pub async fn sales_change_order_submit_impact(
     Json(req): Json<SubmitSalesChangeRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_sales_change(&id, req, &actor)
         .await?;
 
@@ -153,6 +157,7 @@ pub async fn sales_change_order_void(
     Json(req): Json<VoidSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .void_sales_change(&id, req, &actor)
         .await?;
 
@@ -183,6 +188,7 @@ pub async fn sales_change_order_cancel_approval(
     Json(req): Json<CancelSalesChangeApprovalRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesReviewService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_approval(&id, req, &actor)
         .await?;
 

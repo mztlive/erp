@@ -31,14 +31,8 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
 pub mod assignment;
-mod center;
 mod dto;
 pub mod profile;
-
-pub use center::{
-    CustomerCenterContractView, CustomerCenterReadService, CustomerCenterReceivableView,
-    CustomerCenterRelatedView, CustomerCenterSalesOrderView,
-};
 
 pub use self::dto::{
     AssignmentAction, CreateCustomerRequest, CustomerActionBlockerView, CustomerAssignmentListParams,
@@ -396,34 +390,6 @@ impl CustomerService {
         Ok(updated.into())
     }
 
-    /// 软删除客户角色（单集合操作，无事务）。
-    ///
-    /// 停用/删除角色仍可被历史单据引用（§6.2），不删除主体与归属历史。
-    ///
-    /// # 参数
-    /// * `id` - 客户角色 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 删除成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `NotFound` - 客户角色不存在
-    pub async fn delete_customer(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut account = self.load_customer(id).await?;
-        let audit = actor
-            .clone()
-            .resource_log("customer.delete", "customer", account.base.id.clone())?;
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.customer_accounts().soft_delete(&mut account, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
     /// 按 ID 加载未删除客户角色。
     ///
     /// # 参数
@@ -434,7 +400,7 @@ impl CustomerService {
     ///
     /// # 错误
     /// * `NotFound` - 客户角色不存在
-    async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
+    pub async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
             .find_customer(id, &mut NoTransaction)

@@ -1,32 +1,39 @@
 use bpm::engine::DefinitionGraph;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use database::BpmExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::BpmExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use crate::approval::process_kind::process_kind_of;
-use crate::approval::{
-    approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
-    approval_document_read_scope_with_executor,
-};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+    StartIdentityParams,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::{
+    approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
+    approval_document_read_scope_with_executor,
+};
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
 pub async fn ensure_return_start_actor_active(
     db: &Database,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+    if !approval_actor_is_active_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        executor,
+    )
+    .await?
+    {
         return Err(Error::Forbidden("当前账号不可提交该退款或冲正单".to_string()));
     }
     Ok(())
@@ -42,11 +49,21 @@ pub async fn ensure_return_start_replay_authorized(
     organization_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_return_start_actor_active(db, actor, executor).await?;
-    let action_scope =
-        approval_document_action_scope_with_executor(db, rbac, actor, submit_permission, executor).await?;
-    let read_scope =
-        approval_document_read_scope_with_executor(db, rbac, actor, document_type, executor).await?;
+    ensure_return_start_actor_active(db, rbac, actor, executor).await?;
+    let action_scope = approval_document_action_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        submit_permission,
+        executor,
+    )
+    .await?;
+    let read_scope = approval_document_read_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        document_type,
+        executor,
+    )
+    .await?;
     if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
         return Err(Error::Forbidden("无权提交该责任组织的退款或冲正单".to_string()));
     }
@@ -107,7 +124,7 @@ pub async fn load_bound_definition_graph_with_executor(
 ///
 /// # 返回
 /// 返回引擎可消费的定义图。
-fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
+fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
     DefinitionGraph {
         definition: graph.definition,
         nodes: graph.nodes,
@@ -213,7 +230,7 @@ pub async fn replay_return_start_with_executor(
     }
     let receipt = match identity.classify(receipt.as_ref()) {
         ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
         ReceiptBranch::SamePayload(receipt) => receipt,
     };
     let instance = db

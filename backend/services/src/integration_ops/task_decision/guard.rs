@@ -1,10 +1,11 @@
-use database::{IntegrationOpsExt, WorkItemExt};
+use database::IntegrationOpsExt;
 use entities::integration_ops::{
-    error_work_item_type, IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference,
-    ReconciliationDifferenceId, ReconciliationDifferenceResolution, ResolutionVersionCheck,
+    IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference, ReconciliationDifferenceId,
+    ReconciliationDifferenceResolution, ResolutionVersionCheck,
 };
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::{de::DeserializeOwned, Serialize};
@@ -156,7 +157,14 @@ async fn ensure_work_item_association(
                 .find_by_id(&action.item_id, executor)
                 .await?
                 .ok_or_else(|| Error::NotFound("集成错误任务不存在".to_string()))?;
-            (error_work_item_type(task.error_class), "integration_error_task")
+            (
+                if task.error_class == entities::integration_ops::ErrorClass::ResultUnknown {
+                    WorkItemType::IntegrationResultUnknown
+                } else {
+                    WorkItemType::BusinessException
+                },
+                "integration_error_task",
+            )
         }
         IntegrationItemType::ReconciliationDifference => {
             (WorkItemType::BusinessException, "reconciliation_difference")

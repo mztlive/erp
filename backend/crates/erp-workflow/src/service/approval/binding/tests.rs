@@ -28,6 +28,17 @@ use super::revalidate::{
 use super::upgrade::{ensure_registered_upgrade_subject, upgrade_result_from_action};
 use super::*;
 
+/// Live bind path uses one Executor and one object-read port; it does not open a nested transaction.
+#[test]
+fn bind_on_document_create_uses_injected_object_read_and_caller_executor() {
+    let bind = include_str!("bind.rs");
+    let production = bind.split("#[cfg(test)]").next().expect("生产代码必须存在");
+    assert!(production.contains("object_read: &dyn ApprovalObjectReadPort"));
+    assert!(production.contains("executor: &mut dyn Executor"));
+    assert!(!production.contains("with_transaction"));
+    assert!(production.contains("bind_required_definition(db, rbac, object_read, audit_port"));
+}
+
 fn production_source() -> String {
     fn production_part(source: &str) -> &str {
         source.split("#[cfg(test)]").next().expect("必须存在生产代码")
@@ -550,8 +561,15 @@ fn permission_and_scope_from_different_roles_cannot_be_combined() {
         creator_id: "creator-1".to_string(),
     };
 
-    let error =
-        revalidate_assignee_binding_access_by_role(&spec, &[], &role_scope_sets, &context, "u1").unwrap_err();
+    let error = revalidate_assignee_binding_access_by_role(
+        &spec,
+        &[],
+        &role_scope_sets,
+        &context,
+        "u1",
+        &crate::ports::FailClosedObjectReadPort,
+    )
+    .unwrap_err();
 
     assert!(matches!(
         error,

@@ -30,12 +30,12 @@ use super::start_approval::{
     PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
 };
 use super::PurchaseOrderService;
-use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
-use crate::approval::policy::ApprovalDomainAction;
-use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 
@@ -117,7 +117,9 @@ impl PurchaseOrderService {
         order
             .ensure_draft_for_submission()
             .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let draft_id = order
             .draft_submission_id()
@@ -255,7 +257,7 @@ impl PurchaseOrderService {
         .await;
         let first_task = match first_task {
             Ok(task) => task,
-            Err(error) if command_may_have_committed(&error) => {
+            Err(error) if error.command_may_have_committed() => {
                 return self
                     .recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
                         purchase_order_id: id,
@@ -386,7 +388,9 @@ impl PurchaseOrderService {
                             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
                         let organization_id = purchase_order_responsible_org_id(&sales_order)?;
                         let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &purchase_order_id_owned, session).await?;
+                        let binding = find_approval_binding(&db, &purchase_order_id_owned, session)
+                            .await
+                            .map_err(crate::errors::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = purchase_order_subject_ref(&purchase_order_id_owned)?;
                         replay_purchase_order_start_with_executor(
@@ -417,7 +421,7 @@ impl PurchaseOrderService {
                     }
                 }
                 Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) if error.command_may_have_committed() => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {

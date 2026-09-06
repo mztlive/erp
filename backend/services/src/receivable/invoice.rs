@@ -1,8 +1,6 @@
 //! 发票列表、详情、草稿创建、销项提交与过账编排。
 
 use database::{PayableExt, ReceivableExt};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::payable::PurchaseInvoiceAllocation;
 use entities::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceStatus, ReceivableAccount,
@@ -11,6 +9,8 @@ use entities::receivable::{
 use erp_audit::AuditExt;
 use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
 use erp_core::money::Amount;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -25,19 +25,18 @@ use super::dto::{
 use super::invoice_commit::{convert_post_allocations, ensure_sales_invoice, PreparedInvoiceCommit};
 use super::mapping::{ensure_expected_version, zero_amount};
 use super::{invoice_task, ReceivableService};
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
-    BindingDecision,
-};
-use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
 use erp_audit::CommandReceiptServiceExt as _;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{
+    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+};
+use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 impl ReceivableService {
     // -----------------------------------------------------------------------
@@ -202,7 +201,14 @@ impl ReceivableService {
             },
             actor.id(),
         )?;
-        persist_created_invoice(&self.db, &self.rbac, invoice.clone(), actor.clone()).await?;
+        persist_created_invoice(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            invoice.clone(),
+            actor.clone(),
+        )
+        .await?;
         self.invoice_detail(&invoice.base.id).await
     }
 
@@ -237,11 +243,13 @@ impl ReceivableService {
             return self.invoice_detail(&invoice_id).await;
         }
         let prepared = req.prepare()?;
-        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version =
+            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
         let command_receipt_for_tx = command_receipt.clone();
@@ -275,6 +283,7 @@ impl ReceivableService {
                             register_created_invoice_document(
                                 &db,
                                 &rbac,
+                                object_read.as_ref(),
                                 &new_invoice,
                                 &actor_owned,
                                 session,
@@ -456,7 +465,8 @@ impl ReceivableService {
         actor: &AuditActor,
     ) -> Result<InvoiceView> {
         req.validate()?;
-        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version =
+            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -855,6 +865,7 @@ fn apply_invoice_create_binding(
 async fn persist_unbound_invoice_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -862,10 +873,19 @@ async fn persist_unbound_invoice_document(
 ) -> Result<()> {
     let _ = ensure_invoice_skips_approval_binding()?;
     ensure_invoice_has_no_adapter()?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        executor,
+    )
+    .await?;
     apply_invoice_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    persist_registered_document(db, &document, executor)
+        .await
+        .map_err(crate::errors::Error::from)
 }
 
 /// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
@@ -875,6 +895,7 @@ async fn persist_unbound_invoice_document(
 pub(super) async fn register_created_invoice_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     invoice: &Invoice,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -884,8 +905,9 @@ pub(super) async fn register_created_invoice_document(
         &invoice.base.id,
         DocumentType::Invoice,
         invoice.invoice_no.clone(),
-    )?;
-    persist_unbound_invoice_document(db, rbac, document, &bind_command, actor, executor).await
+    )
+    .map_err(crate::errors::Error::from)?;
+    persist_unbound_invoice_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
 /// 在创建事务内写入发票草稿并登记无绑定单据。
@@ -895,6 +917,7 @@ pub(super) async fn register_created_invoice_document(
 async fn persist_created_invoice(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     invoice: Invoice,
     actor: AuditActor,
 ) -> Result<()> {
@@ -903,11 +926,20 @@ async fn persist_created_invoice(
         .resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                register_created_invoice_document(&db, &rbac, &invoice, &actor, session).await?;
+                register_created_invoice_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &invoice,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.invoices().create(&invoice, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
@@ -923,14 +955,14 @@ mod invoice_no_approval_tests {
         invoice_bind_command, invoice_create_binding_decision, policy_of, BindingDecision,
         DocumentApprovalPolicy, DocumentType, Invoice, InvoiceData,
     };
-    use crate::approval::binding::binding_from_published;
-    use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use entities::receivable::{InvoiceDirection, InvoiceKind};
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{InvoiceId, PartyId};
     use erp_core::money::Amount;
+    use erp_workflow::service::approval::binding::binding_from_published;
+    use erp_workflow::service::document_registry::new_registered_document;
     use std::str::FromStr;
 
     fn draft_invoice() -> Invoice {

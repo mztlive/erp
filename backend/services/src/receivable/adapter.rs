@@ -5,26 +5,28 @@
 //! 资金类 `PENDING_REVIEW` 已收敛为 `IN_APPROVAL`，不得再走通用状态更新。
 
 use bpm::SubjectRef;
-use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
 use entities::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation};
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerAccountId;
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-use crate::approval::business_adapter::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
-use crate::approval::policy::{
+use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
@@ -112,8 +114,11 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn customer_receipt_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    entities::approval_integration::subject_ref_for(DocumentType::CustomerReceipt, business_object_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+    erp_workflow::entity::approval_integration::subject_ref_for(
+        DocumentType::CustomerReceipt,
+        business_object_id,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
@@ -378,10 +383,10 @@ fn allowed_document_actions(status: CustomerReceiptStatus) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
     use entities::receivable::CustomerReceiptData;
     use erp_core::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
+    use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
 
     fn draft_receipt() -> CustomerReceipt {

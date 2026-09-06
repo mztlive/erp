@@ -18,7 +18,7 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
+use erp_workflow::service::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
 
 use crate::errors::Result;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
@@ -737,9 +737,9 @@ pub struct ActiveCardSalesApprovalView {
     /// 当前待办乐观锁版本。
     pub task_version: Option<u64>,
     /// 当前固定任务类型。
-    pub work_item_type: Option<entities::work_item::WorkItemType>,
+    pub work_item_type: Option<erp_workflow::entity::work_item::WorkItemType>,
     /// 当前任务状态。
-    pub work_item_status: Option<entities::work_item::WorkItemStatus>,
+    pub work_item_status: Option<erp_workflow::entity::work_item::WorkItemStatus>,
     /// 当前处理状态。
     pub processing_state: ProcessingState,
     /// 权限安全的阻塞摘要。

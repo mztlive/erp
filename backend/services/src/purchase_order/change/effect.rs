@@ -14,10 +14,10 @@ use super::super::change_adapter::execute_purchase_change_domain_action;
 use super::super::dto::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult};
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::super::PurchaseOrderService;
-use crate::approval::policy::ApprovalDomainAction;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
 impl PurchaseOrderService {
     /// 最终通过并生效：改写采购单并同步履约影响。

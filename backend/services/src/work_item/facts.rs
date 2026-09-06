@@ -5,39 +5,38 @@ use std::collections::{HashMap, HashSet};
 use database::{IntegrationOpsExt, LegacyImportExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
-use entities::work_item::{
+use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };
-use erp_core::common::time::Instant;
 use persistence_core::{Executor, NoTransaction};
 
 use crate::errors::Result;
 
 use super::brief;
-use super::dto;
-use super::WorkItemService;
+use erp_workflow::dto::work_item as dto;
 
 /// 工作项简报事实装载使用的实体对象种类别名。
-pub(super) type ObjectKind = WorkItemBriefObjectKind;
+pub type ObjectKind = WorkItemBriefObjectKind;
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct SubjectBrief {
-    pub(super) counterparty_label: Option<String>,
-    pub(super) impact_summary: Option<String>,
+pub struct SubjectBrief {
+    pub counterparty_label: Option<String>,
+    pub impact_summary: Option<String>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ObjectFact {
-    pub(super) root_document_id: String,
-    pub(super) label: String,
-    pub(super) created_by: String,
+pub struct ObjectFact {
+    pub root_document_id: String,
+    pub label: String,
+    pub created_by: String,
     /// 生产者合同允许的权威版本；无约束值对象表示该领域没有通用锁版本约束。
-    pub(super) subject_versions: WorkItemSubjectVersions,
-    pub(super) counterparty_label: Option<String>,
-    pub(super) impact_summary: Option<String>,
+    pub subject_versions: WorkItemSubjectVersions,
+    pub counterparty_label: Option<String>,
+    pub impact_summary: Option<String>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
-    pub(super) subject_briefs: HashMap<String, SubjectBrief>,
+    pub subject_briefs: HashMap<String, SubjectBrief>,
 }
 
 impl ObjectFact {
@@ -265,7 +264,7 @@ fn base_created_at_datetime(created_at: u64) -> Option<String> {
         .map(brief::format_instant_datetime)
 }
 
-pub(super) type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
+pub type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
 
 pub(super) const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
@@ -298,7 +297,7 @@ pub(super) fn object_policy(
 ///
 /// # 错误
 /// 无。
-pub(super) fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
+pub fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
     keys.iter()
         .filter(|(candidate, _)| *candidate == kind)
         .map(|(_, id)| id.clone())
@@ -356,16 +355,17 @@ fn apply_subject_display(
             fields.impact_summary = Some(impact);
         }
     }
-    fields.brief_source = subject
-        .and_then(|item| item.brief_source.clone())
-        .or_else(|| fact.brief_source.clone());
+    let _ = (
+        subject.and_then(|item| item.brief_source.clone()),
+        fact.brief_source.clone(),
+    );
 }
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
     pub(super) async fn object_facts_for_rows(
         &self,
-        rows: &[database::WorkItemRow],
+        rows: &[erp_workflow::WorkItemRow],
     ) -> Result<ObjectFactMap> {
         let keys = rows
             .iter()
@@ -378,7 +378,7 @@ impl WorkItemService {
     }
 
     /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
-    pub(super) async fn load_object_facts(
+    pub async fn load_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
         executor: &mut dyn Executor,

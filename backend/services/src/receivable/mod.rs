@@ -69,6 +69,7 @@ type ReceivableAccountFilter = <mongodb::Database as ReceivableExt>::ReceivableA
 pub struct ReceivableService {
     db: Database,
     rbac: SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl ReceivableService {
@@ -81,6 +82,19 @@ impl ReceivableService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         let rbac = shared_rbac_service(db.clone());
-        Self { db, rbac }
+        Self {
+            db,
+            rbac,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 }

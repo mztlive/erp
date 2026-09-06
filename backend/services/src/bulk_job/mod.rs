@@ -16,15 +16,16 @@
 
 use std::collections::HashSet;
 
-use database::{BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt};
+use database::{BackgroundJobRegistration, BulkJobExt};
 use entities::bulk_job::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
     BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
     BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
-use entities::document_registry::DocumentType;
 use erp_audit::AuditExt;
 use erp_core::ids::FileAssetId;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};

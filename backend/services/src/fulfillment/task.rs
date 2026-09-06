@@ -4,16 +4,17 @@
 //! 责任人或仓库分操作经办人。任务创建、活动记录和完成必须复用调用方事务，
 //! 禁止责任池、创建人或任意默认仓库回退。
 
-use database::{PurchaseOrderExt, SalesOrderExt, WarehouseExt, WorkItemExt};
+use database::{PurchaseOrderExt, SalesOrderExt, WarehouseExt};
 use entities::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
 use entities::warehouse::WarehouseFulfillmentOperation;
-use entities::work_item::{
-    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
-};
 use erp_identity::AccessControlExt;
 use erp_identity::{Permission, PermissionSet};
+use erp_workflow::entity::work_item::{
+    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
@@ -484,9 +485,9 @@ pub(crate) async fn ensure_fulfillment_owner_eligible(
         .ok_or_else(|| {
             Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
         })?;
-    AvailableWorkItemAccount::from_account(&account).map_err(|_| {
-        Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string())
-    })?;
+    AvailableWorkItemAccount::from_account(&crate::workflow_compose::account_fact(&account)).map_err(
+        |_| Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string()),
+    )?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
     let required = PermissionSet::new(
         required_permissions
@@ -517,7 +518,7 @@ mod tests {
     use erp_core::ids::WorkItemId;
 
     use super::{ensure_frozen_identity_fields, AssignmentSource, WorkItem, WorkItemData};
-    use entities::work_item::{WorkItemPriority, WorkItemType};
+    use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemType};
 
     fn fulfillment_task() -> WorkItem {
         WorkItem::new_with_responsibility_key(

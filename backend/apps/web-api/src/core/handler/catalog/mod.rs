@@ -81,9 +81,7 @@ pub async fn product_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = CatalogService::new(state.db())
-        .product_category_create(req, &actor)
-        .await?;
+    let view = erp_processes::create_product_category(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -394,9 +392,7 @@ pub async fn unit_of_measure_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateUnitOfMeasureRequest>,
 ) -> Result<UnitOfMeasureView> {
-    let view = CatalogService::new(state.db())
-        .unit_of_measure_create(req, &actor)
-        .await?;
+    let view = erp_processes::create_unit_of_measure(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -506,9 +502,7 @@ pub async fn sku_attribute_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeRequest>,
 ) -> Result<SkuAttributeView> {
-    let view = CatalogService::new(state.db())
-        .sku_attribute_create(req, &actor)
-        .await?;
+    let view = erp_processes::create_sku_attribute(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -618,9 +612,7 @@ pub async fn sku_attribute_value_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeValueRequest>,
 ) -> Result<SkuAttributeValueView> {
-    let view = CatalogService::new(state.db())
-        .sku_attribute_value_create(req, &actor)
-        .await?;
+    let view = erp_processes::create_sku_attribute_value(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -4,12 +4,14 @@
 //! 任务类型、责任角色、组织、原因与动作映射。通用 BPM 不拥有 W18 与
 //! WorkItem。无 I/O、时钟（时间由调用方注入）或密钥。
 
-use crate::document_registry::{
-    BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
-};
-use crate::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use erp_core::ids::WorkItemId;
 use erp_core::Result;
+use erp_workflow::entity::document_registry::{
+    BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
+};
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
 
 use super::{ConfirmationDecision, ConfirmationScope, LegacyImportBatchId, LegacyImportConfirmation};
 
@@ -122,10 +124,10 @@ pub fn confirmation_workflow_action(
 #[cfg(test)]
 mod tests {
     use super::{confirmation_work_item, confirmation_workflow_action};
-    use crate::document_registry::WorkflowActionType;
     use crate::legacy_import::LegacyImportConfirmationData;
-    use crate::work_item::WorkItemType;
     use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
+    use erp_workflow::entity::document_registry::WorkflowActionType;
+    use erp_workflow::entity::work_item::WorkItemType;
 
     fn confirmation(
         decision: crate::legacy_import::ConfirmationDecision,
@@ -208,7 +210,7 @@ mod tests {
 
     #[test]
     fn workflow_action_maps_both_decisions() {
-        use crate::document_registry::WorkflowActionId;
+        use erp_workflow::entity::document_registry::WorkflowActionId;
         let confirmed = confirmation(crate::legacy_import::ConfirmationDecision::ConfirmScope);
         let action =
             confirmation_workflow_action(WorkflowActionId::new("action-1"), &confirmed, "user-1").unwrap();

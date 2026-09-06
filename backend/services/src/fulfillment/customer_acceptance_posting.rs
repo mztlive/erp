@@ -106,6 +106,7 @@ impl FulfillmentService {
         let actor = actor.clone();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = client
@@ -178,6 +179,7 @@ impl FulfillmentService {
                             register_created_customer_acceptance_document(
                                 &db,
                                 &rbac,
+                                object_read.as_ref(),
                                 &acceptance,
                                 &actor,
                                 session,

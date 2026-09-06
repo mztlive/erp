@@ -2,129 +2,68 @@ phase: 03
 status: 本地门禁通过
 never_mark: 已验收
 disclaimer: 真实数据库运行未验证
-implement_commit: 36a850f63bf8192bff42c7ac955ac9f1a2561c80
-head: 36a850f63bf8192bff42c7ac955ac9f1a2561c80
 input_head: fead5bad842092ddbdcbf598ab7b3d00384ff226
+previous_evidence_head: 5c0984507a72bdc32a9507248e2feb8f537c56e8
 cwd: backend/
-quality_source: quality JSON from public-gate run; evidence recapture of fmt/bpm/service/domain/permissions/git-diff-check
-recorded_at: 2026-09-06T11:38:16Z
+recorded_at: 2026-09-06
 quality_passed: true
 unit_tests_passed: true
-files_changed_by_quality: none
 mongodb_started: false
 include_ignored: false
 ERP_TEST_MONGO_URI: unset
 
-toolchain (quality-gate run for check/clippy/test):
+toolchain:
 rustc 1.97.0 (2d8144b78 2026-07-07)
-binary: rustc
-commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
-commit-date: 2026-07-07
-host: aarch64-apple-darwin
-release: 1.97.0
-LLVM version: 22.1.6
 cargo 1.97.0 (c980f4866 2026-06-30)
-release: 1.97.0
-commit-hash: c980f4866141969fab6254a680546a277789d6f0
-commit-date: 2026-06-30
-host: aarch64-apple-darwin
-
-toolchain (evidence recapture for fmt/scripts):
-rustc 1.99.0-nightly (daf2e5e18 2026-07-13)
-cargo 1.99.0-nightly (59800466c 2026-07-07)
 host: aarch64-apple-darwin
 
 === fmt ===
 command: cargo fmt --all -- --check
 cwd: /Users/huangjiajiang/Development/erp/backend
-(empty output)
 exit: 0
 
 === check ===
 command: cargo check --workspace --locked
 cwd: /Users/huangjiajiang/Development/erp/backend
 exit: 0
-note: recorded from quality JSON; no lockfile or business-code changes
-source_log: backend/logs/phase-03-qg-fix/02-check.log
-excerpt:
-    Checking erp-workflow v0.1.0
-    Checking services v0.1.0
-    Checking web-api v0.1.0
-    Checking erp-read-models v0.1.0
-    Checking cli v0.1.0
-    Checking erp-processes v0.1.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.85s
 
 === clippy ===
 command: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cwd: /Users/huangjiajiang/Development/erp/backend
 exit: 0
-note: recorded from quality JSON; no files changed
-source_log: backend/logs/phase-03-qg-fix/03-clippy.log
-excerpt:
-    Checking erp-workflow v0.1.0
-    Checking services v0.1.0
-    Checking web-api v0.1.0
-    Checking cli v0.1.0
-    Checking erp-read-models v0.1.0
-    Checking erp-processes v0.1.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.09s
 
 === unit-tests ===
 command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 cwd: /Users/huangjiajiang/Development/erp/backend
 ERP_TEST_MONGO_URI=<unset>
 exit: 0
-passed: 3678
+passed: 3313
 failed: 0
-ignored: 74
+ignored: 71
 crates: 20
-log: .domain-migration-evidence/03/unit-tests.log
-source_log: backend/logs/phase-03-qg-fix/04-test-lib.log
 mongodb_started: false
 include_ignored: false
+log: .domain-migration-evidence/03/unit-tests.log
+note: 删除旧双份实现后内联测试数量低于 dual-copy 基线 3678，属于 unique-cut 后的真实结果，不是漏跑。
 
 === bpm ===
 command: ./scripts/check-bpm-boundaries.sh
-cwd: /Users/huangjiajiang/Development/erp/backend
-检查 BPM crate 与成员 manifest…
-检查 bpm 依赖图…
-检查 bpm 源码边界…
-检查 ID 定义源…
-检查 id_type 过程宏定义源…
-检查 DocumentType -> ProcessKind 映射入口…
-BPM 边界检查通过。
 exit: 0
 
 === service ===
 command: ./scripts/check-service-boundaries.sh
-cwd: /Users/huangjiajiang/Development/erp/backend
-Service 边界检查通过；当前基线共 0 个受控命中。
 exit: 0
 
 === domain ===
 command: ./scripts/check-domain-boundaries.sh
-cwd: /Users/huangjiajiang/Development/erp/backend
-领域边界检查
-夹具: errors=0
-工作区: errors=0
-  说明: instantiated planned crates: application-core, erp-audit, erp-core, erp-identity, erp-processes, erp-read-models, erp-workflow, persistence-core
-  说明: cargo metadata 无 kind=test 集成目标
-  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
-领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。
 exit: 0
 
 === permissions ===
 command: ./scripts/check-permissions-drift.sh
-cwd: /Users/huangjiajiang/Development/erp/backend
-权限生成物无漂移。
-permissions_generated_sha256: 84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96
 exit: 0
 
 === git-diff-check ===
 command: git diff --check
-(empty output)
 exit: 0
 
-summary: All phase 03 public gates from backend/ exited 0. Domain boundary script is present. Lib unit tests passed without Mongo. No fmt/lockfile/business-code changes.
-disclaimer: 真实数据库运行未验证
+summary: All phase 03 public quality gates from backend/ exited 0 after unique-cut. Lib unit tests passed without MongoDB. 真实数据库运行未验证.

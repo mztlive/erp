@@ -1,6 +1,4 @@
 use database::FulfillmentExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
     CustomerAcceptanceLineBatch,
@@ -8,22 +6,23 @@ use entities::fulfillment::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
-    BindingDecision,
-};
-use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{
+    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+};
+use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 use super::customer_acceptance_lines::acceptance_line_specs;
 use super::dto::SortDir;
@@ -192,8 +191,15 @@ impl FulfillmentService {
         )?;
         let lines = CustomerAcceptanceLineBatch::build(id.clone(), acceptance_line_specs(&req.lines))
             .map_err(Error::Logic)?;
-        persist_created_customer_acceptance(&self.db, &self.rbac, acceptance.clone(), lines, actor.clone())
-            .await?;
+        persist_created_customer_acceptance(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            acceptance.clone(),
+            lines,
+            actor.clone(),
+        )
+        .await?;
         Ok(acceptance.into())
     }
 }
@@ -373,6 +379,7 @@ fn apply_customer_acceptance_create_binding(
 async fn persist_unbound_customer_acceptance_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -380,10 +387,19 @@ async fn persist_unbound_customer_acceptance_document(
 ) -> Result<()> {
     let _ = ensure_customer_acceptance_skips_approval_binding()?;
     ensure_customer_acceptance_has_no_adapter()?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        executor,
+    )
+    .await?;
     apply_customer_acceptance_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    persist_registered_document(db, &document, executor)
+        .await
+        .map_err(crate::errors::Error::from)
 }
 
 /// 为已构造客户验收登记 `BusinessDocument` 并调用统一绑定端口。
@@ -393,6 +409,7 @@ async fn persist_unbound_customer_acceptance_document(
 pub(super) async fn register_created_customer_acceptance_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     acceptance: &CustomerAcceptance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -402,8 +419,18 @@ pub(super) async fn register_created_customer_acceptance_document(
         &acceptance.base.id,
         DocumentType::CustomerAcceptance,
         acceptance.acceptance_no.clone(),
-    )?;
-    persist_unbound_customer_acceptance_document(db, rbac, document, &bind_command, actor, executor).await
+    )
+    .map_err(crate::errors::Error::from)?;
+    persist_unbound_customer_acceptance_document(
+        db,
+        rbac,
+        object_read,
+        document,
+        &bind_command,
+        actor,
+        executor,
+    )
+    .await
 }
 
 /// 在创建事务内写入客户验收草稿并登记无绑定单据。
@@ -413,6 +440,7 @@ pub(super) async fn register_created_customer_acceptance_document(
 async fn persist_created_customer_acceptance(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     acceptance: CustomerAcceptance,
     lines: Vec<CustomerAcceptanceLine>,
     actor: AuditActor,
@@ -424,12 +452,20 @@ async fn persist_created_customer_acceptance(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                register_created_customer_acceptance_document(&db, &rbac, &acceptance, &actor, session)
-                    .await?;
+                register_created_customer_acceptance_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &acceptance,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.fulfillment()
                     .create_customer_acceptance_with_lines(&acceptance, &lines, session)
                     .await?;
@@ -492,13 +528,13 @@ mod customer_acceptance_no_approval_tests {
         ensure_customer_acceptance_skips_approval_binding, policy_of, BindingDecision, CustomerAcceptance,
         CustomerAcceptanceData, DocumentApprovalPolicy, DocumentType,
     };
-    use crate::approval::binding::binding_from_published;
-    use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use entities::fulfillment::AcceptanceResult;
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
+    use erp_workflow::service::approval::binding::binding_from_published;
+    use erp_workflow::service::document_registry::new_registered_document;
 
     fn draft_acceptance() -> CustomerAcceptance {
         CustomerAcceptance::new(

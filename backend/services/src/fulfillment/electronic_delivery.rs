@@ -1,23 +1,23 @@
-use database::{DocumentRegistryExt, FulfillmentExt, PurchaseOrderExt};
-use entities::document_registry::{BusinessDocument, DocumentType};
+use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::ElectronicDelivery;
 use erp_audit::AuditExt;
 use erp_core::ids::ElectronicDeliveryId;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
-    BindingDecision,
-};
-use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{
+    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+};
+use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::document_registry::new_registered_document;
 
 use super::dto::SortDir;
 use super::electronic_delivery_crypto::electronic_delivery_draft_from_request;
@@ -163,7 +163,14 @@ impl FulfillmentService {
     ) -> Result<ElectronicDeliveryView> {
         req.validate()?;
         let record = electronic_delivery_draft_from_request(req, actor, &self.fingerprint_key)?;
-        persist_created_electronic_delivery(&self.db, &self.rbac, record.clone(), actor.clone()).await?;
+        persist_created_electronic_delivery(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            record.clone(),
+            actor.clone(),
+        )
+        .await?;
         Ok(record.into())
     }
 
@@ -358,6 +365,7 @@ fn electronic_delivery_bind_command(
 async fn persist_unbound_electronic_delivery_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -365,8 +373,15 @@ async fn persist_unbound_electronic_delivery_document(
 ) -> Result<()> {
     let _ = ensure_electronic_delivery_skips_approval_binding()?;
     ensure_electronic_delivery_has_no_adapter()?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        executor,
+    )
+    .await?;
     document
         .ensure_no_approval_registration(DocumentType::ElectronicDelivery, binding.as_ref())
         .map_err(|error| Error::Internal(error.to_string()))?;
@@ -383,6 +398,7 @@ async fn persist_unbound_electronic_delivery_document(
 async fn register_created_electronic_delivery_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     record: &ElectronicDelivery,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -392,8 +408,18 @@ async fn register_created_electronic_delivery_document(
         &record.base.id,
         DocumentType::ElectronicDelivery,
         record.fulfillment_no.clone(),
-    )?;
-    persist_unbound_electronic_delivery_document(db, rbac, document, &bind_command, actor, executor).await
+    )
+    .map_err(crate::errors::Error::from)?;
+    persist_unbound_electronic_delivery_document(
+        db,
+        rbac,
+        object_read,
+        document,
+        &bind_command,
+        actor,
+        executor,
+    )
+    .await
 }
 
 /// 在创建事务内写入电子交付草稿并登记无绑定单据。
@@ -403,6 +429,7 @@ async fn register_created_electronic_delivery_document(
 async fn persist_created_electronic_delivery(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     record: ElectronicDelivery,
     actor: AuditActor,
 ) -> Result<()> {
@@ -413,11 +440,20 @@ async fn persist_created_electronic_delivery(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                register_created_electronic_delivery_document(&db, &rbac, &record, &actor, session).await?;
+                register_created_electronic_delivery_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &record,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.electronic_deliveries().create(&record, session).await?;
                 super::task::ensure_fulfillment_task(
                     &db,
@@ -439,8 +475,6 @@ mod electronic_delivery_no_approval_tests {
         ensure_electronic_delivery_has_no_adapter, ensure_electronic_delivery_skips_approval_binding,
         policy_of, BindingDecision, DocumentApprovalPolicy, DocumentType, ElectronicDelivery,
     };
-    use crate::approval::binding::binding_from_published;
-    use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use entities::fulfillment::{ElectronicDeliveryData, FulfillmentResult};
@@ -450,6 +484,8 @@ mod electronic_delivery_no_approval_tests {
         ElectronicDeliveryId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
     };
     use erp_core::money::Quantity;
+    use erp_workflow::service::approval::binding::binding_from_published;
+    use erp_workflow::service::document_registry::new_registered_document;
     use std::str::FromStr;
 
     fn draft_electronic_delivery() -> ElectronicDelivery {

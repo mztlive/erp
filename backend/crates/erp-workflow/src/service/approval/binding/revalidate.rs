@@ -8,11 +8,12 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
+use crate::ports::ApprovalObjectReadPort;
 use application_core::AuditActor;
 
 use super::super::business_adapter::{
     adapter_spec_of, assignment_scope_covers_organization, ensure_separation_of_duties,
-    revalidate_assignee_binding_access, BindingRevalidationContext,
+    revalidate_assignee_binding_access_with, BindingRevalidationContext,
 };
 use super::super::policy::{
     ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, STATIC_APPROVE_PERMISSION,
@@ -63,6 +64,7 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 pub(super) async fn revalidate_binding_graph(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     policy: &ProcessRequiredApprovalPolicy,
     context: &BindingRevalidationContext,
     graph: &DefinitionGraph,
@@ -84,7 +86,14 @@ pub(super) async fn revalidate_binding_graph(
         }
         ensure_static_decide_permission(rbac, account).await?;
         let (user_scopes, role_scope_sets) = load_assignee_scope_sets(db, rbac, account, executor).await?;
-        revalidate_assignee_binding_access_by_role(&spec, &user_scopes, &role_scope_sets, context, user_id)?;
+        revalidate_assignee_binding_access_by_role(
+            &spec,
+            &user_scopes,
+            &role_scope_sets,
+            context,
+            user_id,
+            object_read,
+        )?;
     }
     Ok(())
 }
@@ -279,6 +288,7 @@ pub(super) fn revalidate_assignee_binding_access_by_role(
     role_scope_sets: &[RoleScopeFacts],
     context: &BindingRevalidationContext,
     assignee_user_id: &str,
+    object_read: &dyn ApprovalObjectReadPort,
 ) -> Result<()> {
     let role_scopes = role_scope_sets
         .iter()
@@ -287,7 +297,14 @@ pub(super) fn revalidate_assignee_binding_access_by_role(
             assignment_scope_covers_organization(user_scopes, role_scopes, &context.organization_id)
         })
         .unwrap_or(&[]);
-    revalidate_assignee_binding_access(spec, user_scopes, role_scopes, context, assignee_user_id)
+    revalidate_assignee_binding_access_with(
+        spec,
+        user_scopes,
+        role_scopes,
+        context,
+        assignee_user_id,
+        object_read,
+    )
 }
 
 /// 库存调整绑定在同一 executor 内分别证明决定与对象读取范围。

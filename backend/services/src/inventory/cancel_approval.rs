@@ -7,17 +7,20 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
-use entities::approval_integration::{
-    ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
-};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
+use database::InventoryExt;
 use entities::inventory::StockAdjustment;
-use entities::work_item::{AssignmentSource, WorkItem, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
+use erp_workflow::entity::approval_integration::{
+    ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
+};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemType};
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -30,25 +33,27 @@ use super::approval_query::load_approval_binding;
 use super::dto::{CancelStockAdjustmentApprovalRequest, StockAdjustmentView};
 use super::start_approval::load_bound_definition_graph;
 use super::InventoryService;
-use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
-use crate::approval::execution::idempotency::{
-    document_cancel_identity, normalize_idempotency_key, payload_conflict_error,
-    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
-};
-use crate::approval::execution::{
-    map_receipt_first_write_error, prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput,
-    PlannedWrites, PreparedExecution,
-};
-use crate::approval::process_kind::process_kind_of;
-use crate::approval::{
-    approval_actor_is_active_with_executor, approval_cancel_scope_with_executor,
-    approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
-    ApprovalActionContext,
-};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::execution::authorization::{
+    converge_eligibility, requires_blocked_cancel,
+};
+use erp_workflow::service::approval::execution::idempotency::{
+    document_cancel_identity, normalize_idempotency_key, payload_conflict_error,
+    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
+};
+use erp_workflow::service::approval::execution::{
+    map_receipt_first_write_error, prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput,
+    PlannedWrites, PreparedExecution,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::{
+    approval_actor_is_active_with_executor, approval_cancel_scope_with_executor,
+    approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
+};
+use erp_workflow::ApprovalActionContext;
 
 const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
 const STOCK_ADJUSTMENT_AUDIT_RESOURCE: &str = "stock_adjustment";
@@ -310,7 +315,7 @@ async fn committed_cancel_replay(
                     ));
                 }
                 if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
-                    return Err(payload_conflict_error());
+                    return Err(payload_conflict_error().into());
                 }
                 let adjustment = db
                     .inventory()
@@ -562,7 +567,7 @@ pub(super) fn ensure_stock_adjustment_open_task_identity(
         || current.process_instance_id.as_ref() != instance.base.id
         || current.round_no != instance.current_round_no
         || task.work_item_type != WorkItemType::DocumentApproval
-        || task.status != entities::work_item::WorkItemStatus::Open
+        || task.status != erp_workflow::entity::work_item::WorkItemStatus::Open
         || task.assignment_source != AssignmentSource::ApprovalRuntime
         || task.approval_node_execution_id.as_ref().map(AsRef::as_ref) != Some(current.base.id.as_str())
         || task.business_object_type != DocumentType::StockAdjustment.as_str()
@@ -671,7 +676,13 @@ async fn ensure_cancel_authorized_with_executor(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
-    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+    if !approval_actor_is_active_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        executor,
+    )
+    .await?
+    {
         return Err(Error::Forbidden("当前账号不可执行库存调整审批撤回".to_string()));
     }
     let snapshot = db
@@ -686,10 +697,19 @@ async fn ensure_cancel_authorized_with_executor(
             instance.subject_version,
         )
         .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
-    let cancel_scope = approval_cancel_scope_with_executor(db, rbac, actor, executor).await?;
-    let read_scope =
-        approval_document_read_scope_with_executor(db, rbac, actor, DocumentType::StockAdjustment, executor)
-            .await?;
+    let cancel_scope = approval_cancel_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        executor,
+    )
+    .await?;
+    let read_scope = approval_document_read_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        DocumentType::StockAdjustment,
+        executor,
+    )
+    .await?;
     if !cancel_scope.covers(&snapshot.payload.responsible_org_id)
         || !read_scope.covers(&snapshot.payload.responsible_org_id)
     {
@@ -702,7 +722,12 @@ async fn ensure_cancel_authorized_with_executor(
             responsible_org_id: snapshot.payload.responsible_org_id,
         });
     }
-    let visibility = definition_management_visibility_with_executor(db, rbac, actor, executor).await?;
+    let visibility = definition_management_visibility_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        executor,
+    )
+    .await?;
     if !visibility
         .runtime_admin_types()
         .contains(&DocumentType::StockAdjustment)
@@ -1004,7 +1029,7 @@ async fn persist_stock_adjustment_cancel_notifications(
 pub async fn cancel_stock_adjustment_approval_in_transaction(
     db: &Database,
     context: &ApprovalActionContext,
-    action: crate::approval::policy::ApprovalDomainAction,
+    action: erp_workflow::service::approval::policy::ApprovalDomainAction,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -1076,7 +1101,7 @@ async fn validate_blocked_cancel_runtime_context(
         .map_err(|_| Error::ConflictError("库存调整受阻实例冻结快照已变化".to_string()))?;
     if instance.status != bpm::model::types::ApprovalProcessInstanceStatus::Blocked
         || instance.process_kind
-            != crate::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
+            != erp_workflow::service::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()

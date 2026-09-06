@@ -4,9 +4,9 @@
 
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
-use database::BpmExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::BpmExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -15,11 +15,11 @@ use super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-use crate::approval::execution::{
+use crate::errors::Result;
+use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
     RuntimeHistoryPage,
 };
-use crate::errors::Result;
 
 /// 加载销售单详情的只读审批结构。
 ///
@@ -55,9 +55,8 @@ pub async fn load_document_approval(
     commercial: CommercialStatus,
     review: ReviewStatus,
 ) -> Result<DocumentApprovalView> {
-    let subject =
-        entities::approval_integration::subject_ref_for_sales_business(business_type, sales_order_id)
-            .map_err(|error| crate::errors::Error::ValidationError(error.to_string()))?;
+    let subject = crate::sales_order::subject_ref_for_sales_business(business_type, sales_order_id)
+        .map_err(|error| crate::errors::Error::ValidationError(error.to_string()))?;
     let runtime = load_runtime(db, &subject).await?;
     Ok(document_approval_view_with_history(
         binding,
@@ -253,13 +252,13 @@ fn optional_text(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{history_item_view, instance_view, optional_text};
-    use crate::approval::execution::RuntimeHistoryItem;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
     use bpm::model::{
         ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
         ProcessKind, SubjectRef, Timestamp,
     };
+    use erp_workflow::service::approval::execution::RuntimeHistoryItem;
 
     fn running_instance() -> ApprovalProcessInstance {
         ApprovalProcessInstance::start_running(NewProcessInstance {

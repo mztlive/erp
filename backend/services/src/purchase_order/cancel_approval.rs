@@ -3,11 +3,13 @@
 use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use database::{BpmExt, PurchaseOrderExt, WorkItemExt};
+use database::PurchaseOrderExt;
 use entities::purchase_order::PurchaseOrder;
-use entities::work_item::WorkItem;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
@@ -19,20 +21,19 @@ use super::adapter::{
 use super::dto::CancelPurchaseOrderApprovalRequest;
 use super::start_approval::load_bound_definition_graph;
 use super::PurchaseOrderService;
-use crate::approval::execution::authorization::converge_eligibility;
-use crate::approval::execution::start::map_engine_error;
-use crate::approval::execution::{
-    claim_and_persist_document_cancel_runtime, command_may_have_committed, command_recovery_delay,
-    normalize_document_cancel_reason, prepare_document_cancel, replay_committed_document_cancel,
-    CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof, ExecutionCommandInput,
-    PreparedExecution,
-};
-use crate::approval::policy::ApprovalDomainAction;
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_audit::AuditActorLogs;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
+    claim_and_persist_document_cancel_runtime, command_recovery_delay, normalize_document_cancel_reason,
+    prepare_document_cancel, replay_committed_document_cancel, CancelExecutionInput, DocumentCancelCommand,
+    DocumentCancelReplayProof, ExecutionCommandInput, PreparedExecution,
+};
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::document_registry::find_approval_binding;
 use validator::Validate;
 
 impl PurchaseOrderService {
@@ -77,7 +78,9 @@ impl PurchaseOrderService {
         }
         self.ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, order.approval_subject_version).await?;
@@ -118,7 +121,7 @@ impl PurchaseOrderService {
         .await;
         match result {
             Ok(()) => Ok(()),
-            Err(error) if command_may_have_committed(&error) => {
+            Err(error) if error.command_may_have_committed() => {
                 recover_purchase_order_cancel(&self.db, &command, error).await
             }
             Err(error) => Err(error),
@@ -138,7 +141,11 @@ async fn replay_purchase_order_cancel(
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
-            Box::pin(async move { replay_committed_document_cancel(&db, &command, session).await })
+            Box::pin(async move {
+                replay_committed_document_cancel(&db, &command, session)
+                    .await
+                    .map_err(Error::from)
+            })
         })
         .await
 }
@@ -153,7 +160,7 @@ async fn recover_purchase_order_cancel(
         match replay_purchase_order_cancel(db, command).await {
             Ok(Some(_)) => return Ok(()),
             Ok(None) => {}
-            Err(error) if command_may_have_committed(&error) => {}
+            Err(error) if error.command_may_have_committed() => {}
             Err(error) => return Err(error),
         }
         if attempt + 1 < CANCEL_RECOVERY_ATTEMPTS {
@@ -303,7 +310,7 @@ pub fn build_purchase_order_cancel_input(
 fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Model(error) => Error::ConflictError(error.to_string()),
-        other => map_engine_error(other),
+        other => Error::from(map_engine_error(other)),
     }
 }
 
@@ -399,9 +406,9 @@ mod tests {
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
     use erp_core::common::time::Instant;
 
-    use crate::approval::execution::{prepare_document_cancel, PreparedExecution};
     use crate::errors::Error;
     use crate::purchase_order::start_approval::tests::{open_task, two_node_graph};
+    use erp_workflow::service::approval::execution::{prepare_document_cancel, PreparedExecution};
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -452,7 +459,7 @@ mod tests {
 
     fn runtime(
         instance: ApprovalProcessInstance,
-        open_tasks: Vec<entities::work_item::WorkItem>,
+        open_tasks: Vec<erp_workflow::entity::work_item::WorkItem>,
     ) -> LoadedCancelRuntime {
         let current = current_execution();
         let plan = plan_cancel(CancelPlanInput {
@@ -509,7 +516,7 @@ mod tests {
         assert!(!built.blocked_port);
         let error = prepare_document_cancel(built, 1).unwrap_err();
         assert!(
-            matches!(error, Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
+            matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
         );
     }
 

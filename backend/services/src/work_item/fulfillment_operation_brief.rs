@@ -8,10 +8,10 @@ use std::collections::{HashMap, HashSet};
 use database::{FulfillmentExt, PurchaseOrderExt, SalesOrderExt};
 use persistence_core::Executor;
 
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, ProcessObjectFacts};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 装载入库、发货、电子交付与服务履约工作项的权威对象事实。
     ///
     /// # 参数
@@ -166,7 +166,7 @@ const SYSTEM_OBJECT_OWNER: &str = "__system__";
 /// # 关键业务约束
 /// 单号缺失时调用方回退为只有作业类型的标题，不得把销售单 ID 写进标题。
 async fn sales_order_numbers(
-    service: &WorkItemService,
+    service: &ProcessObjectFacts,
     sales_order_ids: Vec<String>,
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, String>> {
@@ -206,7 +206,7 @@ async fn sales_order_numbers(
 /// # 关键业务约束
 /// 单号缺失时调用方回退为只有作业类型的标题，不得把采购单 ID 写进标题。
 async fn purchase_order_numbers(
-    service: &WorkItemService,
+    service: &ProcessObjectFacts,
     purchase_order_ids: Vec<String>,
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, String>> {

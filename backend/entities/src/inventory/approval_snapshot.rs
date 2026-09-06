@@ -2,12 +2,14 @@
 //!
 //! 快照责任组织、对手方、数量合计、行数与空行拒绝的唯一规则源。
 
-use crate::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
 use crate::inventory::{StockAdjustment, StockAdjustmentLine};
 use erp_core::common::time::Instant;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+};
 
 /// 库存调整审批快照构造入口。
 pub struct StockAdjustmentApprovalSnapshot;

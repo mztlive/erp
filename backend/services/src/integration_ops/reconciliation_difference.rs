@@ -3,12 +3,13 @@
 //! 差异事实创建后不可修改；决定只由 `task_decision` 追加，不在本模块暴露旧处理或
 //! 解决命令。
 
-use database::{IntegrationOpsExt, WorkItemExt};
+use database::IntegrationOpsExt;
 use entities::integration_ops::{
     difference_terminal_policy, project_difference_actions, DifferenceActionProjection,
     ReconciliationDifference, ReconciliationDifferenceData, ReconciliationDifferenceId,
 };
 use erp_audit::AuditExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -178,7 +179,7 @@ impl IntegrationOpsService {
     async fn store_difference(
         &self,
         difference: ReconciliationDifference,
-        work_item: entities::work_item::WorkItem,
+        work_item: erp_workflow::entity::work_item::WorkItem,
         actor: &AuditActor,
     ) -> Result<()> {
         let audit = actor.clone().resource_log(

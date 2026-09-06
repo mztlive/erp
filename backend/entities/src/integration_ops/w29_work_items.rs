@@ -4,10 +4,12 @@
 //! 由本模块独占；任务主键、当前责任人与时间由调用方注入，责任解析与持久化
 //! 仍归服务；通用 BPM 不得拥有 ERP 责任路由。
 
-use crate::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_core::Result;
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
 
 use super::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 
@@ -211,9 +213,9 @@ mod tests {
         IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
-    use crate::work_item::{AssignmentSource, WorkItemPriority, WorkItemType};
     use erp_core::common::time::Instant;
     use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId, WorkItemId};
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemType};
 
     const NOW: i64 = 1_700_000_000;
 

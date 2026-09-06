@@ -7,11 +7,11 @@ use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, join_list_summary, non_empty};
 use super::super::presentation::format_yuan;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use super::mapping::{amount_reason_brief, append_funds_origin, receipt_brief_source};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 回款审批任务的对象事实：任务对象是回款单本身。
     ///
     /// 回款单实体不记录创建人，创建操作人从 `customer_receipt.create` 审计事实取，

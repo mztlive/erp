@@ -9,9 +9,9 @@ use entities::legacy_import::{
     ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

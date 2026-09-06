@@ -56,6 +56,7 @@ pub async fn payable_account_list(
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<PageView<PayableAccountSummaryView>> {
     let page = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .payable_account_list(&params)
         .await?;
 
@@ -82,6 +83,7 @@ pub async fn payable_account_detail(
     Path(id): Path<String>,
 ) -> Result<PayableAccountView> {
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .payable_account_detail(&id)
         .await?;
 
@@ -113,6 +115,7 @@ pub async fn payment_recipient_reveal(
 ) -> Result<PaymentRecipientRevealView> {
     let sensitive_data = state.sensitive_data();
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
         .await?;
 
@@ -141,6 +144,7 @@ pub async fn payable_account_create(
     Json(req): Json<CreatePayableAccountRequest>,
 ) -> Result<PayableAccountView> {
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_payable_account(req, &actor)
         .await?;
 
@@ -167,6 +171,7 @@ pub async fn supplier_payment_list(
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<PageView<SupplierPaymentView>> {
     let page = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .supplier_payment_list(&params)
         .await?;
 
@@ -193,6 +198,7 @@ pub async fn supplier_payment_detail(
     Path(id): Path<String>,
 ) -> Result<SupplierPaymentView> {
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .supplier_payment_detail(&id)
         .await?;
 
@@ -225,6 +231,7 @@ pub async fn supplier_payment_commit(
     validate_bank_receipt_upload(&req, &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_supplier_payment_with_assets(req, pending.clone(), &actor)
         .await;
     match result {
@@ -260,6 +267,7 @@ pub async fn supplier_payment_bank_receipt(
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .supplier_payment_bank_receipt(&id, &actor)
         .await?;
     if !matches!(
@@ -361,6 +369,7 @@ pub async fn purchase_invoice_allocation_post(
     Json(req): Json<RegisterPurchaseInvoiceRequest>,
 ) -> Result<PurchaseInvoiceRegisteredView> {
     let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .register_purchase_invoice(req, &actor)
         .await?;
 
@@ -387,6 +396,7 @@ pub async fn purchase_invoice_allocation_list(
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<PageView<PurchaseInvoiceAllocationView>> {
     let page = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .purchase_invoice_allocation_list(&params)
         .await?;
 

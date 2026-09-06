@@ -17,17 +17,19 @@ mod query;
 mod sales_order_brief;
 mod stats;
 
-use database::WorkItemExt;
+use erp_workflow::WorkItemExt;
 
 pub(crate) use dto::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily,
     WorkItemFamilyCountsView, WorkItemScope,
 };
-pub use dto::{
-    WorkItemListParams, WorkItemPageView, WorkItemReassignCandidateView, WorkItemStatsParams,
-    WorkItemStatsView, WorkItemView,
-};
+pub use dto::{WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView};
 pub(crate) use facts::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
+pub use fulfillment_queue::{
+    FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
+    FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
+    FulfillmentQueuePageView, FulfillmentQueueWarehouseView,
+};
 pub use query::WorkbenchReadService;
 
 pub(crate) type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;

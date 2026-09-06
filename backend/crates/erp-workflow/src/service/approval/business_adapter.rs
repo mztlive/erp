@@ -317,12 +317,36 @@ pub fn revalidate_assignee_binding_access(
     context: &BindingRevalidationContext,
     assignee_user_id: &str,
 ) -> Result<()> {
+    revalidate_assignee_binding_access_with(
+        spec,
+        user_scopes,
+        role_scopes,
+        context,
+        assignee_user_id,
+        &crate::ports::FailClosedObjectReadPort,
+    )
+}
+
+/// bind/upgrade 共用闸门：使用注入的对象读取端口。
+pub fn revalidate_assignee_binding_access_with(
+    spec: &ApprovalAdapterSpec,
+    user_scopes: &[DataScopeFact],
+    role_scopes: &[DataScopeFact],
+    context: &BindingRevalidationContext,
+    assignee_user_id: &str,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+) -> Result<()> {
     if !assignment_scope_covers_organization(user_scopes, role_scopes, &context.organization_id) {
         return Err(Error::ValidationError(
             "审批人数据范围不覆盖当前单据组织".to_string(),
         ));
     }
-    let can_read = require_wired_object_read(adapter_object_read_decision(spec, context, assignee_user_id)?)?;
+    let can_read = require_wired_object_read(adapter_object_read_decision_with(
+        spec,
+        context,
+        assignee_user_id,
+        object_read,
+    )?)?;
     ensure_binding_scope(spec, user_scopes, role_scopes, &context.organization_id, can_read)
 }
 

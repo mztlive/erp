@@ -10,10 +10,10 @@ use axum::{
 };
 use erp_core::common::time::Instant;
 use erp_identity::Permission;
+use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
 use services::customer::{
     assignment::CustomerAssignmentService, profile::CustomerProfileService, CreateCustomerRequest,
-    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
-    CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView, CustomerDetailView,
+    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView,
     CustomerListParams, CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope,
     CustomerSensitiveRevealView, CustomerService, CustomerView, PageView, RevealCustomerSensitiveRequest,
     SaveCustomerProfileRequest, UpdateCustomerRequest,
@@ -408,9 +408,7 @@ pub async fn customer_delete(
     Path(id): Path<String>,
 ) -> Result<()> {
     ensure_customer_access(&state, &subject, &user_id, &id).await?;
-    CustomerService::new(state.db())
-        .delete_customer(&id, &actor)
-        .await?;
+    erp_processes::delete_customer(state.db(), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 

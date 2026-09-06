@@ -1,10 +1,12 @@
 //! 责任队列列表与单条详情查询。
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::num::NonZeroU32;
 
-use database::{BpmExt, WorkItemExt};
-use entities::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -28,6 +30,7 @@ struct FocusedQueueContext<'a> {
 }
 
 /// Cross-domain workbench query service.
+#[derive(Clone)]
 pub struct WorkbenchReadService<A> {
     /// MongoDB handle used for work-item and brief reads.
     pub db: mongodb::Database,
@@ -52,7 +55,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 查询服务端授权过滤后的责任队列。
     ///
     /// # 参数
@@ -66,15 +69,15 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 查询参数非法、managed 未授权或授权事实无法读取时返回错误。
     pub async fn work_item_list(
         &self,
-        params: &WorkItemListParams,
-        actor: &AuditActor,
+        params: WorkItemListParams,
+        actor: AuditActor,
     ) -> Result<WorkItemPageView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(actor).await?;
+        let access = self.actor_access(&actor).await?;
         let queue_context_id = queue_context_id(actor.id(), &query, &access);
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
-        let mut filter = self.scope_filter(&query, actor, &access)?;
+        let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
         let authorized_page = self
             .authorized_page_fields(&filter, query.page, query.page_size, &access)
@@ -91,7 +94,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             )
             .await?;
         let items = self
-            .project_fields(fields, query.scope, actor, &access, &queue_context_id)
+            .project_fields(fields, query.scope, &actor, &access, &queue_context_id)
             .await?;
         Ok(WorkItemPageView {
             items,
@@ -170,7 +173,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         filter: &WorkItemFilter,
         offset: u64,
-    ) -> Result<Vec<database::WorkItemRow>> {
+    ) -> Result<Vec<erp_workflow::WorkItemRow>> {
         self.db
             .work_items()
             .scan_work_item_batch(filter, offset, AUTHORIZED_SCAN_BATCH_SIZE, &mut NoTransaction)
@@ -209,7 +212,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ) -> Result<Vec<WorkItemView>> {
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
-            let access = self.view_access(&fields, scope, actor, actor_access).await?;
+            let access = self.view_access(&fields, scope, actor, actor_access)?;
             items.push(
                 WorkItemView::from_fields(fields, queue_context_id.to_string())?.with_access(
                     access.processing_state,
@@ -289,10 +292,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 任务不存在或当前用户不在任一安全责任范围时返回错误。
-    pub async fn work_item_detail(&self, id: &str, actor: &AuditActor) -> Result<WorkItemView> {
-        let item = self.load(id).await?;
+    pub async fn work_item_detail(self, id: String, actor: AuditActor) -> Result<WorkItemView> {
+        let item = self.load(id.clone()).await?;
         let item_id = item.base.id.clone();
-        let access = self.actor_access(actor).await?;
+        let access = self.actor_access(&actor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
         let fields = self.authorized_fields_for_items(vec![item], &access).await?;
         let fields = fields
@@ -300,7 +303,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .next()
             .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
-        let view_access = self.view_access(&fields, scope, actor, &access).await?;
+        let view_access = self.view_access(&fields, scope, &actor, &access)?;
         let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
             view_access.processing_state,
             view_access.processing_blocker,
@@ -323,18 +326,20 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 工作项不存在或仓储查询失败时返回错误。
-    pub(super) async fn load(&self, id: &str) -> Result<WorkItem> {
-        self.db
-            .work_items()
-            .find_work_item(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
+    pub(super) fn load(&self, id: String) -> impl Future<Output = Result<WorkItem>> + Send + 'static {
+        let db = self.db.clone();
+        async move {
+            db.work_items()
+                .find_work_item(&id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
+        }
     }
 }
 
 fn approval_context_view(
     execution: &bpm::model::ApprovalNodeExecution,
-    summary: &database::repository::bpm::ApprovalInstanceSummary,
+    summary: &erp_workflow::repository::bpm::ApprovalInstanceSummary,
 ) -> dto::WorkItemApprovalContextView {
     dto::WorkItemApprovalContextView {
         instance_id: summary.id.clone(),
@@ -494,4 +499,69 @@ pub(super) fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u6
     current
         .checked_add(batch_len)
         .ok_or_else(|| Error::Internal("责任队列候选偏移溢出".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ensure_queue_context, next_candidate_offset, remove_approval_decision_actions, AuthorizedPage,
+        AuthorizedPageCollector,
+    };
+    use super::{WorkItemAllowedAction, AUTHORIZED_SCAN_BATCH_SIZE};
+
+    #[test]
+    fn authorized_pagination_slices_after_authorization() {
+        let mut collector = AuthorizedPageCollector::new(2, 2).unwrap();
+
+        collector.extend(["authorized-1"]);
+        collector.extend(["authorized-2", "authorized-3", "authorized-4"]);
+
+        assert_eq!(
+            collector.finish(),
+            AuthorizedPage {
+                items: vec!["authorized-3", "authorized-4"],
+                total: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn authorized_pagination_reaches_later_batch_and_counts_full_total() {
+        let mut collector = AuthorizedPageCollector::new(1, 2).unwrap();
+        collector.extend(Vec::<&str>::new());
+        collector.extend(["allowed-0", "allowed-1", "allowed-2"]);
+        let page = collector.finish();
+        assert_eq!(page.items, vec!["allowed-0", "allowed-1"]);
+        assert_eq!(page.total, 3);
+        assert_eq!(AUTHORIZED_SCAN_BATCH_SIZE.get(), 100);
+    }
+
+    #[test]
+    fn queue_context_mismatch_fails_closed() {
+        assert!(ensure_queue_context(&None, "ctx-1").is_ok());
+        assert!(ensure_queue_context(&Some("ctx-1".to_string()), "ctx-1").is_ok());
+        assert!(ensure_queue_context(&Some("ctx-2".to_string()), "ctx-1").is_err());
+    }
+
+    #[test]
+    fn approval_decision_actions_are_removed_fail_closed() {
+        let mut actions = vec![
+            WorkItemAllowedAction::View,
+            WorkItemAllowedAction::Approve,
+            WorkItemAllowedAction::Reject,
+            WorkItemAllowedAction::Process,
+        ];
+        assert!(remove_approval_decision_actions(&mut actions));
+        assert_eq!(
+            actions,
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]
+        );
+        assert!(!remove_approval_decision_actions(&mut actions));
+    }
+
+    #[test]
+    fn candidate_offset_advances_by_batch_len() {
+        assert_eq!(next_candidate_offset(0, 100).unwrap(), 100);
+        assert!(next_candidate_offset(u64::MAX, 1).is_err());
+    }
 }

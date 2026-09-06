@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use database::{CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt, WorkItemExt};
+use database::{CatalogExt, SupplierApiExt, SupplierExt, SupplierOfferingExt};
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
@@ -19,6 +19,7 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
@@ -26,13 +27,13 @@ use serde::de::DeserializeOwned;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_audit::AuditActorLogs;
 use erp_audit::CommandReceiptServiceExt as _;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
 mod dto;
 
@@ -462,7 +463,8 @@ impl SupplierOfferingService {
         if work_item_id.is_empty() || subject_version.is_empty() {
             return Err(Error::ValidationError("任务 ID 与来源版本不能为空".to_string()));
         }
-        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version =
+            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let receipt = CommandReceipt::from_payload(
             "supplier-supply-exception:",
             actor.id(),
@@ -501,7 +503,7 @@ impl SupplierOfferingService {
                         expected_task_version,
                         &req_for_tx.expected_subject_version,
                     )?;
-                    WorkItemService::new(db.clone(), rbac.clone())
+                    work_item_service(db.clone(), rbac.clone())
                         .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
                         .await?;
 
@@ -893,9 +895,11 @@ mod tests {
         AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingCommand,
         SupplierOfferingCommandData,
     };
-    use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{
+        AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+    };
 
     /// 覆盖存量命令重放：历史裸指纹命令与 DTO 新指纹同键同载荷可重放，跨操作必须冲突。
     #[test]

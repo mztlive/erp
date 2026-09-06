@@ -13,6 +13,7 @@ use persistence_core::Executor;
 use super::super::apply_plan::PlannedWrites;
 use super::read_auth::runtime_object_readable;
 use crate::error::{Error, Result};
+use crate::ports::ApprovalObjectReadPort;
 use crate::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::service::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
@@ -129,6 +130,7 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 pub(super) async fn runtime_admin_notification_recipients(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
@@ -152,7 +154,8 @@ pub(super) async fn runtime_admin_notification_recipients(
         };
         let read_scope_covers =
             !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
-        let object_readable = runtime_object_readable(&spec, &context, &account.id, read_scope_covers)?;
+        let object_readable =
+            runtime_object_readable(&spec, &context, &account.id, read_scope_covers, object_read)?;
         if visibility.runtime_admin_types().contains(&document_type) && read_scope_covers && object_readable {
             recipients.push(account.id);
         }

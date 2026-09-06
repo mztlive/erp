@@ -40,7 +40,7 @@ fn voucher_create_binds_and_submit_starts_unified_approval() {
         include_str!("sellable.rs"),
     );
     assert!(source.contains("sales_create_bind_command"));
-    assert!(source.contains("entities::approval_integration::document_type_of_sales_business"));
+    assert!(source.contains("crate::sales_order::document_type_of_sales_business"));
     let submit = source
         .split("pub async fn submit_sales_order")
         .nth(1)
@@ -55,7 +55,7 @@ fn voucher_create_binds_and_submit_starts_unified_approval() {
         .nth(1)
         .and_then(|body| body.split("async fn persist_bound_sales_document").next())
         .expect("绑定命令");
-    assert!(create.contains("entities::approval_integration::document_type_of_sales_business"));
+    assert!(create.contains("crate::sales_order::document_type_of_sales_business"));
     assert!(!create.contains("DocumentType::SalesOrder"));
 }
 

@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
-use database::{LegacyImportExt, WorkItemExt};
+use database::LegacyImportExt;
 use entities::legacy_import::{
     confirmation_work_item, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,
     LegacyImportBatch, LegacyImportConfirmation, LegacyImportConfirmationData, LegacyImportConfirmationId,
 };
-use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_identity::AccessControlExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};

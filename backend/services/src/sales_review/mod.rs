@@ -8,10 +8,10 @@ use erp_audit::AuditExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::approval::policy::ApprovalDomainAction;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
 mod adapter;
 mod cancel_approval;
@@ -36,6 +36,7 @@ type SalesChangeOrderFilter = <mongodb::Database as SalesReviewExt>::SalesChange
 /// 提供销售变更单生命周期与统一审批编排，不再暴露采购确认或卡券专用审批入口。
 pub struct SalesReviewService {
     db: Database,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl SalesReviewService {
@@ -47,7 +48,19 @@ impl SalesReviewService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self {
+            db,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 }
 

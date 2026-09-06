@@ -1,17 +1,19 @@
 //! W13 卡券票款正式复核命令、岗位分离与复核链匹配。
 
-use database::{DocumentRegistryExt, FileAssetExt, ReceivableExt, WorkItemExt};
-use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
+use database::{FileAssetExt, ReceivableExt};
 use entities::receivable::{
     AccountReviewStatus, CardFundsCommandFollowUp, CardFundsCommandReceipt, CardFundsCommandReceiptData,
     CustomerReceiptStatus, EntityCardFundsReviewConclusion, EntityCardFundsReviewResult,
     EntityCardFundsReviewType, InvoiceDirection, InvoiceStatus, ReceivableAccount, ReceivableFundsReview,
     ReceivableFundsReviewChain, ReceivableFundsReviewData, ReviewResult, CARD_FUNDS_REVIEW_ACTION,
 };
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ReceivableAccountId, ReceivableFundsReviewId, WorkflowActionId};
+use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -36,7 +38,7 @@ use super::mapping::{
 };
 use super::{card_funds_task, ReceivableService};
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -119,7 +121,7 @@ impl ReceivableService {
                         &db, &account, &snapshot, &work_item, &actor_id, session,
                     )
                     .await?;
-                    WorkItemService::new(db.clone(), rbac_for_tx)
+                    work_item_service(db.clone(), rbac_for_tx)
                         .ensure_domain_decision_access(&actor_owned, &work_item, session)
                         .await?;
 

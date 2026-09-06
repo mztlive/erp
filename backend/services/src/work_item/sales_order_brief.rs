@@ -18,10 +18,10 @@ use super::brief::{
     BriefLine, BriefSection, ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::presentation::format_yuan;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 读取销售单身份，并按当前审核中提交写入客户、金额、付款条件和明细简报。
     ///
     /// 没有提交时仍保留最小标题，避免任务因对象事实缺失被授权过滤丢弃。

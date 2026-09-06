@@ -6,23 +6,25 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{BpmExt, SalesOrderExt, WorkItemExt};
+use database::SalesOrderExt;
 use entities::sales_order::SalesOrder;
-use entities::work_item::WorkItem;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
-use crate::approval::execution::authorization::converge_eligibility;
-use crate::approval::execution::{
+use crate::errors::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::{
     claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason, CancelExecutionInput,
     ExecutionCommandInput, PreparedExecution,
 };
-use crate::errors::{Error, Result};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -234,7 +236,6 @@ pub(super) async fn persist_sales_order_cancel(
 #[cfg(test)]
 mod tests {
     use super::{build_sales_order_cancel_input, LoadedCancelRuntime};
-    use crate::approval::execution::{prepare_cancel, PreparedExecution};
     use bpm::engine::DefinitionGraph;
     use bpm::ids::{
         ApprovalNodeDefinitionId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
@@ -249,9 +250,10 @@ mod tests {
         ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition, IdempotencyKey,
         NewNodeExecution, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
-    use entities::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+    use erp_workflow::service::approval::execution::{prepare_cancel, PreparedExecution};
 
     fn at(secs: i64) -> Timestamp {
         Timestamp::from_unix_secs(secs).expect("时间合法")

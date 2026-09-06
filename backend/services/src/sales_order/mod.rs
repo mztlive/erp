@@ -19,13 +19,17 @@
 //! 幂等：提交入口先按服务端摘要后的业务幂等键读取事务收据，同键同载荷在
 //! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
-use crate::approval::policy::ApprovalDomainAction;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use bpm::SubjectRef;
 use database::SalesOrderExt;
+use entities::sales_order::BusinessType;
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::approval_integration::SalesBusinessKind;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -54,12 +58,39 @@ pub use self::dto::{
 };
 pub(crate) use self::progress::update_sales_order_money_progress;
 
+fn sales_business_kind(business_type: BusinessType) -> SalesBusinessKind {
+    match business_type {
+        BusinessType::GoodsService => SalesBusinessKind::GoodsService,
+        BusinessType::Voucher => SalesBusinessKind::Voucher,
+    }
+}
+
+/// Map remaining-domain sales `BusinessType` onto the workflow document type.
+pub(crate) fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType {
+    erp_workflow::entity::approval_integration::document_type_of_sales_business(sales_business_kind(
+        business_type,
+    ))
+}
+
+/// Build a workflow subject ref from remaining-domain sales `BusinessType`.
+pub(crate) fn subject_ref_for_sales_business(
+    business_type: BusinessType,
+    business_object_id: &str,
+) -> Result<SubjectRef> {
+    erp_workflow::entity::approval_integration::subject_ref_for_sales_business(
+        sales_business_kind(business_type),
+        business_object_id,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))
+}
+
 /// 销售单服务。
 ///
 /// 提供销售单建单、草稿保存、提交、作废与查询编排。
 pub struct SalesOrderService {
     db: Database,
     rbac: Option<SharedRbacService>,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl SalesOrderService {
@@ -71,7 +102,20 @@ impl SalesOrderService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self {
+            db,
+            rbac: None,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 
     /// 创建可计算当前操作人审批动作的销售单服务。
@@ -79,7 +123,11 @@ impl SalesOrderService {
     /// # 返回
     /// 返回同时绑定数据库和当前应用授权源的服务。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        Self {
+            db,
+            rbac: Some(rbac),
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
     }
 
     /// 读取创建绑定所需的授权源。

@@ -5,20 +5,23 @@
 //! 任务。付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按
 //! 当前责任规则创建新任务身份。
 
-use database::{PayableExt, SupplierExt, WorkItemExt};
-use entities::payable::{PayableAccount, PayableEntry, PayableSourceType, PendingPaymentAllocation};
-use entities::work_item::{
-    is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
-    supplier_payment_impact_summary, FinanceResponsibilityOperation, SupplierPaymentTaskReason,
-    SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
+use database::{PayableExt, SupplierExt};
+use entities::payable::{
+    EntryDirection, PayableAccount, PayableEntry, PayableSourceType, PendingPaymentAllocation,
 };
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
+use erp_workflow::entity::work_item::{
+    is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
+    supplier_payment_impact_summary, FinanceResponsibilityOperation, PayablePurchaseAdmissionFact,
+    SupplierPaymentTaskReason, SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 
 /// 为采购最终通过形成的应付建立唯一开放付款执行任务。
@@ -43,7 +46,15 @@ pub(crate) async fn ensure_purchase_payment_task(
     entry: &PayableEntry,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !is_purchase_payable(account, entry) {
+    if !is_purchase_payable(&PayablePurchaseAdmissionFact {
+        account_id: account.base.id.as_ref(),
+        source_type_is_purchase_order: account.source_type == PayableSourceType::PurchaseOrder,
+        source_document_id: account.source_document_id.as_ref(),
+        is_settled: account.is_settled(),
+        entry_payable_account_id: entry.payable_account_id.as_ref(),
+        entry_direction_is_increase: entry.direction == EntryDirection::Increase,
+        entry_source_document_id: entry.source_document_id.as_ref(),
+    }) {
         return Err(Error::BusinessLogicError(
             "采购应付事实不完整，无法形成付款任务，请检查应付分录后重试".to_string(),
         ));
@@ -231,7 +242,7 @@ pub(crate) async fn authorize_payment_execution(
             "当前账号不是开放付款任务的当前责任人".to_string(),
         ));
     }
-    WorkItemService::new(
+    work_item_service(
         db.clone(),
         crate::identity_compose::shared_rbac_service(db.clone()),
     )
@@ -378,8 +389,8 @@ async fn resolve_payment_responsibility(
     db: &mongodb::Database,
     account: &PayableAccount,
     executor: &mut dyn Executor,
-) -> Result<crate::work_item::ResolvedFinanceResponsibility> {
-    WorkItemService::new(
+) -> Result<erp_workflow::service::work_item::ResolvedFinanceResponsibility> {
+    work_item_service(
         db.clone(),
         crate::identity_compose::shared_rbac_service(db.clone()),
     )
@@ -389,6 +400,7 @@ async fn resolve_payment_responsibility(
         executor,
     )
     .await
+    .map_err(Error::from)
 }
 
 /// 返回开放任务重复的稳定业务错误。

@@ -58,6 +58,7 @@ impl ReceivableService {
         req.validate()?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -173,7 +174,15 @@ impl ReceivableService {
                     )?;
                     red_mut.mark_registered(&actor_id)?;
                     let mut original_mut = original;
-                    register_created_invoice_document(&db, &rbac, &red_mut, &actor_owned, session).await?;
+                    register_created_invoice_document(
+                        &db,
+                        &rbac,
+                        object_read.as_ref(),
+                        &red_mut,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
                     db.invoices().create(&red_mut, session).await?;
                     if allocation_plan.is_full_reversal() {
                         original_mut.mark_red_invoiced(&actor_id)?;

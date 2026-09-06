@@ -1,15 +1,13 @@
 use mongodb::ClientSession;
 
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use database::DocumentRegistryExt;
-use entities::document_registry::BusinessDocument;
 use entities::sales_order::SalesOrder;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::DocumentRegistryExt;
 use sha2::{Digest, Sha256};
 
 use super::super::adapter::{sales_order_object_readable, sales_order_responsible_org_id};
@@ -51,7 +49,7 @@ pub(super) fn sales_create_bind_command(
     actor: &AuditActor,
 ) -> Result<BindPublishedDefinitionCommand> {
     Ok(BindPublishedDefinitionCommand {
-        document_type: entities::approval_integration::document_type_of_sales_business(order.business_type),
+        document_type: crate::sales_order::document_type_of_sales_business(order.business_type),
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
         context: BindingRevalidationContext {
@@ -68,17 +66,25 @@ pub(super) fn sales_create_bind_command(
 pub(super) async fn persist_bound_sales_document(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut ClientSession,
-) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
+) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = sales_order_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
     db.business_documents().create(document, session).await?;

@@ -16,8 +16,8 @@ use super::card_funds::{
 };
 use super::{normalize_sort, SortDir};
 use crate::errors::Result;
-use crate::work_item::WorkItemView;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde_json::Value as WorkItemView;
 
 /// 应收往来子账列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[

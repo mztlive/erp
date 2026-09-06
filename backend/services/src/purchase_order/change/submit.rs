@@ -1,5 +1,4 @@
-use database::{DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt};
-use entities::document_registry::{BusinessDocument, DocumentType};
+use database::{PurchaseOrderExt, SalesOrderExt, SupplierExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseOrder,
     PurchaseOrderRevision,
@@ -7,6 +6,8 @@ use entities::purchase_order::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::PurchaseChangeOrderId;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
@@ -34,18 +35,14 @@ use super::super::dto::{
 use super::super::line_input::{build_change_submission_lines, to_line_inputs};
 use super::super::PurchaseOrderService;
 use super::mapping::content_fingerprint;
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{
-    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
-};
-use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 
 impl PurchaseOrderService {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -253,7 +250,8 @@ impl PurchaseOrderService {
                 creator_id: actor.id().to_string(),
             },
         };
-        let document = new_registered_document(&change.base.id, DocumentType::PurchaseChangeOrder, "")?;
+        let document = new_registered_document(&change.base.id, DocumentType::PurchaseChangeOrder, "")
+            .map_err(crate::errors::Error::from)?;
         let audit = actor.clone().resource_log(
             "purchase_change_order.create",
             "purchase_change_order",
@@ -262,6 +260,7 @@ impl PurchaseOrderService {
         persist_created_change_order(
             &self.db,
             self.require_rbac()?,
+            std::sync::Arc::clone(&self.object_read),
             change.clone(),
             document,
             bind_command,
@@ -421,7 +420,9 @@ impl PurchaseOrderService {
             adapter,
         } = dispatch;
         let subject = purchase_change_order_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
@@ -484,7 +485,7 @@ impl PurchaseOrderService {
         )
         .await;
         if let Err(error) = persisted {
-            if !command_may_have_committed(&error) {
+            if !error.command_may_have_committed() {
                 return Err(error);
             }
             return self
@@ -544,7 +545,9 @@ impl PurchaseOrderService {
                             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
                         let organization_id = purchase_change_responsible_org_id(&sales_order)?;
                         let _ = purchase_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, session).await?;
+                        let binding = find_approval_binding(&db, &change_order_id, session)
+                            .await
+                            .map_err(crate::errors::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = purchase_change_order_subject_ref(&change_order_id)?;
                         let Some(_) = replay_purchase_change_start_with_executor(
@@ -592,7 +595,7 @@ impl PurchaseOrderService {
             match recovered {
                 Ok(Some(result)) => return Ok(result),
                 Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) if error.command_may_have_committed() => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -614,7 +617,9 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = purchase_change_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = purchase_change_order_subject_ref(id)?;
         let runtime =
@@ -696,9 +701,11 @@ struct FrozenChangeSubmission {
 ///
 /// # 错误
 /// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
+#[allow(clippy::too_many_arguments)]
 async fn persist_created_change_order(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     change_order: PurchaseChangeOrder,
     mut document: BusinessDocument,
     bind_command: BindPublishedDefinitionCommand,
@@ -707,12 +714,21 @@ async fn persist_created_change_order(
 ) -> Result<()> {
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                persist_bound_change_document(&db, &rbac, &mut document, &bind_command, &actor, session)
-                    .await?;
+                persist_bound_change_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &mut document,
+                    &bind_command,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.purchase_change_orders().create(&change_order, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
@@ -728,6 +744,7 @@ async fn persist_created_change_order(
 async fn persist_bound_change_document(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -737,8 +754,15 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("采购变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, session).await?;

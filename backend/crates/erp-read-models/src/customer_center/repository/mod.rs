@@ -2,4 +2,7 @@
 
 mod related;
 
-pub use related::CustomerCenterRepository;
+pub use related::{
+    CustomerCenterContractRow, CustomerCenterRelatedRow, CustomerCenterRepository,
+    CustomerCenterSalesOrderRow,
+};

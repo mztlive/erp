@@ -31,7 +31,7 @@ use super::{
     load_exact_runtime_snapshot, persisted_command_view_with_executor, ApprovalRuntimeService,
 };
 use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
+use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
 use crate::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::service::approval::{
     approval_actor_is_active_with_executor, approval_cancel_blocked_scope_with_executor,
@@ -99,6 +99,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
         let action_port = Arc::clone(&self.action_port);
+        let object_read = Arc::clone(&self.object_read);
         let audit_port = Arc::clone(&self.audit);
         let actor = actor.clone();
         self.db
@@ -109,6 +110,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         &db,
                         &rbac,
                         action_port.as_ref(),
+                        object_read.as_ref(),
                         audit_port.as_ref(),
                         &actor,
                         &command,
@@ -133,6 +135,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         for attempt in 0..RECOVERY_ATTEMPTS {
             let db = self.db.clone();
             let rbac = self.auth.clone();
+            let object_read = Arc::clone(&self.object_read);
             let audit_port = Arc::clone(&self.audit);
             let actor = actor.clone();
             let command = command.clone();
@@ -145,6 +148,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         replay_cancel_blocked_in_transaction(
                             &db,
                             &rbac,
+                            object_read.as_ref(),
                             audit_port.as_ref(),
                             &actor,
                             &command,
@@ -173,6 +177,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 async fn replay_cancel_blocked_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
@@ -194,7 +199,8 @@ async fn replay_cancel_blocked_in_transaction(
 
     let terminal_facts = if instance.status == ApprovalProcessInstanceStatus::Cancelled {
         // 与 Fresh 路径保持相同顺序：失权调用方在任何收据读取或摘要比较前即失败关闭。
-        ensure_cancel_blocked_authorized(db, rbac, actor, document_type, &snapshot, session).await?;
+        ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, session)
+            .await?;
         let facts = load_cancel_blocked_terminal_facts(db, audit_port, &instance, session)
             .await?
             .ok_or_else(hidden_not_found)?;
@@ -355,15 +361,24 @@ async fn cancel_blocked_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
+    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     idempotency_key: &IdempotencyKey,
     session: &mut mongodb::ClientSession,
 ) -> Result<ApprovalCommandView> {
-    if let Some(replay) =
-        replay_cancel_blocked_in_transaction(db, rbac, audit_port, actor, command, idempotency_key, session)
-            .await?
+    if let Some(replay) = replay_cancel_blocked_in_transaction(
+        db,
+        rbac,
+        object_read,
+        audit_port,
+        actor,
+        command,
+        idempotency_key,
+        session,
+    )
+    .await?
     {
         return Ok(replay);
     }
@@ -374,7 +389,7 @@ async fn cancel_blocked_in_transaction(
         .await?
         .ok_or_else(hidden_not_found)?;
     let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, false).await?;
-    ensure_cancel_blocked_authorized(db, rbac, actor, document_type, &snapshot, session).await?;
+    ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, session).await?;
     ensure_cancel_blocked_instance_preconditions(&instance, command)?;
     let task_policy = instance
         .cancellation_task_policy()
@@ -515,6 +530,7 @@ async fn cancel_blocked_in_transaction(
 async fn ensure_cancel_blocked_authorized(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     actor: &AuditActor,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
@@ -532,7 +548,8 @@ async fn ensure_cancel_blocked_authorized(
         creator_id: snapshot.payload.submitted_by.clone(),
     };
     let read_scope_covers = !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
-    let object_readable = runtime_object_readable(&spec, &context, actor.id(), read_scope_covers)?;
+    let object_readable =
+        runtime_object_readable(&spec, &context, actor.id(), read_scope_covers, object_read)?;
     if action_scope.is_empty()
         || !action_scope.covers(&snapshot.payload.responsible_org_id)
         || !read_scope_covers

@@ -9,7 +9,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
+use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
 use application_core::AuditActor;
 
 use super::super::policy::{policy_of, require_process_required};
@@ -29,6 +29,8 @@ use super::{
 /// # 参数
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC
+/// * `object_read` - 注入的对象读取端口
+/// * `audit_port` - 审计写入端口
 /// * `command` - 绑定命令
 /// * `actor` - 已认证操作人
 /// * `executor` - 调用方事务执行器
@@ -41,6 +43,7 @@ use super::{
 pub async fn bind_published_definition_on_document_create(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -54,7 +57,8 @@ pub async fn bind_published_definition_on_document_create(
             Ok(None)
         }
         BindingDecision::RequirePublished => {
-            let binding = bind_required_definition(db, rbac, audit_port, command, actor, executor).await?;
+            let binding =
+                bind_required_definition(db, rbac, object_read, audit_port, command, actor, executor).await?;
             Ok(Some(binding))
         }
     }
@@ -88,6 +92,7 @@ pub fn binding_from_published(
 async fn bind_required_definition(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -95,7 +100,7 @@ async fn bind_required_definition(
 ) -> Result<ApprovalDefinitionBinding> {
     let policy = require_process_required(command.document_type)?;
     let graph = load_published_graph(db, command.document_type, executor).await?;
-    revalidate_binding_graph(db, rbac, &policy, &command.context, &graph, executor).await?;
+    revalidate_binding_graph(db, rbac, object_read, &policy, &command.context, &graph, executor).await?;
     let binding = binding_from_published(
         ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         graph.definition.definition_version,

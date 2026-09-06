@@ -39,7 +39,7 @@ use super::{
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::service::approval::business_adapter::{
-    adapter_object_read_decision, adapter_spec_of, BindingRevalidationContext,
+    adapter_object_read_decision_with, adapter_spec_of, BindingRevalidationContext,
 };
 use crate::service::approval::policy::STATIC_APPROVE_PERMISSION;
 use crate::service::approval::{approval_recovery_scope, ApprovalResumeCommand};
@@ -104,6 +104,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return revalidate_decision_approver(
                 &self.db,
                 &self.auth,
+                self.object_read.as_ref(),
                 RevalidateDecisionApproverInput {
                     assignee_id,
                     assignee_name,
@@ -130,7 +131,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         organization_id: snapshot.payload.responsible_org_id.clone(),
                         creator_id: String::new(),
                     };
-                    match adapter_object_read_decision(spec, &context, assignee_id)? {
+                    match adapter_object_read_decision_with(
+                        spec,
+                        &context,
+                        assignee_id,
+                        self.object_read.as_ref(),
+                    )? {
                         Some(true) => None,
                         _ => Some(AuthorizationFailure::CannotReadSubject),
                     }
@@ -309,6 +315,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let submitted_by = snapshot.payload.submitted_by.clone();
         let ended_execution_id = current.base.id.clone();
         let rbac = self.auth.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let audit_port = std::sync::Arc::clone(&self.audit);
         let stock_resume_revalidation = (document_type == DocumentType::StockAdjustment).then(|| {
             (
@@ -329,6 +336,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         let eligibility = revalidate_decision_approver(
                             &db,
                             &rbac,
+                            object_read.as_ref(),
                             RevalidateDecisionApproverInput {
                                 assignee_id,
                                 assignee_name,

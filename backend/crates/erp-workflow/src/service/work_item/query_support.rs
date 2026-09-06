@@ -1,19 +1,17 @@
 //! Command-path projection helpers shared with mutation outcomes.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use crate::entity::work_item::WorkItem;
 use crate::error::Result;
 use crate::ports::ObjectFactMap;
-use crate::repository::BpmExt;
 use persistence_core::NoTransaction;
 
 use super::access::{authorized_item_fields, ActorAccess};
 use super::dto;
-use super::presentation::resolve_owner_display_name;
-use super::{WorkItemService, WorkItemView};
+use super::WorkItemService;
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// Reload object facts and keep authorized projections.
     pub async fn authorized_fields_for_items(
         &self,
@@ -34,104 +32,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             .filter_map(|item| authorized_item_fields(item, access, &facts))
             .collect())
     }
-
-    pub async fn apply_party_names(&self, items: &mut [WorkItemView]) -> Result<()> {
-        let mut ids = HashSet::new();
-        for item in items.iter() {
-            if let Some(owner) = item.owner_user.as_ref() {
-                ids.insert(owner.id.clone());
-            }
-        }
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let accounts = self
-            .auth
-            .load_accounts(&ids.into_iter().collect::<Vec<_>>(), &mut NoTransaction)
-            .await?;
-        let names = accounts
-            .into_iter()
-            .map(|account| (account.id, account.display_name))
-            .collect::<HashMap<_, _>>();
-        for item in items {
-            if let Some(owner) = item.owner_user.as_mut() {
-                owner.display_name = resolve_owner_display_name(&owner.id, &names);
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn apply_approval_contexts(&self, items: &mut [WorkItemView]) -> Result<()> {
-        let execution_ids = items
-            .iter()
-            .filter_map(|item| item.approval_node_execution_id.as_deref())
-            .map(bpm::ids::ApprovalNodeExecutionId::new)
-            .collect::<Vec<_>>();
-        if execution_ids.is_empty() {
-            return Ok(());
-        }
-        let executions = self
-            .db
-            .bpm_workflow()
-            .list_executions_by_ids(&execution_ids, &mut NoTransaction)
-            .await?;
-        let instance_ids = executions
-            .iter()
-            .map(|execution| execution.process_instance_id.clone())
-            .collect::<Vec<_>>();
-        let summaries = self
-            .db
-            .bpm_workflow()
-            .list_instance_summaries_by_ids(&instance_ids, &mut NoTransaction)
-            .await?;
-        let summary_by_id = summaries
-            .into_iter()
-            .map(|summary| (summary.id.clone(), summary))
-            .collect::<HashMap<_, _>>();
-        for item in items {
-            let Some(execution_id) = item.approval_node_execution_id.as_deref() else {
-                continue;
-            };
-            let Some(execution) = executions
-                .iter()
-                .find(|execution| execution.base.id == execution_id)
-            else {
-                continue;
-            };
-            let Some(summary) = summary_by_id.get(execution.process_instance_id.as_ref()) else {
-                continue;
-            };
-            item.approval_context = Some(dto::WorkItemApprovalContextView {
-                instance_id: summary.id.clone(),
-                status: summary.status.as_str().to_string(),
-                current_round_no: execution.round_no,
-                current_node_label: execution.node_name.clone(),
-                current_assignee_label: non_empty_text(&execution.assignee_name_snapshot),
-                latest_rejection_reason: summary
-                    .latest_rejection_summary
-                    .as_deref()
-                    .and_then(non_empty_text),
-                process_version: Some(summary.definition_version),
-            });
-        }
-        Ok(())
-    }
-}
-
-pub(super) fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
-    QueueContextIdentity::new(
-        "work-item-single",
-        [
-            QueueContextField::scalar("actor", actor_id),
-            QueueContextField::scalar("work_item", work_item_id),
-        ],
-    )
-    .into_string()
-}
-
-fn non_empty_text(value: &str) -> Option<String> {
-    let value = value.trim();
-    (!value.is_empty()).then(|| value.to_string())
 }
 
 #[cfg(test)]
@@ -235,11 +135,21 @@ pub(super) fn business_day_bounds_at(
 }
 
 #[cfg(test)]
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct WorkItemFamilyCountsView {
+    pub approval: u64,
+    pub procurement: u64,
+    pub fulfillment: u64,
+    pub finance: u64,
+    pub exception: u64,
+}
+
+#[cfg(test)]
 pub(super) fn family_counts_for_types(
     work_item_types: impl IntoIterator<Item = crate::entity::work_item::WorkItemType>,
-) -> super::dto::WorkItemFamilyCountsView {
+) -> WorkItemFamilyCountsView {
     use super::dto::WorkItemFamily;
-    let mut counts = super::dto::WorkItemFamilyCountsView::default();
+    let mut counts = WorkItemFamilyCountsView::default();
     for work_item_type in work_item_types {
         match super::dto::family_of(work_item_type) {
             WorkItemFamily::Approval => counts.approval = counts.approval.saturating_add(1),

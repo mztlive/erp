@@ -1,7 +1,8 @@
 use database::CatalogExt;
 use entities::catalog::{ProductBrandId, ProductCategoryId, UnitOfMeasureId, VoucherCatalogDefaults};
+use erp_audit::AuditExt;
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::CatalogService;
 use crate::errors::{Error, Result};
@@ -41,14 +42,18 @@ impl CatalogService {
             category_id.to_string(),
         )?;
         let category_for_tx = category.clone();
-        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.product_categories().create(&category_for_tx, session).await?;
-                Ok(())
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let created = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.product_categories().create(&category_for_tx, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
             })
-        })
-        .await
-        {
+            .await;
+        match created {
             Ok(()) => Ok(category_id),
             Err(error) => self.voucher_root_after_create_error(error).await,
         }
@@ -110,14 +115,18 @@ impl CatalogService {
                 .clone()
                 .resource_log("product_brand.create", "product_brand", brand_id.to_string())?;
         let brand_for_tx = brand.clone();
-        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.product_brands().create(&brand_for_tx, session).await?;
-                Ok(())
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let created = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.product_brands().create(&brand_for_tx, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
             })
-        })
-        .await
-        {
+            .await;
+        match created {
             Ok(()) => Ok(brand_id),
             Err(error) => self.voucher_brand_after_create_error(error).await,
         }
@@ -171,14 +180,18 @@ impl CatalogService {
                 .clone()
                 .resource_log("unit_of_measure.create", "unit_of_measure", unit_id.to_string())?;
         let unit_for_tx = unit.clone();
-        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.unit_of_measures().create(&unit_for_tx, session).await?;
-                Ok(())
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let created = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.unit_of_measures().create(&unit_for_tx, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
             })
-        })
-        .await
-        {
+            .await;
+        match created {
             Ok(()) => Ok(unit_id),
             Err(error) => self.voucher_unit_after_create_error(error).await,
         }

@@ -1,11 +1,11 @@
 //! 新建采购单后在同一事务内冻结并启动统一审批。
 
 use database::PurchaseOrderExt;
-use entities::document_registry::BusinessDocument;
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use entities::sales_order::SalesOrder;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
+use erp_workflow::entity::document_registry::BusinessDocument;
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 
@@ -18,12 +18,12 @@ use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph_with_executor,
     persist_purchase_order_start_with_session, PurchaseOrderStartInput, PurchaseOrderStartPersistInput,
 };
-use crate::approval::execution::prepare_start;
-use crate::approval::policy::ApprovalDomainAction;
-use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::prepare_start;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
 
 /// 创建并提交后的正式号与乐观锁版本。
 pub(super) struct SubmittedCreatedOrder {
@@ -382,8 +382,10 @@ async fn prepare_created_order_start(
     idempotency_key: &str,
     now: Instant,
     session: &mut ClientSession,
-) -> Result<crate::approval::execution::PreparedExecution> {
-    let binding = find_approval_binding(db, &order.base.id, session).await?;
+) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
+    let binding = find_approval_binding(db, &order.base.id, session)
+        .await
+        .map_err(crate::errors::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, session).await?;
     let start = purchase_order_start_command(
@@ -404,7 +406,7 @@ async fn prepare_created_order_start(
         receipt: None,
         now,
     })?;
-    prepare_start(start_input)
+    prepare_start(start_input).map_err(Error::from)
 }
 
 /// 冻结创建单启动持久化入参。
@@ -412,9 +414,9 @@ struct PersistFrozenCreatedOrderStartInput<'a> {
     /// 已冻结的采购提交。
     frozen: FrozenCreatedDraft,
     /// 启动计划。
-    prepared: crate::approval::execution::PreparedExecution,
+    prepared: erp_workflow::service::approval::execution::PreparedExecution,
     /// 不可变快照载荷。
-    snapshot: entities::approval_integration::ApprovalSubjectSnapshotPayload,
+    snapshot: erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload,
     /// 单据责任组织。
     organization_id: String,
     /// 提交人。

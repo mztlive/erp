@@ -10,16 +10,16 @@ use database::{
     CustomerExt, InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt,
     SalesReviewExt, SupplierExt,
 };
-use entities::document_registry::DocumentType;
 use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use entities::sales_review::SalesChangeOrderStatus;
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
+use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use services::approval::business_adapter::BindingRevalidationContext;
-use services::approval::policy::require_process_required;
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::policy::require_process_required;
 use services::{Error, Result};
 
 /// 审批绑定升级使用的强业务对象事实。
@@ -638,13 +638,13 @@ fn ensure_exact_document_id(document_type: DocumentType, document_id: &str) -> R
     if document_id.is_empty() || document_id.trim() != document_id {
         return Err(Error::ValidationError("单据 ID 必须是非空精确主键".to_string()));
     }
-    entities::approval_integration::subject_ref_for(document_type, document_id)
+    erp_workflow::entity::approval_integration::subject_ref_for(document_type, document_id)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(())
 }
 
 fn ensure_sales_document_type(requested: DocumentType, actual: BusinessType) -> Result<()> {
-    let actual = entities::approval_integration::document_type_of_sales_business(actual);
+    let actual = crate::approval_dispatch::sales_subject::document_type_of_sales_business(actual);
     if actual != requested {
         return Err(Error::ValidationError(format!(
             "请求单据类型 {} 与销售单业务性质对应类型 {} 不一致",
@@ -656,7 +656,7 @@ fn ensure_sales_document_type(requested: DocumentType, actual: BusinessType) -> 
 }
 
 fn ensure_known_sales_business_type(actual: BusinessType) -> Result<()> {
-    match entities::approval_integration::document_type_of_sales_business(actual) {
+    match crate::approval_dispatch::sales_subject::document_type_of_sales_business(actual) {
         DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Ok(()),
         _ => Err(Error::Internal("销售单业务性质映射不完整".to_string())),
     }
@@ -679,7 +679,7 @@ fn ensure_initial_sales_order_state(order: &entities::sales_order::SalesOrder) -
         || order.stable.current_revision_id.is_some()
     {
         return Err(already_submitted(
-            entities::approval_integration::document_type_of_sales_business(order.business_type),
+            crate::approval_dispatch::sales_subject::document_type_of_sales_business(order.business_type),
         ));
     }
     Ok(())
@@ -783,20 +783,6 @@ impl ProcessUpgradeSubject {
     }
 }
 
-fn workflow_document_type(
-    document_type: entities::document_registry::DocumentType,
-) -> erp_workflow::DocumentType {
-    erp_workflow::DocumentType::try_from_code(document_type.as_str())
-        .expect("workflow and entities DocumentType codes stay aligned")
-}
-
-fn entities_document_type(
-    document_type: erp_workflow::DocumentType,
-) -> entities::document_registry::DocumentType {
-    entities::document_registry::DocumentType::try_from_code(document_type.as_str())
-        .expect("workflow and entities DocumentType codes stay aligned")
-}
-
 fn map_upgrade_error(error: Error) -> erp_workflow::Error {
     match error {
         Error::ValidationError(message) => erp_workflow::Error::ValidationError(message),
@@ -815,7 +801,7 @@ fn map_upgrade_error(error: Error) -> erp_workflow::Error {
 
 fn to_workflow_facts(facts: ApprovalUpgradeSubjectFacts) -> erp_workflow::ApprovalUpgradeSubjectFacts {
     erp_workflow::ApprovalUpgradeSubjectFacts {
-        document_type: workflow_document_type(facts.document_type),
+        document_type: facts.document_type,
         document_id: facts.document_id,
         business_object_version: facts.business_object_version,
         document_no: facts.document_no,
@@ -826,7 +812,7 @@ fn to_workflow_facts(facts: ApprovalUpgradeSubjectFacts) -> erp_workflow::Approv
 
 fn to_entities_facts(facts: &erp_workflow::ApprovalUpgradeSubjectFacts) -> ApprovalUpgradeSubjectFacts {
     ApprovalUpgradeSubjectFacts {
-        document_type: entities_document_type(facts.document_type),
+        document_type: facts.document_type,
         document_id: facts.document_id.clone(),
         business_object_version: facts.business_object_version,
         document_no: facts.document_no.clone(),
@@ -843,14 +829,9 @@ impl erp_workflow::UpgradeSubjectPort for ProcessUpgradeSubject {
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> erp_workflow::Result<erp_workflow::ApprovalUpgradeSubjectFacts> {
-        let facts = load_approval_upgrade_subject_facts(
-            &self.db,
-            entities_document_type(document_type),
-            document_id,
-            executor,
-        )
-        .await
-        .map_err(map_upgrade_error)?;
+        let facts = load_approval_upgrade_subject_facts(&self.db, document_type, document_id, executor)
+            .await
+            .map_err(map_upgrade_error)?;
         Ok(to_workflow_facts(facts))
     }
 

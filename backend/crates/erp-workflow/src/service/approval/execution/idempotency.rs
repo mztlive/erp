@@ -771,7 +771,7 @@ fn cancel_digest_payload(
 ///
 /// 仅供精确历史 writer 或调用方自有的显式版本格式使用；当前命令必须通过
 /// [`ApprovalCommandIdentity`] 写入 V3 摘要。
-pub(crate) fn legacy_payload_digest(canonical: &str) -> String {
+pub fn legacy_payload_digest(canonical: &str) -> String {
     hex::encode(Sha256::digest(canonical.as_bytes()))
 }
 

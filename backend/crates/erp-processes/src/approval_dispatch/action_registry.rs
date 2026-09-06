@@ -51,8 +51,6 @@ async fn dispatch_action(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> ServiceResult<()> {
-    let services_action = services_action(action)?;
-    let services_context = services_context(context)?;
     match action {
         ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
         | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission => {
@@ -81,7 +79,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::StockAdjustmentPost => {
             services::inventory::InventoryService::new(registry.db.clone(), registry.rbac.clone())
-                .post_stock_adjustment(&services_context, actor, executor)
+                .post_stock_adjustment(context, actor, executor)
                 .await
                 .map(|_| ())
         }
@@ -102,7 +100,7 @@ async fn dispatch_action(
             let session = require_transaction(executor)?;
             services::returns::finalize_approved_return_in_transaction(
                 &registry.db,
-                services_document_type(action.document_type())?,
+                action.document_type(),
                 context.business_object_id(),
                 actor,
                 session,
@@ -114,7 +112,7 @@ async fn dispatch_action(
             services::sales_order::cancel_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -124,7 +122,7 @@ async fn dispatch_action(
             services::sales_review::cancel_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -134,7 +132,7 @@ async fn dispatch_action(
             services::purchase_order::cancel_order_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -144,7 +142,7 @@ async fn dispatch_action(
             services::purchase_order::cancel_change_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -153,8 +151,8 @@ async fn dispatch_action(
         ApprovalDomainAction::StockAdjustmentCancelApproval => {
             services::inventory::cancel_stock_adjustment_approval_in_transaction(
                 &registry.db,
-                &services_context,
-                services_action,
+                context,
+                action,
                 actor,
                 executor,
             )
@@ -164,7 +162,7 @@ async fn dispatch_action(
             services::receivable::cancel_customer_receipt_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -176,9 +174,9 @@ async fn dispatch_action(
         | ApprovalDomainAction::PaymentReversalCancelApproval => {
             services::returns::cancel_approval_in_transaction(
                 &registry.db,
-                services_document_type(action.document_type())?,
+                action.document_type(),
                 context.business_object_id(),
-                services_action,
+                action,
                 actor,
                 executor,
             )
@@ -214,62 +212,6 @@ fn validate_context(
         ));
     }
     Ok(())
-}
-
-fn services_action(
-    action: ApprovalDomainAction,
-) -> ServiceResult<entities::approval_integration::ApprovalDomainAction> {
-    entities::approval_integration::ApprovalDomainAction::ALL
-        .iter()
-        .copied()
-        .find(|item| item.as_str() == action.as_str())
-        .ok_or_else(|| ServiceError::Internal(format!("未知审批领域动作 {}", action.as_str())))
-}
-
-fn services_document_type(
-    document_type: erp_workflow::DocumentType,
-) -> ServiceResult<entities::document_registry::DocumentType> {
-    entities::document_registry::DocumentType::try_from_code(document_type.as_str())
-        .map_err(|error| ServiceError::Internal(error.to_string()))
-}
-
-fn services_context(
-    context: &ApprovalActionContext,
-) -> ServiceResult<services::approval::ApprovalActionContext> {
-    use services::approval::{
-        ApprovalActionContext as ServicesContext, BlockedCancelActionParams, DecisionActionParams,
-    };
-    if let Some(work_item_id) = context.work_item_id() {
-        ServicesContext::for_decision(DecisionActionParams {
-            approval_process_instance_id: context.approval_process_instance_id().to_string(),
-            approval_node_execution_id: context
-                .approval_node_execution_id()
-                .unwrap_or_default()
-                .to_string(),
-            work_item_id: work_item_id.to_string(),
-            business_object_type: context.business_object_type().to_string(),
-            business_object_id: context.business_object_id().to_string(),
-            subject_version: context.subject_version().to_string(),
-            actor_id: context.actor_id().to_string(),
-            reason: context.reason().map(ToOwned::to_owned),
-            idempotency_key: context.idempotency_key().to_string(),
-        })
-    } else {
-        ServicesContext::for_blocked_cancel(BlockedCancelActionParams {
-            approval_process_instance_id: context.approval_process_instance_id().to_string(),
-            approval_node_execution_id: context
-                .approval_node_execution_id()
-                .unwrap_or_default()
-                .to_string(),
-            work_item_id: None,
-            business_object_type: context.business_object_type().to_string(),
-            business_object_id: context.business_object_id().to_string(),
-            subject_version: context.subject_version().to_string(),
-            actor_id: context.actor_id().to_string(),
-            reason: context.reason().unwrap_or_default().to_string(),
-            idempotency_key: context.idempotency_key().to_string(),
-        })
-    }
 }
 
 fn map_service_error(error: ServiceError) -> erp_workflow::Error {

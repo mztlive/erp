@@ -1,18 +1,20 @@
-use database::{DocumentRegistryExt, LegacyImportExt, WorkItemExt};
-use entities::document_registry::WorkflowActionId;
+use database::LegacyImportExt;
 use entities::legacy_import::{
     confirmation_workflow_action, ConfirmationDecision, ConfirmationScope, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation,
 };
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_workflow::entity::document_registry::WorkflowActionId;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -98,7 +100,7 @@ impl LegacyImportService {
                         &batch,
                         &actor_id,
                     )?;
-                    WorkItemService::new(db.clone(), rbac_for_tx.clone())
+                    work_item_service(db.clone(), rbac_for_tx.clone())
                         .ensure_domain_decision_access(&audit_actor, &work_item, session)
                         .await?;
                     let _ = &work_item;

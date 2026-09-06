@@ -47,6 +47,7 @@ fn service(state: &AppState) -> FulfillmentService {
         state.config_snapshot().app.secret.as_bytes().to_vec(),
         state.sensitive_data(),
     )
+    .with_object_read(state.approval_object_read())
 }
 
 #[permission_macros::permission(

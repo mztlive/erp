@@ -1,8 +1,11 @@
 use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
+use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
+use erp_processes::ApprovalActionRegistry;
+use erp_workflow::service::approval::execution::ApprovalRuntimeService;
+use erp_workflow::ApprovalNotificationOutboxPort;
 use mongodb::Database;
 use serde::Serialize;
-use services::approval::execution::ApprovalRuntimeService;
 use services::party::SensitiveDataCodec;
 use services::supplier_api::{
     SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
@@ -11,7 +14,7 @@ use services::supplier_api::{
 use services::supplier_fulfillment::{
     SupplierFulfillmentService, SupplierGateway, UnavailableSupplierGateway,
 };
-use services::{ApprovalActionRegistry, ApprovalNotificationOutboxPort};
+use services::workflow_compose::{workflow_audit, workflow_auth, workflow_object_facts, WorkflowAuth};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::S3Storage;
@@ -122,7 +125,7 @@ pub struct AppState {
     rbac: SharedRbacService,
     storage: Arc<S3Storage>,
     sensitive_data: Arc<SensitiveDataCodec>,
-    approval_runtime_service: Arc<ApprovalRuntimeService>,
+    approval_runtime_service: Arc<ApprovalRuntimeService<WorkflowAuth>>,
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
     external_connectors: ExternalConnectorPorts,
 }
@@ -153,10 +156,14 @@ impl AppState {
         ));
         let rbac = services::identity_compose::shared_rbac_service(db.clone());
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
-        let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_action_port(
+        let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
             db.clone(),
-            Arc::clone(&rbac),
+            workflow_auth(db.clone(), Arc::clone(&rbac)),
             approval_action_port,
+            Arc::new(ProcessObjectRead),
+            Arc::new(ProcessUpgradeSubject::new(db.clone())),
+            workflow_audit(db.clone()),
+            workflow_object_facts(db.clone()),
         ));
         let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
         Self {
@@ -204,13 +211,18 @@ impl AppState {
         Arc::clone(&self.rbac)
     }
 
+    /// Composition-root object-read port for approval binding.
+    pub fn approval_object_read(&self) -> Arc<dyn erp_workflow::ApprovalObjectReadPort> {
+        Arc::new(ProcessObjectRead)
+    }
+
     /// 返回进程内注入的目标审批运行服务。
     ///
     /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。
     ///
     /// # 返回
     /// 返回启动时构造的真实 [`ApprovalRuntimeService`]；未 cut-over 类型必须失败关闭。
-    pub fn approval_runtime_service(&self) -> Arc<ApprovalRuntimeService> {
+    pub fn approval_runtime_service(&self) -> Arc<ApprovalRuntimeService<WorkflowAuth>> {
         Arc::clone(&self.approval_runtime_service)
     }
 

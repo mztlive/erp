@@ -253,7 +253,9 @@ mod tests {
     }
 
     fn dummy_view(owner_id: Option<&str>) -> WorkItemView {
-        use entities::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
+        use erp_workflow::entity::work_item::{
+            AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType,
+        };
         WorkItemView {
             id: "wi".to_string(),
             work_item_type: WorkItemType::ImportBusinessConfirmation,

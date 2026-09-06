@@ -3,12 +3,12 @@ use super::mapping::{
     stock_adjustment_start_identity, stock_adjustment_start_scopes,
 };
 use super::persist::validate_start_notification_identities;
-use crate::approval::execution::idempotency::{legacy_payload_digest, ReceiptBranch};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
-use entities::approval_integration::ApprovalNotificationEventKind;
 use entities::inventory::{AdjustmentReasonType, MovementDirection};
 use erp_core::common::time::Instant;
+use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
+use erp_workflow::service::approval::execution::idempotency::{legacy_payload_digest, ReceiptBranch};
 
 use crate::inventory::dto::{
     ExpectedStockBalanceVersion, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,

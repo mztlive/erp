@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt};
+use database::{PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
 use entities::sales_order::{
     BusinessType, ReviewStatus, SalesOrderRevision, SalesOrderRevisionLine, SalesOrderSubmissionLine,
     SalesOrderWorkingCopy, WorkingPurpose,
@@ -11,6 +11,7 @@ use entities::sales_order::{
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_identity::AccessControlExt;
 use erp_identity::Permission;
+use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -26,10 +27,10 @@ use super::status::{
     close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
 };
 use super::SalesOrderService;
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::subject;
+use erp_workflow::service::document_registry::find_approval_binding;
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
 type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;
@@ -753,7 +754,7 @@ impl SalesOrderService {
         if !review_status.has_active_review_task() {
             return Ok((None, None, None));
         }
-        let object_type = entities::approval_integration::document_type_of_sales_business(business_type)
+        let object_type = crate::sales_order::document_type_of_sales_business(business_type)
             .as_str()
             .to_string();
         let tasks = self
@@ -791,7 +792,7 @@ impl SalesOrderService {
             .filter(|(_, _, review_status)| review_status.has_active_review_task())
             .map(|(id, business_type, _)| {
                 (
-                    entities::approval_integration::document_type_of_sales_business(*business_type)
+                    crate::sales_order::document_type_of_sales_business(*business_type)
                         .as_str()
                         .to_string(),
                     id.clone(),

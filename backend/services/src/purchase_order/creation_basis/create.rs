@@ -1,5 +1,4 @@
-use database::{DocumentRegistryExt, PurchaseOrderExt, SalesOrderExt, SupplierExt, WarehouseExt};
-use entities::document_registry::DocumentType;
+use database::{PurchaseOrderExt, SalesOrderExt, SupplierExt, WarehouseExt};
 use entities::purchase_order::{
     basis_id_for, stable_line_id, supply_cost, BasisGroup, BasisLine, BasisScope, CreationBasisFacts,
     FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -15,6 +14,8 @@ use erp_core::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, WarehouseId,
 };
 use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
@@ -32,15 +33,13 @@ use super::super::shared::zero_amount;
 use super::super::PurchaseOrderService;
 use super::mapping::business_date_of;
 use super::query::{basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order};
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::new_registered_document;
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
@@ -149,6 +148,7 @@ impl PurchaseOrderService {
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.clone();
@@ -165,7 +165,14 @@ impl PurchaseOrderService {
                         request_fingerprint: &transaction_fingerprint,
                         actor: &transaction_actor,
                     };
-                    create_from_basis_in_transaction(&db, &binding_rbac, &command, session).await
+                    create_from_basis_in_transaction(
+                        &db,
+                        &binding_rbac,
+                        object_read.as_ref(),
+                        &command,
+                        session,
+                    )
+                    .await
                 })
             })
             .await;
@@ -203,6 +210,7 @@ impl PurchaseOrderService {
 async fn create_from_basis_in_transaction(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &CreateBasisCommand<'_>,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrderResult> {
@@ -245,7 +253,7 @@ async fn create_from_basis_in_transaction(
         selected_lines: &selected_lines,
         facts: &latest_facts,
     };
-    persist_basis_draft(db, rbac, &input, command, session).await
+    persist_basis_draft(db, rbac, object_read, &input, command, session).await
 }
 
 /// guard 重算后的事务内创建输入：已完成 CAS 的销售单、最新依据范围、
@@ -288,6 +296,7 @@ pub struct VerifiedBasisInput<'a> {
 pub async fn persist_basis_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     session: &mut ClientSession,
@@ -363,7 +372,7 @@ pub async fn persist_basis_draft(
         lines: &submission_lines,
         actor: command.actor,
     };
-    write_prepared_draft(db, rbac, &write, session).await?;
+    write_prepared_draft(db, rbac, object_read, &write, session).await?;
     let submitted = submit_created_draft_in_session(
         db,
         sales_order,
@@ -583,6 +592,7 @@ fn build_submission_line(
 async fn write_prepared_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     write: &PreparedDraftWrite<'_>,
     session: &mut ClientSession,
 ) -> Result<()> {
@@ -597,10 +607,18 @@ async fn write_prepared_draft(
             creator_id: write.actor.id().to_string(),
         },
     };
-    let binding = bind_published_definition_on_document_create(db, rbac, &bind_command, write.actor, session)
-        .await?
-        .ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
-    let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        &bind_command,
+        write.actor,
+        session,
+    )
+    .await?
+    .ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
+    let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")
+        .map_err(crate::errors::Error::from)?;
     attach_published_binding(&mut document, binding)?;
     db.purchase_orders().create(write.order, session).await?;
     db.business_documents().create(&document, session).await?;

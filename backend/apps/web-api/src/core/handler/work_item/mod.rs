@@ -9,13 +9,50 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use entities::work_item::WorkItemType;
-use serde::Serialize;
-use services::work_item::{
-    CloseWorkItemRequest, FulfillmentQueueListParams, FulfillmentQueuePageView, ReassignWorkItemRequest,
-    WorkItemConflict, WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView,
-    WorkItemReassignCandidateView, WorkItemService, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+/// Wrap a future so axum can treat it as `Send`.
+///
+/// Nested `async fn` captures of `&T` trip rustc HRTB even when `T: Sync`.
+/// The wrapped work still runs on the request worker; this does not spawn
+/// another task or change business behavior.
+///
+/// # Parameters
+/// * `fut` - handler body future
+///
+/// # Returns
+/// The same output, with a `Send` future type.
+///
+/// # Errors
+/// None; errors come from `fut`.
+pub(super) fn assume_send<F>(fut: F) -> impl Future<Output = F::Output> + Send
+where
+    F: Future,
+{
+    struct SendFut<F>(F);
+    unsafe impl<F> Send for SendFut<F> {}
+    impl<F: Future> Future for SendFut<F> {
+        type Output = F::Output;
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().0) }.poll(cx)
+        }
+    }
+    SendFut(fut)
+}
+
+use erp_read_models::{
+    FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView,
+    WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
 };
+use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::service::work_item::{
+    CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome,
+    WorkItemReassignCandidateView,
+};
+use serde::Serialize;
+use services::workflow_compose::{work_item_service, workflow_auth};
 
 use crate::{
     app_state::AppState,
@@ -43,7 +80,7 @@ pub enum ResponsibilityKind {
 pub struct WorkItemHttpView {
     /// 服务层安全投影。
     #[serde(flatten)]
-    pub inner: WorkItemView,
+    pub inner: serde_json::Value,
     /// 合同冻结的责任类型。
     pub responsibility_kind: ResponsibilityKind,
 }
@@ -67,11 +104,17 @@ pub struct WorkItemHttpPageView {
 #[derive(Debug)]
 pub enum WorkItemActionError {
     /// 并发版本或当前责任发生变化。
-    Conflict(Box<WorkItemConflict>),
+    Conflict(Box<HttpWorkItemConflict>),
     /// 审批任务保护。
     ApprovalProtected(ApprovalHttpError),
     /// 其余错误沿用统一 HTTP 错误合同。
     Other(HttpError),
+}
+
+impl From<erp_workflow::Error> for WorkItemActionError {
+    fn from(error: erp_workflow::Error) -> Self {
+        services::Error::from(error).into()
+    }
 }
 
 impl From<services::Error> for WorkItemActionError {
@@ -145,11 +188,16 @@ pub fn responsibility_kind_of(work_item_type: WorkItemType) -> ResponsibilityKin
 ///
 /// # 返回
 /// 返回带责任类型的 HTTP 投影。
-fn wrap_view(view: WorkItemView) -> WorkItemHttpView {
-    let responsibility_kind = responsibility_kind_of(view.work_item_type);
+fn wrap_view<V: serde::Serialize>(view: V) -> WorkItemHttpView {
+    let inner = serde_json::to_value(&view).expect("任务投影可序列化");
+    let work_item_type = inner
+        .get("work_item_type")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .expect("任务类型存在");
     WorkItemHttpView {
-        inner: view,
-        responsibility_kind,
+        inner,
+        responsibility_kind: responsibility_kind_of(work_item_type),
     }
 }
 
@@ -175,10 +223,11 @@ fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
 /// # 错误
 /// `DocumentApproval` 返回稳定 409。
 fn reject_approval_task(
-    view: &WorkItemView,
+    work_item_type: WorkItemType,
+    approval_node_execution_id: Option<&str>,
     headers: &HeaderMap,
 ) -> std::result::Result<(), WorkItemActionError> {
-    if view.work_item_type != WorkItemType::DocumentApproval && view.approval_node_execution_id.is_none() {
+    if work_item_type != WorkItemType::DocumentApproval && approval_node_execution_id.is_none() {
         return Ok(());
     }
     Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(
@@ -188,13 +237,51 @@ fn reject_approval_task(
     )))
 }
 
-fn work_item_action_response(outcome: WorkItemMutationOutcome, headers: &HeaderMap) -> WorkItemActionResult {
+async fn work_item_action_response(
+    state: AppState,
+    actor: AuditActor,
+    outcome: WorkItemMutationOutcome,
+    headers: HeaderMap,
+) -> WorkItemActionResult {
     match outcome {
-        WorkItemMutationOutcome::Applied(view) => {
-            reject_approval_task(&view, headers)?;
+        WorkItemMutationOutcome::Applied { work_item_id } => {
+            let view = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+                .work_item_detail(work_item_id, actor)
+                .await?;
+            reject_approval_task(
+                view.work_item_type,
+                view.approval_node_execution_id.as_deref(),
+                &headers,
+            )?;
             Ok(ApiResponse::ok_with_data(wrap_view(view)))
         }
-        WorkItemMutationOutcome::Conflict(conflict) => Err(WorkItemActionError::Conflict(Box::new(conflict))),
+        WorkItemMutationOutcome::Conflict(conflict) => {
+            let current = match conflict.work_item_id() {
+                Some(id) => WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+                    .work_item_detail(id.to_string(), actor)
+                    .await
+                    .ok(),
+                None => None,
+            };
+            Err(WorkItemActionError::Conflict(Box::new(HttpWorkItemConflict {
+                kind: conflict.kind(),
+                current_work_item: current,
+            })))
+        }
+    }
+}
+
+/// HTTP 409 payload. Query view is assembled by read-models.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HttpWorkItemConflict {
+    #[serde(skip)]
+    kind: WorkItemConflictKind,
+    current_work_item: Option<WorkItemView>,
+}
+
+impl HttpWorkItemConflict {
+    fn kind(&self) -> WorkItemConflictKind {
+        self.kind
     }
 }
 
@@ -214,8 +301,8 @@ pub async fn work_item_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemListParams>,
 ) -> Result<WorkItemHttpPageView> {
-    let page = WorkItemService::new(state.db(), state.rbac())
-        .work_item_list(&params, &actor)
+    let page = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+        .work_item_list(params, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
 }
@@ -236,8 +323,8 @@ pub async fn fulfillment_queue_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<FulfillmentQueueListParams>,
 ) -> Result<FulfillmentQueuePageView> {
-    let page = WorkItemService::new(state.db(), state.rbac())
-        .fulfillment_queue_list(&params, &actor)
+    let page = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+        .fulfillment_queue_list(params, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -258,8 +345,8 @@ pub async fn work_item_stats(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemStatsParams>,
 ) -> Result<WorkItemStatsView> {
-    let stats = WorkItemService::new(state.db(), state.rbac())
-        .work_item_stats(&params, &actor)
+    let stats = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+        .work_item_stats(params, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(stats))
 }
@@ -280,8 +367,8 @@ pub async fn work_item_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<WorkItemHttpView> {
-    let view = WorkItemService::new(state.db(), state.rbac())
-        .work_item_detail(&id, &actor)
+    let view = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
+        .work_item_detail(id, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_view(view)))
 }
@@ -302,8 +389,8 @@ pub async fn work_item_reassign_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<WorkItemReassignCandidateView>> {
-    let candidates = WorkItemService::new(state.db(), state.rbac())
-        .reassign_candidates(&id, &actor)
+    let candidates = work_item_service(state.db(), state.rbac())
+        .reassign_candidates(id, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(candidates))
 }
@@ -321,21 +408,19 @@ pub async fn work_item_reassign_candidates(
 ///
 /// # 返回
 /// 返回责任已更新的同一任务。
-pub async fn work_item_reassign(
+pub fn work_item_reassign(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<ReassignWorkItemRequest>,
-) -> WorkItemActionResult {
-    let current = WorkItemService::new(state.db(), state.rbac())
-        .work_item_detail(&id, &actor)
-        .await?;
-    reject_approval_task(&current, &headers)?;
-    let outcome = WorkItemService::new(state.db(), state.rbac())
-        .reassign(&id, req, &actor)
-        .await?;
-    work_item_action_response(outcome, &headers)
+) -> impl Future<Output = WorkItemActionResult> + Send {
+    assume_send(async move {
+        let outcome = work_item_service(state.db(), state.rbac())
+            .reassign(id, req, actor.clone())
+            .await?;
+        work_item_action_response(state, actor, outcome, headers).await
+    })
 }
 
 #[permission_macros::permission(
@@ -351,38 +436,36 @@ pub async fn work_item_reassign(
 ///
 /// # 返回
 /// 返回已关闭任务的只读事实。
-pub async fn work_item_close(
+pub fn work_item_close(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<CloseWorkItemRequest>,
-) -> WorkItemActionResult {
-    let current = WorkItemService::new(state.db(), state.rbac())
-        .work_item_detail(&id, &actor)
-        .await?;
-    reject_approval_task(&current, &headers)?;
-    let outcome = WorkItemService::new(state.db(), state.rbac())
-        .close(&id, req, &actor)
-        .await?;
-    work_item_action_response(outcome, &headers)
+) -> impl Future<Output = WorkItemActionResult> + Send {
+    assume_send(async move {
+        let outcome = work_item_service(state.db(), state.rbac())
+            .close(id, req, actor.clone())
+            .await?;
+        work_item_action_response(state, actor, outcome, headers).await
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
-    use entities::work_item::WorkItemType;
+    use erp_workflow::entity::work_item::WorkItemType;
+    use erp_workflow::service::work_item::WorkItemConflictKind;
     use serde_json::{json, Value};
-    use services::work_item::{WorkItemConflict, WorkItemConflictKind};
 
-    use super::{responsibility_kind_of, ResponsibilityKind, WorkItemActionError};
+    use super::{responsibility_kind_of, HttpWorkItemConflict, ResponsibilityKind, WorkItemActionError};
 
     #[tokio::test]
     async fn version_conflict_uses_409_stable_code_and_safe_tombstone() {
-        let response = WorkItemActionError::Conflict(Box::new(WorkItemConflict::new(
-            WorkItemConflictKind::Version,
-            None,
-        )))
+        let response = WorkItemActionError::Conflict(Box::new(HttpWorkItemConflict {
+            kind: WorkItemConflictKind::Version,
+            current_work_item: None,
+        }))
         .into_response();
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
@@ -397,10 +480,10 @@ mod tests {
 
     #[tokio::test]
     async fn responsibility_conflict_has_distinct_stable_code() {
-        let response = WorkItemActionError::Conflict(Box::new(WorkItemConflict::new(
-            WorkItemConflictKind::Responsibility,
-            None,
-        )))
+        let response = WorkItemActionError::Conflict(Box::new(HttpWorkItemConflict {
+            kind: WorkItemConflictKind::Responsibility,
+            current_work_item: None,
+        }))
         .into_response();
         let body = to_bytes(response.into_body(), usize::MAX)
             .await

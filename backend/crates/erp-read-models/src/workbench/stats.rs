@@ -1,7 +1,7 @@
 //! 责任队列待办统计。
 
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
@@ -15,7 +15,7 @@ use super::{
     WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService,
 };
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 查询与正式队列复用同一授权快照的待办统计。
     ///
     /// # 参数
@@ -29,21 +29,21 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
     pub async fn work_item_stats(
         &self,
-        params: &WorkItemStatsParams,
-        actor: &AuditActor,
+        params: WorkItemStatsParams,
+        actor: AuditActor,
     ) -> Result<WorkItemStatsView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(actor).await?;
-        let selected = self.stats_fields_for_scope(&query, actor, &access).await?;
+        let access = self.actor_access(&actor).await?;
+        let selected = self.stats_fields_for_scope(&query, &actor, &access).await?;
         let selected = self
-            .processable_stats_fields(selected, query.scope, actor, &access)
+            .processable_stats_fields(selected, query.scope, &actor, &access)
             .await?;
         let assigned = self
-            .stats_fields_for_open_scope(&query, WorkItemScope::Mine, actor, &access)
+            .stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access)
             .await?;
         let assigned = self
-            .processable_stats_fields(assigned, WorkItemScope::Mine, actor, &access)
+            .processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access)
             .await?;
         let family_items = if params.family.is_none() && params.work_item_type.is_none() {
             assigned.clone()
@@ -51,9 +51,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let mut family_query = query.clone();
             family_query.work_item_types = registered_work_item_types();
             let family_items = self
-                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, actor, &access)
+                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, &actor, &access)
                 .await?;
-            self.processable_stats_fields(family_items, WorkItemScope::Mine, actor, &access)
+            self.processable_stats_fields(family_items, WorkItemScope::Mine, &actor, &access)
                 .await?
         };
         let as_of = Instant::now();
@@ -125,7 +125,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut processable = Vec::with_capacity(fields.len());
         for item in fields {
-            let view_access = self.view_access(&item, scope, actor, access).await?;
+            let view_access = self.view_access(&item, scope, actor, access)?;
             if counts_as_processable_stat(scope, &view_access) {
                 processable.push(item);
             }

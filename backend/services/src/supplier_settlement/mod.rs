@@ -245,7 +245,6 @@ mod tests {
         SupplierSettlementDifferenceEvidenceData, SupplierSettlementItemData,
         SupplierSettlementStatementData,
     };
-    use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
@@ -253,6 +252,9 @@ mod tests {
     };
     use erp_core::money::Quantity;
     use erp_core::AccountKind;
+    use erp_workflow::entity::work_item::{
+        AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+    };
     use persistence_core::NoTransaction;
     use test_support::{require_mongo, TestDb};
 

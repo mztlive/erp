@@ -5,34 +5,36 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{
-    ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, SalesOrderExt, SalesReviewExt, WorkItemExt,
-};
-use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::DocumentType;
+use database::{SalesOrderExt, SalesReviewExt};
 use entities::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
-use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemPriority};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
-use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{
+use crate::errors::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
+use erp_workflow::service::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
     StartIdentityParams,
 };
-use crate::approval::execution::{
+use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -64,7 +66,7 @@ pub(super) async fn load_bound_definition_graph(
 ///
 /// # 返回
 /// 返回引擎可消费的定义图。
-fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
+fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
     DefinitionGraph {
         definition: graph.definition,
         nodes: graph.nodes,
@@ -155,7 +157,7 @@ pub(super) async fn replay_sales_change_start_with_executor(
     }
     let receipt = match identity.classify(receipt.as_ref()) {
         ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
         ReceiptBranch::SamePayload(receipt) => receipt,
     };
     let instance = db
@@ -351,7 +353,7 @@ pub(super) struct SalesChangeStartPersistInput {
     /// 冻结提交行。
     pub submission_lines: Vec<SalesChangeSubmissionLine>,
     /// 工作流动作。
-    pub workflow_action: entities::document_registry::WorkflowAction,
+    pub workflow_action: erp_workflow::entity::document_registry::WorkflowAction,
     /// 冻结快照载荷。
     pub snapshot_payload: ApprovalSubjectSnapshotPayload,
     /// `prepare_start` 结果。
@@ -458,7 +460,7 @@ pub(super) async fn persist_sales_change_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -522,7 +524,7 @@ fn list_projection_from_execution(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_open_tasks(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     owner_role: &str,
     organization_id: &str,
     now: Instant,

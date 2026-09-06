@@ -12,8 +12,8 @@
 use database::SourceRegistryExt;
 use entities::source_registry::{
     ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityMapId, ExternalIdentityTarget,
-    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemId,
-    SourceSystemUpdate, TargetStatus,
+    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemUpdate,
+    TargetStatus,
 };
 use erp_audit::AuditExt;
 use id_generator::next_id;
@@ -55,44 +55,6 @@ impl SourceRegistryService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         Self { db }
-    }
-
-    /// 创建来源系统（单集合写入，无事务）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建来源系统的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - code 与既有来源系统重复（唯一索引透出）
-    /// * `RepositoryError` - 数据库写入失败
-    pub async fn create_source_system(
-        &self,
-        req: CreateSourceSystemRequest,
-        actor: &AuditActor,
-    ) -> Result<SourceSystemView> {
-        req.validate()?;
-        let id = SourceSystemId::new(next_id());
-        let system = SourceSystem::new(id, req.into_data(), actor.id())?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("source_system.create", "source_system", system.base.id.clone())?;
-
-        let system_for_tx = system.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.source_systems().create(&system_for_tx, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-
-        Ok(system.into())
     }
 
     /// 分页查询来源系统列表。

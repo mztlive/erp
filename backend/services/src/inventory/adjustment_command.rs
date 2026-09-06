@@ -1,6 +1,4 @@
 use database::{InventoryExt, WarehouseExt};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::inventory::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
     StockAdjustmentUpdate,
@@ -8,20 +6,20 @@ use entities::inventory::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 use super::adapter::document_approval_view_with_history;
 use super::authorization::inventory_authorization_with_executor;
@@ -89,7 +87,8 @@ impl InventoryService {
             &id,
             DocumentType::StockAdjustment,
             adjustment.adjustment_no.clone(),
-        )?;
+        )
+        .map_err(crate::errors::Error::from)?;
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::StockAdjustment,
             business_object_id: id.to_string(),
@@ -102,6 +101,7 @@ impl InventoryService {
         persist_created_adjustment(
             &self.db,
             &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
             CreatedAdjustmentPersist {
                 adjustment: adjustment.clone(),
                 lines,
@@ -154,6 +154,7 @@ impl InventoryService {
                 .resource_log("stock_adjustment.update", "stock_adjustment", id.to_string())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let _object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let adjustment_id = StockAdjustmentId::new(id.to_string());
         let actor = actor.clone();
@@ -264,6 +265,7 @@ struct CreatedAdjustmentPersist {
 async fn persist_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     persist: CreatedAdjustmentPersist,
 ) -> Result<StockAdjustmentDetailView> {
     let CreatedAdjustmentPersist {
@@ -278,6 +280,7 @@ async fn persist_created_adjustment(
     } = persist;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
@@ -324,8 +327,16 @@ async fn persist_created_adjustment(
                 db.inventory()
                     .create_stock_adjustment_with_lines(&adjustment, &lines, session)
                     .await?;
-                let binding =
-                    persist_bound_document(&db, &rbac, &mut document, &bind_command, &actor, session).await?;
+                let binding = persist_bound_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &mut document,
+                    &bind_command,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.audit_logs().create(&audit, session).await?;
                 created_adjustment_detail(adjustment, lines, binding, can_submit)
             })
@@ -379,16 +390,26 @@ fn created_adjustment_detail(
 async fn persist_bound_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<ApprovalDefinitionBinding> {
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
-    persist_registered_document(db, document, session).await?;
+    persist_registered_document(db, document, session)
+        .await
+        .map_err(crate::errors::Error::from)?;
     Ok(binding)
 }
 

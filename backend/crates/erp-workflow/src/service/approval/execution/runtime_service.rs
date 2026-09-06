@@ -44,7 +44,6 @@ pub struct ApprovalRuntimeService<A> {
     db: Database,
     auth: A,
     action_port: Arc<dyn ApprovalDomainActionPort>,
-    #[allow(dead_code)]
     pub(crate) object_read: Arc<dyn ApprovalObjectReadPort>,
     pub(crate) upgrade: Arc<dyn UpgradeSubjectPort>,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
@@ -1062,7 +1061,12 @@ mod tests {
             organization_id: "org-1".to_string(),
             creator_id: "submitter".to_string(),
         };
-        assert!(runtime_object_readable(&spec, &context, "approver", true).expect("已登记读权且范围覆盖"));
-        assert!(!runtime_object_readable(&spec, &context, "approver", false).expect("范围不覆盖必须拒绝"));
+        let port = crate::ports::FailClosedObjectReadPort;
+        assert!(
+            runtime_object_readable(&spec, &context, "approver", true, &port).expect("已登记读权且范围覆盖")
+        );
+        assert!(
+            !runtime_object_readable(&spec, &context, "approver", false, &port).expect("范围不覆盖必须拒绝")
+        );
     }
 }

@@ -1,9 +1,5 @@
-use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-
-/// 责任队列时限筛选。
-///
-/// 与实体合同共用同一枚举，避免读模型再定义一套筛选语义。
-pub type WorkItemDueFilter = entities::work_item::WorkItemDueFilter;
+pub use erp_workflow::entity::work_item::WorkItemDueFilter;
+use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

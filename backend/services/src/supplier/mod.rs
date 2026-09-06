@@ -15,8 +15,6 @@ use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::party::{SensitiveDataCodec, SensitiveFieldKind};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 
 mod dto;
 pub(crate) mod eligibility;
@@ -313,34 +311,6 @@ impl SupplierService {
             )?);
         }
         Ok(fields)
-    }
-
-    /// 软删除供应商角色（单集合操作，无事务）。
-    ///
-    /// 停用/删除角色仍可被历史单据引用（§6.2），不删除主体与版本历史。
-    ///
-    /// # 参数
-    /// * `id` - 供应商角色 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 删除成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `NotFound` - 供应商角色不存在
-    pub async fn delete_supplier(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut supplier = self.load_supplier(id).await?;
-        let audit = actor
-            .clone()
-            .resource_log("supplier.delete", "supplier", supplier.base.id.clone())?;
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.supplier_accounts().soft_delete(&mut supplier, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(())
     }
 
     /// 按 ID 加载未删除供应商角色。

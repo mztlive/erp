@@ -1,25 +1,28 @@
 use std::str::FromStr;
 
-use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
-use entities::document_registry::DocumentType;
+use database::InventoryExt;
 use entities::inventory::{
     MovementDirection, ReservationEntryType, StockAdjustment, StockAdjustmentLine, StockMovement,
     StockMovementData, StockReservationEntry, StockReservationEntryData,
 };
-use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockMovementId, StockReservationEntryId};
 use erp_core::money::Quantity;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::approval::ApprovalActionContext;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::ApprovalActionContext;
 
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use super::approval_query::load_approval_binding;
@@ -169,7 +172,7 @@ async fn validate_post_runtime_context(
         .map(ToString::to_string);
     if instance.status != bpm::model::types::ApprovalProcessInstanceStatus::Running
         || instance.process_kind
-            != crate::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
+            != erp_workflow::service::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()

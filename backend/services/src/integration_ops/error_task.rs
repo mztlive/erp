@@ -3,12 +3,13 @@
 //! 人工业务动作只通过 `task_decision` 的 W29 强命令；责任退回、转交和关闭只通过
 //! W02 责任 API。本模块不保留旧动作入口。
 
-use database::{IntegrationOpsExt, WorkItemExt};
+use database::IntegrationOpsExt;
 use entities::integration_ops::{
     error_owner_role, error_terminal_policy, project_error_actions, ErrorActionProjection,
     IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
 };
 use erp_audit::AuditExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -136,7 +137,10 @@ impl IntegrationOpsService {
         })
     }
 
-    async fn find_task_work_item(&self, task_id: &str) -> Result<Option<entities::work_item::WorkItem>> {
+    async fn find_task_work_item(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<erp_workflow::entity::work_item::WorkItem>> {
         let mut items = self
             .db
             .work_items()
@@ -160,7 +164,7 @@ impl IntegrationOpsService {
     async fn store_error_task(
         &self,
         task: IntegrationErrorTask,
-        work_item: entities::work_item::WorkItem,
+        work_item: erp_workflow::entity::work_item::WorkItem,
         actor: &AuditActor,
     ) -> Result<()> {
         let audit = actor.clone().resource_log(

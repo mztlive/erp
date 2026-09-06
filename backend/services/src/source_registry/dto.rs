@@ -78,7 +78,7 @@ impl CreateSourceSystemRequest {
     ///
     /// # 返回
     /// 返回实体层创建数据。
-    pub(crate) fn into_data(self) -> SourceSystemData {
+    pub fn into_data(self) -> SourceSystemData {
         SourceSystemData {
             code: self.code,
             system_type: self.system_type,

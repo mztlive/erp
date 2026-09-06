@@ -25,7 +25,7 @@ use super::brief::{
     push_document_section, push_section, BriefLine, ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::presentation::format_yuan;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
 
 pub(super) type LineStateMap = HashMap<String, DiffLineState>;
@@ -56,7 +56,7 @@ struct PurchaseChangeBriefContext {
     target_lines: HashMap<String, LineStateMap>,
 }
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 销售变更审批任务的对象事实：任务对象是变更单本身。
     ///
     /// # 参数

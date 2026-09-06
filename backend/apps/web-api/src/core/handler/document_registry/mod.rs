@@ -1,24 +1,33 @@
 //! 域 D02 `document_registry` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::document_registry` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_workflow` 单据注册 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::document_registry::{
+use erp_workflow::service::document_registry::{
     AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
     CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
     DocumentRegistryService, DocumentRelationView, PageView, RegisterBusinessDocumentRequest,
     WorkflowActionListParams, WorkflowActionView,
 };
+use services::workflow_compose::{workflow_audit, workflow_object_facts};
 
 use crate::{
     app_state::AppState,
     core::{errors::Result, response::ApiResponse},
 };
+
+fn document_registry_service(state: &AppState) -> DocumentRegistryService {
+    DocumentRegistryService::with_ports(
+        state.db(),
+        workflow_audit(state.db()),
+        workflow_object_facts(state.db()),
+    )
+}
 
 #[permission_macros::permission(
     group = "单据注册",
@@ -39,7 +48,7 @@ pub async fn business_document_list(
     State(state): State<AppState>,
     Query(params): Query<BusinessDocumentListParams>,
 ) -> Result<PageView<BusinessDocumentView>> {
-    let page = DocumentRegistryService::new(state.db())
+    let page = document_registry_service(&state)
         .business_document_list(&params)
         .await?;
 
@@ -67,7 +76,7 @@ pub async fn business_document_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterBusinessDocumentRequest>,
 ) -> Result<BusinessDocumentView> {
-    let view = DocumentRegistryService::new(state.db())
+    let view = document_registry_service(&state)
         .register_business_document(req, &actor)
         .await?;
 
@@ -93,7 +102,7 @@ pub async fn business_document_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<BusinessDocumentView> {
-    let view = DocumentRegistryService::new(state.db())
+    let view = document_registry_service(&state)
         .business_document_detail(&id)
         .await?;
 
@@ -119,7 +128,7 @@ pub async fn workflow_action_list(
     State(state): State<AppState>,
     Query(params): Query<WorkflowActionListParams>,
 ) -> Result<PageView<WorkflowActionView>> {
-    let page = DocumentRegistryService::new(state.db())
+    let page = document_registry_service(&state)
         .workflow_action_list(&params)
         .await?;
 
@@ -148,7 +157,7 @@ pub async fn workflow_action_create(
     Json(req): Json<AppendWorkflowActionRequest>,
 ) -> Result<WorkflowActionView> {
     // 责任角色由 Service 按操作人账号类型注入（HTTP 层不携带角色字段）。
-    let view = DocumentRegistryService::new(state.db())
+    let view = document_registry_service(&state)
         .append_workflow_action(req, &actor)
         .await?;
 
@@ -174,7 +183,7 @@ pub async fn document_relation_list(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentRelationView>> {
-    let relations = DocumentRegistryService::new(state.db())
+    let relations = document_registry_service(&state)
         .document_relation_list(&erp_core::ids::BusinessDocumentId::new(id))
         .await?;
 
@@ -202,7 +211,7 @@ pub async fn document_relation_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateDocumentRelationRequest>,
 ) -> Result<DocumentRelationView> {
-    let view = DocumentRegistryService::new(state.db())
+    let view = document_registry_service(&state)
         .create_document_relation(req, &actor)
         .await?;
 
@@ -228,7 +237,7 @@ pub async fn document_participant_list(
     State(state): State<AppState>,
     Query(query): Query<DocumentParticipantListQuery>,
 ) -> Result<Vec<DocumentParticipantView>> {
-    let items = DocumentRegistryService::new(state.db())
+    let items = document_registry_service(&state)
         .document_participant_list(&query.user_id)
         .await?;
 
@@ -258,7 +267,7 @@ pub async fn document_participant_create(
     Json(req): Json<CreateDocumentParticipantRequest>,
 ) -> Result<DocumentParticipantView> {
     // 记录人由 Service 按操作人账号 ID 注入（HTTP 层不携带记录人字段）。
-    let view = DocumentRegistryService::new(state.db())
+    let view = document_registry_service(&state)
         .create_document_participant(req, &actor)
         .await?;
 

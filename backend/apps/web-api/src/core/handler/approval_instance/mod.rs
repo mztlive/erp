@@ -14,9 +14,9 @@ use axum::{
     http::HeaderMap,
     Extension, Json,
 };
-use entities::document_registry::DocumentType;
-use services::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
-use services::approval::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
+use erp_workflow::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
 
 use crate::{
     app_state::AppState,
@@ -282,7 +282,9 @@ pub async fn upgrade_binding(
 }
 
 /// 构造运行服务。
-fn runtime_service(state: &AppState) -> std::sync::Arc<ApprovalRuntimeService> {
+fn runtime_service(
+    state: &AppState,
+) -> std::sync::Arc<ApprovalRuntimeService<services::workflow_compose::WorkflowAuth>> {
     state.approval_runtime_service()
 }
 

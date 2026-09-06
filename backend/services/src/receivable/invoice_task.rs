@@ -1,21 +1,22 @@
 //! 应收子账与 W11 销项开票执行任务的原子生命周期编排。
 //!
-//! 任务身份、摘要与终态口径唯一来源为 `entities::work_item::finance_task`；
+//! 任务身份、摘要与终态口径唯一来源为 `erp_workflow::entity::work_item::finance_task`；
 //! 本文件只解析责任人/组织、调用 factory 并持久化（FIN-E06）。
 
-use database::{ReceivableExt, WorkItemExt};
+use database::ReceivableExt;
 use entities::receivable::ReceivableAccount;
-use entities::work_item::{
+use erp_core::common::time::Instant;
+use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
+use erp_workflow::entity::work_item::{
     is_zero_amount, matches_sales_invoice_identity, new_sales_invoice_task, sales_invoice_impact_summary,
     FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
 };
-use erp_core::common::time::Instant;
-use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 
 /// 触发应收可开票额度变化的正式业务事实。
@@ -138,7 +139,7 @@ pub(crate) async fn record_invoice_execution(
             "当前账号不是开放开票任务的当前责任人".to_string(),
         ));
     }
-    WorkItemService::new(
+    work_item_service(
         db.clone(),
         crate::identity_compose::shared_rbac_service(db.clone()),
     )
@@ -169,7 +170,7 @@ async fn create_invoice_task(
     reason: SalesInvoiceTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let responsibility = WorkItemService::new(
+    let responsibility = work_item_service(
         db.clone(),
         crate::identity_compose::shared_rbac_service(db.clone()),
     )

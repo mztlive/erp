@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use database::{CostExt, PayableExt, SupplierSettlementExt, WorkItemExt};
+use database::{CostExt, PayableExt, SupplierSettlementExt};
 use entities::cost::CostEntry;
 use entities::payable::{
     EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
@@ -10,13 +10,14 @@ use entities::supplier_settlement::{
     SettlementCostDelta, SettlementReviewDecision, SettlementReviewResult, SettlementStatus,
     SupplierSettlementDifference, SupplierSettlementStatement,
 };
-use entities::work_item::{
-    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
-};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PayableAccountId, PayableEntryId, WorkItemId};
 use erp_core::money::Amount;
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -30,7 +31,7 @@ use super::{
     SETTLEMENT_REVIEW_OWNER_ROLE,
 };
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -271,7 +272,7 @@ impl SupplierSettlementService {
             client
                 .with_transaction(move |session| {
                     Box::pin(async move {
-                        WorkItemService::new(db.clone(), rbac_for_tx.clone())
+                        work_item_service(db.clone(), rbac_for_tx.clone())
                             .ensure_domain_decision_access(&audit_actor, &work_item, session)
                             .await?;
                         ensure_settlement_reviewer_eligible(&db, &work_item, &statement, &actor_id, session)

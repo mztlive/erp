@@ -146,8 +146,8 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 /// # 错误
 /// 政策缺失或权限字符串无法解析时返回服务错误。
 fn ensure_registered_approval_policies() -> std::result::Result<(), services::Error> {
-    for document_type in services::approval::policy::ALL_DOCUMENT_TYPES {
-        services::approval::policy::policy_of(document_type)?;
+    for document_type in erp_workflow::service::approval::policy::ALL_DOCUMENT_TYPES {
+        erp_workflow::service::approval::policy::policy_of(document_type)?;
     }
     Ok(())
 }

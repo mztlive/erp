@@ -1,16 +1,17 @@
 //! 应收往来子账列表、详情与创建编排。
 
-use database::{ReceivableExt, SalesOrderExt, WorkItemExt};
+use database::{ReceivableExt, SalesOrderExt};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
 };
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
 use erp_identity::Permission;
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -29,10 +30,11 @@ use super::mapping::{
 };
 use super::{card_funds_task, invoice_task, ReceivableAccountFilter, ReceivableService};
 use crate::errors::{Error, Result};
-use crate::work_item::{WorkItemAllowedAction, WorkItemService};
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::work_item::WorkItemAllowedAction;
 
 impl ReceivableService {
     // -----------------------------------------------------------------------
@@ -255,10 +257,10 @@ impl ReceivableService {
         else {
             return Ok(view);
         };
-        let formal = WorkItemService::new(self.db.clone(), rbac.clone())
-            .work_item_detail(work_item_id, actor)
+        let formal = work_item_service(self.db.clone(), rbac.clone())
+            .authorize_work_item(work_item_id, actor)
             .await?;
-        let review_type = match formal.work_item_type {
+        let review_type = match formal.item.work_item_type {
             WorkItemType::CardFundsReview => CardFundsReviewType::Opening,
             WorkItemType::CardFundsDeltaReview => CardFundsReviewType::SyncDelta,
             _ => {
@@ -267,16 +269,16 @@ impl ReceivableService {
                 ));
             }
         };
-        if formal.business_object_type != "receivable_account"
-            || formal.business_object_id != id
-            || formal.subject_version != view.current_sales_order_revision_id
+        if formal.item.business_object_type != "receivable_account"
+            || formal.item.business_object_id != id
+            || formal.item.subject_version != view.current_sales_order_revision_id
             || false
         {
             return Err(Error::BusinessLogicError(
                 "正式任务与当前应收账户或销售版本不匹配".to_string(),
             ));
         }
-        view.work_item = Some(formal.clone());
+        view.work_item = None;
         view.active_review_type = Some(review_type);
         if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
             block_card_funds_actions(

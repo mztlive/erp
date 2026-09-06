@@ -6,22 +6,24 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use database::{BpmExt, ReturnsExt, WorkItemExt};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use database::ReturnsExt;
 use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
-use entities::work_item::WorkItem;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
-use crate::approval::execution::authorization::converge_eligibility;
-use crate::approval::execution::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::{
     normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
 };
-use crate::errors::{Error, Result};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {

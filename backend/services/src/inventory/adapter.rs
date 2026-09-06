@@ -4,19 +4,19 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式。
 
 use bpm::SubjectRef;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
 use entities::inventory::{StockAdjustment, StockAdjustmentState};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
 
-use crate::approval::business_adapter::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
-use crate::approval::policy::{
+use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 use super::dto::{
     CancelStockAdjustmentApprovalTokenView, DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView,
@@ -110,8 +110,11 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    entities::approval_integration::subject_ref_for(DocumentType::StockAdjustment, business_object_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+    erp_workflow::entity::approval_integration::subject_ref_for(
+        DocumentType::StockAdjustment,
+        business_object_id,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
@@ -268,7 +271,6 @@ fn allowed_document_actions(status: StockAdjustmentState, can_submit: bool, can_
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
     use entities::inventory::{
         AdjustmentReasonType, MovementDirection, StockAdjustmentData, StockAdjustmentLine,
@@ -277,6 +279,7 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
     use erp_core::money::Quantity;
+    use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
 
     fn draft_adjustment() -> StockAdjustment {

@@ -17,11 +17,11 @@ mod tests {
     use super::{
         execute_purchase_change_domain_action, start_purchase_change_approval, PurchaseOrderService,
     };
-    use crate::approval::policy::ApprovalDomainAction;
     use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus};
     use erp_core::ids::{
         PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
     };
+    use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
     fn change_source() -> String {
         [

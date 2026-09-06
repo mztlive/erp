@@ -1,6 +1,6 @@
 use bpm::model::ApprovalNodeExecution;
-use database::repository::bpm::ApprovalInstanceListProjection;
 use erp_core::common::time::Instant;
+use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 
 /// 由入口执行构造有界列表投影。
 ///

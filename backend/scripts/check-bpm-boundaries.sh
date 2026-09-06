@@ -52,7 +52,7 @@ require_single_definition() {
 echo "检查 BPM crate 与成员 manifest…"
 require_file "${BACKEND_DIR}/crates/bpm/Cargo.toml"
 require_file "${BACKEND_DIR}/scripts/check-bpm-boundaries.sh"
-require_file "${BACKEND_DIR}/services/src/approval/process_kind.rs"
+require_file "${BACKEND_DIR}/crates/erp-workflow/src/service/approval/process_kind.rs"
 
 if ! grep -E -q '^[[:space:]]*"crates/bpm"' "${BACKEND_DIR}/Cargo.toml"; then
     fail "workspace members 未登记 crates/bpm"
@@ -157,7 +157,7 @@ if [[ -n "${MACRO_RULES}" ]]; then
 fi
 
 echo "检查 DocumentType -> ProcessKind 映射入口…"
-PROCESS_KIND_FILE="${BACKEND_DIR}/services/src/approval/process_kind.rs"
+PROCESS_KIND_FILE="${BACKEND_DIR}/crates/erp-workflow/src/service/approval/process_kind.rs"
 if ! grep -E -q 'pub fn process_kind_of\(' "${PROCESS_KIND_FILE}"; then
     fail "缺少 process_kind_of 映射入口"
 fi

@@ -22,10 +22,7 @@ pub fn object_policy(
 ) -> Option<&'static WorkItemBriefRelation> {
     work_item_type.brief_relation(business_object_type)
 }
-use super::{
-    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemScope,
-    WorkItemService,
-};
+use super::{ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemScope, WorkItemService};
 
 pub const MANAGE_PERMISSION: &str = "work_item:manage";
 pub const REASSIGN_PERMISSION: &str = "work_item:reassign";
@@ -40,7 +37,7 @@ pub struct ActorAccess {
     pub can_manage: bool,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 写命令执行前重验对象存在、阅读权限和参与依据。
     pub async fn ensure_object_participation(&self, actor: &AuditActor, item: &WorkItem) -> Result<()> {
         let access = self.actor_access(actor).await?;
@@ -153,40 +150,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             organizations_from_pairs(&management_scopes),
             responsibility_scopes,
         ))
-    }
-
-    pub fn scope_filter(
-        &self,
-        query: &dto::WorkItemListQuery,
-        actor: &AuditActor,
-        access: &ActorAccess,
-    ) -> Result<WorkItemFilter> {
-        let mut filter = WorkItemFilter {
-            work_item_types: query.work_item_types.clone(),
-            statuses: query.statuses.clone(),
-            priorities: query.priorities.clone(),
-            query: query.query.clone(),
-            object_access_shapes: Some(object_access_shapes(access)),
-            page: query.page,
-            page_size: query.page_size,
-            sort_by: Some(query.sort_by.to_string()),
-            sort_ascending: query.sort_ascending,
-            ..WorkItemFilter::default()
-        };
-        match query.scope {
-            WorkItemScope::Mine => filter.owner_user_id = Some(actor.id().to_string()),
-            WorkItemScope::Managed => {
-                ensure_managed_access(access)?;
-                filter.owner_organization_ids = organization_filter(access);
-            }
-            WorkItemScope::History => {
-                filter.history_actor_id = Some(actor.id().to_string());
-                if access.can_manage && !access.organization_ids.is_empty() {
-                    filter.history_managed_organization_ids = Some(organization_filter(access));
-                }
-            }
-        }
-        Ok(filter)
     }
 
     pub async fn view_access(
@@ -310,8 +273,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 在领域决定事务内按当前账号、有效角色、读取权限、数据范围和对象参与事实重验访问。
-    #[allow(dead_code)]
-    pub(crate) async fn ensure_domain_decision_access(
+    pub async fn ensure_domain_decision_access(
         &self,
         actor: &AuditActor,
         item: &WorkItem,

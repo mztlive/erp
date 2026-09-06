@@ -16,8 +16,10 @@ use persistence_core::Executor;
 use super::super::authorization::{converge_eligibility, AuthorizationFailure};
 use super::hidden_not_found;
 use crate::error::{Error, ErrorCode, Result};
+use crate::ports::ApprovalObjectReadPort;
 use crate::service::approval::business_adapter::{
-    adapter_object_read_decision, adapter_spec_of, ensure_separation_of_duties, BindingRevalidationContext,
+    adapter_object_read_decision_with, adapter_spec_of, ensure_separation_of_duties,
+    BindingRevalidationContext,
 };
 use crate::service::approval::policy::{policy_of, DocumentApprovalPolicy, SeparationOfDutiesPolicy};
 use crate::service::approval::process_kind::process_kind_of;
@@ -78,6 +80,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// # 参数
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC 服务
+/// * `object_read` - 注入的对象读取端口
 /// * `input` - 审批人、快照与分离政策
 /// * `executor` - 调用方持有的数据库执行器
 ///
@@ -92,6 +95,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 pub(super) async fn revalidate_decision_approver(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
@@ -139,7 +143,7 @@ pub(super) async fn revalidate_decision_approver(
                         organization_id: snapshot.payload.responsible_org_id.clone(),
                         creator_id: snapshot.payload.submitted_by.clone(),
                     };
-                    match runtime_object_readable(spec, &context, assignee_id, true)? {
+                    match runtime_object_readable(spec, &context, assignee_id, true, object_read)? {
                         true => {
                             if ensure_separation_of_duties(
                                 separation_policy,
@@ -172,11 +176,12 @@ pub(super) fn runtime_object_readable(
     context: &BindingRevalidationContext,
     actor_id: &str,
     read_scope_covers: bool,
+    object_read: &dyn ApprovalObjectReadPort,
 ) -> Result<bool> {
     if spec.document_type == DocumentType::StockAdjustment {
         return Ok(read_scope_covers);
     }
-    Ok(adapter_object_read_decision(spec, context, actor_id)?.unwrap_or(false))
+    Ok(adapter_object_read_decision_with(spec, context, actor_id, object_read)?.unwrap_or(false))
 }
 
 /// 读取必须审批政策唯一签署的岗位分离规则。

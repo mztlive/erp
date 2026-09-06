@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use database::{DocumentRegistryExt, ReceivableExt, SalesOrderExt, WorkItemExt};
+use database::{ReceivableExt, SalesOrderExt};
 use entities::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
     ReceivableEntryData, ReceivableEntryType,
@@ -13,7 +13,6 @@ use entities::sales_order::{
     FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder,
     SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
-use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
@@ -21,6 +20,11 @@ use erp_core::ids::{
     WorkItemId,
 };
 use erp_core::money::Amount;
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};

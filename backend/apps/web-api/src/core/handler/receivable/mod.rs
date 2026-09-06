@@ -43,6 +43,7 @@ pub async fn receivable_account_list(
     Query(params): Query<ReceivableAccountListParams>,
 ) -> Result<PageView<ReceivableAccountSummaryView>> {
     let page = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .receivable_account_list(&params)
         .await?;
 
@@ -73,6 +74,7 @@ pub async fn receivable_account_detail(
     Query(params): Query<CardFundsReviewDetailParams>,
 ) -> Result<ReceivableAccountView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .receivable_account_detail_with_actions(&id, &params, &actor, state.rbac())
         .await?;
 
@@ -101,6 +103,7 @@ pub async fn receivable_account_create(
     Json(req): Json<CreateReceivableAccountRequest>,
 ) -> Result<ReceivableAccountView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_receivable_account(req, &actor)
         .await?;
 
@@ -129,6 +132,7 @@ pub async fn receivable_funds_review_complete(
     Json(command): Json<CompleteCardFundsReviewCommand>,
 ) -> Result<CompleteCardFundsReviewResult> {
     let result = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .complete_card_funds_review(command, &actor)
         .await?;
 
@@ -149,6 +153,7 @@ pub async fn card_funds_receipt_register(
     Json(req): Json<RegisterCardFundsReceiptRequest>,
 ) -> Result<CardFundsRegistrationResult> {
     let result = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .register_card_funds_receipt(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -168,6 +173,7 @@ pub async fn card_funds_invoice_register(
     Json(req): Json<RegisterCardFundsInvoiceRequest>,
 ) -> Result<CardFundsRegistrationResult> {
     let result = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .register_card_funds_invoice(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -193,6 +199,7 @@ pub async fn customer_receipt_list(
     Query(params): Query<CustomerReceiptListParams>,
 ) -> Result<PageView<CustomerReceiptView>> {
     let page = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .customer_receipt_list(&params)
         .await?;
 
@@ -219,6 +226,7 @@ pub async fn customer_receipt_detail(
     Path(id): Path<String>,
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .customer_receipt_detail(&id)
         .await?;
 
@@ -247,6 +255,7 @@ pub async fn customer_receipt_create(
     Json(req): Json<CreateCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_customer_receipt(req, &actor)
         .await?;
 
@@ -275,6 +284,7 @@ pub async fn customer_receipt_commit(
     Json(req): Json<CommitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_customer_receipt(req, &actor)
         .await?;
 
@@ -305,6 +315,7 @@ pub async fn customer_receipt_submit(
     Json(req): Json<SubmitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_customer_receipt(&id, req, &actor)
         .await?;
 
@@ -335,6 +346,7 @@ pub async fn customer_receipt_cancel_approval(
     Json(req): Json<CancelCustomerReceiptApprovalRequest>,
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_customer_receipt_approval(&id, req, &actor)
         .await?;
 
@@ -389,7 +401,10 @@ pub async fn invoice_list(
     State(state): State<AppState>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<PageView<InvoiceView>> {
-    let page = ReceivableService::new(state.db()).invoice_list(&params).await?;
+    let page = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
+        .invoice_list(&params)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -410,7 +425,10 @@ pub async fn invoice_list(
 /// # 返回
 /// 返回发票视图。
 pub async fn invoice_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db()).invoice_detail(&id).await?;
+    let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
+        .invoice_detail(&id)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -437,6 +455,7 @@ pub async fn invoice_create(
     Json(req): Json<CreateInvoiceRequest>,
 ) -> Result<InvoiceView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_invoice(req, &actor)
         .await?;
 
@@ -465,6 +484,7 @@ pub async fn invoice_commit(
     Json(req): Json<CommitInvoiceRequest>,
 ) -> Result<InvoiceView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_invoice(req, &actor)
         .await?;
 
@@ -495,6 +515,7 @@ pub async fn invoice_post(
     Json(req): Json<PostInvoiceRequest>,
 ) -> Result<InvoiceView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .post_invoice(&id, req, &actor)
         .await?;
 
@@ -525,6 +546,7 @@ pub async fn invoice_red_issue(
     Json(req): Json<CommitRedInvoiceRequest>,
 ) -> Result<InvoiceView> {
     let view = ReceivableService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .issue_red_invoice(&id, req, &actor)
         .await?;
 

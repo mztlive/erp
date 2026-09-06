@@ -4,8 +4,8 @@
 //! 作为权限范围，再关联四类履约草稿、来源采购/销售单和仓库。聚合在服务端完成
 //! 筛选、指标和分页；客户端不得逐页拉取四个单据列表后自行拼接。
 
-use database::WorkItemExt;
-use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
@@ -153,9 +153,10 @@ impl<'a> FulfillmentQueueRepository<'a> {
     ///
     /// # 错误
     /// 无。
-    fn collection(&self) -> mongodb::Collection<entities::work_item::WorkItem> {
+    fn collection(&self) -> mongodb::Collection<erp_workflow::entity::work_item::WorkItem> {
         self.db.collection(<Database as WorkItemExt>::WORK_ITEMS)
     }
+
     /// 查询当前个人责任范围内的履约页面投影。
     ///
     /// # 参数

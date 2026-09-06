@@ -24,9 +24,10 @@ pub use dto::{
     ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
-pub(crate) use scope::{
+pub use scope::{
     approval_actor_is_active, approval_actor_is_active_with_executor,
-    approval_cancel_blocked_scope_with_executor, approval_decide_scope_with_executor,
+    approval_cancel_blocked_scope_with_executor, approval_cancel_scope_with_executor,
+    approval_decide_scope_with_executor, approval_document_action_scope_with_executor,
     approval_document_read_scope, approval_document_read_scope_with_executor,
     definition_management_visibility_with_executor,
 };

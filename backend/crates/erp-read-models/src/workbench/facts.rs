@@ -5,10 +5,10 @@ use std::collections::{HashMap, HashSet};
 use database::{IntegrationOpsExt, LegacyImportExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
-use entities::work_item::{
+use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };
-use erp_core::common::time::Instant;
 use persistence_core::{Executor, NoTransaction};
 
 use crate::errors::Result;
@@ -365,7 +365,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
     pub(super) async fn object_facts_for_rows(
         &self,
-        rows: &[database::WorkItemRow],
+        rows: &[erp_workflow::WorkItemRow],
     ) -> Result<ObjectFactMap> {
         let keys = rows
             .iter()

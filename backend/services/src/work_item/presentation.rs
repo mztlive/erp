@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use entities::work_item::WorkItemType;
 use erp_core::money::Amount;
+use erp_workflow::entity::work_item::WorkItemType;
 
 /// 处理人姓名尚未解析时的占位文案。
 pub(crate) const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";

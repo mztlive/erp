@@ -5,14 +5,18 @@
 
 use std::collections::HashMap;
 
-use database::{FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, WorkItemExt};
-use entities::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType};
 use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::{
+    QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
+};
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
+use crate::fulfillment_queue::{
+    FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, FulfillmentQueueRepository,
+};
 use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use application_core::AuditActor;
 
@@ -305,7 +309,7 @@ pub struct FulfillmentQueuePageView {
     pub as_of: Instant,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 查询当前个人责任范围内的 W09 履约队列。
     ///
     /// # 参数
@@ -319,12 +323,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 参数非法、队列上下文变化、授权事实或聚合读取失败时返回错误。
     pub async fn fulfillment_queue_list(
         &self,
-        params: &FulfillmentQueueListParams,
-        actor: &AuditActor,
+        params: FulfillmentQueueListParams,
+        actor: AuditActor,
     ) -> Result<FulfillmentQueuePageView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(actor).await?;
+        let access = self.actor_access(&actor).await?;
         let visible_types = visible_operation_types(&query.operation_types, &access);
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;
@@ -339,9 +343,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .and_then(|page| page.checked_mul(u64::from(query.page_size)))
             .ok_or_else(|| Error::ValidationError("履约队列分页偏移超出支持范围".to_string()))?;
         let (due_from, due_before) = due_bounds(query.due)?;
-        let repository_page = self
-            .db
-            .work_items()
+        let repository_page = FulfillmentQueueRepository::new(&self.db)
             .search_fulfillment_queue(
                 &RepositoryFilter {
                     owner_user_id: actor.id().to_string(),

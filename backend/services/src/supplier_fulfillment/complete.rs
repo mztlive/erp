@@ -1,12 +1,13 @@
-use database::{SupplierFulfillmentExt, WorkItemExt};
+use database::SupplierFulfillmentExt;
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus,
     SupplierOrderActionType,
 };
-use entities::work_item::WorkItemStatus;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderActionId;
+use erp_workflow::entity::work_item::WorkItemStatus;
+use erp_workflow::WorkItemExt;
 use persistence_core::{NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -24,7 +25,7 @@ use super::receipt::{
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -96,7 +97,7 @@ impl SupplierFulfillmentService {
                         &actor_id,
                     )?;
                     ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
-                    WorkItemService::new(db.clone(), rbac_for_tx.clone())
+                    work_item_service(db.clone(), rbac_for_tx.clone())
                         .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
                         .await?;
 

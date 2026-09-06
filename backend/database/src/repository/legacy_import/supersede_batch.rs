@@ -5,9 +5,8 @@
 //! `invalidate` 的确认与已就地 `close` 的任务。空集合零写，任一版本冲突
 //! 由调用方事务整体回滚。全部使用调用方 executor，不开事务。
 
-use crate::repository::owned::{LegacyImportConfirmationRepository, WorkItemRepository};
+use crate::repository::owned::LegacyImportConfirmationRepository;
 use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
-use entities::work_item::WorkItem;
 use erp_core::ids::LegacyImportConfirmationId;
 
 use persistence_core::Executor;
@@ -46,41 +45,6 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
                 && item.replacement_confirmation_id.as_ref() == Some(replacement_id)
         }) {
             self.update(confirmation, executor).await?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> WorkItemRepository<'a> {
-    /// 批量写回已关闭的取代任务（INT-R28 批量写）。
-    ///
-    /// 调用方先经实体 `close` 完成开放任务关闭，本方法只执行逐项 CAS
-    /// 写回；空集合零写，不访问数据库。已关闭任务由调用方过滤，
-    /// 不传入本方法。任一项版本冲突或写入失败时返回错误，由调用方
-    /// 事务整体回滚。
-    ///
-    /// # 参数
-    /// * `work_items` - 已完成关闭 mutation 的任务（就地更新版本号）
-    /// * `executor` - 调用方事务执行器，必须位于同一事务中
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示全部写回成功。
-    ///
-    /// # 错误
-    /// 当任一任务 CAS 未命中或 MongoDB 写入失败时返回错误。
-    ///
-    /// # 约束
-    /// 不自行开启或提交事务；不做任务状态裁决，只持久化已关闭任务。
-    pub async fn persist_closed_confirmation_work_items(
-        &self,
-        work_items: &mut [WorkItem],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if work_items.is_empty() {
-            return Ok(());
-        }
-        for item in work_items.iter_mut() {
-            self.update(item, executor).await?;
         }
         Ok(())
     }

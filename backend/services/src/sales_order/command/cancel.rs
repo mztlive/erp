@@ -13,12 +13,12 @@ use super::super::cancel_approval::{
 use super::super::dto::{CancelSalesOrderApprovalRequest, SalesOrderDetailView};
 use super::super::SalesOrderService;
 use super::submit::latest_submission_no;
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::prepare_cancel;
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::prepare_cancel;
+use erp_workflow::service::document_registry::find_approval_binding;
 
 impl SalesOrderService {
     /// 撤回审批中的销售单，回到可修正草稿。
@@ -61,9 +61,11 @@ impl SalesOrderService {
             ));
         }
         let ports = sales_approval_ports(order.business_type)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let subject = entities::approval_integration::subject_ref_for_sales_business(order.business_type, id)
+        let subject = crate::sales_order::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let subject_version = latest_submission_no(&self.db, id).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;

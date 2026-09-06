@@ -1,14 +1,15 @@
 //! 责任队列授权快照、范围过滤与允许动作。
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 
-use database::DocumentRegistryExt;
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_identity::access_control::{
     DataScope, DataScopeSubjectType, OrganizationCoverage, ResponsibilityScopeSet,
 };
 use erp_identity::AccessControlExt;
 use erp_identity::{Permission, PermissionSet};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::DocumentRegistryExt;
 use persistence_core::NoTransaction;
 
 use crate::errors::{Error, Result};
@@ -34,7 +35,7 @@ pub(super) struct ActorAccess {
     pub(super) can_manage: bool,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 读取当前操作人的责任队列授权快照。
     ///
     /// # 参数
@@ -45,8 +46,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 授权 Port 或参与关系读取失败时返回错误。
-    pub(super) async fn actor_access(&self, actor: &AuditActor) -> Result<ActorAccess> {
-        self.actor_access_for(actor.kind(), actor.id()).await
+    pub(super) fn actor_access(
+        &self,
+        actor: &AuditActor,
+    ) -> impl Future<Output = Result<ActorAccess>> + Send + 'static {
+        let this = self.clone();
+        let kind = actor.kind();
+        let actor_id = actor.id().to_string();
+        async move { this.actor_access_for(kind, &actor_id).await }
     }
 
     /// 按账号类型与稳定 ID 构造责任队列授权快照。
@@ -198,14 +205,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         Ok(filter)
     }
 
-    pub(super) async fn view_access(
+    pub(super) fn view_access(
         &self,
         item: &dto::WorkItemFields,
         scope: WorkItemScope,
         actor: &AuditActor,
         access: &ActorAccess,
     ) -> Result<ViewAccess> {
-        if let Some(blocker) = self.processing_blocker(None::<&str>).await? {
+        if let Some(blocker) = self.processing_blocker(None::<&str>)? {
             return Ok(ViewAccess::blocked(blocker));
         }
         if scope == WorkItemScope::History || item.status != WorkItemStatus::Open {
@@ -215,7 +222,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         Ok(ViewAccess::ready(actions))
     }
 
-    async fn processing_blocker(&self, _step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
+    fn processing_blocker(&self, _step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
         Ok(None)
     }
 }
@@ -267,7 +274,7 @@ pub(super) fn has_permission(access: &ActorAccess, permission: &str) -> bool {
 /// # 错误
 /// 无；未注册或无法证明访问权的候选项会失败关闭并被过滤。
 pub(super) fn authorized_fields(
-    rows: Vec<database::WorkItemRow>,
+    rows: Vec<erp_workflow::WorkItemRow>,
     access: &ActorAccess,
     facts: &ObjectFactMap,
 ) -> Vec<dto::WorkItemFields> {
@@ -343,7 +350,16 @@ pub(super) fn required_execution_permissions(
         )
         .expect("业务异常固定权限必须合法")]));
     }
-    work_item_type.required_execution_permissions(business_object_type)
+    work_item_type
+        .required_execution_permissions(business_object_type)
+        .map(|codes| {
+            PermissionSet::new(
+                codes
+                    .iter()
+                    .map(|code| Permission::parse(code).expect("完整执行权限必须合法"))
+                    .collect::<Vec<_>>(),
+            )
+        })
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。

@@ -18,6 +18,7 @@ erp-core = { workspace = true }
 persistence-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
+erp-workflow = { workspace = true }
 entities = { workspace = true }
 application-core = { workspace = true }
 regex = { workspace = true }

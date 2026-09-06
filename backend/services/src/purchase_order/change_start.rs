@@ -5,33 +5,37 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, PurchaseOrderExt, WorkItemExt};
-use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
+use database::PurchaseOrderExt;
 use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
-use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemPriority};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
-use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
+use erp_workflow::service::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
     StartIdentityParams,
 };
-use crate::approval::execution::start::map_engine_error;
-use crate::approval::execution::{
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -63,7 +67,7 @@ pub(super) async fn load_bound_definition_graph(
 ///
 /// # 返回
 /// 返回引擎可消费的定义图。
-fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
+fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
     DefinitionGraph {
         definition: graph.definition,
         nodes: graph.nodes,
@@ -154,7 +158,7 @@ pub(super) async fn replay_purchase_change_start_with_executor(
     }
     let receipt = match identity.classify(receipt.as_ref()) {
         ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
         ReceiptBranch::SamePayload(receipt) => receipt,
     };
     let instance = db
@@ -308,7 +312,7 @@ pub(super) fn build_purchase_change_start_input(
 fn map_start_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::InvalidCommand(message) => Error::ConflictError(message.to_string()),
-        other => map_engine_error(other),
+        other => Error::from(map_engine_error(other)),
     }
 }
 
@@ -435,7 +439,7 @@ pub(super) async fn persist_purchase_change_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -499,7 +503,7 @@ fn list_projection_from_execution(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_open_tasks(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     owner_role: &str,
     organization_id: &str,
     now: Instant,
@@ -547,14 +551,14 @@ mod tests {
         ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, ParticipantId,
         ProcessKind, Timestamp,
     };
-    use entities::document_registry::business_document::ApprovalDefinitionBinding;
-    use entities::document_registry::DocumentType;
     use erp_core::common::time::Instant;
+    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+    use erp_workflow::entity::document_registry::DocumentType;
 
-    use crate::approval::execution::idempotency::{start_identity, StartIdentityParams};
-    use crate::approval::execution::{prepare_start, PreparedExecution};
-    use crate::approval::process_kind::process_kind_of;
     use crate::errors::Error;
+    use erp_workflow::service::approval::execution::idempotency::{start_identity, StartIdentityParams};
+    use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
+    use erp_workflow::service::approval::process_kind::process_kind_of;
 
     fn node(
         id: &str,
@@ -720,7 +724,7 @@ mod tests {
         );
         let error = prepare_start(built).unwrap_err();
         assert!(
-            matches!(error, Error::ValidationError(message) if message.contains("启动时全部审批人必须有效"))
+            matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("启动时全部审批人必须有效"))
         );
     }
 

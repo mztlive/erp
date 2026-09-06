@@ -1,11 +1,12 @@
-use database::{ContractExt, CustomerExt, DocumentRegistryExt, SalesOrderExt};
-use entities::document_registry::{
-    BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
-};
+use database::{ContractExt, CustomerExt, SalesOrderExt};
 use entities::sales_order::{SalesOrder, SalesOrderData};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
+use erp_workflow::entity::document_registry::{
+    BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
+};
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -32,10 +33,10 @@ use super::identity::{
     sales_order_create_fingerprint, sales_submission_audit_id,
 };
 use super::submit::ensure_unified_start_command;
-use crate::approval::execution::prepare_start;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::prepare_start;
 
 impl SalesOrderService {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
@@ -214,8 +215,7 @@ impl SalesOrderService {
             actor.id(),
         )?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let document_type =
-            entities::approval_integration::document_type_of_sales_business(req.business_type);
+        let document_type = crate::sales_order::document_type_of_sales_business(req.business_type);
         let document = BusinessDocument::new(
             BusinessDocumentId::new(order.base.id.clone()),
             BusinessDocumentData {
@@ -228,11 +228,9 @@ impl SalesOrderService {
 
         if req.intent == SalesOrderCreateIntent::Submit {
             let ports = sales_approval_ports(order.business_type)?;
-            let subject = entities::approval_integration::subject_ref_for_sales_business(
-                order.business_type,
-                &order.base.id,
-            )
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
+            let subject =
+                crate::sales_order::subject_ref_for_sales_business(order.business_type, &order.base.id)
+                    .map_err(|error| Error::ValidationError(error.to_string()))?;
             let organization_id = sales_order_responsible_org_id(&order)?;
             let _ = sales_order_object_readable(&organization_id, actor.id())?;
             self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines)
@@ -288,6 +286,7 @@ impl SalesOrderService {
             )?;
             let bind_command = sales_create_bind_command(&submitted_order, actor)?;
             let rbac = self.require_rbac().cloned()?;
+            let object_read = std::sync::Arc::clone(&self.object_read);
             let sellable_refs = Self::sellable_working_copy_refs(&working_copy_lines)?;
             let detail_id = submitted_order.base.id.clone();
             let db = self.db.clone();
@@ -303,6 +302,7 @@ impl SalesOrderService {
                         let binding = persist_bound_sales_document(
                             &db,
                             &rbac,
+                            object_read.as_ref(),
                             &mut document,
                             &bind_command,
                             &actor_owned,
@@ -338,7 +338,9 @@ impl SalesOrderService {
                             db.sales_order_submission_lines().create(line, session).await?;
                         }
                         db.workflow_actions().create(&workflow_action, session).await?;
-                        if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                        if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
+                            prepared
+                        {
                             persist_runtime_writes(
                                 &db,
                                 &writes,
@@ -387,6 +389,7 @@ impl SalesOrderService {
         let mut document_for_tx = document;
         let bind_command = sales_create_bind_command(&order, actor)?;
         let rbac_for_tx = self.require_rbac().cloned()?;
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let actor_for_tx = actor.clone();
         let sellable_refs_for_tx = Self::sellable_working_copy_refs(&working_copy_lines)?;
         let transaction_result = client
@@ -399,6 +402,7 @@ impl SalesOrderService {
                     persist_bound_sales_document(
                         &db,
                         &rbac_for_tx,
+                        object_read.as_ref(),
                         &mut document_for_tx,
                         &bind_command,
                         &actor_for_tx,

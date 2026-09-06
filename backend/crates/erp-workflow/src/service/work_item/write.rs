@@ -1,5 +1,7 @@
 //! 责任队列写入结果、幂等回放与版本冲突投影。
 
+use std::future::Future;
+
 use crate::entity::work_item::WorkItem;
 use crate::repository::WorkItemExt;
 use application_core::CommandReceipt;
@@ -9,8 +11,7 @@ use crate::error::{Error, Result};
 use application_core::AuditActor;
 
 use super::access::detail_scope;
-use super::query_support::single_item_context_id;
-use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService, WorkItemView};
+use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
 
 pub(super) const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 
@@ -51,14 +52,16 @@ pub(super) fn work_item_update_error(error: persistence_core::Error) -> WorkItem
     }
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// Load a work item by id.
-    pub(super) async fn load(&self, id: &str) -> Result<WorkItem> {
-        self.db
-            .work_items()
-            .find_work_item(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
+    pub fn load(&self, id: String) -> impl Future<Output = Result<WorkItem>> + Send + 'static {
+        let db = self.db.clone();
+        async move {
+            db.work_items()
+                .find_work_item(&id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
+        }
     }
 
     /// 读取已完成的同一幂等命令，并拒绝相同键混用不同请求。
@@ -74,74 +77,81 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
         if resource_id != item_id {
             return Err(Error::Internal("幂等审计资源与命令不一致".to_string()));
         }
-        self.load(item_id).await.map(Some)
+        self.load(item_id.to_string()).await.map(Some)
     }
 
-    /// 将成功写入的实体重新按当前 actor 授权投影。
+    /// 将成功写入的实体映射为命令结果。
     pub(super) async fn applied_outcome(
         &self,
         item: WorkItem,
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        self.mutation_view(item, actor)
-            .await
-            .map(WorkItemMutationOutcome::Applied)
+        let _ = actor;
+        Ok(WorkItemMutationOutcome::Applied {
+            work_item_id: item.base.id.clone(),
+        })
     }
 
-    /// 冲突后重新读取任务并形成权限安全的最新投影。
-    ///
-    /// 最新任务不再可见或已经删除时固定返回空摘要；授权与对象读取的其他
-    /// 基础设施错误继续失败，禁止退化为未经裁剪的实体。
+    /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。
     pub(super) async fn conflict_outcome(
         &self,
         item_id: &str,
         kind: WorkItemConflictKind,
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        let Some(item) = self
+        let _ = actor;
+        let exists = self
             .db
             .work_items()
             .find_work_item(item_id, &mut NoTransaction)
             .await?
-        else {
-            return Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(
-                kind, None,
-            )));
-        };
-        let current_work_item = match self.mutation_view(item, actor).await {
-            Ok(view) => Some(view),
-            Err(Error::Forbidden(_) | Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
+            .is_some();
         Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(
             kind,
-            current_work_item,
+            exists.then(|| item_id.to_string()),
         )))
     }
 
-    pub(super) async fn mutation_view(&self, item: WorkItem, actor: &AuditActor) -> Result<WorkItemView> {
+    /// Authorize a work item for remaining domain callers without returning the HTTP view.
+    pub async fn authorize_work_item(&self, id: &str, actor: &AuditActor) -> Result<AuthorizedWorkItem> {
+        let item = self.load(id.to_string()).await?;
         let access = self.actor_access(actor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
-        let item_id = item.base.id.clone();
         let fields = self
-            .authorized_fields_for_items(vec![item], &access)
+            .authorized_fields_for_items(vec![item.clone()], &access)
             .await?
             .into_iter()
             .next()
             .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        let mut view = WorkItemView::from_fields(fields, single_item_context_id(actor.id(), &item_id))?
-            .with_access(
-                view_access.processing_state,
-                view_access.processing_blocker,
-                view_access.allowed_actions,
-                view_access.action_blockers,
-            );
-        self.apply_party_names(std::slice::from_mut(&mut view)).await?;
-        self.apply_approval_contexts(std::slice::from_mut(&mut view))
-            .await?;
-        Ok(view)
+        let _ = fields;
+        Ok(AuthorizedWorkItem {
+            item,
+            allowed_actions: view_access.allowed_actions,
+            processing_state: view_access.processing_state,
+            processing_blocker: view_access.processing_blocker,
+            action_blockers: view_access
+                .action_blockers
+                .into_iter()
+                .map(|blocker| blocker.message)
+                .collect(),
+        })
     }
+}
+
+/// Command-side authorization snapshot used by remaining domain services.
+#[derive(Debug, Clone)]
+pub struct AuthorizedWorkItem {
+    /// Loaded work-item entity.
+    pub item: WorkItem,
+    /// Actions the current actor may take.
+    pub allowed_actions: Vec<super::WorkItemAllowedAction>,
+    /// Processing state after authorization.
+    pub processing_state: super::ProcessingState,
+    /// Optional processing blocker.
+    pub processing_blocker: Option<super::ProcessingBlockerView>,
+    /// Permission-safe action blockers.
+    pub action_blockers: Vec<String>,
 }
 
 pub(super) fn required_text(value: &str, message: &str) -> Result<String> {
@@ -153,7 +163,7 @@ pub(super) fn required_text(value: &str, message: &str) -> Result<String> {
 }
 
 /// 将 HTTP 任务版本解析为正整数乐观锁版本。
-pub(crate) fn expected_task_version(value: &str) -> Result<u64> {
+pub fn expected_task_version(value: &str) -> Result<u64> {
     let value = value.trim();
     let version = value
         .parse::<u64>()

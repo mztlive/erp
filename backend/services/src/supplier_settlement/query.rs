@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use database::{SupplierSettlementExt, WorkItemExt};
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::{
     SettlementStatus, SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
-use entities::work_item::WorkItemType;
+use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

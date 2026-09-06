@@ -1,14 +1,15 @@
-use database::{SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{SupplierApiExt, SupplierFulfillmentExt};
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     FulfillmentStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierFulfillmentOrderUpdate,
     SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus, SupplierOrderActionType,
     SupplierOrderActionUpdate,
 };
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderActionId;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
@@ -29,7 +30,7 @@ use super::receipt::{
 };
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 
@@ -329,7 +330,7 @@ impl SupplierFulfillmentService {
                             investigated_order_version,
                         )?;
                         ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
-                        WorkItemService::new(db.clone(), rbac_for_tx.clone())
+                        work_item_service(db.clone(), rbac_for_tx.clone())
                             .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
                             .await?;
                         work_item.subject_version = order.base.version.to_string();
@@ -450,7 +451,7 @@ impl SupplierFulfillmentService {
                             order.base.version,
                         )?;
                         ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
-                        WorkItemService::new(db.clone(), rbac.clone())
+                        work_item_service(db.clone(), rbac.clone())
                             .ensure_domain_decision_access(&actor, &work_item, session)
                             .await?;
                     } else {

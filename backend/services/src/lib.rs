@@ -1,11 +1,8 @@
-pub mod approval;
-pub mod approval_action_registry;
 pub mod bulk_job;
 pub mod catalog;
 pub mod contract;
 pub mod cost;
 pub mod customer;
-pub mod document_registry;
 mod errors;
 pub mod file_asset;
 pub mod fulfillment;
@@ -29,11 +26,8 @@ pub mod supplier_api;
 pub mod supplier_fulfillment;
 pub mod supplier_offering;
 pub mod supplier_settlement;
-mod transaction;
 pub mod warehouse;
 pub mod work_item;
+pub mod workflow_compose;
 
-pub use approval::definition::ApprovalDefinitionService;
-pub use approval::execution::{ApprovalNotificationOutboxPort, ApprovalRuntimeService};
-pub use approval_action_registry::ApprovalActionRegistry;
 pub use errors::{Error, ErrorCode, Result};

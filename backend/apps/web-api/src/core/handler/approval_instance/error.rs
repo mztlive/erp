@@ -85,7 +85,8 @@ impl ApprovalHttpError {
     ///
     /// # 返回
     /// 返回稳定码、状态与关联 ID。
-    pub fn from_service(error: services::Error, headers: &HeaderMap) -> Self {
+    pub fn from_service(error: impl Into<services::Error>, headers: &HeaderMap) -> Self {
+        let error = error.into();
         let correlation_id = correlation_id(headers);
         if let Some(code) = error.code() {
             return Self::coded(code, correlation_id, None);

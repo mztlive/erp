@@ -1,16 +1,13 @@
 use database::CatalogExt;
-use entities::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData, UnitOfMeasureUpdate};
-use entities::catalog::{EnableStatus, UnitOfMeasureId};
+use entities::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureUpdate};
 use erp_audit::AuditExt;
-use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
 use crate::catalog::dto::{
-    CreateUnitOfMeasureRequest, PageView, SortDir, UnitOfMeasureListParams, UnitOfMeasureView,
-    UpdateUnitOfMeasureRequest,
+    PageView, SortDir, UnitOfMeasureListParams, UnitOfMeasureView, UpdateUnitOfMeasureRequest,
 };
 use crate::errors::Result;
 use application_core::AuditActor;
@@ -72,51 +69,6 @@ impl CatalogService {
             page: filter.page,
             page_size: filter.page_size,
         })
-    }
-
-    /// 创建计量单位（单集合写入，无事务）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建单位的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - unit_code 重复（唯一索引透出）
-    pub async fn unit_of_measure_create(
-        &self,
-        req: CreateUnitOfMeasureRequest,
-        actor: &AuditActor,
-    ) -> Result<UnitOfMeasureView> {
-        req.validate()?;
-        let id = UnitOfMeasureId::new(next_id());
-        let unit = UnitOfMeasure::new(
-            id.clone(),
-            UnitOfMeasureData {
-                unit_code: req.unit_code,
-                name: req.name,
-                symbol: req.symbol,
-                quantity_scale: req.quantity_scale,
-                status: req.status.unwrap_or(EnableStatus::Active),
-            },
-            actor.id(),
-        )?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
-        let unit_for_tx = unit.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.unit_of_measures().create(&unit_for_tx, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(unit.into())
     }
 
     /// 更新计量单位（乐观锁语义）。

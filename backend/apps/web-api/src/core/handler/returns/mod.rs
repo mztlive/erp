@@ -47,6 +47,7 @@ pub async fn sales_return_case_list(
     Query(params): Query<SalesReturnCaseListParams>,
 ) -> Result<PageView<SalesReturnCaseView>> {
     let page = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .sales_return_case_list(&params)
         .await?;
 
@@ -73,6 +74,7 @@ pub async fn sales_return_case_detail(
     Path(id): Path<String>,
 ) -> Result<SalesReturnCaseView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .sales_return_case_detail(&id)
         .await?;
 
@@ -101,6 +103,7 @@ pub async fn sales_return_case_create(
     Json(req): Json<CreateSalesReturnCaseRequest>,
 ) -> Result<SalesReturnCaseView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_sales_return_case(req, &actor)
         .await?;
 
@@ -127,6 +130,7 @@ pub async fn purchase_return_order_list(
     Query(params): Query<PurchaseReturnOrderListParams>,
 ) -> Result<PageView<PurchaseReturnOrderView>> {
     let page = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .purchase_return_order_list(&params)
         .await?;
 
@@ -153,6 +157,7 @@ pub async fn purchase_return_order_detail(
     Path(id): Path<String>,
 ) -> Result<PurchaseReturnOrderView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .purchase_return_order_detail(&id)
         .await?;
 
@@ -181,6 +186,7 @@ pub async fn purchase_return_order_create(
     Json(req): Json<CreatePurchaseReturnOrderRequest>,
 ) -> Result<PurchaseReturnOrderView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_purchase_return_order(req, &actor)
         .await?;
 
@@ -207,6 +213,7 @@ pub async fn customer_refund_list(
     Query(params): Query<CustomerRefundListParams>,
 ) -> Result<PageView<CustomerRefundView>> {
     let page = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .customer_refund_list(&params)
         .await?;
 
@@ -233,6 +240,7 @@ pub async fn customer_refund_detail(
     Path(id): Path<String>,
 ) -> Result<CustomerRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .customer_refund_detail(&id)
         .await?;
 
@@ -261,6 +269,7 @@ pub async fn customer_refund_create(
     Json(req): Json<CreateCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_customer_refund(req, &actor)
         .await?;
 
@@ -281,6 +290,7 @@ pub async fn customer_refund_commit(
     Json(req): Json<CommitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_customer_refund(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -310,6 +320,7 @@ pub async fn customer_refund_submit(
     Json(req): Json<SubmitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_customer_refund(&id, req, &actor)
         .await?;
 
@@ -340,6 +351,7 @@ pub async fn customer_refund_cancel_approval(
     Json(req): Json<CancelCustomerRefundApprovalRequest>,
 ) -> Result<CustomerRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_customer_refund_approval(&id, req, &actor)
         .await?;
 
@@ -395,6 +407,7 @@ pub async fn supplier_refund_detail(
     Path(id): Path<String>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .supplier_refund_detail(&id)
         .await?;
 
@@ -423,6 +436,7 @@ pub async fn supplier_refund_create(
     Json(req): Json<CreateSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_supplier_refund(req, &actor)
         .await?;
 
@@ -443,6 +457,7 @@ pub async fn supplier_refund_commit(
     Json(req): Json<CommitSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_supplier_refund(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -472,6 +487,7 @@ pub async fn supplier_refund_submit(
     Json(req): Json<SubmitSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_supplier_refund(&id, req, &actor)
         .await?;
 
@@ -502,6 +518,7 @@ pub async fn supplier_refund_cancel_approval(
     Json(req): Json<CancelSupplierRefundApprovalRequest>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_supplier_refund_approval(&id, req, &actor)
         .await?;
 
@@ -557,6 +574,7 @@ pub async fn receipt_reversal_detail(
     Path(id): Path<String>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .receipt_reversal_detail(&id)
         .await?;
 
@@ -585,6 +603,7 @@ pub async fn receipt_reversal_create(
     Json(req): Json<CreateReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_receipt_reversal(req, &actor)
         .await?;
 
@@ -605,6 +624,7 @@ pub async fn receipt_reversal_commit(
     Json(req): Json<CommitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_receipt_reversal(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -634,6 +654,7 @@ pub async fn receipt_reversal_submit(
     Json(req): Json<SubmitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_receipt_reversal(&id, req, &actor)
         .await?;
 
@@ -664,6 +685,7 @@ pub async fn receipt_reversal_cancel_approval(
     Json(req): Json<CancelReceiptReversalApprovalRequest>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_receipt_reversal_approval(&id, req, &actor)
         .await?;
 
@@ -719,6 +741,7 @@ pub async fn payment_reversal_detail(
     Path(id): Path<String>,
 ) -> Result<PaymentReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .payment_reversal_detail(&id)
         .await?;
 
@@ -747,6 +770,7 @@ pub async fn payment_reversal_create(
     Json(req): Json<CreatePaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .create_payment_reversal(req, &actor)
         .await?;
 
@@ -767,6 +791,7 @@ pub async fn payment_reversal_commit(
     Json(req): Json<CommitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .commit_payment_reversal(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -796,6 +821,7 @@ pub async fn payment_reversal_submit(
     Json(req): Json<SubmitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .submit_payment_reversal(&id, req, &actor)
         .await?;
 
@@ -826,6 +852,7 @@ pub async fn payment_reversal_cancel_approval(
     Json(req): Json<CancelPaymentReversalApprovalRequest>,
 ) -> Result<PaymentReversalView> {
     let view = ReturnsService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .cancel_payment_reversal_approval(&id, req, &actor)
         .await?;
 

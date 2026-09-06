@@ -79,6 +79,7 @@ impl<'a> CustomerCenterRepository<'a> {
         self.db
             .collection(<Database as database::CustomerExt>::CUSTOMER_ACCOUNTS)
     }
+
     /// 查询指定客户的关联业务跨页指标与最近摘要。
     ///
     /// # 参数

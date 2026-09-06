@@ -2,10 +2,10 @@
 
 use persistence_core::Executor;
 
-use super::{ObjectFactMap, WorkItemService};
+use super::ObjectFactMap;
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 旧采购确认对象事实已删除，恒返回空结果。
     ///
     /// # 参数

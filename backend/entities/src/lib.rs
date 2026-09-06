@@ -1,10 +1,8 @@
-pub mod approval_integration;
 pub mod bulk_job;
 pub mod catalog;
 pub mod contract;
 pub mod cost;
 pub mod customer;
-pub mod document_registry;
 pub mod file_asset;
 pub mod fulfillment;
 pub mod integration_ops;
@@ -25,6 +23,5 @@ pub mod supplier_fulfillment;
 pub mod supplier_offering;
 pub mod supplier_settlement;
 pub mod warehouse;
-pub mod work_item;
 
 pub use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};

@@ -144,6 +144,13 @@ impl From<erp_audit::Error> for Error {
     }
 }
 
+impl From<erp_workflow::Error> for Error {
+    /// 将工作流领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_workflow::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<services::Error> for Error {
     /// 从给定值构建实例。
     ///

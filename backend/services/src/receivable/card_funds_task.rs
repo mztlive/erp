@@ -1,20 +1,20 @@
 //! 应收子账与 W13 卡券票款复核任务的原子生产。
 //!
-//! 任务规格、身份与摘要唯一来源为 `entities::work_item::finance_task`；
+//! 任务规格、身份与摘要唯一来源为 `erp_workflow::entity::work_item::finance_task`；
 //! 本文件只解析责任人/组织、调用 factory 并持久化（FIN-E06）。
 
-use database::WorkItemExt;
-use entities::receivable::ReceivableAccount;
-use entities::work_item::{
-    card_funds_task_kind, new_card_funds_task, CardFundsTaskKind, CardFundsTaskSpec,
-    FinanceResponsibilityOperation, WorkItem, WorkItemType, RECEIVABLE_OBJECT_TYPE,
-};
+use entities::receivable::{AccountReviewStatus, ReceivableAccount};
 use erp_core::ids::WorkItemId;
+use erp_workflow::entity::work_item::{
+    card_funds_task_kind, new_card_funds_task, CardFundsReviewStatusFact, CardFundsTaskKind,
+    CardFundsTaskSpec, FinanceResponsibilityOperation, WorkItem, WorkItemType, RECEIVABLE_OBJECT_TYPE,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 
 /// 为新形成的待复核应收子账建立唯一正式 W13 任务。
 ///
@@ -53,7 +53,9 @@ pub(crate) async fn ensure_card_funds_review_task(
     subject_version: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<WorkItem>> {
-    let Some((work_item_type, _)) = card_funds_task_kind(account.review_status) else {
+    let Some((work_item_type, _)) =
+        card_funds_task_kind(card_funds_review_status_fact(account.review_status))
+    else {
         return Ok(None);
     };
     let existing = db
@@ -83,7 +85,7 @@ pub(crate) async fn ensure_card_funds_review_task(
             return Err(Error::Internal("票款复核任务种类与待复核状态不一致".to_string()));
         }
     };
-    let responsibility = WorkItemService::new(
+    let responsibility = work_item_service(
         db.clone(),
         crate::identity_compose::shared_rbac_service(db.clone()),
     )
@@ -110,4 +112,13 @@ pub(crate) async fn ensure_card_funds_review_task(
     .map_err(Error::Logic)?;
     db.work_items().create(&task, executor).await?;
     Ok(Some(task))
+}
+
+fn card_funds_review_status_fact(status: AccountReviewStatus) -> CardFundsReviewStatusFact {
+    match status {
+        AccountReviewStatus::NotApplicable => CardFundsReviewStatusFact::NotApplicable,
+        AccountReviewStatus::OpeningPending => CardFundsReviewStatusFact::OpeningPending,
+        AccountReviewStatus::Reviewed => CardFundsReviewStatusFact::Reviewed,
+        AccountReviewStatus::SyncDeltaPending => CardFundsReviewStatusFact::SyncDeltaPending,
+    }
 }

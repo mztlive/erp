@@ -2,8 +2,8 @@
 //!
 //! 路径参数与字符串版本属于 HTTP 形态差异；节点写请求复用 Service DTO。
 
+use erp_workflow::service::approval::definition_dto::DefinitionNodeRequest;
 use serde::Deserialize;
-use services::approval::definition_dto::DefinitionNodeRequest;
 
 /// 整组替换草稿节点的 HTTP 请求。
 ///
@@ -62,8 +62,10 @@ impl EligibleAssigneesQuery {
 
 #[cfg(test)]
 mod tests {
+    use erp_workflow::service::approval::definition_dto::{
+        CreateDefinitionDraftRequest, DefinitionNodeRequest,
+    };
     use serde_json::json;
-    use services::approval::definition_dto::{CreateDefinitionDraftRequest, DefinitionNodeRequest};
 
     use super::{DefinitionLockHttpRequest, EligibleAssigneesQuery, ReplaceNodesHttpRequest};
 

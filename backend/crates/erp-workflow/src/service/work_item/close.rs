@@ -50,19 +50,19 @@ struct CloseDomainEvidenceInput<'a> {
     receipt: CommandReceipt,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 关闭重复、误派或已有有效替代任务。
     ///
     /// # 错误
     /// 缺少管理权限、任务类型禁止通用关闭、原因非法或版本陈旧时返回错误。
     pub async fn close(
-        &self,
-        id: &str,
+        self,
+        id: String,
         req: CloseWorkItemRequest,
-        actor: &AuditActor,
+        actor: AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        let managed_access = self.managed_access(actor).await?;
-        let item = self.load(id).await?;
+        let managed_access = self.managed_access(&actor).await?;
+        let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
         req.validate()?;
         let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
@@ -83,7 +83,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             actor.id(),
             action,
             "work_item",
-            id,
+            &id,
             &idempotency_key,
             [
                 version,
@@ -91,38 +91,38 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
                 decision.replacement_work_item_id.clone().unwrap_or_default(),
             ],
         )?;
-        if let Some(replayed) = self.idempotent_replay(&receipt, id).await? {
+        if let Some(replayed) = self.idempotent_replay(&receipt, &id).await? {
             ensure_generic_work_item_mutation(&replayed)?;
-            return self.applied_outcome(replayed, actor).await;
+            return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
             return self
-                .conflict_outcome(id, WorkItemConflictKind::Version, actor)
+                .conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
                 .await;
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
-        self.ensure_object_participation(actor, &item).await?;
+        self.ensure_object_participation(&actor, &item).await?;
         if !item.is_w29_closable() {
             return Err(Error::BusinessLogicError(
                 "只有 W29 登记的异常任务允许受控关闭".to_string(),
             ));
         }
         if let Some(replacement_id) = decision.replacement_work_item_id.as_deref() {
-            self.ensure_w29_replacement(&item, replacement_id, actor, &managed_access)
+            self.ensure_w29_replacement(&item, replacement_id, &actor, &managed_access)
                 .await?;
         }
         let updated = self
             .close_with_domain_evidence(CloseDomainEvidenceInput {
                 item,
-                actor,
+                actor: &actor,
                 decision,
                 receipt,
             })
             .await?;
         match updated {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
+            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
             WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(id, WorkItemConflictKind::Version, actor)
+                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
                     .await
             }
         }
@@ -139,7 +139,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
         if replacement_id == current.base.id {
             return Err(Error::ValidationError("替代任务不能引用自身".to_string()));
         }
-        let replacement = self.load(replacement_id).await?;
+        let replacement = self.load(replacement_id.to_string()).await?;
         if !replacement.is_w29_replacement_for(current) {
             return Err(Error::ConflictError(
                 "替代任务必须是同一 W29 对象类别的开放正式任务".to_string(),

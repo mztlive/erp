@@ -1,10 +1,10 @@
 use database::{PurchaseOrderExt, SalesOrderExt};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseOrder,
     PurchaseOrderRevision,
 };
 use erp_core::ids::PurchaseChangeSubmissionId;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 

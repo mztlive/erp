@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
-use database::{FulfillmentExt, InventoryExt, SalesOrderExt, WorkItemExt};
+use database::{FulfillmentExt, InventoryExt, SalesOrderExt};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::inventory::{
     ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
@@ -16,13 +16,14 @@ use entities::inventory::{
 use entities::purchase_order::{
     payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
 };
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::ids::{
     DeliveryId, DeliveryLineId, SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId,
     WarehouseId,
 };
 use erp_core::money::Quantity;
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
@@ -144,6 +145,7 @@ impl PurchaseOrderService {
         }
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.clone();
@@ -157,6 +159,7 @@ impl PurchaseOrderService {
                         &db,
                         CreateFromSourcingInTransactionInput {
                             rbac: &binding_rbac,
+                            object_read: object_read.as_ref(),
                             req: &transaction_req,
                             assignments: &assignments,
                             sales_order_id: &transaction_sales_order_id,
@@ -191,6 +194,8 @@ impl PurchaseOrderService {
 struct CreateFromSourcingInTransactionInput<'a> {
     /// 审批绑定授权源。
     rbac: &'a SharedRbacService,
+    /// Composition-root object-read port.
+    object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
     /// 原始选源请求。
     req: &'a CreatePurchaseOrdersFromSourcingRequest,
     /// 已规范化且稳定行不重复的选源集合。
@@ -334,6 +339,7 @@ async fn create_from_sourcing_in_transaction(
             persist_basis_draft(
                 db,
                 input.rbac,
+                input.object_read,
                 &VerifiedBasisInput {
                     sales_order: &order,
                     group: latest,
@@ -785,7 +791,7 @@ fn sourcing_work_item_status(status: WorkItemStatus, legacy: bool) -> Result<Str
 #[cfg(test)]
 mod tests {
     use super::{sourcing_work_item_status, SourcingReceipt};
-    use entities::work_item::WorkItemStatus;
+    use erp_workflow::entity::work_item::WorkItemStatus;
 
     /// 幂等回放必须保留同步后的任务状态，不能把部分分配误报为任务完成。
     #[test]

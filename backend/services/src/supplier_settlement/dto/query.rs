@@ -4,10 +4,10 @@ use entities::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
     SupplierSettlementStatement,
 };
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, SupplierSettlementItemId, SupplierSettlementStatementId};
 use erp_core::money::Amount;
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use validator::Validate;

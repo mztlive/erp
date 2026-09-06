@@ -44,6 +44,7 @@ pub async fn purchase_order_list(
     Query(params): Query<PurchaseOrderListParams>,
 ) -> Result<PageView<PurchaseOrderListItemView>> {
     let page = PurchaseOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .purchase_order_list(&params)
         .await?;
 
@@ -71,6 +72,7 @@ pub async fn purchase_order_detail(
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
     let view = PurchaseOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .purchase_order_detail(&id)
         .await?;
 
@@ -275,6 +277,7 @@ pub async fn purchase_creation_basis_list(
     Query(params): Query<CreationBasisListParams>,
 ) -> Result<Vec<CreationBasisView>> {
     let views = PurchaseOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .creation_basis_list(&params, &actor)
         .await?;
 
@@ -420,6 +423,7 @@ pub async fn purchase_change_list(
     Query(params): Query<PurchaseChangeOrderListParams>,
 ) -> Result<PageView<PurchaseChangeOrderView>> {
     let page = PurchaseOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .change_order_list(&params)
         .await?;
 
@@ -446,6 +450,7 @@ pub async fn purchase_change_detail(
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeOrderView> {
     let view = PurchaseOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .change_order_detail(&id)
         .await?;
 

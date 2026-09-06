@@ -5,10 +5,15 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use services::work_item::{
+use std::future::Future;
+
+use super::assume_send;
+
+use erp_workflow::service::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
-    FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest, WorkItemService,
+    FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
 };
+use services::workflow_compose::work_item_service;
 use validator::Validate;
 
 use crate::{
@@ -27,7 +32,7 @@ use crate::{
 pub async fn finance_responsibility_rule_list(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityRuleView>> {
-    let views = WorkItemService::new(state.db(), state.rbac())
+    let views = work_item_service(state.db(), state.rbac())
         .finance_responsibility_rule_list()
         .await?;
     Ok(ApiResponse::ok_with_data(views))
@@ -41,16 +46,18 @@ pub async fn finance_responsibility_rule_list(
     resource = "finance_responsibility",
     action = "manage"
 )]
-pub async fn finance_responsibility_rule_create(
+pub fn finance_responsibility_rule_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<CreateFinanceResponsibilityRuleRequest>,
-) -> Result<FinanceResponsibilityRuleView> {
-    request.validate()?;
-    let view = WorkItemService::new(state.db(), state.rbac())
-        .create_finance_responsibility_rule(request, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
+) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
+    assume_send(async move {
+        request.validate()?;
+        let view = work_item_service(state.db(), state.rbac())
+            .create_finance_responsibility_rule(request, actor)
+            .await?;
+        Ok(ApiResponse::ok_with_data(view))
+    })
 }
 
 /// 整项更新财务责任规则。
@@ -61,17 +68,19 @@ pub async fn finance_responsibility_rule_create(
     resource = "finance_responsibility",
     action = "manage"
 )]
-pub async fn finance_responsibility_rule_update(
+pub fn finance_responsibility_rule_update(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(request): Json<UpdateFinanceResponsibilityRuleRequest>,
-) -> Result<FinanceResponsibilityRuleView> {
-    request.validate()?;
-    let view = WorkItemService::new(state.db(), state.rbac())
-        .update_finance_responsibility_rule(&id, request, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
+) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
+    assume_send(async move {
+        request.validate()?;
+        let view = work_item_service(state.db(), state.rbac())
+            .update_finance_responsibility_rule(id, request, actor)
+            .await?;
+        Ok(ApiResponse::ok_with_data(view))
+    })
 }
 
 /// 查询付款与销项开票的负责人候选。
@@ -85,7 +94,7 @@ pub async fn finance_responsibility_rule_update(
 pub async fn finance_responsibility_owner_options(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
-    let views = WorkItemService::new(state.db(), state.rbac())
+    let views = work_item_service(state.db(), state.rbac())
         .finance_responsibility_owner_options()
         .await?;
     Ok(ApiResponse::ok_with_data(views))

@@ -77,7 +77,7 @@ struct AssignmentPolicyAuditInput<'a> {
     authorization: AssignmentAuthorizationSnapshot,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 查询当前开放非审批任务可转交的具体账号。
     ///
     /// # 参数
@@ -94,12 +94,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     /// 采购单责任任务的候选人必须同时能够执行该采购单全部开放履约任务；列表只作交互提示，
     /// 最终转交命令仍须在写事务内重验全部账号、授权与业务事实。
     pub async fn reassign_candidates(
-        &self,
-        id: &str,
-        actor: &AuditActor,
+        self,
+        id: String,
+        actor: AuditActor,
     ) -> Result<Vec<WorkItemReassignCandidateView>> {
-        let managed_access = self.managed_access(actor).await?;
-        let item = self.load(id).await?;
+        let managed_access = self.managed_access(&actor).await?;
+        let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
         ensure_item_in_managed_scope(&item, &managed_access)?;
 
@@ -126,7 +126,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
                 continue;
             }
             let authorization = match self
-                .assignment_authorization_snapshot(actor, &account.id, &item, true)
+                .assignment_authorization_snapshot(&actor, &account.id, &item, true)
                 .await
             {
                 Ok(authorization) => authorization,
@@ -135,7 +135,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             };
             if let Some(tasks) = cascade_tasks.as_deref() {
                 match ensure_fulfillment_tasks_candidate(
-                    self,
+                    &self,
                     tasks,
                     &account.id,
                     &authorization.assignee_permissions,
@@ -168,13 +168,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     /// # 错误
     /// 缺少任务管理权限、目标资格无法证明、审批受阻或任务版本陈旧时返回错误。
     pub async fn reassign(
-        &self,
-        id: &str,
+        self,
+        id: String,
         req: ReassignWorkItemRequest,
-        actor: &AuditActor,
+        actor: AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        let managed_access = self.managed_access(actor).await?;
-        let item = self.load(id).await?;
+        let managed_access = self.managed_access(&actor).await?;
+        let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
         req.validate()?;
         let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
@@ -188,38 +188,38 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             actor.id(),
             action,
             "work_item",
-            id,
+            &id,
             &idempotency_key,
             [version, target_user_id.clone(), reason.clone()],
         )?;
-        if let Some(replayed) = self.idempotent_replay(&receipt, id).await? {
+        if let Some(replayed) = self.idempotent_replay(&receipt, &id).await? {
             ensure_generic_work_item_mutation(&replayed)?;
-            return self.applied_outcome(replayed, actor).await;
+            return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
             return self
-                .conflict_outcome(id, WorkItemConflictKind::Version, actor)
+                .conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
                 .await;
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
         let authorization = self
-            .assignment_authorization_snapshot(actor, &target_user_id, &item, true)
+            .assignment_authorization_snapshot(&actor, &target_user_id, &item, true)
             .await?;
         let updated = self
             .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
                 item,
                 expected_task_version,
                 target_user_id,
-                actor,
+                actor: &actor,
                 receipt,
                 audit_detail: reason,
                 authorization,
             })
             .await?;
         match updated {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
+            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
             WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(id, WorkItemConflictKind::Version, actor)
+                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
                     .await
             }
         }

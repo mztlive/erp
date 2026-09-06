@@ -146,6 +146,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
         let action_port = Arc::clone(&self.action_port);
+        let object_read = Arc::clone(&self.object_read);
         let audit_port = Arc::clone(&self.audit);
         let actor = actor.clone();
         self.db
@@ -156,6 +157,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         &db,
                         &rbac,
                         action_port.as_ref(),
+                        object_read.as_ref(),
                         audit_port.as_ref(),
                         &actor,
                         &command,
@@ -178,6 +180,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         for attempt in 0..RECOVERY_ATTEMPTS {
             let db = self.db.clone();
             let rbac = self.auth.clone();
+            let object_read = Arc::clone(&self.object_read);
             let actor = actor.clone();
             let command = command.clone();
             let recovered = self
@@ -185,7 +188,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
-                        replay_decision_in_transaction(&db, &rbac, &actor, &command, session).await
+                        replay_decision_in_transaction(
+                            &db,
+                            &rbac,
+                            object_read.as_ref(),
+                            &actor,
+                            &command,
+                            session,
+                        )
+                        .await
                     })
                 })
                 .await;
@@ -229,6 +240,7 @@ pub(super) fn decision_terminal_fresh_error() -> Error {
 async fn replay_decision_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     session: &mut mongodb::ClientSession,
@@ -253,7 +265,7 @@ async fn replay_decision_in_transaction(
     if original_actor_id != actor.id() {
         return Err(decision_terminal_fresh_error());
     }
-    match authorize_decision_terminal_replay(db, rbac, actor, &execution, session).await {
+    match authorize_decision_terminal_replay(db, rbac, object_read, actor, &execution, session).await {
         Ok(()) => {}
         Err(Error::Forbidden(_)) => {
             return Err(decision_terminal_fresh_error());
@@ -298,12 +310,15 @@ async fn submit_decision_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     session: &mut mongodb::ClientSession,
 ) -> Result<RuntimeDecisionOutcome> {
-    if let Some(replay) = replay_decision_in_transaction(db, rbac, actor, command, session).await? {
+    if let Some(replay) =
+        replay_decision_in_transaction(db, rbac, object_read, actor, command, session).await?
+    {
         return Ok(replay);
     }
 
@@ -383,6 +398,7 @@ async fn submit_decision_in_transaction(
     let current_eligibility = revalidate_decision_approver(
         db,
         rbac,
+        object_read,
         RevalidateDecisionApproverInput {
             assignee_id: actor.id(),
             assignee_name: &execution.assignee_name_snapshot,
@@ -403,6 +419,7 @@ async fn submit_decision_in_transaction(
                 revalidate_decision_approver(
                     db,
                     rbac,
+                    object_read,
                     RevalidateDecisionApproverInput {
                         assignee_id: node.assignee_participant_id.as_str(),
                         assignee_name: &node.assignee_label_snapshot,
@@ -463,7 +480,8 @@ async fn submit_decision_in_transaction(
     let runtime_admin_ids = if writes.notifications.iter().any(|intent| {
         intent.event_kind == crate::entity::approval_integration::ApprovalNotificationEventKind::Blocked
     }) {
-        runtime_admin_notification_recipients(db, rbac, document_type, &snapshot, session).await?
+        runtime_admin_notification_recipients(db, rbac, object_read, document_type, &snapshot, session)
+            .await?
     } else {
         Vec::new()
     };
@@ -668,6 +686,7 @@ pub(super) fn legacy_decision_terminal_facts_match(
 async fn authorize_decision_terminal_replay(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     execution: &ApprovalNodeExecution,
     session: &mut mongodb::ClientSession,
@@ -716,6 +735,7 @@ async fn authorize_decision_terminal_replay(
     let eligibility = revalidate_decision_approver(
         db,
         rbac,
+        object_read,
         RevalidateDecisionApproverInput {
             assignee_id: actor.id(),
             assignee_name: &execution.assignee_name_snapshot,

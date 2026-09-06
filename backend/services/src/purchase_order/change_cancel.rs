@@ -3,25 +3,27 @@
 use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
-use database::repository::bpm::ApprovalInstanceListProjection;
-use database::{BpmExt, PurchaseOrderExt, WorkItemExt};
+use database::PurchaseOrderExt;
 use entities::purchase_order::PurchaseChangeOrder;
-use entities::work_item::{WorkItem, WorkItemCloseData};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
+use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
-use crate::approval::execution::authorization::converge_eligibility;
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::start::map_engine_error;
-use crate::approval::execution::{
+use crate::errors::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
     normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
 };
-use crate::errors::{Error, Result};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -168,7 +170,7 @@ pub fn build_purchase_change_cancel_input(
 fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Model(error) => Error::ConflictError(error.to_string()),
-        other => map_engine_error(other),
+        other => Error::from(map_engine_error(other)),
     }
 }
 
@@ -260,7 +262,7 @@ pub(super) async fn persist_purchase_change_cancel(
 /// CAS 未应用或写入失败时返回错误。
 async fn persist_cancel_runtime(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     open_tasks: &[WorkItem],
     actor_id: &str,
     reason: &str,
@@ -368,9 +370,12 @@ fn cancel_list_projection(now: Instant) -> ApprovalInstanceListProjection {
 ///
 /// # 错误
 /// 未找到、版本冲突或状态已变时返回冲突。
-fn require_cas_applied<T>(outcome: database::repository::bpm::CasWriteOutcome<T>, label: &str) -> Result<()> {
+fn require_cas_applied<T>(
+    outcome: erp_workflow::repository::bpm::CasWriteOutcome<T>,
+    label: &str,
+) -> Result<()> {
     match outcome {
-        database::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
+        erp_workflow::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
         _ => Err(Error::ConflictError(format!(
             "{label}已被其他请求修改，请刷新后重试"
         ))),
@@ -386,9 +391,9 @@ mod tests {
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
     use erp_core::common::time::Instant;
 
-    use crate::approval::execution::prepare_cancel;
     use crate::errors::Error;
     use crate::purchase_order::start_approval::tests::{open_task, two_node_graph};
+    use erp_workflow::service::approval::execution::prepare_cancel;
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -436,7 +441,7 @@ mod tests {
 
     fn runtime(
         instance: ApprovalProcessInstance,
-        open_tasks: Vec<entities::work_item::WorkItem>,
+        open_tasks: Vec<erp_workflow::entity::work_item::WorkItem>,
     ) -> LoadedCancelRuntime {
         let current = current_execution();
         let plan = plan_cancel(CancelPlanInput {
@@ -510,7 +515,7 @@ mod tests {
         assert!(!built.blocked_port);
         let error = prepare_cancel(built).unwrap_err();
         assert!(
-            matches!(error, Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
+            matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
         );
     }
 

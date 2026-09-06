@@ -4,14 +4,15 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
-use database::{SalesOrderExt, WorkItemExt};
+use database::SalesOrderExt;
 use entities::sales_order::{BusinessType, SalesOrder};
-use entities::work_item::{
-    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
-};
 use erp_core::ids::SalesOrderId;
 use erp_identity::AccessControlExt;
 use erp_identity::{Permission, PermissionSet};
+use erp_workflow::entity::work_item::{
+    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
@@ -219,7 +220,7 @@ async fn ensure_customer_acceptance_owner_eligible(
         .find_work_item_account(owner_user_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string()))?;
-    AvailableWorkItemAccount::from_account(&account)
+    AvailableWorkItemAccount::from_account(&crate::workflow_compose::account_fact(&account))
         .map_err(|_| Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()))?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
     let required = PermissionSet::new(

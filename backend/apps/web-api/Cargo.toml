@@ -48,6 +48,9 @@ erp-core = { workspace = true }
 application-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
+erp-workflow = { workspace = true }
+erp-processes = { workspace = true }
+erp-read-models = { workspace = true }
 services = { workspace = true }
 config = { workspace = true }
 permission-macros = { workspace = true }

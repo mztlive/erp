@@ -1,6 +1,7 @@
 //! 财务责任规则管理、负责人候选与任务生产时的严格解析。
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use crate::entity::work_item::EnableStatus;
@@ -155,19 +156,19 @@ pub struct FinanceResponsibilityOwnerOptionView {
 /// 任务生产时冻结的财务责任解析结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
-pub(crate) struct ResolvedFinanceResponsibility {
+pub struct ResolvedFinanceResponsibility {
     /// 具体负责人账号 ID。
     pub owner_user_id: String,
     /// 写入工作项且后续不随规则更新变化的责任键。
     pub responsibility_key: String,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkItemService<A> {
     /// 查询全部财务责任规则。
     ///
     /// # 错误
     /// 规则、账号或往来方读取失败时返回错误。
-    pub async fn finance_responsibility_rule_list(&self) -> Result<Vec<FinanceResponsibilityRuleView>> {
+    pub async fn finance_responsibility_rule_list(self) -> Result<Vec<FinanceResponsibilityRuleView>> {
         let rules = self
             .db
             .finance_responsibility_rules()
@@ -181,9 +182,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     /// # 错误
     /// 匹配范围、往来方、负责人资格、唯一性或事务写入不满足时返回错误。
     pub async fn create_finance_responsibility_rule(
-        &self,
+        self,
         request: CreateFinanceResponsibilityRuleRequest,
-        actor: &AuditActor,
+        actor: AuditActor,
     ) -> Result<FinanceResponsibilityRuleView> {
         let data = request.into_data();
         let probe = self
@@ -229,10 +230,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     /// # 错误
     /// 规则不存在、版本冲突、往来方或负责人资格不满足时返回错误。
     pub async fn update_finance_responsibility_rule(
-        &self,
-        id: &str,
+        self,
+        id: String,
         request: UpdateFinanceResponsibilityRuleRequest,
-        actor: &AuditActor,
+        actor: AuditActor,
     ) -> Result<FinanceResponsibilityRuleView> {
         let (version, data) = request.into_parts();
         let probe = self
@@ -241,7 +242,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
         let current = self
             .db
             .finance_responsibility_rules()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
         if current.base.version != version {
@@ -331,7 +332,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     /// # 错误
     /// 账号或权限数据读取失败时返回错误。
     pub async fn finance_responsibility_owner_options(
-        &self,
+        self,
     ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
         let payment = required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)?;
         let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
@@ -386,7 +387,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<u64> {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.auth.current_policy_revision().await?;
-            self.ensure_finance_owner_eligible(operation, owner_user_id, &mut NoTransaction)
+            self.ensure_finance_owner_eligible(operation, owner_user_id.to_string())
                 .await?;
             let after = self.auth.current_policy_revision().await?;
             if before == after {
@@ -403,8 +404,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
     ///
     /// # 错误
     /// 往来方失效、规则零/多命中、账号不可用或权限不足时失败关闭。
-    #[allow(dead_code)]
-    pub(crate) async fn resolve_finance_responsibility(
+    pub async fn resolve_finance_responsibility(
         &self,
         operation: FinanceResponsibilityOperation,
         counterparty_id: &str,
@@ -420,7 +420,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
         let rule = FinanceResponsibilityRuleSet::new(&rules)
             .resolve(operation, counterparty_id)
             .map_err(|error| Error::BusinessLogicError(format!("{}，请先维护财务责任配置", error)))?;
-        self.ensure_finance_owner_eligible(operation, &rule.owner_user_id, executor)
+        self.ensure_finance_owner_eligible(operation, rule.owner_user_id.clone())
             .await?;
         Ok(ResolvedFinanceResponsibility {
             owner_user_id: rule.owner_user_id.clone(),
@@ -444,7 +444,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
             }
         }
         if validate_owner {
-            self.ensure_finance_owner_eligible(probe.operation, &probe.owner_user_id, executor)
+            self.ensure_finance_owner_eligible(probe.operation, probe.owner_user_id.clone())
                 .await?;
         }
         Ok(probe)
@@ -485,38 +485,36 @@ impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    async fn ensure_finance_owner_eligible(
+    fn ensure_finance_owner_eligible(
         &self,
         operation: FinanceResponsibilityOperation,
-        owner_user_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let account = self
-            .auth
-            .load_account(owner_user_id, executor)
-            .await?
-            .ok_or_else(|| {
-                Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
+        owner_user_id: String,
+    ) -> impl Future<Output = Result<()>> + Send + 'static {
+        let auth = self.auth.clone();
+        async move {
+            let account = auth
+                .load_account(&owner_user_id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| {
+                    Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
+                })?;
+            AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).map_err(|_| {
+                Error::BusinessLogicError(format!("{}负责人账号不可用，请重新选择", operation.label()))
             })?;
-        AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).map_err(|_| {
-            Error::BusinessLogicError(format!("{}负责人账号不可用，请重新选择", operation.label()))
-        })?;
-        let granted = self
-            .auth
-            .permission_codes(account.kind, account.id.as_str())
-            .await?;
-        let required = required_finance_permissions(operation)?;
-        if required.iter().all(|code| {
-            granted
-                .iter()
-                .any(|owned| crate::ports::permission_covers(owned, code))
-        }) {
-            return Ok(());
+            let granted = auth.permission_codes(account.kind, account.id.as_str()).await?;
+            let required = required_finance_permissions(operation)?;
+            if required.iter().all(|code| {
+                granted
+                    .iter()
+                    .any(|owned| crate::ports::permission_covers(owned, code))
+            }) {
+                return Ok(());
+            }
+            Err(Error::BusinessLogicError(format!(
+                "{}负责人缺少完整执行权限，请先调整财务角色或重新选择",
+                operation.label()
+            )))
         }
-        Err(Error::BusinessLogicError(format!(
-            "{}负责人缺少完整执行权限，请先调整财务角色或重新选择",
-            operation.label()
-        )))
     }
 
     async fn single_finance_responsibility_view(

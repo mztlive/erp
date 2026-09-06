@@ -9,11 +9,11 @@ use super::super::brief::{
     format_instant_date, join_list_summary, non_empty, push_section, ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::super::presentation::format_yuan;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use super::mapping::{amount_reason_brief, append_funds_origin};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 供应商付款事实简报。
     ///
     /// # 参数

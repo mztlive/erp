@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use database::{FileAssetExt, PartyExt, PayableExt, SupplierExt};
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::file_asset::BankReceiptEvidencePolicy;
 use entities::party::PartyBankAccount;
 use entities::payable::{
@@ -18,6 +17,7 @@ use erp_core::ids::{
     SupplierAccountId, SupplierPaymentId,
 };
 use erp_core::money::Amount;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, NoTransaction};
@@ -31,11 +31,6 @@ use super::dto::{
 use super::mapping::{payment_recipient_view, resolve_current_payment_recipient, zero_amount};
 use super::payment_task;
 use super::{PayableService, SupplierPaymentFilter, SupplierPaymentWithAssetsResult};
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
 use crate::pending_file_assets::PendingFileAssets;
@@ -44,6 +39,9 @@ use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
 use erp_audit::CommandReceiptServiceExt as _;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 impl PayableService {
     // -----------------------------------------------------------------------
@@ -204,7 +202,8 @@ impl PayableService {
         let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
         let used_assets = resolve_payment_receipt_references(&mut req, &pending_assets)?;
         pending_assets.ensure_all_used(&used_assets)?;
-        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version =
+            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
         let expected_payee_bank_account_id =
             PartyBankAccountId::new(req.expected_payee_bank_account_id.trim());
@@ -226,6 +225,7 @@ impl PayableService {
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let actor_owned = actor.clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = rbac
@@ -259,10 +259,12 @@ impl PayableService {
                         &payment.base.id,
                         DocumentType::SupplierPayment,
                         payment.payment_no.clone(),
-                    )?;
+                    )
+                    .map_err(crate::errors::Error::from)?;
                     persist_unbound_supplier_payment_document(
                         &db,
                         &rbac,
+                        object_read.as_ref(),
                         document,
                         &bind_command,
                         &actor_owned,
@@ -841,19 +843,29 @@ async fn ensure_bank_receipt_asset_in_transaction(
 async fn persist_unbound_supplier_payment_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     if binding.is_some() || document.approval_binding.is_some() {
         return Err(Error::Internal(
             "供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string(),
         ));
     }
-    persist_registered_document(db, &document, session).await
+    persist_registered_document(db, &document, session)
+        .await
+        .map_err(crate::errors::Error::from)
 }
 
 /// 汇总付款核销分配并装配视图。

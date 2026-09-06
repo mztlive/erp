@@ -23,12 +23,12 @@ use entities::legacy_import::{
     LegacyImportBatch, LegacyImportBatchStatus, LegacyImportConfirmation,
 };
 #[cfg(test)]
-use entities::work_item::{WorkItem, WorkItemCloseData};
-#[cfg(test)]
 use erp_core::common::time::Instant;
+#[cfg(test)]
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
 
 #[cfg(test)]
-use crate::work_item::WorkItemAllowedAction;
+use erp_workflow::service::work_item::WorkItemAllowedAction;
 
 #[cfg(test)]
 use super::dto::{

@@ -1,4 +1,4 @@
-use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 
 use super::query::{parse_priorities, DEFAULT_TIMEZONE};
 use super::status::WORK_ITEM_TYPES;

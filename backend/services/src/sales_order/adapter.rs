@@ -4,24 +4,26 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式，
 //! 运行时不得按采购确认或卡券运营节点用途分支。
 
-use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
 use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerAccountId;
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
 
-use crate::approval::business_adapter::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
-use crate::approval::policy::{
+use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource, SALES_ORDER_PROCUREMENT_CONFIRMATION,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
@@ -577,7 +579,6 @@ fn allowed_document_actions(commercial: CommercialStatus, review: ReviewStatus) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
     use entities::sales_order::{
         CardForm, GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
@@ -589,6 +590,7 @@ mod tests {
         SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
 
     fn draft_order() -> SalesOrder {
@@ -758,7 +760,7 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::SalesOrder);
         assert_eq!(adapter.process_kind.as_str(), "sales_order");
         assert_eq!(
-            entities::approval_integration::subject_ref_for(DocumentType::SalesOrder, "so-1")
+            erp_workflow::entity::approval_integration::subject_ref_for(DocumentType::SalesOrder, "so-1")
                 .expect("主体引用必须可构造")
                 .subject_kind(),
             "sales_order"
@@ -793,11 +795,11 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
         assert_eq!(
-            entities::approval_integration::document_type_of_sales_business(BusinessType::GoodsService),
+            crate::sales_order::document_type_of_sales_business(BusinessType::GoodsService),
             DocumentType::SalesOrder
         );
         assert_eq!(
-            entities::approval_integration::document_type_of_sales_business(BusinessType::Voucher),
+            crate::sales_order::document_type_of_sales_business(BusinessType::Voucher),
             DocumentType::VoucherSalesOrder
         );
         assert!(matches!(BusinessType::Voucher, BusinessType::Voucher));
@@ -810,9 +812,12 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::VoucherSalesOrder);
         assert_eq!(adapter.process_kind.as_str(), "voucher_sales_order");
         assert_eq!(
-            entities::approval_integration::subject_ref_for(DocumentType::VoucherSalesOrder, "so-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            erp_workflow::entity::approval_integration::subject_ref_for(
+                DocumentType::VoucherSalesOrder,
+                "so-1"
+            )
+            .expect("主体引用必须可构造")
+            .subject_kind(),
             "voucher_sales_order"
         );
         assert_eq!(

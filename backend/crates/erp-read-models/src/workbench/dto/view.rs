@@ -1,4 +1,6 @@
-use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
 use serde::Serialize;
 
 use super::super::brief::assemble_brief;
@@ -15,17 +17,6 @@ pub struct WorkItemPartyView {
     pub id: String,
     /// 权限安全的展示名。
     pub display_name: String,
-}
-
-/// 非审批任务转交的合格具体账号。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkItemReassignCandidateView {
-    /// 账号稳定 ID。
-    pub user_id: String,
-    /// 账号显示名称。
-    pub display_name: String,
-    /// 用户可识别的登录账号。
-    pub account: String,
 }
 
 /// 事项简报中的只读键值。
@@ -361,8 +352,8 @@ impl From<WorkItem> for WorkItemFields {
     }
 }
 
-impl From<database::WorkItemRow> for WorkItemFields {
-    fn from(item: database::WorkItemRow) -> Self {
+impl From<erp_workflow::WorkItemRow> for WorkItemFields {
+    fn from(item: erp_workflow::WorkItemRow) -> Self {
         let root_business_object_id = item.business_object_id.clone();
         Self {
             id: item.id,

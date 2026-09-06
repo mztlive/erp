@@ -1,15 +1,17 @@
 use std::collections::HashMap;
 
-use database::{LegacyImportExt, WorkItemExt};
+use database::LegacyImportExt;
 use entities::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
-use entities::work_item::{WorkItem, WorkItemStatus};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
+use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
-use crate::work_item::{ProcessingState, WorkItemAllowedAction, WorkItemService, WorkItemView};
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
 
 use super::super::dto::{
     ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationListParams, LegacyImportConfirmationView,
@@ -67,11 +69,15 @@ impl LegacyImportService {
             .into_iter()
             .map(|item| (item.base.id.clone(), item))
             .collect::<HashMap<_, _>>();
-        let work_item_service = WorkItemService::new(self.db.clone(), rbac);
+        let work_item_service = work_item_service(self.db.clone(), rbac);
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
             let work_item_id = row.work_item_id.to_string();
-            let work_item = match work_item_service.work_item_detail(&work_item_id, actor).await {
+            let work_item = match work_item_service
+                .authorize_work_item(&work_item_id, actor)
+                .await
+                .map_err(Error::from)
+            {
                 Ok(view) => Some(authorized_work_item_view(view, row.status)),
                 Err(Error::Forbidden(_) | Error::NotFound(_)) => {
                     work_items.get(&work_item_id).map(read_only_work_item_view)
@@ -139,7 +145,7 @@ pub(super) fn read_only_work_item_view(item: &WorkItem) -> ImportBusinessConfirm
 
 /// 把统一待办的 actor 安全投影合并为 W18 责任与领域动作。
 fn authorized_work_item_view(
-    item: WorkItemView,
+    item: erp_workflow::service::work_item::AuthorizedWorkItem,
     confirmation_status: ConfirmationStatus,
 ) -> ImportBusinessConfirmationWorkItemView {
     let mut allowed_actions = item
@@ -150,28 +156,24 @@ fn authorized_work_item_view(
         .map(str::to_string)
         .collect::<Vec<_>>();
     append_confirmation_actions(&mut allowed_actions, confirmation_status, &item.allowed_actions);
-    let mut action_blockers = item
-        .action_blockers
-        .into_iter()
-        .map(|blocker| blocker.message)
-        .collect::<Vec<_>>();
+    let mut action_blockers = item.action_blockers;
     if let Some(blocker) = item.processing_blocker {
         action_blockers.push(blocker.message);
     }
     ImportBusinessConfirmationWorkItemView {
-        work_item_id: item.id,
-        work_item_type: item.work_item_type,
-        task_version: item.task_version,
-        subject_version: item.subject_version,
-        status: item.status,
-        owner_role: item.owner_role,
-        owner_organization_id: item.owner_organization_id,
-        owner_user_id: item.owner_user_id,
+        work_item_id: item.item.base.id.clone(),
+        work_item_type: item.item.work_item_type,
+        task_version: item.item.base.version.to_string(),
+        subject_version: item.item.subject_version.clone(),
+        status: item.item.status,
+        owner_role: item.item.owner_role.clone(),
+        owner_organization_id: item.item.owner_organization_id.clone(),
+        owner_user_id: item.item.owner_user_id.clone(),
         processing_state: processing_state_code(item.processing_state).to_string(),
         allowed_actions,
         action_blockers,
-        handler_key: item.handler_key,
-        destination_workspace_id: item.destination_workspace_id,
+        handler_key: IMPORT_CONFIRMATION_HANDLER.to_string(),
+        destination_workspace_id: IMPORT_CONFIRMATION_WORKSPACE.to_string(),
     }
 }
 

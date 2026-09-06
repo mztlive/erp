@@ -25,21 +25,10 @@ use super::start_approval::{
 };
 use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{
-    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
-};
-use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{CustomerExt, DocumentRegistryExt, ReceivableExt, ReturnsExt};
-use entities::document_registry::BusinessDocument;
-use entities::document_registry::DocumentType;
+use database::{CustomerExt, ReceivableExt, ReturnsExt};
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::CommandReceiptServiceExt as _;
@@ -49,6 +38,14 @@ use erp_core::ids::{
     ReceivableEntryOffsetId,
 };
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use erp_workflow::DocumentRegistryExt;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use entities::receivable::{
@@ -186,7 +183,14 @@ impl ReturnsService {
             },
             actor.id(),
         )?;
-        persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
+        persist_created_customer_refund(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            refund.clone(),
+            actor.clone(),
+        )
+        .await?;
         self.customer_refund_detail(&refund.base.id).await
     }
 
@@ -258,7 +262,8 @@ impl ReturnsService {
                 creator_id: actor.id().to_string(),
             },
         };
-        let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())?;
+        let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())
+            .map_err(crate::errors::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -270,6 +275,7 @@ impl ReturnsService {
         let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
@@ -280,6 +286,7 @@ impl ReturnsService {
                     let binding = persist_bound_customer_refund_document(
                         &db,
                         &rbac,
+                        object_read.as_ref(),
                         document,
                         &bind_command,
                         &actor_owned,
@@ -300,7 +307,9 @@ impl ReturnsService {
                     })?;
                     let prepared = prepare_start(start_input)?;
                     db.customer_refunds().create(&refund, session).await?;
-                    if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                    if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
+                        prepared
+                    {
                         persist_runtime_writes(
                             &db,
                             &writes,
@@ -425,7 +434,9 @@ impl ReturnsService {
         adapter: super::adapter::CustomerRefundAdapter,
     ) -> Result<CustomerRefundView> {
         let subject = customer_refund_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let organization_id = self.customer_responsible_org_id(&refund.customer_id).await?;
@@ -470,7 +481,7 @@ impl ReturnsService {
         )
         .await;
         if let Err(error) = persisted {
-            if !command_may_have_committed(&error) {
+            if !error.command_may_have_committed() {
                 return Err(error);
             }
             self.recover_customer_refund_start(id, recovery_subject_version, &idempotency_key, actor, error)
@@ -500,7 +511,7 @@ impl ReturnsService {
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
-                        ensure_return_start_actor_active(&db, &actor, session).await?;
+                        ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
                         let refund = db
                             .customer_refunds()
                             .find_by_id(&refund_id, session)
@@ -522,7 +533,9 @@ impl ReturnsService {
                             session,
                         )
                         .await?;
-                        let binding = find_approval_binding(&db, &refund_id, session).await?;
+                        let binding = find_approval_binding(&db, &refund_id, session)
+                            .await
+                            .map_err(crate::errors::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = customer_refund_subject_ref(&refund_id)?;
                         replay_return_start_with_executor(
@@ -544,7 +557,7 @@ impl ReturnsService {
             match recovered {
                 Ok(Some(instance_id)) => return Ok(instance_id),
                 Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) if error.command_may_have_committed() => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -570,7 +583,7 @@ impl ReturnsService {
             .client()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    ensure_return_start_actor_active(&db, &actor, session).await?;
+                    ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
                     let refund = db
                         .customer_refunds()
                         .find_by_id(&refund_id, session)
@@ -592,7 +605,9 @@ impl ReturnsService {
                         session,
                     )
                     .await?;
-                    let binding = find_approval_binding(&db, &refund_id, session).await?;
+                    let binding = find_approval_binding(&db, &refund_id, session)
+                        .await
+                        .map_err(crate::errors::Error::from)?;
                     let binding = require_frozen_binding(binding.as_ref())?;
                     let subject = customer_refund_subject_ref(&refund_id)?;
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
@@ -631,7 +646,9 @@ impl ReturnsService {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = customer_refund_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = customer_refund_subject_ref(id)?;
         let runtime =
@@ -708,6 +725,7 @@ impl ReturnsService {
     /// * `BusinessLogicError` - 累计退款超原回款、重复过账或超额冲减
     pub async fn post_customer_refund(&self, id: &str, actor: &AuditActor) -> Result<CustomerRefundView> {
         let db = self.db.clone();
+        let _object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -745,7 +763,10 @@ impl ReturnsService {
             .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction).await {
+        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)
+        {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
@@ -779,7 +800,7 @@ pub(super) async fn apply_customer_refund_final_post(
     ensure_final_approve_posting(&refund)?;
     execute_customer_refund_domain_action(
         &mut refund,
-        crate::approval::policy::ApprovalDomainAction::CustomerRefundPost,
+        erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerRefundPost,
     )?;
     apply_customer_refund_posting(db, &refund, actor_id, session).await?;
     refund.mark_posted()?;
@@ -801,6 +822,7 @@ pub(super) async fn apply_customer_refund_final_post(
 async fn persist_created_customer_refund(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     refund: CustomerRefund,
     actor: AuditActor,
 ) -> Result<()> {
@@ -818,7 +840,8 @@ async fn persist_created_customer_refund(
         &refund.base.id,
         DocumentType::CustomerRefund,
         refund.refund_no.clone(),
-    )?;
+    )
+    .map_err(crate::errors::Error::from)?;
     let audit = actor.clone().resource_log(
         "customer_refund.create",
         "customer_refund",
@@ -826,12 +849,21 @@ async fn persist_created_customer_refund(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                persist_bound_customer_refund_document(&db, &rbac, document, &bind_command, &actor, session)
-                    .await?;
+                persist_bound_customer_refund_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    document,
+                    &bind_command,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.customer_refunds().create(&refund, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
@@ -889,17 +921,25 @@ async fn validate_customer_refund_source(
 async fn persist_bound_customer_refund_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
+) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = customer_refund_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户退款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, session).await?;
@@ -1100,11 +1140,11 @@ async fn persist_customer_refund_decrease_offset(
 #[cfg(test)]
 mod customer_refund_approval_tests {
     use super::{execute_customer_refund_domain_action, start_customer_refund_approval, ReturnsService};
-    use crate::approval::policy::ApprovalDomainAction;
     use entities::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
     use erp_core::money::Amount;
+    use erp_workflow::service::approval::policy::ApprovalDomainAction;
     use std::str::FromStr;
 
     fn draft_refund() -> CustomerRefund {

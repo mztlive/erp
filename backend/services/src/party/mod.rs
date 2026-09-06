@@ -333,37 +333,6 @@ impl PartyService {
         Ok(updated.into())
     }
 
-    /// 软删除主体（单集合操作，无事务）。
-    ///
-    /// 只标记 `parties.deleted_at`，历史修订与已引用单据不受影响
-    /// （§4.5.3：基础资料以停用/删除表示退出业务，不物理删除）。
-    ///
-    /// # 参数
-    /// * `id` - 主体 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 删除成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `NotFound` - 主体不存在
-    /// * `ConflictError` - 主体已被删除（版本冲突透出）
-    pub async fn delete_party(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut party = self.load_party(id).await?;
-        ensure_outside_supplier_profile(&self.db, &PartyId::new(id)).await?;
-        let audit = actor
-            .clone()
-            .resource_log("party.delete", "party", party.base.id.clone())?;
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.parties().soft_delete(&mut party, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
     /// 分页查询主体修订列表。
     ///
     /// # 参数
@@ -429,7 +398,7 @@ impl PartyService {
     ///
     /// # 错误
     /// * `NotFound` - 主体不存在
-    async fn load_party(&self, id: &str) -> Result<Party> {
+    pub async fn load_party(&self, id: &str) -> Result<Party> {
         self.db
             .parties()
             .find_party(&PartyId::new(id), &mut NoTransaction)
@@ -495,7 +464,7 @@ impl PartyService {
 ///
 /// 供应商的主体、联系人、地址、税务等事实必须由供应商资料根级命令统一维护，
 /// 以确保 Party 与 Supplier 双版本及其子事实位于同一事务边界。
-pub(super) async fn ensure_outside_supplier_profile(db: &Database, party_id: &PartyId) -> Result<()> {
+pub async fn ensure_outside_supplier_profile(db: &Database, party_id: &PartyId) -> Result<()> {
     let has_supplier_role = db
         .supplier_accounts()
         .find_by_party(party_id, &mut NoTransaction)

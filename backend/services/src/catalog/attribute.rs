@@ -1,20 +1,15 @@
 use database::CatalogExt;
-use entities::catalog::sku_attribute::{SkuAttribute, SkuAttributeData, SkuAttributeUpdate};
-use entities::catalog::sku_attribute_value::{
-    SkuAttributeValue, SkuAttributeValueData, SkuAttributeValueUpdate,
-};
-use entities::catalog::{EnableStatus, SkuAttributeId, SkuAttributeValueId};
+use entities::catalog::sku_attribute::{SkuAttribute, SkuAttributeUpdate};
+use entities::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueUpdate};
 use erp_audit::AuditExt;
-use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
 use crate::catalog::dto::{
-    CreateSkuAttributeRequest, CreateSkuAttributeValueRequest, PageView, SkuAttributeListParams,
-    SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SortDir, UpdateSkuAttributeRequest,
-    UpdateSkuAttributeValueRequest,
+    PageView, SkuAttributeListParams, SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView,
+    SortDir, UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest,
 };
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
@@ -78,49 +73,6 @@ impl CatalogService {
             page: filter.page,
             page_size: filter.page_size,
         })
-    }
-
-    /// 创建规格属性（单集合写入，无事务）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建属性的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - attribute_code 重复（唯一索引透出）
-    pub async fn sku_attribute_create(
-        &self,
-        req: CreateSkuAttributeRequest,
-        actor: &AuditActor,
-    ) -> Result<SkuAttributeView> {
-        req.validate()?;
-        let id = SkuAttributeId::new(next_id());
-        let attribute = SkuAttribute::new(
-            id.clone(),
-            SkuAttributeData {
-                attribute_code: req.attribute_code,
-                name: req.name,
-                value_type: req.value_type,
-                status: req.status.unwrap_or(EnableStatus::Active),
-            },
-            actor.id(),
-        )?;
-        let audit = actor
-            .clone()
-            .resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
-        let attribute_for_tx = attribute.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.sku_attributes().create(&attribute_for_tx, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(attribute.into())
     }
 
     /// 更新规格属性（乐观锁语义）。
@@ -257,54 +209,6 @@ impl CatalogService {
         })
     }
 
-    /// 创建规格属性值（单集合写入，无事务）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建属性值的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 所属规格属性不存在
-    /// * `ConflictError` - 同一属性下 value_code 重复（唯一索引透出）
-    pub async fn sku_attribute_value_create(
-        &self,
-        req: CreateSkuAttributeValueRequest,
-        actor: &AuditActor,
-    ) -> Result<SkuAttributeValueView> {
-        req.validate()?;
-        self.load_attribute(req.attribute_id.as_ref()).await?;
-        let id = SkuAttributeValueId::new(next_id());
-        let value = SkuAttributeValue::new(
-            id.clone(),
-            SkuAttributeValueData {
-                attribute_id: req.attribute_id,
-                value_code: req.value_code,
-                display_value: req.display_value,
-                sort_order: req.sort_order,
-                status: req.status.unwrap_or(EnableStatus::Active),
-            },
-            actor.id(),
-        )?;
-        let audit = actor.clone().resource_log(
-            "sku_attribute_value.create",
-            "sku_attribute_value",
-            id.to_string(),
-        )?;
-        let value_for_tx = value.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.sku_attribute_values().create(&value_for_tx, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(value.into())
-    }
-
     /// 更新规格属性值（乐观锁语义）。
     ///
     /// # 参数
@@ -396,7 +300,7 @@ impl CatalogService {
     ///
     /// # 错误
     /// 属性不存在时返回 `NotFound`。
-    async fn load_attribute(&self, id: &str) -> Result<SkuAttribute> {
+    pub async fn load_attribute(&self, id: &str) -> Result<SkuAttribute> {
         self.db
             .sku_attributes()
             .find_by_id(id, &mut NoTransaction)

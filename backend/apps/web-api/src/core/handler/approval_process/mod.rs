@@ -10,14 +10,15 @@ use axum::{
     http::HeaderMap,
     Extension, Json,
 };
-use entities::document_registry::DocumentType;
-use services::{
-    approval::definition::{definition_management_visibility, ApprovalDefinitionService},
-    approval::definition_dto::{
-        CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
-        PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
-    },
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::definition::{
+    definition_management_visibility, ApprovalDefinitionService,
 };
+use erp_workflow::service::approval::definition_dto::{
+    CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
+    PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
+};
+use services::workflow_compose::{workflow_audit, workflow_auth, WorkflowAuth};
 
 use crate::{
     app_state::AppState,
@@ -56,7 +57,7 @@ pub async fn definition_catalog(
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
 ) -> ApprovalResult<Vec<DefinitionCatalogItem>> {
-    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&workflow_auth(state.db(), state.rbac()), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let items = definition_service(&state)
@@ -83,7 +84,7 @@ pub async fn definition_versions(
     headers: HeaderMap,
     Path(document_type): Path<DocumentType>,
 ) -> ApprovalResult<Vec<DefinitionVersionItem>> {
-    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&workflow_auth(state.db(), state.rbac()), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let versions = definition_service(&state)
@@ -110,7 +111,7 @@ pub async fn definition_detail(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApprovalResult<DefinitionDetailView> {
-    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&workflow_auth(state.db(), state.rbac()), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let view = definition_service(&state)
@@ -245,14 +246,14 @@ pub async fn eligible_assignees(
     headers: HeaderMap,
     Path(document_type): Path<DocumentType>,
     Query(query): Query<EligibleAssigneesQuery>,
-) -> ApprovalResult<Vec<services::approval::execution::RuntimeAssigneeCandidate>> {
+) -> ApprovalResult<Vec<erp_workflow::service::approval::execution::RuntimeAssigneeCandidate>> {
     let limit = query
         .normalized_limit()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = definition_service(&state)
         .eligible_assignees(
             &actor,
-            services::approval::definition_assignees::DefinitionAssigneeQuery {
+            erp_workflow::service::approval::definition_assignees::DefinitionAssigneeQuery {
                 document_type,
                 search: query.search,
                 limit,
@@ -264,8 +265,12 @@ pub async fn eligible_assignees(
 }
 
 /// 构造定义管理服务。
-fn definition_service(state: &AppState) -> ApprovalDefinitionService {
-    ApprovalDefinitionService::new(state.db(), state.rbac())
+fn definition_service(state: &AppState) -> ApprovalDefinitionService<WorkflowAuth> {
+    ApprovalDefinitionService::with_audit(
+        state.db(),
+        workflow_auth(state.db(), state.rbac()),
+        workflow_audit(state.db()),
+    )
 }
 
 /// 把 HTTP 节点写请求转为服务命令。

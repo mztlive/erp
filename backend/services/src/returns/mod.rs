@@ -33,7 +33,7 @@ use database::ReturnsExt;
 use erp_audit::AuditExt;
 use persistence_core::Executor;
 
-use entities::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use sha2::{Digest, Sha256};
 
@@ -67,6 +67,7 @@ use erp_identity::SharedRbacService;
 pub struct ReturnsService {
     db: Database,
     rbac: SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 /// 由操作者与幂等键生成不泄露原键的稳定纠错单号。
@@ -115,7 +116,20 @@ impl ReturnsService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         let rbac = shared_rbac_service(db.clone());
-        Self { db, rbac }
+        Self {
+            db,
+            rbac,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 }
 
@@ -197,7 +211,7 @@ pub async fn cancel_approval_in_transaction(
     db: &Database,
     document_type: DocumentType,
     id: &str,
-    action: crate::approval::policy::ApprovalDomainAction,
+    action: erp_workflow::service::approval::policy::ApprovalDomainAction,
     actor: &application_core::AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {

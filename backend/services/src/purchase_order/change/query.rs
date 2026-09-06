@@ -1,13 +1,13 @@
 use database::PurchaseOrderExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::super::dto::{PageView, PurchaseChangeOrderListParams, PurchaseChangeOrderView};
 use super::super::PurchaseOrderService;
 use super::mapping::change_list_view;
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
+use erp_workflow::service::document_registry::find_approval_binding;
 
 impl PurchaseOrderService {
     /// 分页查询采购变更单列表。
@@ -83,7 +83,10 @@ impl PurchaseOrderService {
     /// # 错误
     /// 仓储失败时返回错误。
     async fn load_change_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
-        match find_approval_binding(&self.db, id, &mut NoTransaction).await {
+        match find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)
+        {
             Ok(binding) => Ok(binding),
             Err(Error::NotFound(_)) => Ok(None),
             Err(error) => Err(error),

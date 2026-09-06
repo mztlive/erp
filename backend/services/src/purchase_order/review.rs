@@ -13,7 +13,6 @@ use entities::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision,
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use entities::work_item::WorkItemStatus;
 use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
@@ -22,6 +21,7 @@ use erp_core::ids::{
     SalesOrderLineId,
 };
 use erp_core::money::Quantity;
+use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
@@ -52,7 +52,7 @@ impl PurchaseOrderService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<PurchaseReviewResult> {
-        use crate::approval::policy::ApprovalDomainAction;
+        use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
         let PreparedFormalizedOrder { persist, result } = self.prepare_formalized_order(id, actor).await?;
         persist_formalized_order(&self.db, persist, actor).await?;

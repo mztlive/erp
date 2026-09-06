@@ -38,7 +38,7 @@ use crate::{
 /// # 返回
 /// 返回绑定数据库与 RBAC 的服务实例。
 fn inventory_service(state: &AppState) -> InventoryService {
-    InventoryService::new(state.db(), state.rbac())
+    InventoryService::new(state.db(), state.rbac()).with_object_read(state.approval_object_read())
 }
 
 /// 创建库存调整单的 HTTP wire。余额版本必须是十进制字符串。

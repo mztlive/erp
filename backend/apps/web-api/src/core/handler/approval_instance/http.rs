@@ -6,10 +6,10 @@ use axum::{
     extract::{FromRequestParts, Query},
     http::request::Parts,
 };
-use serde::Deserialize;
-use services::approval::execution::{
+use erp_workflow::service::approval::execution::{
     RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
 };
+use serde::Deserialize;
 
 use super::error::ApprovalHttpError;
 
@@ -83,7 +83,7 @@ impl PreparedInstanceListQuery {
             query.limit,
             query.q,
         )
-        .map_err(|error| match error {
+        .map_err(|error| match services::Error::from(error) {
             services::Error::ValidationError(message) => ApprovalHttpError::unprocessable(message, headers),
             error => ApprovalHttpError::from_service(error, headers),
         })?;
@@ -333,10 +333,10 @@ fn parse_cursor_view(raw: &str) -> Result<RuntimeInstanceListView, String> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-    use services::approval::execution::{
+    use erp_workflow::service::approval::execution::{
         RuntimeInstanceListCursor, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
     };
+    use serde_json::json;
 
     use super::{
         CancelBlockedHttpRequest, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,

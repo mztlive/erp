@@ -3,18 +3,9 @@ use super::dto::{
     SortDir,
 };
 use super::ReturnsService;
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
-    BindingDecision,
-};
-use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use database::ReturnsExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::returns::{
     PurchaseReturnLine, PurchaseReturnLineData, PurchaseReturnOrder, PurchaseReturnOrderData,
 };
@@ -22,6 +13,14 @@ use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_core::ids::{PurchaseReturnLineId, PurchaseReturnOrderId};
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{
+    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+};
+use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -130,7 +129,15 @@ impl ReturnsService {
                 warehouse_id: req.lines[0].warehouse_id.clone(),
             },
         )?;
-        persist_created_purchase_return_order(&self.db, &self.rbac, order, line, actor.clone()).await?;
+        persist_created_purchase_return_order(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            order,
+            line,
+            actor.clone(),
+        )
+        .await?;
         self.purchase_return_order_detail(&order_id).await
     }
 
@@ -310,6 +317,7 @@ fn apply_purchase_return_create_binding(
 async fn persist_unbound_purchase_return_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -317,10 +325,19 @@ async fn persist_unbound_purchase_return_document(
 ) -> Result<()> {
     let _ = ensure_purchase_return_skips_approval_binding()?;
     ensure_purchase_return_has_no_adapter()?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        executor,
+    )
+    .await?;
     apply_purchase_return_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    persist_registered_document(db, &document, executor)
+        .await
+        .map_err(crate::errors::Error::from)
 }
 
 /// 为已构造采购退货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -330,6 +347,7 @@ async fn persist_unbound_purchase_return_document(
 async fn register_created_purchase_return_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     order: &PurchaseReturnOrder,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -339,8 +357,10 @@ async fn register_created_purchase_return_document(
         &order.base.id,
         DocumentType::PurchaseReturnOrder,
         order.purchase_return_no.clone(),
-    )?;
-    persist_unbound_purchase_return_document(db, rbac, document, &bind_command, actor, executor).await
+    )
+    .map_err(crate::errors::Error::from)?;
+    persist_unbound_purchase_return_document(db, rbac, object_read, document, &bind_command, actor, executor)
+        .await
 }
 
 /// 在创建事务内写入采购退货草稿并登记无绑定单据。
@@ -350,6 +370,7 @@ async fn register_created_purchase_return_document(
 async fn persist_created_purchase_return_order(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     order: PurchaseReturnOrder,
     line: PurchaseReturnLine,
     actor: AuditActor,
@@ -361,11 +382,20 @@ async fn persist_created_purchase_return_order(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                register_created_purchase_return_document(&db, &rbac, &order, &actor, session).await?;
+                register_created_purchase_return_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &order,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.returns()
                     .create_purchase_return_with_line(&order, &line, session)
                     .await?;
@@ -384,13 +414,13 @@ mod purchase_return_no_approval_tests {
         purchase_return_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
         PurchaseReturnOrder, PurchaseReturnOrderData,
     };
-    use crate::approval::binding::binding_from_published;
-    use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use entities::returns::ReturnMode;
     use erp_core::common::time::Instant;
     use erp_core::ids::{PurchaseOrderId, PurchaseReturnOrderId};
+    use erp_workflow::service::approval::binding::binding_from_published;
+    use erp_workflow::service::document_registry::new_registered_document;
 
     fn draft_order() -> PurchaseReturnOrder {
         PurchaseReturnOrder::new(

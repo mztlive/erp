@@ -68,11 +68,11 @@ pub use self::dto::{
 };
 pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
-use crate::approval::policy::ApprovalDomainAction;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
 /// 采购单服务。
 ///
@@ -80,6 +80,7 @@ use erp_identity::SharedRbacService;
 pub struct PurchaseOrderService {
     db: Database,
     rbac: Option<SharedRbacService>,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl PurchaseOrderService {
@@ -91,7 +92,20 @@ impl PurchaseOrderService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self {
+            db,
+            rbac: None,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 
     /// 创建可绑定发布定义的采购单服务。
@@ -103,7 +117,11 @@ impl PurchaseOrderService {
     /// # 返回
     /// 返回同时绑定数据库和授权源的服务。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        Self {
+            db,
+            rbac: Some(rbac),
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
     }
 
     /// 读取采购单写命令所需的共享授权源。

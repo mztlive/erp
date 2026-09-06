@@ -1,4 +1,4 @@
-use entities::work_item::WorkItemType;
+use erp_workflow::entity::work_item::WorkItemType;
 use serde::{Deserialize, Serialize};
 
 pub(super) const WORK_ITEM_TYPES: [WorkItemType; 12] = [

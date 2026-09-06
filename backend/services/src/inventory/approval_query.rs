@@ -3,11 +3,14 @@
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use database::{ApprovalIntegrationExt, BpmExt, InventoryExt, WorkItemExt};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
+use database::InventoryExt;
 use entities::inventory::{StockAdjustment, StockAdjustmentState};
-use entities::work_item::WorkItem;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -25,13 +28,13 @@ use super::dto::{
 };
 use super::start_approval::actor_can_submit;
 use super::InventoryService;
-use crate::approval::execution::authorization::requires_blocked_cancel;
-use crate::approval::execution::{
-    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-};
-use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_workflow::service::approval::execution::authorization::requires_blocked_cancel;
+use erp_workflow::service::approval::execution::{
+    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
 pub(super) async fn load_document_approval(

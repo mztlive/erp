@@ -16,7 +16,7 @@ use super::brief::{
     ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::presentation::format_yuan;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
 
 #[derive(Default)]
@@ -28,7 +28,7 @@ struct SettlementBriefContext {
     source_evidence_by_hash: HashMap<String, SupplierSettlementSourceEvidence>,
 }
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 库存调整审批任务的对象事实。
     ///
     /// # 参数

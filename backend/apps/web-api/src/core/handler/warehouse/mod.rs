@@ -228,9 +228,7 @@ pub async fn warehouse_sku_policy_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateWarehouseSkuPolicyRequest>,
 ) -> Result<WarehouseSkuPolicyView> {
-    let view = WarehouseService::new(state.db())
-        .warehouse_sku_policy_create(req, &actor)
-        .await?;
+    let view = erp_processes::create_warehouse_sku_policy(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

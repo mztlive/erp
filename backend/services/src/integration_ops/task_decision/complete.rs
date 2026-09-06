@@ -1,8 +1,9 @@
-use database::{IntegrationOpsExt, WorkItemExt};
+use database::IntegrationOpsExt;
 use entities::integration_ops::{
     DirectConclusion, ErrorTaskStatus, IntegrationCommandIdentity, ResolutionType,
 };
 use erp_core::common::time::Instant;
+use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
@@ -22,7 +23,7 @@ use super::guard::{
 };
 use super::{append_resolution, store_receipt, DirectFact, TASK_COMPLETION_AUDIT};
 use crate::errors::Result;
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 
 #[derive(Debug)]
@@ -78,7 +79,7 @@ impl IntegrationOpsService {
             Box::pin(async move {
                 let action = command.as_non_terminal_action();
                 let mut work_item = load_bound_work_item(db, &prepared, &action, actor.id(), session).await?;
-                WorkItemService::new(db.clone(), rbac.clone())
+                work_item_service(db.clone(), rbac.clone())
                     .ensure_domain_decision_access(&actor, &work_item, session)
                     .await?;
                 let terminal =

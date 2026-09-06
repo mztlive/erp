@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::Result;
-use crate::work_item::WorkItemView;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde_json::Value as WorkItemView;
 
 /// 供应商履约订单列表允许的排序字段白名单（Service 层校验，禁止任意字段透传）。
 pub(crate) const FULFILLMENT_ORDER_SORT_FIELDS: &[&str] =
@@ -707,7 +707,7 @@ pub struct SupplierOrderInvestigationWorkItemView {
     /// 原任务 ID。
     pub id: String,
     /// 调查后仍固定为开放。
-    pub status: entities::work_item::WorkItemStatus,
+    pub status: erp_workflow::entity::work_item::WorkItemStatus,
     /// 调查处理记录提交后的任务版本。
     pub task_version: u64,
 }
@@ -754,7 +754,7 @@ pub struct SupplierOrderTaskCompletionResultView {
     /// 已完成的正式任务。
     pub work_item_id: String,
     /// 固定为 `COMPLETED`。
-    pub work_item_status: entities::work_item::WorkItemStatus,
+    pub work_item_status: erp_workflow::entity::work_item::WorkItemStatus,
     /// 完成后的任务版本。
     pub task_version: u64,
     /// 终态确认时的订单版本。

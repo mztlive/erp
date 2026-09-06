@@ -1,24 +1,26 @@
 use bpm::SubjectRef;
-use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
 use entities::returns::{ReceiptReversal, ReceiptReversalStatus};
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerAccountId;
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
 
 use super::super::dto::{
     DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView,
 };
 use super::definition_view_from_binding;
-use crate::approval::business_adapter::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
-use crate::approval::policy::{
+use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 已注册的回款冲正单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,8 +105,11 @@ fn receipt_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Recei
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn receipt_reversal_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    entities::approval_integration::subject_ref_for(DocumentType::ReceiptReversal, business_object_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+    erp_workflow::entity::approval_integration::subject_ref_for(
+        DocumentType::ReceiptReversal,
+        business_object_id,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
@@ -355,10 +360,10 @@ fn receipt_reversal_allowed_actions(status: ReceiptReversalStatus) -> Vec<String
 mod receipt_reversal_tests {
     use super::super::RECENT_HISTORY_LIMIT;
     use super::*;
-    use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
     use entities::returns::ReceiptReversalData;
     use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
+    use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
 
     fn draft_reversal() -> ReceiptReversal {

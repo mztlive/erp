@@ -50,6 +50,7 @@ pub use self::cancel_approval::cancel_stock_adjustment_approval_in_transaction;
 pub struct InventoryService {
     db: Database,
     rbac: SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl InventoryService {
@@ -62,6 +63,19 @@ impl InventoryService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+        Self {
+            db,
+            rbac,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
+        }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 }

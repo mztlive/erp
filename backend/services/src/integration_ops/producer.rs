@@ -8,9 +8,9 @@ use entities::integration_ops::{
     difference_owner_role, new_difference_work_item, new_error_work_item, IntegrationErrorTask,
     ReconciliationDifference,
 };
-use entities::work_item::WorkItem;
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
+use erp_workflow::entity::work_item::WorkItem;
 use id_generator::next_id;
 
 use crate::errors::{Error, Result};

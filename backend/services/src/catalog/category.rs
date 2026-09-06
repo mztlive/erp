@@ -1,16 +1,15 @@
 use database::CatalogExt;
-use entities::catalog::product_category::{ProductCategory, ProductCategoryData, ProductCategoryUpdate};
-use entities::catalog::{EnableStatus, ProductCategoryId};
+use entities::catalog::product_category::{ProductCategory, ProductCategoryUpdate};
+use entities::catalog::ProductCategoryId;
 use erp_audit::AuditExt;
-use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::support::ensure_version;
 use super::CatalogService;
 use crate::catalog::dto::{
-    CreateProductCategoryRequest, MoveProductCategoryRequest, PageView, ProductCategoryListParams,
-    ProductCategoryView, SortDir, UpdateProductCategoryRequest,
+    MoveProductCategoryRequest, PageView, ProductCategoryListParams, ProductCategoryView, SortDir,
+    UpdateProductCategoryRequest,
 };
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
@@ -77,57 +76,6 @@ impl CatalogService {
             page: filter.page,
             page_size: filter.page_size,
         })
-    }
-
-    /// 创建商品分类（单集合写入，无事务）。
-    ///
-    /// 新建分类时校验父分类存在且不会形成环（沿祖先链上溯，命中自身即环）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建分类的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 父分类不存在
-    /// * `BusinessLogicError` - 父子关系将形成环
-    /// * `ConflictError` - category_code 重复（唯一索引透出）
-    pub async fn product_category_create(
-        &self,
-        req: CreateProductCategoryRequest,
-        actor: &AuditActor,
-    ) -> Result<ProductCategoryView> {
-        req.validate()?;
-        let parent_id = req.parent_category_id.clone();
-        let id = ProductCategoryId::new(next_id());
-        self.ensure_parent_chain_ok(&id, parent_id.as_ref()).await?;
-        let category = ProductCategory::new(
-            id.clone(),
-            ProductCategoryData {
-                category_code: req.category_code,
-                parent_category_id: parent_id,
-                name: req.name,
-                product_kind: req.product_kind,
-                status: req.status.unwrap_or(EnableStatus::Active),
-            },
-            actor.id(),
-        )?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("product_category.create", "product_category", id.to_string())?;
-        let category_for_tx = category.clone();
-        crate::transaction::run_audited(&self.db, audit, move |db, session| {
-            Box::pin(async move {
-                db.product_categories().create(&category_for_tx, session).await?;
-                Ok(())
-            })
-        })
-        .await?;
-        Ok(category.into())
     }
 
     /// 更新商品分类（乐观锁语义；名称、类型、状态与可选父级变更原子提交）。
@@ -294,7 +242,7 @@ impl CatalogService {
     ///
     /// # 错误
     /// 父分类不存在或沿祖先链命中本节点、成环、过深时返回错误。
-    pub(super) async fn ensure_parent_chain_ok(
+    pub async fn ensure_parent_chain_ok(
         &self,
         id: &str,
         parent_id: Option<&ProductCategoryId>,

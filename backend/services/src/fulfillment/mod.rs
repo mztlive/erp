@@ -73,6 +73,7 @@ pub struct FulfillmentService {
     fingerprint_key: Vec<u8>,
     sensitive_data: Arc<SensitiveDataCodec>,
     rbac: SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl FulfillmentService {
@@ -92,6 +93,16 @@ impl FulfillmentService {
             fingerprint_key,
             sensitive_data,
             rbac,
+            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
         }
+    }
+
+    /// Inject composition-root object-read for approval binding.
+    pub fn with_object_read(
+        mut self,
+        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    ) -> Self {
+        self.object_read = object_read;
+        self
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
 use entities::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
@@ -12,10 +12,13 @@ use entities::supplier_fulfillment::{
     SupplierFulfillmentOrderUpdate, SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionId,
     SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderActionUpdate,
 };
-use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, WorkItemId};
+use erp_workflow::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

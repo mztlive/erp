@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::view::WorkItemView;
-
 /// 责任命令的稳定冲突分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkItemConflictKind {
@@ -38,14 +36,13 @@ impl WorkItemConflictKind {
 
 /// 责任命令冲突时返回的权限安全数据。
 ///
-/// `current_work_item` 必须由 Service 使用当前 actor 重新投影；若最新任务
-/// 已不在 actor 的查看范围内，则固定返回 `null`，不得降级返回原始实体。
+/// HTTP 使用冲突任务 ID 再向 read-models 投影；命令层不持有查询视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemConflict {
     #[serde(skip)]
     kind: WorkItemConflictKind,
-    /// 当前仍可见时的最新安全投影；不可见或已删除时为空。
-    pub current_work_item: Option<WorkItemView>,
+    #[serde(skip)]
+    work_item_id: Option<String>,
 }
 
 impl WorkItemConflict {
@@ -53,31 +50,30 @@ impl WorkItemConflict {
     ///
     /// # 参数
     /// * `kind` - 稳定冲突分类
-    /// * `current_work_item` - actor 重新授权后的最新安全投影
+    /// * `work_item_id` - 仍存在时的任务 ID；已删除时为空
     ///
     /// # 返回
-    /// 返回可直接放入 409 响应 `data` 的冲突数据。
-    pub fn new(kind: WorkItemConflictKind, current_work_item: Option<WorkItemView>) -> Self {
-        Self {
-            kind,
-            current_work_item,
-        }
+    /// 返回命令层冲突事实。
+    pub fn new(kind: WorkItemConflictKind, work_item_id: Option<String>) -> Self {
+        Self { kind, work_item_id }
     }
 
     /// 返回稳定冲突分类。
-    ///
-    /// # 返回
-    /// 返回版本冲突或责任冲突。
     pub fn kind(&self) -> WorkItemConflictKind {
         self.kind
+    }
+
+    /// 返回冲突时仍存在的任务 ID。
+    pub fn work_item_id(&self) -> Option<&str> {
+        self.work_item_id.as_deref()
     }
 }
 
 /// 责任命令的服务端结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkItemMutationOutcome {
-    /// 命令已应用并返回更新后的安全投影。
-    Applied(WorkItemView),
+    /// 命令已应用；HTTP 再向 read-models 投影。
+    Applied { work_item_id: String },
     /// 命令因并发版本或责任变化未应用。
     Conflict(WorkItemConflict),
 }

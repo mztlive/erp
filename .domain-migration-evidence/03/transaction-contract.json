@@ -28,13 +28,13 @@
     ],
     "external_io_in_write": "forbidden",
     "same_executor": true,
-    "legacy_file": "services/src/transaction.rs",
-    "legacy_sha256": "d15282091f3f3c880a9551a13718210eaf4a67c7bb78c2b23cd7afd700a308c9",
-    "note": "跨域审计编排迁入 erp-processes；旧 services/src/transaction.rs 生产路径仍保留至旧源清零。真实数据库运行未验证。"
+    "legacy_file": null,
+    "legacy_sha256": null,
+    "note": "run_audited 仅在 erp-processes；旧 services/src/transaction.rs 已删除。catalog/warehouse/source_registry 外层创建与 customer/party/supplier 删除走命名流程。真实数据库运行未验证。"
   },
   "approval_dispatch": {
     "file": "crates/erp-processes/src/approval_dispatch/action_registry.rs",
-    "sha256": "b0fb4dd80bf030065e51f52958a86be4feed6ae1fe456623640c71c69654be86",
+    "sha256": "fa73898fbfec0e10c4bd1bdf3cf0ae022fd9a6c6b09aa8653593b44d352a6bb3",
     "same_executor": true,
     "domain_action_port": true,
     "no_nested_transaction": true

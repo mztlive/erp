@@ -5,18 +5,22 @@ use bpm::model::types::{
     ApprovalProcessInstanceStatus,
 };
 use bpm::model::ApprovalNodeExecution;
-use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, InventoryExt, WorkItemExt};
-use entities::approval_integration::{
-    ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
-    ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
-};
-use entities::document_registry::DocumentType;
+use database::InventoryExt;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
-use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemPriority};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
+use erp_workflow::entity::approval_integration::{
+    ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
+    ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -29,14 +33,14 @@ use super::prepare::{
     ensure_stock_adjustment_submit_authorized_with_executor, load_bound_definition_graph_with_executor,
     revalidate_stock_adjustment_start_candidates,
 };
-use crate::approval::execution::apply_plan::PlannedWrites;
-use crate::approval::execution::map_receipt_first_write_error;
-use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
+use erp_workflow::service::approval::execution::map_receipt_first_write_error;
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 库存调整启动事务写入集合。
 ///

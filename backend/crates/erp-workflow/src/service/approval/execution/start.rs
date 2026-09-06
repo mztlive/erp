@@ -129,7 +129,7 @@ fn build_receipt(
 }
 
 /// 将引擎错误映射为服务错误。不可提交错误为内部错误。
-pub(crate) fn map_engine_error(error: bpm::engine::EngineError) -> Error {
+pub fn map_engine_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Uncommittable(message) => Error::Internal(message.to_string()),
         bpm::engine::EngineError::InvalidCommand(message) => Error::ValidationError(message.to_string()),

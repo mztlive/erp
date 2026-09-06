@@ -84,6 +84,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<UpgradeBindingResultView> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let upgrade = std::sync::Arc::clone(&self.upgrade);
         let audit = std::sync::Arc::clone(&self.audit);
         let actor = actor.clone();
@@ -94,6 +95,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     upgrade_unsubmitted_document_definition(
                         &db,
                         &rbac,
+                        object_read.as_ref(),
                         upgrade.as_ref(),
                         audit.as_ref(),
                         &command,

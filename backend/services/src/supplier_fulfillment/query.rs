@@ -1,9 +1,10 @@
-use database::{SupplierApiExt, SupplierExt, SupplierFulfillmentExt, WorkItemExt};
+use database::{SupplierApiExt, SupplierExt, SupplierFulfillmentExt};
 use entities::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction, SupplierOrderActionType,
 };
-use entities::work_item::WorkItemType;
+use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -21,9 +22,10 @@ use super::mapping::{item_view, refund_fact_view};
 use super::place::ensure_capability;
 use super::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use crate::errors::{Error, Result};
-use crate::work_item::{WorkItemAllowedAction, WorkItemService};
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::work_item::WorkItemAllowedAction;
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
 type FulfillmentOrderFilter = <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;
@@ -169,15 +171,15 @@ impl SupplierFulfillmentService {
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let formal = if let Some(work_item_id) = work_item_id {
-            let view = WorkItemService::new(self.db.clone(), rbac)
-                .work_item_detail(work_item_id, actor)
+            let view = work_item_service(self.db.clone(), rbac)
+                .authorize_work_item(work_item_id, actor)
                 .await?;
             if !matches!(
-                view.work_item_type,
+                view.item.work_item_type,
                 WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
-            ) || view.business_object_type != W26_BUSINESS_OBJECT_TYPE
-                || view.business_object_id != order.base.id
-                || view.subject_version != order.base.version.to_string()
+            ) || view.item.business_object_type != W26_BUSINESS_OBJECT_TYPE
+                || view.item.business_object_id != order.base.id
+                || view.item.subject_version != order.base.version.to_string()
                 || false
             {
                 return Err(Error::BusinessLogicError(
@@ -273,7 +275,7 @@ impl SupplierFulfillmentService {
                 blocker_code: Some("ADDRESS_REVEAL_NOT_REGISTERED".to_string()),
                 blocker_message: Some("当前 W26 尚未注册可审计的短时地址揭示入口".to_string()),
             },
-            work_item: formal,
+            work_item: None,
             target_supplier_action_id,
             last_investigation,
             allowed_actions,

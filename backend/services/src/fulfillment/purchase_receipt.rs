@@ -1,27 +1,26 @@
 use database::FulfillmentExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
 };
 use erp_audit::AuditExt;
 use erp_core::ids::PurchaseReceiptId;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::approval::binding::{
-    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
-    BindingDecision,
-};
-use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{
+    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+};
+use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 use super::dto::SortDir;
 use super::purchase_receipt_lines::receipt_line_specs;
@@ -176,7 +175,15 @@ impl FulfillmentService {
         )?;
         let lines = PurchaseReceiptLineBatch::build(id.clone(), receipt_line_specs(&req.lines))
             .map_err(Error::Logic)?;
-        persist_created_purchase_receipt(&self.db, &self.rbac, receipt.clone(), lines, actor.clone()).await?;
+        persist_created_purchase_receipt(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            receipt.clone(),
+            lines,
+            actor.clone(),
+        )
+        .await?;
         Ok(receipt.into())
     }
 
@@ -419,6 +426,7 @@ fn apply_purchase_receipt_create_binding(
 async fn persist_unbound_purchase_receipt_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -426,10 +434,19 @@ async fn persist_unbound_purchase_receipt_document(
 ) -> Result<()> {
     let _ = ensure_purchase_receipt_skips_approval_binding()?;
     ensure_purchase_receipt_has_no_adapter()?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        executor,
+    )
+    .await?;
     apply_purchase_receipt_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    persist_registered_document(db, &document, executor)
+        .await
+        .map_err(crate::errors::Error::from)
 }
 
 /// 为已构造采购收货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -439,6 +456,7 @@ async fn persist_unbound_purchase_receipt_document(
 async fn register_created_purchase_receipt_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     receipt: &PurchaseReceipt,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -448,8 +466,10 @@ async fn register_created_purchase_receipt_document(
         &receipt.base.id,
         DocumentType::PurchaseReceipt,
         receipt.receipt_no.clone(),
-    )?;
-    persist_unbound_purchase_receipt_document(db, rbac, document, &bind_command, actor, executor).await
+    )
+    .map_err(crate::errors::Error::from)?;
+    persist_unbound_purchase_receipt_document(db, rbac, object_read, document, &bind_command, actor, executor)
+        .await
 }
 
 /// 在创建事务内写入采购收货草稿并登记无绑定单据。
@@ -459,6 +479,7 @@ async fn register_created_purchase_receipt_document(
 async fn persist_created_purchase_receipt(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     receipt: PurchaseReceipt,
     lines: Vec<PurchaseReceiptLine>,
     actor: AuditActor,
@@ -470,11 +491,20 @@ async fn persist_created_purchase_receipt(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                register_created_purchase_receipt_document(&db, &rbac, &receipt, &actor, session).await?;
+                register_created_purchase_receipt_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &receipt,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.fulfillment()
                     .create_purchase_receipt_with_lines(&receipt, &lines, session)
                     .await?;
@@ -605,12 +635,12 @@ mod purchase_receipt_no_approval_tests {
         purchase_receipt_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
         PurchaseReceipt, PurchaseReceiptData,
     };
-    use crate::approval::binding::binding_from_published;
-    use crate::document_registry::new_registered_document;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::{PurchaseOrderId, PurchaseReceiptId, WarehouseId};
+    use erp_workflow::service::approval::binding::binding_from_published;
+    use erp_workflow::service::document_registry::new_registered_document;
 
     fn draft_receipt() -> PurchaseReceipt {
         PurchaseReceipt::new(

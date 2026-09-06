@@ -1,5 +1,4 @@
 use database::SalesOrderExt;
-use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use entities::sales_order::{
     SalesContentHash, SalesOrder, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
     SalesOrderWorkingCopyUpdate, WorkingPurpose,
@@ -9,6 +8,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
 };
+use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -30,18 +30,18 @@ use super::super::start_approval::{
 };
 use super::super::SalesOrderService;
 use super::identity::{sales_submission_audit_id, sales_submission_fingerprint};
-use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
+use erp_workflow::service::document_registry::find_approval_binding;
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {
     /// 销售单主键。
     sales_order_id: &'a str,
     /// 提交时冻结的单据类型。
-    document_type: entities::document_registry::DocumentType,
+    document_type: erp_workflow::entity::document_registry::DocumentType,
     /// 提交时冻结的审批主题版本。
     subject_version: u32,
     /// 提交幂等键。
@@ -332,9 +332,11 @@ impl SalesOrderService {
             working_copy_plan,
         } = start;
         let ports = sales_approval_ports(order.business_type)?;
-        let subject = entities::approval_integration::subject_ref_for_sales_business(order.business_type, id)
+        let subject = crate::sales_order::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
@@ -417,7 +419,7 @@ impl SalesOrderService {
         .await;
         match persisted {
             Ok(view) => Ok(view),
-            Err(error) if command_may_have_committed(&error) => {
+            Err(error) if error.command_may_have_committed() => {
                 self.recover_sales_submission_start(RecoverSalesSubmissionStartInput {
                     sales_order_id: id,
                     document_type: ports.document_type,
@@ -518,9 +520,11 @@ impl SalesOrderService {
                         }
                         let organization_id = sales_order_responsible_org_id(&order)?;
                         let _ = sales_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &sales_order_id_owned, session).await?;
+                        let binding = find_approval_binding(&db, &sales_order_id_owned, session)
+                            .await
+                            .map_err(crate::errors::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = entities::approval_integration::subject_ref_for_sales_business(
+                        let subject = crate::sales_order::subject_ref_for_sales_business(
                             order.business_type,
                             &sales_order_id_owned,
                         )
@@ -556,7 +560,7 @@ impl SalesOrderService {
                     }
                 }
                 Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) if error.command_may_have_committed() => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {

@@ -250,8 +250,6 @@ pub async fn supplier_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    SupplierService::new(state.db())
-        .delete_supplier(&id, &actor)
-        .await?;
+    erp_processes::delete_supplier(state.db(), id, actor).await?;
     Ok(ApiResponse::ok())
 }

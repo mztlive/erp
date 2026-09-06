@@ -3,16 +3,20 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
-use database::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, ReturnsExt, WorkItemExt};
-use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
+use database::ReturnsExt;
 use entities::returns::SupplierRefund;
-use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemPriority};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
@@ -20,15 +24,15 @@ use persistence_core::Transactional;
 use super::super::adapter::supplier_refund_object_readable;
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
-use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{
+    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 读取供应商退款同载荷启动收据；不存在时返回 `None`。
 ///
@@ -323,7 +327,7 @@ pub async fn persist_supplier_refund_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_supplier_refund_runtime(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -364,7 +368,7 @@ pub async fn persist_supplier_refund_runtime(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_supplier_refund_open_tasks(
     db: &Database,
-    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     owner_role: &str,
     organization_id: &str,
     now: Instant,

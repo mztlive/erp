@@ -5,9 +5,9 @@ use erp_core::ids::StockAdjustmentId;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::approval::execution::PreparedExecution;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
+use erp_workflow::service::approval::execution::PreparedExecution;
 
 use super::adapter::{
     execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,

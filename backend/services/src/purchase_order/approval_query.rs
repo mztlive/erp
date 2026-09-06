@@ -2,9 +2,9 @@
 
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
-use database::BpmExt;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::purchase_order::PurchaseOrderStatus;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::BpmExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -17,11 +17,11 @@ use super::dto::{
     DocumentApprovalView,
 };
 use super::start_approval::load_bound_definition_graph;
-use crate::approval::execution::{
+use crate::errors::Result;
+use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
     RuntimeHistoryPage,
 };
-use crate::errors::Result;
 
 /// 加载采购单详情的只读审批结构。
 ///

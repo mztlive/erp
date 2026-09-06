@@ -2,10 +2,7 @@
 // 销售变更单（W05 变更轨；§8.1.3 本批部分）
 // ---------------------------------------------------------------------
 
-use database::{DocumentRegistryExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
-use entities::document_registry::{
-    BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
-};
+use database::{ReceivableExt, SalesOrderExt, SalesReviewExt};
 use entities::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
@@ -18,6 +15,10 @@ use erp_core::ids::{
     SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
     SalesOrderWorkingCopyId,
 };
+use erp_workflow::entity::document_registry::{
+    BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
+};
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
@@ -45,20 +46,16 @@ use super::{
     SalesChangeOrderFilter, SalesChangeOrderListParams, SalesChangeOrderView, SalesReviewService,
     SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{
-    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
-};
-use crate::approval::policy::ApprovalDomainAction;
-use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 
 impl SalesReviewService {
     /// 分页查询销售变更单。
@@ -140,8 +137,12 @@ impl SalesReviewService {
     async fn load_change_binding(
         &self,
         id: &str,
-    ) -> Result<Option<entities::document_registry::business_document::ApprovalDefinitionBinding>> {
-        match find_approval_binding(&self.db, id, &mut NoTransaction).await {
+    ) -> Result<Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>>
+    {
+        match find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)
+        {
             Ok(binding) => Ok(binding),
             Err(Error::NotFound(_)) => Ok(None),
             Err(error) => Err(error),
@@ -290,7 +291,7 @@ impl SalesReviewService {
             actor.id(),
         )?;
         let bind_command = BindPublishedDefinitionCommand {
-            document_type: entities::document_registry::DocumentType::SalesChangeOrder,
+            document_type: erp_workflow::entity::document_registry::DocumentType::SalesChangeOrder,
             business_object_id: change_order.base.id.clone(),
             business_object_version: change_order.base.version,
             context: BindingRevalidationContext {
@@ -300,9 +301,10 @@ impl SalesReviewService {
         };
         let document = new_registered_document(
             change_order.base.id.clone(),
-            entities::document_registry::DocumentType::SalesChangeOrder,
+            erp_workflow::entity::document_registry::DocumentType::SalesChangeOrder,
             String::new(),
-        )?;
+        )
+        .map_err(crate::errors::Error::from)?;
         let audit = actor.clone().resource_log(
             "sales_change_order.create",
             "sales_change_order",
@@ -311,6 +313,7 @@ impl SalesReviewService {
         persist_created_change_order(
             &self.db,
             rbac,
+            std::sync::Arc::clone(&self.object_read),
             CreatedChangeOrderPersistInput {
                 change_order: change_order.clone(),
                 working_copy,
@@ -415,6 +418,7 @@ impl SalesReviewService {
                 .clone()
                 .resource_log("sales_change_order.void", "sales_change_order", id.to_string())?;
         let db = self.db.clone();
+        let _object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         client
             .with_transaction(move |session| {
@@ -465,7 +469,9 @@ impl SalesReviewService {
             ));
         }
         let adapter = sales_change_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = sales_change_order_subject_ref(id)?;
         let subject_version = latest_change_submission_no(&self.db, id).await?;
@@ -574,7 +580,9 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let subject = sales_change_order_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let (mut working_copy, copy_lines) = load_change_working_copy(&self.db, &change_order).await?;
         let submission_no = next_change_submission_no(&self.db, id).await?;
@@ -649,7 +657,7 @@ impl SalesReviewService {
         )
         .await;
         if let Err(error) = persisted {
-            if !command_may_have_committed(&error) {
+            if !error.command_may_have_committed() {
                 return Err(error);
             }
             self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
@@ -690,7 +698,9 @@ impl SalesReviewService {
                             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
                         let organization_id = sales_change_responsible_org_id(&sales_order)?;
                         let _ = sales_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, session).await?;
+                        let binding = find_approval_binding(&db, &change_order_id, session)
+                            .await
+                            .map_err(crate::errors::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = sales_change_order_subject_ref(&change_order_id)?;
                         replay_sales_change_start_with_executor(
@@ -709,7 +719,7 @@ impl SalesReviewService {
             match recovered {
                 Ok(Some(instance_id)) => return Ok(instance_id),
                 Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) if error.command_may_have_committed() => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -730,7 +740,7 @@ impl SalesReviewService {
 /// 返回详情视图。
 fn detail_view(
     change_order: SalesChangeOrder,
-    binding: Option<entities::document_registry::business_document::ApprovalDefinitionBinding>,
+    binding: Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>,
 ) -> SalesChangeOrderDetailView {
     SalesChangeOrderDetailView {
         id: change_order.base.id,
@@ -896,6 +906,7 @@ struct CreatedChangeOrderPersistInput {
 async fn persist_created_change_order(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     input: CreatedChangeOrderPersistInput,
 ) -> Result<()> {
     let CreatedChangeOrderPersistInput {
@@ -909,12 +920,21 @@ async fn persist_created_change_order(
     } = input;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                persist_bound_change_document(&db, &rbac, &mut document, &bind_command, &actor, session)
-                    .await?;
+                persist_bound_change_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    &mut document,
+                    &bind_command,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.sales_change_orders().create(&change_order, session).await?;
                 db.sales_order_working_copies()
                     .create(&working_copy, session)
@@ -936,6 +956,7 @@ async fn persist_created_change_order(
 async fn persist_bound_change_document(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -945,8 +966,15 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, session).await?;

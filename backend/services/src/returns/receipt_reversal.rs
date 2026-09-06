@@ -23,19 +23,10 @@ use super::start_approval::{
 };
 use super::version_conflict::conflict_if_stale_version;
 use super::{return_command_no, ReturnsService};
-use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
-};
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{DocumentRegistryExt, ReceivableExt, ReturnsExt};
-use entities::document_registry::BusinessDocument;
-use entities::document_registry::DocumentType;
+use database::{ReceivableExt, ReturnsExt};
 use entities::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     ReceiptAllocation, ReceiptAllocationData,
@@ -48,6 +39,14 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId, ReceiptAllocationId, ReceiptReversalId};
 use erp_core::money::Amount;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
+use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -108,7 +107,14 @@ impl ReturnsService {
             },
             actor.id(),
         )?;
-        persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
+        persist_created_receipt_reversal(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            reversal.clone(),
+            actor.clone(),
+        )
+        .await?;
         self.receipt_reversal_detail(&reversal.base.id).await
     }
 
@@ -181,7 +187,8 @@ impl ReturnsService {
             },
         };
         let document =
-            new_registered_document(&id, DocumentType::ReceiptReversal, reversal.reversal_no.clone())?;
+            new_registered_document(&id, DocumentType::ReceiptReversal, reversal.reversal_no.clone())
+                .map_err(crate::errors::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -193,6 +200,7 @@ impl ReturnsService {
         let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
@@ -203,6 +211,7 @@ impl ReturnsService {
                     let binding = persist_bound_receipt_reversal_document(
                         &db,
                         &rbac,
+                        object_read.as_ref(),
                         document,
                         &bind_command,
                         &actor_owned,
@@ -223,7 +232,9 @@ impl ReturnsService {
                     })?;
                     let prepared = prepare_start(start_input)?;
                     db.receipt_reversals().create(&reversal, session).await?;
-                    if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                    if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
+                        prepared
+                    {
                         persist_receipt_reversal_runtime(
                             &db,
                             &writes,
@@ -338,7 +349,9 @@ impl ReturnsService {
         adapter: super::adapter::ReceiptReversalAdapter,
     ) -> Result<ReceiptReversalView> {
         let subject = receipt_reversal_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let (organization_id, customer_id) = self
@@ -408,7 +421,9 @@ impl ReturnsService {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = receipt_reversal_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let subject = receipt_reversal_subject_ref(id)?;
         let runtime =
@@ -487,6 +502,7 @@ impl ReturnsService {
     /// * `BusinessLogicError` - 累计冲正超原回款、重复过账或超额冲减
     pub async fn post_receipt_reversal(&self, id: &str, actor: &AuditActor) -> Result<ReceiptReversalView> {
         let db = self.db.clone();
+        let _object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -525,7 +541,10 @@ impl ReturnsService {
             .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction).await {
+        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)
+        {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
@@ -557,6 +576,7 @@ impl ReturnsService {
 async fn persist_created_receipt_reversal(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     reversal: ReceiptReversal,
     actor: AuditActor,
 ) -> Result<()> {
@@ -575,7 +595,8 @@ async fn persist_created_receipt_reversal(
         &reversal.base.id,
         DocumentType::ReceiptReversal,
         reversal.reversal_no.clone(),
-    )?;
+    )
+    .map_err(crate::errors::Error::from)?;
     let audit = actor.clone().resource_log(
         "receipt_reversal.create",
         "receipt_reversal",
@@ -583,12 +604,21 @@ async fn persist_created_receipt_reversal(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
+    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                persist_bound_receipt_reversal_document(&db, &rbac, document, &bind_command, &actor, session)
-                    .await?;
+                persist_bound_receipt_reversal_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    document,
+                    &bind_command,
+                    &actor,
+                    session,
+                )
+                .await?;
                 db.receipt_reversals().create(&reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
@@ -643,17 +673,25 @@ async fn validate_receipt_reversal_source(
 async fn persist_bound_receipt_reversal_document(
     db: &Database,
     rbac: &SharedRbacService,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
+) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = receipt_reversal_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding =
-        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = crate::workflow_compose::bind_published_definition_on_document_create(
+        db,
+        rbac,
+        object_read,
+        bind_command,
+        actor,
+        session,
+    )
+    .await?;
     let binding = binding.ok_or_else(|| Error::Internal("回款冲正单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, session).await?;
@@ -682,7 +720,7 @@ pub(super) async fn apply_receipt_reversal_final_post(
     ensure_receipt_reversal_final_approve_posting(&reversal)?;
     execute_receipt_reversal_domain_action(
         &mut reversal,
-        crate::approval::policy::ApprovalDomainAction::ReceiptReversalPost,
+        erp_workflow::service::approval::policy::ApprovalDomainAction::ReceiptReversalPost,
     )?;
     apply_receipt_reversal_posting(db, &reversal, actor_id, session).await?;
     reversal.mark_posted()?;
@@ -878,11 +916,11 @@ async fn persist_reverse_allocations(
 #[cfg(test)]
 mod receipt_reversal_approval_tests {
     use super::{execute_receipt_reversal_domain_action, start_receipt_reversal_approval, ReturnsService};
-    use crate::approval::policy::ApprovalDomainAction;
     use entities::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
     use erp_core::money::Amount;
+    use erp_workflow::service::approval::policy::ApprovalDomainAction;
     use std::str::FromStr;
 
     fn draft_reversal() -> ReceiptReversal {

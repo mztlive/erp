@@ -42,6 +42,7 @@ pub async fn sales_order_list(
     Query(params): Query<SalesOrderListParams>,
 ) -> Result<PageView<SalesOrderView>> {
     let page = SalesOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .sales_order_list(&params)
         .await?;
 
@@ -130,6 +131,7 @@ pub async fn sales_order_save_working_copy(
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
     let view = SalesOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .save_working_copy(&id, req, &actor)
         .await?;
 
@@ -220,6 +222,7 @@ pub async fn sales_order_void(
     Json(req): Json<VoidSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
     let view = SalesOrderService::new(state.db())
+        .with_object_read(state.approval_object_read())
         .void_sales_order(&id, req, &actor)
         .await?;
 

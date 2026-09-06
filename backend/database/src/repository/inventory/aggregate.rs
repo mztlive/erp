@@ -1,12 +1,13 @@
 use entities::catalog::{Sku, SkuRevision};
-use entities::document_registry::BusinessDocument;
 use entities::fulfillment::PurchaseReceipt;
 use entities::warehouse::{Warehouse, WarehouseRevision};
 use erp_core::ids::SkuId;
+use erp_workflow::entity::document_registry::BusinessDocument;
 use mongodb::bson::doc;
 
-use super::super::extensions::{CatalogExt, DocumentRegistryExt, FulfillmentExt, WarehouseExt};
+use super::super::extensions::{CatalogExt, FulfillmentExt, WarehouseExt};
 use super::InventoryRepository;
+use erp_workflow::DocumentRegistryExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 

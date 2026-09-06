@@ -15,12 +15,11 @@ use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, non_empty, BriefLine, BRIEF_LINE_LIMIT};
 use super::super::presentation::format_yuan;
-use super::super::WorkItemService;
 use super::mapping::{payment_brief_lines, receipt_brief_lines, voucher_account_line};
 use super::{FundsOriginBrief, InvoiceRequirementBrief, ReceivableRevisionBriefs, VoucherAccountBrief};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 从创建审计回填单据创建人（资金单据实体不落创建人字段）。
     ///
     /// # 参数

@@ -48,7 +48,7 @@ impl From<erp_workflow::Error> for Error {
             erp_workflow::Error::Rbac(message) => Self::Rbac(message),
             erp_workflow::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
             erp_workflow::Error::RepositoryError(error) => Self::RepositoryError(error),
-            erp_workflow::Error::Coded(code) => Self::BusinessLogicError(code.to_string()),
+            erp_workflow::Error::Coded(code) => Self::Coded(ErrorCode::from(code)),
         }
     }
 }
@@ -232,6 +232,49 @@ pub enum ErrorCode {
     ApprovalIdempotencyPayloadConflict,
 }
 
+impl From<erp_workflow::ErrorCode> for ErrorCode {
+    /// Map workflow approval codes onto the remaining services error-code enum.
+    fn from(code: erp_workflow::ErrorCode) -> Self {
+        match code {
+            erp_workflow::ErrorCode::ApprovalPolicyNotRegistered => Self::ApprovalPolicyNotRegistered,
+            erp_workflow::ErrorCode::ApprovalProcessNotConfigured => Self::ApprovalProcessNotConfigured,
+            erp_workflow::ErrorCode::ApprovalDraftSourceNotAvailable => Self::ApprovalDraftSourceNotAvailable,
+            erp_workflow::ErrorCode::ApprovalDefinitionNotDraft => Self::ApprovalDefinitionNotDraft,
+            erp_workflow::ErrorCode::ApprovalDefinitionVersionConflict => {
+                Self::ApprovalDefinitionVersionConflict
+            }
+            erp_workflow::ErrorCode::ApprovalDefinitionInvalid => Self::ApprovalDefinitionInvalid,
+            erp_workflow::ErrorCode::ApprovalDefinitionBindingCorrupted => {
+                Self::ApprovalDefinitionBindingCorrupted
+            }
+            erp_workflow::ErrorCode::ApprovalAlreadyStarted => Self::ApprovalAlreadyStarted,
+            erp_workflow::ErrorCode::ApprovalTaskNotOpen => Self::ApprovalTaskNotOpen,
+            erp_workflow::ErrorCode::ApprovalTaskNotAssignedToActor => Self::ApprovalTaskNotAssignedToActor,
+            erp_workflow::ErrorCode::ApprovalTaskVersionConflict => Self::ApprovalTaskVersionConflict,
+            erp_workflow::ErrorCode::ApprovalInstanceVersionConflict => Self::ApprovalInstanceVersionConflict,
+            erp_workflow::ErrorCode::ApprovalExecutionVersionConflict => {
+                Self::ApprovalExecutionVersionConflict
+            }
+            erp_workflow::ErrorCode::ApprovalSubjectVersionConflict => Self::ApprovalSubjectVersionConflict,
+            erp_workflow::ErrorCode::ApprovalRejectReasonRequired => Self::ApprovalRejectReasonRequired,
+            erp_workflow::ErrorCode::ApprovalInstanceBlocked => Self::ApprovalInstanceBlocked,
+            erp_workflow::ErrorCode::ApprovalResumeNotAllowedForBlocker => {
+                Self::ApprovalResumeNotAllowedForBlocker
+            }
+            erp_workflow::ErrorCode::ApprovalCurrentApproverNotRecovered => {
+                Self::ApprovalCurrentApproverNotRecovered
+            }
+            erp_workflow::ErrorCode::ApprovalBlockedCancelNotAllowed => Self::ApprovalBlockedCancelNotAllowed,
+            erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden => {
+                Self::ApprovalGenericWorkItemMutationForbidden
+            }
+            erp_workflow::ErrorCode::ApprovalIdempotencyPayloadConflict => {
+                Self::ApprovalIdempotencyPayloadConflict
+            }
+        }
+    }
+}
+
 impl ErrorCode {
     /// 审批合同冻结的全部结构化错误码。
     pub const ALL: [Self; 21] = [
@@ -315,6 +358,13 @@ impl std::fmt::Display for ErrorCode {
 }
 
 impl Error {
+    /// Whether a failed transaction may already have committed on the server.
+    pub fn command_may_have_committed(&self) -> bool {
+        matches!(
+            self,
+            Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_)
+        )
+    }
     /// 由合同冻结的审批稳定码构造服务错误。
     ///
     /// `APPROVAL_POLICY_NOT_REGISTERED` 只允许作为内部错误；资格与图校验走 422 语义，

@@ -32,10 +32,11 @@ pub use cancel::{
     replay_committed_document_cancel, CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof,
 };
 pub use decision::{prepare_decision, DecisionExecutionInput};
-pub(crate) use idempotency::map_receipt_first_write_error;
 pub use idempotency::{
-    legacy_standard_start_receipt_identity, legacy_start_receipt_identity, specialized_start_identity,
-    upgrade_binding_identity, LegacyReceiptIdentity, PreparedCommandIdentity,
+    command_may_have_committed, command_recovery_delay, legacy_payload_digest,
+    legacy_standard_start_receipt_identity, legacy_start_receipt_identity, map_receipt_first_write_error,
+    payload_conflict_error, specialized_start_identity, upgrade_binding_identity, LegacyReceiptIdentity,
+    PreparedCommandIdentity, ReceiptBranch,
 };
 pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use resume::{prepare_resume, ResumeExecutionInput};
@@ -50,7 +51,7 @@ pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,
     RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
-pub use start::{prepare_start, prepare_start_with_identity, StartExecutionInput};
+pub use start::{map_engine_error, prepare_start, prepare_start_with_identity, StartExecutionInput};
 #[cfg(test)]
 pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};

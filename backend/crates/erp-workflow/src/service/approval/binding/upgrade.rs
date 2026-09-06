@@ -16,7 +16,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
+use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
 use application_core::AuditActor;
 
 use super::super::execution::idempotency::{payload_conflict_error, ReceiptBranch};
@@ -47,6 +47,9 @@ use super::DEFINITION_UPGRADED_AUDIT_ACTION;
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 共享 RBAC 服务
+/// * `object_read` - 注入的对象读取端口
+/// * `upgrade` - 升级主体端口
+/// * `audit` - 审计写入端口
 /// * `command` - 精确对象、强版本、绑定 CAS、原因和预构造幂等身份
 /// * `actor` - 已认证操作人；仍需在事务内重验账号与授权
 /// * `executor` - 调用方事务执行器
@@ -61,6 +64,7 @@ use super::DEFINITION_UPGRADED_AUDIT_ACTION;
 pub async fn upgrade_unsubmitted_document_definition(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
     audit: &dyn crate::ports::WorkflowAuditPort,
     command: &UpgradeUnsubmittedDefinitionCommand,
@@ -88,6 +92,7 @@ pub async fn upgrade_unsubmitted_document_definition(
     apply_fresh_upgrade(
         db,
         rbac,
+        object_read,
         audit,
         ApplyFreshUpgradeInput {
             command,
@@ -313,6 +318,7 @@ struct ApplyFreshUpgradeInput<'a> {
 async fn apply_fresh_upgrade(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     input: ApplyFreshUpgradeInput<'_>,
     executor: &mut dyn Executor,
@@ -336,7 +342,16 @@ async fn apply_fresh_upgrade(
         .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
 
     let published = load_published_graph(db, facts.document_type, executor).await?;
-    revalidate_binding_graph(db, rbac, policy, &facts.binding_context(), &published, executor).await?;
+    revalidate_binding_graph(
+        db,
+        rbac,
+        object_read,
+        policy,
+        &facts.binding_context(),
+        &published,
+        executor,
+    )
+    .await?;
     ensure_upgrade_changes_definition(&previous, &published)?;
 
     let current_definition_id = ApprovalProcessDefinitionId::new(published.definition.base.id.clone());

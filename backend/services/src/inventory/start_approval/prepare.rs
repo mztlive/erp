@@ -4,12 +4,14 @@ use bpm::ids::{
 };
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
-use database::{ApprovalIntegrationExt, BpmExt, InventoryExt};
-use entities::approval_integration::ApprovalSubjectSnapshot;
-use entities::document_registry::DocumentType;
+use database::InventoryExt;
 use entities::inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
 use erp_core::common::time::Instant;
 use erp_identity::AccessControlExt;
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::ApprovalIntegrationExt;
+use erp_workflow::BpmExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -21,24 +23,24 @@ use super::mapping::{
     build_adjustment_line_updates, is_supported_start_receipt_identity, stock_adjustment_start_identity,
     stock_adjustment_start_scopes,
 };
-use crate::approval::business_adapter::ensure_separation_of_duties;
-use crate::approval::execution::authorization::converge_eligibility;
-use crate::approval::execution::idempotency::{
+use crate::errors::{Error, Result};
+use application_core::AuditActor;
+use erp_identity::SharedRbacService;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, ReceiptBranch, StartIdentityParams,
 };
-use crate::approval::execution::{
+use erp_workflow::service::approval::execution::{
     prepare_start_with_identity, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
-use crate::approval::policy::require_process_required;
-use crate::approval::process_kind::process_kind_of;
-use crate::approval::{
+use erp_workflow::service::approval::policy::require_process_required;
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::{
     approval_actor_is_active_with_executor, approval_decide_scope_with_executor,
     approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
 };
-use crate::errors::{Error, Result};
-use application_core::AuditActor;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_identity::SharedRbacService;
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
 
@@ -84,7 +86,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
 ///
 /// # 错误
 /// 无。
-fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
+fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
     DefinitionGraph {
         definition: graph.definition,
         nodes: graph.nodes,
@@ -112,7 +114,7 @@ pub fn prepare_stock_adjustment_start(
         &input.binding_id,
         input.definition_version,
     )?;
-    prepare_start_with_identity(input, identity)
+    prepare_start_with_identity(input, identity).map_err(Error::from)
 }
 
 /// 按当前 V3、历史无前缀作用域顺序读取规范幂等键对应的启动收据。
@@ -208,7 +210,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
         binding.approval_definition_version,
     )?;
     if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
-        return Err(payload_conflict_error());
+        return Err(payload_conflict_error().into());
     }
     let legacy_standard_identity = start_identity(StartIdentityParams {
         idempotency_key: key.clone(),
@@ -237,7 +239,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     if weak_legacy_receipt
         && !legacy_start_payload_matches_result(db, &adjustment, &snapshot, req, actor, executor).await?
     {
-        return Err(payload_conflict_error());
+        return Err(payload_conflict_error().into());
     }
     ensure_stock_adjustment_submit_authorized_with_executor(db, rbac, &adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
@@ -425,18 +427,31 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !approval_actor_is_active_with_executor(db, actor, executor).await?
+    if !approval_actor_is_active_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        executor,
+    )
+    .await?
         || adjustment.prepared_by != actor.id()
     {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
     }
     let organization_id = adjustment.warehouse_id.as_ref();
-    let action_scope =
-        approval_document_action_scope_with_executor(db, rbac, actor, "stock_adjustment:submit", executor)
-            .await?;
-    let read_scope =
-        approval_document_read_scope_with_executor(db, rbac, actor, DocumentType::StockAdjustment, executor)
-            .await?;
+    let action_scope = approval_document_action_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        "stock_adjustment:submit",
+        executor,
+    )
+    .await?;
+    let read_scope = approval_document_read_scope_with_executor(
+        &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        actor,
+        DocumentType::StockAdjustment,
+        executor,
+    )
+    .await?;
     if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
         return Err(Error::Forbidden("无权提交该责任组织的库存调整单".to_string()));
     }
@@ -640,10 +655,14 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
-        let decide_scope = approval_decide_scope_with_executor(db, rbac, &assignee_actor, executor).await?;
+        let decide_scope = approval_decide_scope_with_executor(
+            &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+            &assignee_actor,
+            executor,
+        )
+        .await?;
         let read_scope = approval_document_read_scope_with_executor(
-            db,
-            rbac,
+            &crate::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
             &assignee_actor,
             DocumentType::StockAdjustment,
             executor,

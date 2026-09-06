@@ -6,9 +6,6 @@
 
 use bpm::engine::DefinitionGraph;
 use bpm::SubjectRef;
-use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::document_registry::DocumentType;
 use entities::purchase_order::{
     PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
@@ -16,20 +13,25 @@ use entities::sales_order::SalesOrder;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Quantity;
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::DocumentType;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalNodeView, DocumentApprovalView,
 };
-use crate::approval::business_adapter::{
+use crate::errors::{Error, Result};
+use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
-use crate::approval::policy::{
+use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource,
 };
-use crate::approval::process_kind::process_kind_of;
-use crate::errors::{Error, Result};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
@@ -120,8 +122,11 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseOrderAdapter> 
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn purchase_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
-    entities::approval_integration::subject_ref_for(DocumentType::PurchaseOrder, business_object_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+    erp_workflow::entity::approval_integration::subject_ref_for(
+        DocumentType::PurchaseOrder,
+        business_object_id,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 提交并启动：进入 `IN_APPROVAL`，递增 `approval_subject_version`。
@@ -491,7 +496,6 @@ fn allowed_document_actions(status: PurchaseOrderStatus) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrderData,
@@ -505,6 +509,7 @@ mod tests {
         SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
 
     fn draft_order() -> PurchaseOrder {

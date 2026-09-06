@@ -61,11 +61,11 @@
     "apps/web-api/src/lib.rs",
     "apps/web-api/src/main.rs"
   ],
-  "section_6_callers_still_bind_old_services": true,
+  "section_6_callers_still_bind_old_services": false,
   "workspace_member_count": 21,
   "kind_test_targets": 0,
   "historical_tests_archives_byte_for_byte": true,
   "quality_passed": true,
   "unit_tests_passed": true,
-  "note": "前序输入为阶段 02 本地门禁通过提交 fead5bad，不是已验收。实现提交 36a850f6（workflow-composition local quality gates）。erp-workflow/erp-processes/erp-read-models 已加入 workspace；owner_phase=03 的 8 个 workflow 拥有仓储与 CustomerCenterRepository/FulfillmentQueueRepository 专属只读仓储已落地。公共门禁全部 exit 0（3678 lib tests, 0 failed, 74 ignored）。旧 services/approval、work_item、document_registry、transaction 生产路径仍保留，HTTP 入口仍通过旧 services 类型装配；领域边界旧源清零规则已加载、当前不核销业务源文件。真实数据库运行未验证。"
+  "note": "前序输入为阶段 02 本地门禁通过提交 fead5bad，不是已验收。unique-cut 后旧 services/approval、document_registry、transaction 与 database owned phase-03 仓储已删除；HTTP 入口绑定 erp-workflow / erp-read-models / erp-processes。真实数据库运行未验证。"
 }

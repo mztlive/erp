@@ -9,5 +9,18 @@ pub mod customer_center;
 pub mod fulfillment_queue;
 pub mod workbench;
 
-pub use customer_center::CustomerCenterReadService;
-pub use workbench::WorkbenchReadService;
+pub use customer_center::{
+    CustomerCenterContractRow, CustomerCenterContractView, CustomerCenterReadService,
+    CustomerCenterReceivableView, CustomerCenterRelatedRow, CustomerCenterRelatedView,
+    CustomerCenterRepository, CustomerCenterSalesOrderRow, CustomerCenterSalesOrderView,
+};
+pub use fulfillment_queue::{
+    FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow, FulfillmentQueueRepository,
+    FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
+};
+pub use workbench::{
+    FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
+    FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
+    FulfillmentQueuePageView, FulfillmentQueueWarehouseView, WorkItemListParams, WorkItemPageView,
+    WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
+};

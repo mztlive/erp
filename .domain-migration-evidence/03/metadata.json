@@ -5,23 +5,21 @@
   "branch": "chore/domain-crate-03-workflow-composition",
   "evidence_dir": ".domain-migration-evidence/03",
   "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
-  "implement_commits": [
-    "36a850f63bf8192bff42c7ac955ac9f1a2561c80"
-  ],
-  "implement_commit": "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
-  "head": "36a850f63bf8192bff42c7ac955ac9f1a2561c80",
+  "previous_evidence_head": "5c0984507a72bdc32a9507248e2feb8f537c56e8",
   "unique_integration_owner": "chore/domain-crate-03-workflow-composition implementer",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
-  "files_tsv_rows": 217,
+  "files_tsv_rows": 518,
   "path_changes": {
-    "add": 195,
-    "delete": 0,
-    "modify": 22,
-    "total": 217
+    "add": 193,
+    "delete": 126,
+    "modify": 199,
+    "total": 518,
+    "versus": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+    "rename_detection": false
   },
   "owned_repositories_moved": [
     "ApprovalNotificationOutboxRepository",
@@ -49,18 +47,17 @@
   "autotests": false,
   "workspace_members": 21,
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T11:38:16Z",
+  "recorded_at": "2026-09-06",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
-    "passed": 3678,
+    "passed": 3313,
     "failed": 0,
-    "ignored": 74,
+    "ignored": 71,
     "crates": 20,
     "mongodb_started": false,
     "include_ignored": false,
-    "log": ".domain-migration-evidence/03/unit-tests.log",
-    "source_log": "backend/logs/phase-03-qg-fix/04-test-lib.log"
+    "log": ".domain-migration-evidence/03/unit-tests.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -73,9 +70,8 @@
     "permissions": 0,
     "git-diff-check": 0,
     "all_exit_0": true,
-    "files_changed": [],
     "log": ".domain-migration-evidence/03/quality-gates.log",
-    "summary": "All phase 03 public quality gates from backend/ exited 0. Lib unit tests passed without MongoDB. No lockfile or business-code changes. 真实数据库运行未验证."
+    "summary": "All phase 03 public quality gates from backend/ exited 0 after unique-cut. 3313 lib tests passed, 0 failed, 71 ignored. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
   },
   "contracts": {
     "admin_routes": 369,
@@ -96,16 +92,8 @@
       "rustc": "1.97.0 (2d8144b78 2026-07-07)",
       "cargo": "1.97.0 (c980f4866 2026-06-30)",
       "host": "aarch64-apple-darwin",
-      "profile": "dev",
-      "note": "check/clippy/lib-test recorded from public-gate run logs"
-    },
-    "evidence_recapture": {
-      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
-      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
-      "host": "aarch64-apple-darwin",
-      "profile": "dev",
-      "note": "fmt/bpm/service/domain/permissions/git-diff-check recapture"
+      "profile": "dev"
     }
   },
-  "implement_summary": "Phase 03 local gates passed on chore/domain-crate-03-workflow-composition (217 files). erp-workflow/erp-processes/erp-read-models compile; 3678 lib tests passed, 0 failed, 74 ignored. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
+  "implement_summary": "Phase 03 unique-cut repair on chore/domain-crate-03-workflow-composition. Dual WorkItem/DocumentRegistry/approval/run_audited implementations deleted; HTTP binds erp-workflow / erp-read-models / erp-processes; owned repositories unique in erp-workflow; WorkItemView unique in erp-read-models. 3313 lib tests passed. Status is 本地门禁通过, not 已验收. 真实数据库运行未验证."
 }

@@ -1,7 +1,6 @@
 //! W13 当前责任任务内的历史回款/销项发票原子登记。
 
-use database::{ReceivableExt, WorkItemExt};
-use entities::document_registry::DocumentType;
+use database::ReceivableExt;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CardFundsRegistrationAllocationInput,
     CardFundsRegistrationAllocations, CardFundsRegistrationAllocationsError, CardFundsRegistrationKind,
@@ -10,7 +9,6 @@ use entities::receivable::{
     SalesInvoiceAllocation, SalesInvoiceAllocationData, CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
     CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
 };
-use entities::work_item::WorkItemType;
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -18,6 +16,9 @@ use erp_core::ids::{
     SalesInvoiceAllocationId,
 };
 use erp_core::money::Amount;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -39,14 +40,14 @@ use super::mapping::{
     CardFundsSnapshot,
 };
 use super::{invoice_task, ReceivableService};
-use crate::approval::binding::BindPublishedDefinitionCommand;
-use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
-use crate::work_item::WorkItemService;
+use crate::workflow_compose::work_item_service;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::new_registered_document;
 
 impl ReceivableService {
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
@@ -87,6 +88,7 @@ impl ReceivableService {
             });
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -165,10 +167,12 @@ impl ReceivableService {
                         &receipt.base.id,
                         DocumentType::CustomerReceipt,
                         receipt.receipt_no.clone(),
-                    )?;
+                    )
+                    .map_err(crate::errors::Error::from)?;
                     persist_bound_customer_receipt_document(
                         &db,
                         &rbac,
+                        object_read.as_ref(),
                         document,
                         &bind_command,
                         &actor_owned,
@@ -266,6 +270,7 @@ impl ReceivableService {
             });
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let object_read = std::sync::Arc::clone(&self.object_read);
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -341,7 +346,15 @@ impl ReceivableService {
                         &actor_id,
                     )?;
                     invoice.mark_registered(&actor_id)?;
-                    register_created_invoice_document(&db, &rbac, &invoice, &actor_owned, session).await?;
+                    register_created_invoice_document(
+                        &db,
+                        &rbac,
+                        object_read.as_ref(),
+                        &invoice,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
                     let applied = db
                         .receivable_accounts()
                         .apply_invoicing(
@@ -494,7 +507,7 @@ async fn load_card_funds_registration_context(
         input.expected_task_version,
         input.expected_subject_version.trim(),
     )?;
-    WorkItemService::new(db.clone(), input.rbac)
+    work_item_service(db.clone(), input.rbac)
         .ensure_domain_decision_access(input.actor, &work_item, executor)
         .await?;
 

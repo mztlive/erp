@@ -22,14 +22,13 @@ use mongodb::Database;
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
     WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemConflict, WorkItemConflictKind,
-    WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemListParams, WorkItemMutationOutcome,
-    WorkItemPageView, WorkItemPartyView, WorkItemReassignCandidateView, WorkItemScope, WorkItemSort,
-    WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+    WorkItemMutationOutcome, WorkItemPartyView, WorkItemReassignCandidateView, WorkItemScope,
 };
 pub use finance_responsibility::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
-    FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
+    FinanceResponsibilityRuleView, ResolvedFinanceResponsibility, UpdateFinanceResponsibilityRuleRequest,
 };
+pub use write::{expected_task_version, AuthorizedWorkItem};
 
 #[cfg(test)]
 use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
@@ -49,12 +48,11 @@ use reassign::{
     approval_assignment_separated, audited_fact_operator_actors, non_empty_assignment_actors,
     purchase_order_fulfillment_responsibility_id, AssignmentSeparationPolicy,
 };
-#[cfg(test)]
-use write::expected_task_version;
 
 pub type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
 /// 人工任务责任服务。
+#[derive(Clone)]
 pub struct WorkItemService<A> {
     pub db: Database,
     pub auth: A,
@@ -62,7 +60,7 @@ pub struct WorkItemService<A> {
     pub audit: Arc<dyn WorkflowAuditPort>,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> WorkItemService<A> {
+impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 创建服务。
     ///
     /// # 参数
@@ -808,7 +806,7 @@ mod tests {
                 .find("ensure_generic_work_item_mutation(&item)")
                 .expect("命令必须先识别审批任务");
             let replay = body
-                .find("idempotent_replay(&receipt, id)")
+                .find("idempotent_replay(&receipt, &id)")
                 .expect("命令必须保留幂等回放");
             assert!(guard < replay, "审批任务守卫必须先于命令回放");
         }

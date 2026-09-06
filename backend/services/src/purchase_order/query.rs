@@ -15,8 +15,8 @@ use super::dto::{
 };
 use super::view_mapping::{revision_line_to_view, revision_totals, submission_line_to_view};
 use super::PurchaseOrderService;
-use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
+use erp_workflow::service::document_registry::find_approval_binding;
 
 /// 采购单列表筛选条件类型（经 `PurchaseOrderExt` 关联类型跨 crate 可达）。
 type PurchaseOrderFilter = <mongodb::Database as PurchaseOrderExt>::PurchaseOrderFilter;
@@ -238,7 +238,10 @@ impl PurchaseOrderService {
                     paid_allocated_amount: account.settled_total,
                     purchase_invoice_allocated_amount: account.invoiced_total,
                 });
-        let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction).await {
+        let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
+            .await
+            .map_err(crate::errors::Error::from)
+        {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),

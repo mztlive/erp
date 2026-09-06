@@ -7,11 +7,11 @@ use persistence_core::Executor;
 
 use super::super::brief::{join_list_summary, push_section, ObjectBriefSource};
 use super::super::presentation::format_yuan;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
+use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use super::mapping::{invoice_tax_profile_label, payable_account_fact};
 use crate::errors::Result;
 
-impl WorkItemService {
+impl crate::work_item::ProcessObjectFacts {
     /// 应收子账票款复核与销项开票任务共用的对象事实。
     ///
     /// # 参数

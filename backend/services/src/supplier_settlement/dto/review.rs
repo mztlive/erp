@@ -1,8 +1,8 @@
 //! 结算复核提交与决定命令。
 
 use entities::supplier_settlement::SettlementReviewRejectReason;
-use entities::work_item::WorkItemStatus;
 use erp_core::money::Amount;
+use erp_workflow::entity::work_item::WorkItemStatus;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

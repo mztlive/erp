@@ -142,7 +142,7 @@ pub async fn party_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    PartyService::new(state.db()).delete_party(&id, &actor).await?;
+    erp_processes::delete_party(state.db(), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 

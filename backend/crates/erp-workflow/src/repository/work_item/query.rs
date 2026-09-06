@@ -103,6 +103,28 @@ impl<'a> WorkItemRepository<'a> {
         self.find_by_id(id, executor).await
     }
 
+    /// Persist already-closed confirmation work items in the caller transaction.
+    ///
+    /// # Parameters
+    /// * `work_items` - closed work items to write back with CAS
+    /// * `executor` - caller transaction executor
+    ///
+    /// # Errors
+    /// Version conflict or MongoDB write failures.
+    pub async fn persist_closed_confirmation_work_items(
+        &self,
+        work_items: &mut [WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if work_items.is_empty() {
+            return Ok(());
+        }
+        for item in work_items.iter_mut() {
+            self.update(item, executor).await?;
+        }
+        Ok(())
+    }
+
     /// 查找指定业务对象当前开放的供应异常人工任务。
     ///
     /// # 参数

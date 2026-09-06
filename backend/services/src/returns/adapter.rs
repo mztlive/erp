@@ -9,7 +9,7 @@ mod payment_reversal;
 mod receipt_reversal;
 mod supplier_refund;
 
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 
 use super::dto::DocumentApprovalDefinitionView;
 
