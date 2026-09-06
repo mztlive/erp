@@ -2,31 +2,35 @@
   "phase": "05",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "branch": "chore/domain-crate-05-party-customer-supplier",
   "evidence_dir": ".domain-migration-evidence/05",
   "input_head": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
   "implement_commits": [
-    "9838c29b26521e78c4d7405b7db9071b1ad9dc66"
+    "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+    "0f92caee0ad1780917bffb2350a2a5bb2a24febc"
   ],
   "implement_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "coverage_repair_commit": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
   "integrator_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
-  "head": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "head": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
   "unique_integration_owner": "chore/domain-crate-05-party-customer-supplier integrator",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
-  "files_tsv_rows": 229,
+  "files_tsv_rows": 398,
   "path_changes": {
     "add": 54,
-    "delete": 4,
+    "delete": 3,
     "modify": 68,
-    "rename": 103,
+    "rename": 104,
     "total": 229,
     "versus": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
-    "rename_detection": true
+    "rename_detection": true,
+    "evidence_rows": 398,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
   },
   "owned_repositories_moved": [
     "CustomerAccountRepository",
@@ -82,7 +86,7 @@
     "web-api"
   ],
   "kind_test_targets": 0,
-  "recorded_at": "2026-09-06T21:19:43Z",
+  "recorded_at": "2026-09-06T21:35:39Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
@@ -93,7 +97,7 @@
     "mongodb_started": false,
     "include_ignored": false,
     "log": ".domain-migration-evidence/05/unit-tests.log",
-    "source_log": "backend/logs/phase-05-repair-gates/04-test-lib.log"
+    "source_log": "backend/logs/phase-05-qg-gates-verify/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -108,8 +112,8 @@
     "all_exit_0": true,
     "files_changed": [],
     "log": ".domain-migration-evidence/05/quality-gates.log",
-    "source_dir": "backend/logs/phase-05-repair-gates",
-    "summary": "Phase 05 coverage repair public gates all passed from backend/. Restored DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures, no test-support back-edge. fmt/check/clippy/lib tests without Mongo/BPM/service/domain/permissions/git-diff-check each exited 0. 3281 passed, 0 failed, 68 ignored. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+    "source_dir": "backend/logs/phase-05-qg-gates-verify",
+    "summary": "Phase 05 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-05-qg-gates-verify/. No lockfile or business-code changes. 3281 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
   },
   "contracts": {
     "admin_routes": 369,
@@ -134,6 +138,7 @@
     "before": "self.mobile.as_deref()",
     "after": "self.mobile.as_ref().map(String::as_str)",
     "comparison": ".domain-migration-evidence/05/compile/customer-comparison.json",
+    "raw_reports": ".domain-migration-evidence/05/compile/",
     "note": "中间态复测已完成；耗时相对阶段 00 基线回退，旧大 crate 仍 Dirty。不得冒充最终隔离达标。阈值在阶段 17 判定。真实数据库运行未验证。"
   },
   "toolchain": {
@@ -172,10 +177,18 @@
       "committed": true,
       "commit_sha": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
       "summary": "Registered crates, unwired old mods, moved profile roots to erp-processes, wired AppState/handlers/indexes/callers."
+    },
+    {
+      "shard": "coverage-repair",
+      "branch": "chore/domain-crate-05-party-customer-supplier",
+      "committed": true,
+      "commit_sha": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
+      "summary": "Restored DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures; 3281 passed, 68 ignored."
     }
   ],
-  "implement_summary": "Phase 05 coverage repair on chore/domain-crate-05-party-customer-supplier. Restored DuplicatePartyId plus env-gated party index audit/explain tests and proc_supplier_io_mongo_tests.rs with local Mongo fixtures (no test-support/dev back-edge). Public gates passed (3281 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证",
+  "implement_summary": "Phase 05 party/customer/supplier unique-cut and integrator wiring on chore/domain-crate-05-party-customer-supplier (implement 9838c29b; coverage repair 0f92caee). erp-party/erp-customer/erp-supplier own aggregates; customer_profile/supplier_profile hold root txns. Public gates passed (3281 lib tests, 0 failed, 68 ignored). Customer compile retest recorded. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证",
   "coverage_repair": {
+    "commit": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
     "restored_symbols": [
       "DuplicatePartyId",
       "insert_raw_party",

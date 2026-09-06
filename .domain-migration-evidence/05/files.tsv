@@ -168,6 +168,63 @@ add	.domain-migration-evidence/05/quality-gates.log	阶段 05 验收证据；rev
 add	.domain-migration-evidence/05/quality-gates.tsv	阶段 05 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
 add	.domain-migration-evidence/05/transaction-contract.json	阶段 05 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
 add	.domain-migration-evidence/05/unit-tests.log	阶段 05 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/dto/party_snapshot.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/ports/account.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/ports/audit.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/ports/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/service/customer/profile/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-customer/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/ports/audit.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/ports/supplier_role.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-party/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/customer.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/supplier.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/customer_profile/idempotency.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/customer_profile/views.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/supplier_profile/party_change.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/entity/supplier/profile_change/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/ports/file_asset.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/ports/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/ports/sensitive.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/repository/supplier/bundle/detail.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-supplier/src/service/supplier/profile.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+add	backend/database/src/repository/supplier_names.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/supplier/bundle/detail.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+delete	backend/entities/src/supplier/profile_change/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/customer/profile/idempotency.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/AGENTS.md	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.lock	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
@@ -177,175 +234,19 @@ modify	backend/apps/web-api/src/core/errors.rs	phase 05 unique-cut / integrator 
 modify	backend/apps/web-api/src/core/handler/customer/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/apps/web-api/src/core/handler/party/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/apps/web-api/src/core/handler/supplier/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/dto/customer.rs	rename from backend/services/src/customer/dto.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/dto/party_snapshot.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/assignment_command.rs	rename from backend/entities/src/customer/assignment_command.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/customer_account.rs	rename from backend/entities/src/customer/customer_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/customer_assignment.rs	rename from backend/entities/src/customer/customer_assignment.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/customer_profile_command.rs	rename from backend/entities/src/customer/customer_profile_command.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/mod.rs	rename from backend/entities/src/customer/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/entity/customer/profile_validation.rs	rename from backend/entities/src/customer/profile_validation.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/indexes/customer.rs	rename from backend/database/src/indexes/customer.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/ports/account.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/ports/audit.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/ports/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/repository/customer.rs	rename from backend/database/src/repository/customer.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/repository/extensions/customer.rs	rename from backend/database/src/repository/extensions/customer.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/repository/owned/customer_account.rs	rename from backend/database/src/repository/owned/customer_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/repository/owned/customer_assignment.rs	rename from backend/database/src/repository/owned/customer_assignment.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/repository/owned/customer_profile_command.rs	rename from backend/database/src/repository/owned/customer_profile_command.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/service/customer/assignment.rs	rename from backend/services/src/customer/assignment.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/service/customer/mod.rs	rename from backend/services/src/customer/mod.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/service/customer/profile/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-customer/src/service/customer/profile/validation.rs	rename from backend/services/src/customer/profile/validation.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-customer/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/dto/party.rs	rename from backend/services/src/party/dto.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/close.rs	rename from backend/entities/src/party/close.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/content_match.rs	rename from backend/entities/src/party/content_match.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/entity.rs	rename from backend/entities/src/party/entity.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/mod.rs	rename from backend/entities/src/party/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/party_address.rs	rename from backend/entities/src/party/party_address.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/party_bank_account.rs	rename from backend/entities/src/party/party_bank_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/party_contact.rs	rename from backend/entities/src/party/party_contact.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/party_revision.rs	rename from backend/entities/src/party/party_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/party_tax_profile.rs	rename from backend/entities/src/party/party_tax_profile.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/sensitive.rs	rename from backend/entities/src/party/sensitive.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/entity/party/status.rs	rename from backend/entities/src/party/status.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/indexes/party.rs	rename from backend/database/src/indexes/party.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/ports/audit.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/ports/supplier_role.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/extensions/party.rs	rename from backend/database/src/repository/extensions/party.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party.rs	rename from backend/database/src/repository/owned/party.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party_address.rs	rename from backend/database/src/repository/owned/party_address.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party_bank_account.rs	rename from backend/database/src/repository/owned/party_bank_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party_contact.rs	rename from backend/database/src/repository/owned/party_contact.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party_revision.rs	rename from backend/database/src/repository/owned/party_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/owned/party_tax_profile.rs	rename from backend/database/src/repository/owned/party_tax_profile.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/address.rs	rename from backend/database/src/repository/party/address.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/aggregate.rs	rename from backend/database/src/repository/party/aggregate.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/bank_account.rs	rename from backend/database/src/repository/party/bank_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/contact.rs	rename from backend/database/src/repository/party/contact.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/mod.rs	rename from backend/database/src/repository/party/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/record.rs	rename from backend/database/src/repository/party/record.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/revision.rs	rename from backend/database/src/repository/party/revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/shared.rs	rename from backend/database/src/repository/party/shared.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/repository/party/tax_profile.rs	rename from backend/database/src/repository/party/tax_profile.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-party/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/address.rs	rename from backend/services/src/party/address.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/bank_account.rs	rename from backend/services/src/party/bank_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/contact.rs	rename from backend/services/src/party/contact.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/mod.rs	rename from backend/services/src/party/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/sensitive.rs	rename from backend/services/src/party/sensitive.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-party/src/service/party/tax_profile.rs	rename from backend/services/src/party/tax_profile.rs；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/customer.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/adapters/supplier.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/attachments/supplier.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/customer.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/create.rs	rename from backend/services/src/customer/profile/create.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/facts.rs	rename from backend/services/src/customer/profile/facts.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/customer_profile/idempotency.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/mod.rs	rename from backend/services/src/customer/profile.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/numbering.rs	rename from backend/services/src/customer/profile/numbering.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/query.rs	rename from backend/services/src/customer/profile/query.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/sensitive.rs	rename from backend/services/src/customer/profile/sensitive.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/customer_profile/update.rs	rename from backend/services/src/customer/profile/update.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/customer_profile/views.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-processes/src/supplier.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/create.rs	rename from backend/services/src/supplier/profile/create.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/mod.rs	rename from backend/services/src/supplier/profile/mod.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-processes/src/supplier_profile/party_change.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/sensitive.rs	rename from backend/services/src/supplier/profile/sensitive.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/tests.rs	rename from backend/services/src/supplier/profile/tests.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/update.rs	rename from backend/services/src/supplier/profile/update.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-processes/src/supplier_profile/validation.rs	rename from backend/services/src/supplier/profile/validation.rs；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/src/customer_center/repository/related.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/src/customer_center/service.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/src/workbench/change_order_brief.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/dto/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/dto/supplier.rs	rename from backend/services/src/supplier/dto.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/entity/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/business_category.rs	rename from backend/entities/src/supplier/business_category.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/creation_plan.rs	rename from backend/entities/src/supplier/creation_plan.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/eligibility.rs	rename from backend/entities/src/supplier/eligibility.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/mod.rs	rename from backend/entities/src/supplier/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/payment_term.rs	rename from backend/entities/src/supplier/payment_term.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/mod.rs	rename from backend/entities/src/supplier/profile_change/mod.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/entity/supplier/profile_change/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/plan.rs	rename from backend/entities/src/supplier/profile_change/plan.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/qualification.rs	rename from backend/entities/src/supplier/profile_change/qualification.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/tests.rs	rename from backend/entities/src/supplier/profile_change/tests.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/types.rs	rename from backend/entities/src/supplier/profile_change/types.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_account.rs	rename from backend/entities/src/supplier/supplier_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_capability.rs	rename from backend/entities/src/supplier/supplier_capability.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_capability_revision.rs	rename from backend/entities/src/supplier/supplier_capability_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_commercial_profile_revision.rs	rename from backend/entities/src/supplier/supplier_commercial_profile_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_profile_command.rs	rename from backend/entities/src/supplier/supplier_profile_command.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification.rs	rename from backend/entities/src/supplier/supplier_qualification.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification_capability.rs	rename from backend/entities/src/supplier/supplier_qualification_capability.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification_revision.rs	rename from backend/entities/src/supplier/supplier_qualification_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/entity/supplier/supplier_rating_revision.rs	rename from backend/entities/src/supplier/supplier_rating_revision.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/error.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/indexes/supplier.rs	rename from backend/database/src/indexes/supplier.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/ports/file_asset.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/ports/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/ports/party.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/ports/sensitive.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/repository/extensions/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/extensions/supplier.rs	rename from backend/database/src/repository/extensions/supplier.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/repository/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/repository/owned/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_account.rs	rename from backend/database/src/repository/owned/supplier_account.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_capability.rs	rename from backend/database/src/repository/owned/supplier_capability.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_commercial_profile_revision.rs	rename from backend/database/src/repository/owned/supplier_commercial_profile_revision.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_profile_command.rs	rename from backend/database/src/repository/owned/supplier_profile_command.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_qualification.rs	rename from backend/database/src/repository/owned/supplier_qualification.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/owned/supplier_qualification_capability.rs	rename from backend/database/src/repository/owned/supplier_qualification_capability.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier.rs	rename from backend/database/src/repository/supplier.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/account.rs	rename from backend/database/src/repository/supplier/account.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/repository/supplier/bundle/detail.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/bundle/list.rs	rename from backend/database/src/repository/supplier/bundle/list.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/bundle/mod.rs	rename from backend/database/src/repository/supplier/bundle/mod.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/bundle/tests.rs	rename from backend/database/src/repository/supplier/bundle/tests.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/capability.rs	rename from backend/database/src/repository/supplier/capability.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/command.rs	rename from backend/database/src/repository/supplier/command.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/qualification.rs	rename from backend/database/src/repository/supplier/qualification.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/repository/supplier/revision.rs	rename from backend/database/src/repository/supplier/revision.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/service/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/service/supplier/eligibility.rs	rename from backend/services/src/supplier/eligibility.rs；禁止标记已验收；真实数据库运行未验证
-rename	backend/crates/erp-supplier/src/service/supplier/mod.rs	rename from backend/services/src/supplier/mod.rs；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/service/supplier/profile.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/indexes/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
@@ -355,24 +256,19 @@ modify	backend/database/src/repository/owned/mod.rs	phase 05 unique-cut / integr
 modify	backend/database/src/repository/purchase_order/center_facts.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/purchase_order/creation_basis.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/purchase_order/list_facts.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/supplier/bundle/detail.rs	old unique-cut source removed; no re-export facade；禁止标记已验收；真实数据库运行未验证
-delete	backend/database/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs	old unique-cut source removed; no re-export facade；禁止标记已验收；真实数据库运行未验证
-add	backend/database/src/repository/supplier_names.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/supplier_offering.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/database/src/repository/supplier_offering/list_filter.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/05-party-customer-supplier.md	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/05-party-customer-supplier.md	阶段 05 状态与证据核销；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	阶段 05 状态与证据核销；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/lib.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/purchase_order/creation_basis.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/purchase_order/order.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/entities/src/purchase_order/snapshot.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-delete	backend/entities/src/supplier/profile_change/party.rs	old unique-cut source removed; no re-export facade；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/Cargo.toml	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/contract/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/contract/query.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/contract/scope.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-delete	backend/services/src/customer/profile/idempotency.rs	old unique-cut source removed; no re-export facade；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/errors.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/fulfillment/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/fulfillment/service_fulfillment_confirm.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
@@ -397,6 +293,107 @@ modify	backend/services/src/supplier_fulfillment/query.rs	phase 05 unique-cut / 
 modify	backend/services/src/supplier_offering/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/funds_document_brief/query.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
 modify	backend/services/src/work_item/mod.rs	phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-party/src/indexes/party.rs	coverage repair: restore DuplicatePartyId and env-gated PROC-R10 tests with local fixtures; no test-support back-edge；禁止标记已验收；真实数据库运行未验证
-modify	backend/crates/erp-supplier/src/repository/supplier/bundle/mod.rs	coverage repair: re-mod proc_supplier_io_mongo_tests；禁止标记已验收；真实数据库运行未验证
-add	backend/crates/erp-supplier/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs	coverage repair: restore source-map phase=05 mongo tests with local fixtures; keep ERP_TEST_MONGO_URI ignore gates；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/dto/customer.rs	rename from backend/services/src/customer/dto.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/assignment_command.rs	rename from backend/entities/src/customer/assignment_command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/customer_account.rs	rename from backend/entities/src/customer/customer_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/customer_assignment.rs	rename from backend/entities/src/customer/customer_assignment.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/customer_profile_command.rs	rename from backend/entities/src/customer/customer_profile_command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/mod.rs	rename from backend/entities/src/customer/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/entity/customer/profile_validation.rs	rename from backend/entities/src/customer/profile_validation.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/indexes/customer.rs	rename from backend/database/src/indexes/customer.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/repository/customer.rs	rename from backend/database/src/repository/customer.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/repository/extensions/customer.rs	rename from backend/database/src/repository/extensions/customer.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/repository/owned/customer_account.rs	rename from backend/database/src/repository/owned/customer_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/repository/owned/customer_assignment.rs	rename from backend/database/src/repository/owned/customer_assignment.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/repository/owned/customer_profile_command.rs	rename from backend/database/src/repository/owned/customer_profile_command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/service/customer/assignment.rs	rename from backend/services/src/customer/assignment.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/service/customer/mod.rs	rename from backend/services/src/customer/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-customer/src/service/customer/profile/validation.rs	rename from backend/services/src/customer/profile/validation.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/dto/party.rs	rename from backend/services/src/party/dto.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/close.rs	rename from backend/entities/src/party/close.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/content_match.rs	rename from backend/entities/src/party/content_match.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/entity.rs	rename from backend/entities/src/party/entity.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/mod.rs	rename from backend/entities/src/party/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/party_address.rs	rename from backend/entities/src/party/party_address.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/party_bank_account.rs	rename from backend/entities/src/party/party_bank_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/party_contact.rs	rename from backend/entities/src/party/party_contact.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/party_revision.rs	rename from backend/entities/src/party/party_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/party_tax_profile.rs	rename from backend/entities/src/party/party_tax_profile.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/sensitive.rs	rename from backend/entities/src/party/sensitive.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/entity/party/status.rs	rename from backend/entities/src/party/status.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/indexes/party.rs	rename from backend/database/src/indexes/party.rs；coverage repair: restore DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures; no test-support back-edge；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/extensions/party.rs	rename from backend/database/src/repository/extensions/party.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party.rs	rename from backend/database/src/repository/owned/party.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party_address.rs	rename from backend/database/src/repository/owned/party_address.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party_bank_account.rs	rename from backend/database/src/repository/owned/party_bank_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party_contact.rs	rename from backend/database/src/repository/owned/party_contact.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party_revision.rs	rename from backend/database/src/repository/owned/party_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/owned/party_tax_profile.rs	rename from backend/database/src/repository/owned/party_tax_profile.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/address.rs	rename from backend/database/src/repository/party/address.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/aggregate.rs	rename from backend/database/src/repository/party/aggregate.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/bank_account.rs	rename from backend/database/src/repository/party/bank_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/contact.rs	rename from backend/database/src/repository/party/contact.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/mod.rs	rename from backend/database/src/repository/party/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/record.rs	rename from backend/database/src/repository/party/record.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/revision.rs	rename from backend/database/src/repository/party/revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/shared.rs	rename from backend/database/src/repository/party/shared.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/repository/party/tax_profile.rs	rename from backend/database/src/repository/party/tax_profile.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/address.rs	rename from backend/services/src/party/address.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/bank_account.rs	rename from backend/services/src/party/bank_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/contact.rs	rename from backend/services/src/party/contact.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/mod.rs	rename from backend/services/src/party/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/sensitive.rs	rename from backend/services/src/party/sensitive.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-party/src/service/party/tax_profile.rs	rename from backend/services/src/party/tax_profile.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/create.rs	rename from backend/services/src/customer/profile/create.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/facts.rs	rename from backend/services/src/customer/profile/facts.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/mod.rs	rename from backend/services/src/customer/profile.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/numbering.rs	rename from backend/services/src/customer/profile/numbering.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/query.rs	rename from backend/services/src/customer/profile/query.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/sensitive.rs	rename from backend/services/src/customer/profile/sensitive.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/customer_profile/update.rs	rename from backend/services/src/customer/profile/update.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/create.rs	rename from backend/services/src/supplier/profile/create.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/mod.rs	rename from backend/services/src/supplier/profile/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/sensitive.rs	rename from backend/services/src/supplier/profile/sensitive.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/tests.rs	rename from backend/services/src/supplier/profile/tests.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/update.rs	rename from backend/services/src/supplier/profile/update.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/supplier_profile/validation.rs	rename from backend/services/src/supplier/profile/validation.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/dto/supplier.rs	rename from backend/services/src/supplier/dto.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/business_category.rs	rename from backend/entities/src/supplier/business_category.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/creation_plan.rs	rename from backend/entities/src/supplier/creation_plan.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/eligibility.rs	rename from backend/entities/src/supplier/eligibility.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/mod.rs	rename from backend/entities/src/supplier/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/payment_term.rs	rename from backend/entities/src/supplier/payment_term.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/mod.rs	rename from backend/entities/src/supplier/profile_change/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/plan.rs	rename from backend/entities/src/supplier/profile_change/plan.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/qualification.rs	rename from backend/entities/src/supplier/profile_change/qualification.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/tests.rs	rename from backend/entities/src/supplier/profile_change/tests.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/profile_change/types.rs	rename from backend/entities/src/supplier/profile_change/types.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_account.rs	rename from backend/entities/src/supplier/supplier_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_capability.rs	rename from backend/entities/src/supplier/supplier_capability.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_capability_revision.rs	rename from backend/entities/src/supplier/supplier_capability_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_commercial_profile_revision.rs	rename from backend/entities/src/supplier/supplier_commercial_profile_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_profile_command.rs	rename from backend/entities/src/supplier/supplier_profile_command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification.rs	rename from backend/entities/src/supplier/supplier_qualification.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification_capability.rs	rename from backend/entities/src/supplier/supplier_qualification_capability.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_qualification_revision.rs	rename from backend/entities/src/supplier/supplier_qualification_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/entity/supplier/supplier_rating_revision.rs	rename from backend/entities/src/supplier/supplier_rating_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/indexes/supplier.rs	rename from backend/database/src/indexes/supplier.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/extensions/supplier.rs	rename from backend/database/src/repository/extensions/supplier.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_account.rs	rename from backend/database/src/repository/owned/supplier_account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_capability.rs	rename from backend/database/src/repository/owned/supplier_capability.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_commercial_profile_revision.rs	rename from backend/database/src/repository/owned/supplier_commercial_profile_revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_profile_command.rs	rename from backend/database/src/repository/owned/supplier_profile_command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_qualification.rs	rename from backend/database/src/repository/owned/supplier_qualification.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/owned/supplier_qualification_capability.rs	rename from backend/database/src/repository/owned/supplier_qualification_capability.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier.rs	rename from backend/database/src/repository/supplier.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/account.rs	rename from backend/database/src/repository/supplier/account.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/bundle/list.rs	rename from backend/database/src/repository/supplier/bundle/list.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/bundle/mod.rs	rename from backend/database/src/repository/supplier/bundle/mod.rs；coverage repair: restore DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures; no test-support back-edge；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs	rename from backend/database/src/repository/supplier/bundle/proc_supplier_io_mongo_tests.rs；coverage repair: restore DuplicatePartyId/PROC-R10 and proc_supplier_io_mongo_tests with local fixtures; no test-support back-edge；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/bundle/tests.rs	rename from backend/database/src/repository/supplier/bundle/tests.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/capability.rs	rename from backend/database/src/repository/supplier/capability.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/command.rs	rename from backend/database/src/repository/supplier/command.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/qualification.rs	rename from backend/database/src/repository/supplier/qualification.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/repository/supplier/revision.rs	rename from backend/database/src/repository/supplier/revision.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/service/supplier/eligibility.rs	rename from backend/services/src/supplier/eligibility.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-supplier/src/service/supplier/mod.rs	rename from backend/services/src/supplier/mod.rs；phase 05 unique-cut / integrator wiring；禁止标记已验收；真实数据库运行未验证

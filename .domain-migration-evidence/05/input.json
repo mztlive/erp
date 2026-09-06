@@ -1,18 +1,20 @@
 {
   "phase": "05",
-  "recorded_at": "2026-09-06T21:19:43Z",
+  "recorded_at": "2026-09-06T21:35:39Z",
   "evidence_dir": ".domain-migration-evidence/05",
   "input_head": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
   "implement_commits": [
-    "9838c29b26521e78c4d7405b7db9071b1ad9dc66"
+    "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+    "0f92caee0ad1780917bffb2350a2a5bb2a24febc"
   ],
   "implement_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "coverage_repair_commit": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
   "integrator_commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
-  "head": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+  "head": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
   "branch": "chore/domain-crate-05-party-customer-supplier",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "disclaimer": "真实数据库运行未验证",
   "real_database_verified": false,
   "git_at_start": {
@@ -76,5 +78,5 @@
   "quality_passed": true,
   "unit_tests_passed": true,
   "compile_measurement": "completed: .domain-migration-evidence/05/compile/",
-  "note": "Coverage repair restored source-map phase=05 DuplicatePartyId/PROC-R10 mongo tests and proc_supplier_io_mongo_tests.rs with local fixtures. Public gates exit 0 (3281 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. 不得标记已验收. 真实数据库运行未验证"
+  "note": "前序输入为阶段 04 本地门禁通过提交 c2ceb82eb893191cd0a3bf518bfb9c58d5748a15，不是已验收。实现/集成提交 9838c29b26521e78c4d7405b7db9071b1ad9dc66；覆盖修复 0f92caee0ad1780917bffb2350a2a5bb2a24febc。review_approved=true。公共门禁全部 exit 0（3281 lib tests, 0 failed, 68 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
 }

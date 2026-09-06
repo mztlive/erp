@@ -97,5 +97,5 @@
   "source_contains_with_transaction": true,
   "real_database_rollback_concurrency": "未验证",
   "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、customer_profile/supplier_profile 同一 Executor。真实数据库运行未验证",
-  "recorded_at": "2026-09-06T20:36:16Z"
+  "recorded_at": "2026-09-06T21:35:39Z"
 }
