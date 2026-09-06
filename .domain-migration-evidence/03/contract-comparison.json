@@ -1,0 +1,28 @@
+{
+  "phase": "03",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "versus_phase_02": {
+    "baseline": ".domain-migration-evidence/02/contract-comparison.json",
+    "permissions_generated_sha256_equal": true,
+    "admin_route_count_equal": true,
+    "admin_route_count_phase_02": 369,
+    "admin_route_count": 369,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "phase_02_permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "index_count_equal": true,
+    "index_count": 368,
+    "error_code_variants_equal": true,
+    "error_code_count": 21,
+    "note": "权限生成物与阶段 02 哈希对比见 equal 字段；HTTP 路径/方法/RBAC 未改。真实数据库运行未验证。"
+  },
+  "http": {
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "admin_route_count": 369,
+    "note": "权限生成物无漂移；HTTP 路径/方法/RBAC 未改"
+  },
+  "indexes": {
+    "index_count": 368,
+    "note": "本阶段未改 collection/index 名称、键或唯一性"
+  }
+}

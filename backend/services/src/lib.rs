@@ -36,4 +36,4 @@ pub mod work_item;
 pub use approval::definition::ApprovalDefinitionService;
 pub use approval::execution::{ApprovalNotificationOutboxPort, ApprovalRuntimeService};
 pub use approval_action_registry::ApprovalActionRegistry;
-pub use errors::{Error, ErrorCode};
+pub use errors::{Error, ErrorCode, Result};

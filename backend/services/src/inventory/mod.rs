@@ -41,7 +41,7 @@ pub use self::dto::{
     SubmitStockAdjustmentApprovalTokenView, SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
 };
 
-pub(crate) use self::cancel_approval::cancel_stock_adjustment_approval_in_transaction;
+pub use self::cancel_approval::cancel_stock_adjustment_approval_in_transaction;
 
 /// 库存服务。
 ///

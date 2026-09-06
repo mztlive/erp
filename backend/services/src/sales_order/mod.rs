@@ -97,7 +97,7 @@ impl SalesOrderService {
 ///
 /// # 错误
 /// 单据不存在、动作与销售类型不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub(crate) async fn cancel_approval_in_transaction(
+pub async fn cancel_approval_in_transaction(
     db: &Database,
     id: &str,
     action: ApprovalDomainAction,

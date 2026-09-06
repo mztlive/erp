@@ -1,0 +1,289 @@
+//! 组合根注入的审批领域动作注册表。
+//!
+//! 本模块位于审批运行时与业务域之外。审批运行时只依赖
+//! [`ApprovalDomainActionPort`]；本注册表负责把合同动作路由到所属业务域，
+//! 并强制复用审批运行时持有的唯一事务执行器。
+
+use mongodb::Database;
+use persistence_core::Executor;
+
+use application_core::AuditActor;
+use erp_identity::SharedRbacService;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort};
+use services::Error as ServiceError;
+use services::Result as ServiceResult;
+
+/// 审批强类型领域动作注册表。
+pub struct ApprovalActionRegistry {
+    db: Database,
+    rbac: SharedRbacService,
+}
+
+impl ApprovalActionRegistry {
+    /// 构造完整领域动作注册表。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
+    }
+}
+
+impl ApprovalDomainActionPort for ApprovalActionRegistry {
+    fn execute<'a>(
+        &'a self,
+        action: ApprovalDomainAction,
+        context: &'a ApprovalActionContext,
+        actor: &'a AuditActor,
+        executor: &'a mut dyn Executor,
+    ) -> ApprovalActionFuture<'a> {
+        Box::pin(async move {
+            validate_context(action, context, actor).map_err(map_service_error)?;
+            dispatch_action(self, action, context, actor, executor)
+                .await
+                .map_err(map_service_error)
+        })
+    }
+}
+
+async fn dispatch_action(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    let services_action = services_action(action)?;
+    let services_context = services_context(context)?;
+    match action {
+        ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
+        | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission => {
+            let session = require_transaction(executor)?;
+            services::sales_order::SalesOrderService::with_rbac(registry.db.clone(), registry.rbac.clone())
+                .formalize_approved_submission_in_transaction(context.business_object_id(), actor, session)
+                .await
+        }
+        ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange => {
+            let session = require_transaction(executor)?;
+            services::sales_review::SalesReviewService::new(registry.db.clone())
+                .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
+                .await
+        }
+        ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
+            let session = require_transaction(executor)?;
+            services::purchase_order::PurchaseOrderService::new(registry.db.clone())
+                .formalize_approved_order_in_transaction(context.business_object_id(), actor, session)
+                .await
+        }
+        ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
+            let session = require_transaction(executor)?;
+            services::purchase_order::PurchaseOrderService::new(registry.db.clone())
+                .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
+                .await
+        }
+        ApprovalDomainAction::StockAdjustmentPost => {
+            services::inventory::InventoryService::new(registry.db.clone(), registry.rbac.clone())
+                .post_stock_adjustment(&services_context, actor, executor)
+                .await
+                .map(|_| ())
+        }
+        ApprovalDomainAction::CustomerReceiptPost => {
+            let session = require_transaction(executor)?;
+            services::receivable::post_customer_receipt_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                actor,
+                session,
+            )
+            .await
+        }
+        ApprovalDomainAction::CustomerRefundPost
+        | ApprovalDomainAction::SupplierRefundPost
+        | ApprovalDomainAction::ReceiptReversalPost
+        | ApprovalDomainAction::PaymentReversalPost => {
+            let session = require_transaction(executor)?;
+            services::returns::finalize_approved_return_in_transaction(
+                &registry.db,
+                services_document_type(action.document_type())?,
+                context.business_object_id(),
+                actor,
+                session,
+            )
+            .await
+        }
+        ApprovalDomainAction::SalesOrderCancelApprovalSubmission
+        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
+            services::sales_order::cancel_approval_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::SalesChangeOrderCancelApproval => {
+            services::sales_review::cancel_approval_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::PurchaseOrderCancelApproval => {
+            services::purchase_order::cancel_order_approval_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
+            services::purchase_order::cancel_change_approval_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::StockAdjustmentCancelApproval => {
+            services::inventory::cancel_stock_adjustment_approval_in_transaction(
+                &registry.db,
+                &services_context,
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::CustomerReceiptCancelApproval => {
+            services::receivable::cancel_customer_receipt_approval_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::CustomerRefundCancelApproval
+        | ApprovalDomainAction::SupplierRefundCancelApproval
+        | ApprovalDomainAction::ReceiptReversalCancelApproval
+        | ApprovalDomainAction::PaymentReversalCancelApproval => {
+            services::returns::cancel_approval_in_transaction(
+                &registry.db,
+                services_document_type(action.document_type())?,
+                context.business_object_id(),
+                services_action,
+                actor,
+                executor,
+            )
+            .await
+        }
+        _ => Err(ServiceError::BusinessLogicError(format!(
+            "动作 {} 必须由业务域提交入口执行，审批运行时不得反向调用",
+            action.as_str()
+        ))),
+    }
+}
+
+fn require_transaction(executor: &mut dyn Executor) -> ServiceResult<&mut mongodb::ClientSession> {
+    executor
+        .session()
+        .ok_or_else(|| ServiceError::Internal("审批领域动作缺少事务会话".to_string()))
+}
+
+fn validate_context(
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+) -> ServiceResult<()> {
+    let expected = action.document_type();
+    if context.business_object_type() != expected.as_str() {
+        return Err(ServiceError::ConflictError(
+            "审批领域动作与冻结单据类型不一致".to_string(),
+        ));
+    }
+    if context.actor_id() != actor.id() {
+        return Err(ServiceError::Forbidden(
+            "审批领域动作操作人与认证身份不一致".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn services_action(
+    action: ApprovalDomainAction,
+) -> ServiceResult<entities::approval_integration::ApprovalDomainAction> {
+    entities::approval_integration::ApprovalDomainAction::ALL
+        .iter()
+        .copied()
+        .find(|item| item.as_str() == action.as_str())
+        .ok_or_else(|| ServiceError::Internal(format!("未知审批领域动作 {}", action.as_str())))
+}
+
+fn services_document_type(
+    document_type: erp_workflow::DocumentType,
+) -> ServiceResult<entities::document_registry::DocumentType> {
+    entities::document_registry::DocumentType::try_from_code(document_type.as_str())
+        .map_err(|error| ServiceError::Internal(error.to_string()))
+}
+
+fn services_context(
+    context: &ApprovalActionContext,
+) -> ServiceResult<services::approval::ApprovalActionContext> {
+    use services::approval::{
+        ApprovalActionContext as ServicesContext, BlockedCancelActionParams, DecisionActionParams,
+    };
+    if let Some(work_item_id) = context.work_item_id() {
+        ServicesContext::for_decision(DecisionActionParams {
+            approval_process_instance_id: context.approval_process_instance_id().to_string(),
+            approval_node_execution_id: context
+                .approval_node_execution_id()
+                .unwrap_or_default()
+                .to_string(),
+            work_item_id: work_item_id.to_string(),
+            business_object_type: context.business_object_type().to_string(),
+            business_object_id: context.business_object_id().to_string(),
+            subject_version: context.subject_version().to_string(),
+            actor_id: context.actor_id().to_string(),
+            reason: context.reason().map(ToOwned::to_owned),
+            idempotency_key: context.idempotency_key().to_string(),
+        })
+    } else {
+        ServicesContext::for_blocked_cancel(BlockedCancelActionParams {
+            approval_process_instance_id: context.approval_process_instance_id().to_string(),
+            approval_node_execution_id: context
+                .approval_node_execution_id()
+                .unwrap_or_default()
+                .to_string(),
+            work_item_id: None,
+            business_object_type: context.business_object_type().to_string(),
+            business_object_id: context.business_object_id().to_string(),
+            subject_version: context.subject_version().to_string(),
+            actor_id: context.actor_id().to_string(),
+            reason: context.reason().unwrap_or_default().to_string(),
+            idempotency_key: context.idempotency_key().to_string(),
+        })
+    }
+}
+
+fn map_service_error(error: ServiceError) -> erp_workflow::Error {
+    match error {
+        ServiceError::ValidationError(message) => erp_workflow::Error::ValidationError(message),
+        ServiceError::NotFound(message) => erp_workflow::Error::NotFound(message),
+        ServiceError::BusinessLogicError(message) => erp_workflow::Error::BusinessLogicError(message),
+        ServiceError::ConflictError(message) => erp_workflow::Error::ConflictError(message),
+        ServiceError::Forbidden(message) => erp_workflow::Error::Forbidden(message),
+        ServiceError::Unauthenticated(message) => erp_workflow::Error::Unauthenticated(message),
+        ServiceError::Internal(message) => erp_workflow::Error::Internal(message),
+        ServiceError::Logic(error) => erp_workflow::Error::Logic(error),
+        ServiceError::OutcomeUnknown(error) => erp_workflow::Error::OutcomeUnknown(error),
+        ServiceError::RepositoryError(error) => erp_workflow::Error::RepositoryError(error),
+        other => erp_workflow::Error::Internal(other.to_string()),
+    }
+}

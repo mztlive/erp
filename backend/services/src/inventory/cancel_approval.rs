@@ -1001,7 +1001,7 @@ async fn persist_stock_adjustment_cancel_notifications(
 ///
 /// # 错误
 /// 调整单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub(crate) async fn cancel_stock_adjustment_approval_in_transaction(
+pub async fn cancel_stock_adjustment_approval_in_transaction(
     db: &Database,
     context: &ApprovalActionContext,
     action: crate::approval::policy::ApprovalDomainAction,

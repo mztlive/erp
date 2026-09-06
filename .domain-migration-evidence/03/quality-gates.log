@@ -1,0 +1,76 @@
+phase: 03
+status: 本地门禁通过
+never_mark: 已验收
+disclaimer: 真实数据库运行未验证
+implement_commit: (pending this evidence commit)
+head: fead5bad842092ddbdcbf598ab7b3d00384ff226
+input_head: fead5bad842092ddbdcbf598ab7b3d00384ff226
+cwd: backend/
+recorded_at: 2026-09-06T11:26:18Z
+quality_passed: true
+unit_tests_passed: true
+files_changed_by_quality: none
+mongodb_started: false
+include_ignored: false
+ERP_TEST_MONGO_URI: unset
+
+toolchain:
+rustc 1.97.0 (2d8144b78 2026-07-07)
+binary: rustc
+commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+commit-date: 2026-07-07
+host: aarch64-apple-darwin
+release: 1.97.0
+LLVM version: 22.1.6
+
+cargo 1.97.0 (c980f4866 2026-06-30)
+
+=== fmt ===
+command: cargo fmt --all -- --check
+cwd: /Users/huangjiajiang/Development/erp/backend
+(empty output)
+exit: 0
+
+=== check ===
+command: cargo check --workspace --locked
+cwd: /Users/huangjiajiang/Development/erp/backend
+exit: 0
+log: backend/logs/phase-03-qg-fix/02-check.log
+
+=== clippy ===
+command: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cwd: /Users/huangjiajiang/Development/erp/backend
+exit: 0
+log: backend/logs/phase-03-qg-fix/03-clippy.log
+
+=== unit-tests ===
+command: env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+cwd: /Users/huangjiajiang/Development/erp/backend
+exit: 0
+passed: 3678
+failed: 0
+ignored: 74
+mongodb_started: false
+
+=== bpm ===
+command: ./scripts/check-bpm-boundaries.sh
+exit: 0
+
+=== service ===
+command: ./scripts/check-service-boundaries.sh
+exit: 0
+
+=== domain ===
+command: ./scripts/check-domain-boundaries.sh
+exit: 0
+
+=== permissions ===
+command: ./scripts/check-permissions-drift.sh
+exit: 0
+permissions_generated_sha256: 84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96
+
+=== git-diff-check ===
+command: git diff --check
+exit: 0
+
+summary: Phase 03 public gates from backend/ exited 0. erp-workflow/erp-processes/erp-read-models compile. Lib unit tests 3678 passed, 0 failed, 74 ignored. Domain boundary script allows composition old-layer deps. 真实数据库运行未验证.

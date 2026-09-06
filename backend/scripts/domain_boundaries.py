@@ -302,8 +302,8 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
     for edge in graph.edges:
         src, dst, kind = edge.from_package, edge.to_package, edge.kind
         label = f"{src} -[{kind}{f', rename={edge.rename}' if edge.rename else ''}]-> {dst}"
-        if src in PLANNED_DOMAIN_PACKAGES and dst in OLD_BUSINESS:
-            errors.append(f"新领域/基础/组合 crate 不得依赖旧三层: {label}")
+        if src in FOUNDATION | BUSINESS_DOMAINS and dst in OLD_BUSINESS:
+            errors.append(f"新领域/基础 crate 不得依赖旧三层: {label}")
         if src in BUSINESS_DOMAINS and dst in BUSINESS_DOMAINS and src != dst:
             errors.append(f"普通领域 crate 之间禁止直接依赖: {label}")
         if src in FOUNDATION and dst in BUSINESS_DOMAINS | OLD_BUSINESS | COMPOSITION:
@@ -405,6 +405,23 @@ def scan_foreign_collections(path: str, source: str, own: set[str], foreign: set
         if name in foreign and name not in own:
             errors.append(f"领域仓储访问外域集合 {name}: {path}")
     return errors
+
+
+def is_repository_source(path: str) -> bool:
+    """Return whether a source path is a repository module (directory or `repository.rs`)."""
+    normalized = "/" + path.replace("\\", "/").strip("/") + "/"
+    return "/repository/" in normalized or Path(path).name == "repository.rs"
+
+
+def crate_collection_literals(repo_root: Path) -> set[str]:
+    """Collect collection string literals declared under a crate repository tree."""
+    owned: set[str] = set()
+    if not repo_root.is_dir():
+        return owned
+    for path in repo_root.rglob("*.rs"):
+        for match in COLLECTION_LITERAL.finditer(path.read_text(encoding="utf-8")):
+            owned.add(match.group(2))
+    return owned
 
 
 def load_fixtures(root: Path) -> Path:
@@ -516,6 +533,10 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
             {"sales_orders"},
         ),
     )
+    if not is_repository_source("crates/erp-read-models/src/fulfillment_queue/repository.rs"):
+        result.errors.append("repository.rs 文件应视为仓储源")
+    if is_repository_source("crates/erp-workflow/src/service/approval/scope.rs"):
+        result.errors.append("service 源不应视为仓储源")
     require_hit(
         "repo_negative_foreign_collection.rs",
         scan_foreign_collections(
@@ -652,16 +673,15 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any]) -> CheckResult:
                 if not root:
                     continue
                 package = ident_map.get(root)
-                if package and package in OLD_BUSINESS:
+                if name not in COMPOSITION and package and package in OLD_BUSINESS:
                     result.errors.append(f"新 crate 源码 use 旧三层 {used}: {rel}")
                 if name in BUSINESS_DOMAINS and package in BUSINESS_DOMAINS and package != name:
                     result.errors.append(f"领域源码直接 use 其他领域 {used}: {rel}")
             if "/entity/" in f"/{rel}/" or path.parent.name == "entity" or rel.endswith("/entity.rs"):
                 money_exception = name == "erp-core" and path.name == "money.rs"
                 result.errors.extend(scan_entity_source(rel, text, money_exception=money_exception))
-            if "/service/" in f"/{rel}/" or name in COMPOSITION:
-                if "/repository/" not in f"/{rel}/":
-                    result.errors.extend(scan_service_mongo(rel, text))
+            if ("/service/" in f"/{rel}/" or name in COMPOSITION) and not is_repository_source(rel):
+                result.errors.extend(scan_service_mongo(rel, text))
             result.errors.extend(scan_facade(rel, text))
 
     bpm_src = backend / "crates/bpm/src"
@@ -670,14 +690,23 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any]) -> CheckResult:
             rel = path.relative_to(backend).as_posix()
             result.errors.extend(scan_bpm_source(rel, path.read_text(encoding="utf-8")))
 
-    owned = collection_ownership(backend)
+    old_owned = collection_ownership(backend)
+    crate_owned: dict[str, set[str]] = {}
+    migrated = set()
     for name in present_planned:
+        if name not in BUSINESS_DOMAINS:
+            continue
+        crate_owned[name] = crate_collection_literals(crates_root / name / "src" / "repository")
+        migrated |= crate_owned[name]
+    leftover_old = set(old_owned) - migrated
+    for name in present_planned:
+        if name not in BUSINESS_DOMAINS:
+            continue
         repo_root = crates_root / name / "src" / "repository"
         if not repo_root.is_dir():
             continue
-        domain_key = name.removeprefix("erp-")
-        own = {coll for coll, owner in owned.items() if owner.replace("_", "-") in {domain_key, name}}
-        foreign = set(owned) - own
+        own = crate_owned.get(name, set())
+        foreign = (migrated | leftover_old) - own
         for path in repo_root.rglob("*.rs"):
             rel = path.relative_to(backend).as_posix()
             result.errors.extend(

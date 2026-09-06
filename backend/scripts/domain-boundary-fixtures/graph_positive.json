@@ -31,7 +31,16 @@
       "name": "erp-processes",
       "deps": [
         { "name": "erp-customer", "kind": "normal" },
-        { "name": "erp-sales", "kind": "normal" }
+        { "name": "erp-sales", "kind": "normal" },
+        { "name": "services", "kind": "normal" },
+        { "name": "entities", "kind": "normal" }
+      ]
+    },
+    {
+      "name": "erp-read-models",
+      "deps": [
+        { "name": "database", "kind": "normal" },
+        { "name": "entities", "kind": "normal" }
       ]
     },
     {

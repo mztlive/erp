@@ -41,7 +41,7 @@ mod red_invoice;
 mod start_approval;
 
 pub use self::adapter::customer_receipt_object_readable;
-pub(crate) use self::customer_receipt::{
+pub use self::customer_receipt::{
     cancel_customer_receipt_approval_in_transaction, post_customer_receipt_in_transaction,
 };
 pub use self::dto::{

@@ -124,7 +124,7 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
-    pub(crate) async fn formalize_approved_submission_in_transaction(
+    pub async fn formalize_approved_submission_in_transaction(
         &self,
         id: &str,
         actor: &AuditActor,

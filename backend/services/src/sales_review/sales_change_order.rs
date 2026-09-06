@@ -534,7 +534,7 @@ impl SalesReviewService {
     ///
     /// # 错误
     /// 状态、基准版本、应收差额或持久化不变量失败时返回错误。
-    pub(crate) async fn apply_effective_change_in_transaction(
+    pub async fn apply_effective_change_in_transaction(
         &self,
         id: &str,
         actor: &AuditActor,

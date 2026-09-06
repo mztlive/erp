@@ -760,7 +760,7 @@ impl ReceivableService {
 ///
 /// # 错误
 /// 回款/分录不存在、主体或额度不变量失败、任一写入失败时返回错误。
-pub(crate) async fn post_customer_receipt_in_transaction(
+pub async fn post_customer_receipt_in_transaction(
     db: &Database,
     receipt_id: &str,
     actor: &AuditActor,
@@ -888,7 +888,7 @@ pub(crate) async fn post_customer_receipt_in_transaction(
 ///
 /// # 错误
 /// 回款单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub(crate) async fn cancel_customer_receipt_approval_in_transaction(
+pub async fn cancel_customer_receipt_approval_in_transaction(
     db: &Database,
     receipt_id: &str,
     action: crate::approval::policy::ApprovalDomainAction,

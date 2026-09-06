@@ -1,0 +1,33 @@
+{
+  "phase": "03",
+  "recorded_at": "2026-09-06T11:26:18Z",
+  "evidence_dir": ".domain-migration-evidence/03",
+  "input_head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+  "head": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+  "branch": "chore/domain-crate-03-workflow-composition",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "disclaimer": "真实数据库运行未验证",
+  "real_database_verified": false,
+  "git_at_start": {
+    "unrelated_untracked_not_committed": [
+      ".grok/workflows/migrate-domain-crates.rhai",
+      "backend/scripts/_phase03_fix_uses.py",
+      "backend/scripts/_phase03_qg_fix.py",
+      "backend/scripts/_phase03_transform.py",
+      "backend/scripts/_phase03_read_models_fix.py"
+    ],
+    "actions_not_taken": [
+      "stash",
+      "reset --hard",
+      "clean",
+      "push",
+      "merge"
+    ]
+  },
+  "prerequisite_ok": true,
+  "phase_02_status": "本地门禁通过",
+  "quality_passed": true,
+  "unit_tests_passed": true,
+  "note": "阶段 03 本地门禁通过。旧 services 查询实现仍保留至已验收清零。真实数据库运行未验证。"
+}

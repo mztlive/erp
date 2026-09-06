@@ -1,0 +1,29 @@
+[package]
+name = "erp-read-models"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+bpm = { workspace = true }
+chrono = { workspace = true }
+database = { workspace = true }
+entities = { workspace = true }
+entity-core = { workspace = true }
+erp-audit = { workspace = true }
+erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-workflow = { workspace = true }
+futures-util = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+regex = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+services = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+tracing = { workspace = true }
+validator = { workspace = true }

@@ -31,6 +31,28 @@ impl From<erp_identity::Error> for Error {
     }
 }
 
+impl From<erp_workflow::Error> for Error {
+    /// 将工作流领域错误映射为服务错误。
+    fn from(error: erp_workflow::Error) -> Self {
+        match error {
+            erp_workflow::Error::Internal(message) => Self::Internal(message),
+            erp_workflow::Error::NotFound(message) => Self::NotFound(message),
+            erp_workflow::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_workflow::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_workflow::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_workflow::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_workflow::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_workflow::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_workflow::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_workflow::Error::Logic(error) => Self::Logic(error),
+            erp_workflow::Error::Rbac(message) => Self::Rbac(message),
+            erp_workflow::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_workflow::Error::RepositoryError(error) => Self::RepositoryError(error),
+            erp_workflow::Error::Coded(code) => Self::BusinessLogicError(code.to_string()),
+        }
+    }
+}
+
 impl From<erp_audit::Error> for Error {
     /// 将审计领域错误映射为服务错误。
     fn from(error: erp_audit::Error) -> Self {

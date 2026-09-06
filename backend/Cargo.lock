@@ -1716,6 +1716,85 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-processes"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "database",
+ "entities",
+ "entity-core",
+ "erp-audit",
+ "erp-core",
+ "erp-identity",
+ "erp-workflow",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "services",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
+name = "erp-read-models"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "chrono",
+ "database",
+ "entities",
+ "entity-core",
+ "erp-audit",
+ "erp-core",
+ "erp-identity",
+ "erp-workflow",
+ "futures-util",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "rust_decimal",
+ "serde",
+ "services",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
+name = "erp-workflow"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "hex",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4113,6 +4192,7 @@ dependencies = [
  "erp-audit",
  "erp-core",
  "erp-identity",
+ "erp-workflow",
  "hex",
  "hmac 0.13.0",
  "id-generator",

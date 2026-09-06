@@ -133,7 +133,7 @@ impl ReturnsService {
 ///
 /// # 错误
 /// 单据类型不属于退货退款域，或领域状态/额度/持久化不变量失败时返回错误。
-pub(crate) async fn finalize_approved_return_in_transaction(
+pub async fn finalize_approved_return_in_transaction(
     db: &Database,
     document_type: DocumentType,
     business_object_id: &str,
@@ -193,7 +193,7 @@ pub(crate) async fn finalize_approved_return_in_transaction(
 ///
 /// # 错误
 /// 单据不存在、类型与动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub(crate) async fn cancel_approval_in_transaction(
+pub async fn cancel_approval_in_transaction(
     db: &Database,
     document_type: DocumentType,
     id: &str,

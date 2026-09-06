@@ -8,6 +8,9 @@ members = [
   "crates/persistence-core",
   "crates/erp-identity",
   "crates/erp-audit",
+  "crates/erp-workflow",
+  "crates/erp-processes",
+  "crates/erp-read-models",
   "crates/entity-macros", # 过程宏项目
   "crates/entity-core",
   "crates/permission-macros",
@@ -30,6 +33,9 @@ application-core = { path = "crates/application-core" }
 persistence-core = { path = "crates/persistence-core" }
 erp-identity = { path = "crates/erp-identity" }
 erp-audit = { path = "crates/erp-audit" }
+erp-workflow = { path = "crates/erp-workflow" }
+erp-processes = { path = "crates/erp-processes" }
+erp-read-models = { path = "crates/erp-read-models" }
 config = { path = "config" }
 database = { path = "database" }
 entities = { path = "entities" }

@@ -1,0 +1,35 @@
+{
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "same_executor": true,
+    "external_io_in_write": "forbidden",
+    "note": "跨域审计编排迁入 erp-processes；workflow 命令通过 WorkflowAuditPort 同 Executor 写入"
+  },
+  "approval_dispatch": {
+    "file": "crates/erp-processes/src/approval_dispatch/action_registry.rs",
+    "same_executor": true,
+    "domain_action_port": true,
+    "no_nested_transaction": true
+  },
+  "owned_repositories_moved": {
+    "count": 2,
+    "types": [
+      "CustomerCenterRepository",
+      "FulfillmentQueueRepository"
+    ],
+    "compose": "owned read repositories; no inherent impl on foreign Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true
+  },
+  "source_contains_with_transaction": true
+}

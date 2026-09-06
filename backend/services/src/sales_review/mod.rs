@@ -58,7 +58,7 @@ pub type SalesChangeOrderService = SalesReviewService;
 ///
 /// # 错误
 /// 变更单不存在、状态迁移或 CAS 写入失败时返回错误。
-pub(crate) async fn cancel_approval_in_transaction(
+pub async fn cancel_approval_in_transaction(
     db: &Database,
     id: &str,
     action: ApprovalDomainAction,

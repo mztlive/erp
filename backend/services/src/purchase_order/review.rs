@@ -64,7 +64,7 @@ impl PurchaseOrderService {
     ///
     /// # 错误
     /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。
-    pub(crate) async fn formalize_approved_order_in_transaction(
+    pub async fn formalize_approved_order_in_transaction(
         &self,
         id: &str,
         actor: &AuditActor,
