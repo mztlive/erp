@@ -1,0 +1,33 @@
+{
+  "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "artifacts": [
+    {
+      "path": "/private/tmp/supply16-catalog-semantic-review.md",
+      "sha256": "a75a1426890c8371a682c5232d25a42ae9ca4f40055351ee5615fe403c0c307f"
+    },
+    {
+      "path": "/private/tmp/supply16-catalog-semantic-review.json",
+      "sha256": "30107ef9405c7170561944b27c53e9035df4ddf98250645358278660b5374a23"
+    },
+    {
+      "path": "/private/tmp/supply16-fulfillment-persistence-result.md",
+      "sha256": "ff184544f4e8c03cf72d5faca1a42622e74b2ec8f1162323ad79be7bcad8090f"
+    },
+    {
+      "path": "/private/tmp/supply16-fulfillment-persistence-result.json",
+      "sha256": "b06bfd416a6affe048be94f9a91776d99898677f67be7f264f650af23193b911"
+    },
+    {
+      "path": "/private/tmp/cutover17-supply-error-export.patch",
+      "sha256": "f7ec4b67e3c97d8afac00dbd6b884091cd81ea710a971f523295ca6cb2371c78"
+    },
+    {
+      "path": "/private/tmp/cutover17-supply-error-export.json",
+      "sha256": "72a33c085c0ede87a9647303c4ab0c9d30c06a18387844630eb97fdfbfffea51"
+    },
+    {
+      "path": "/private/tmp/cutover17-supply-error-export.md",
+      "sha256": "d66f236942bf40a38914430fa0ed257992942f1f3a46c6119f0b9bab4aad0bac"
+    }
+  ]
+}

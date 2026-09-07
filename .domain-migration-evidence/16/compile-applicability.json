@@ -1,0 +1,9 @@
+{
+  "phase": "16",
+  "code_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "isolated_domain": "erp-supply",
+  "normal_build_dev_proof": "domain-dependencies.json",
+  "timed_probe": "not separately required in this phase",
+  "reason": "供应链与商品等8个域normal/build/dev闭包只包含自身和erp-core；最终旧三层删除及三场景耗时统一在17判断。",
+  "final_performance_gate_phase": "17"
+}

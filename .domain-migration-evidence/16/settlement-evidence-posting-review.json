@@ -1,0 +1,81 @@
+{
+  "tree": "/private/tmp/erp-domain-crate-16-supply",
+  "input": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+  "current_head": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "status": "implemented_static_only",
+  "new_tests": [
+    "evidence_posting_reads_before_statement_cas_and_evidence_on_same_executor",
+    "evidence_posting_preserves_every_io_error_and_stops_at_its_prefix",
+    "evidence_posting_missing_facts_fail_at_the_original_read",
+    "evidence_posting_version_precedes_association_and_association_precedes_state",
+    "evidence_posting_noneditable_state_stops_before_both_writes"
+  ],
+  "test_count": 5,
+  "tests_executed_by_worker": 0,
+  "cargo_by_worker": false,
+  "mongodb_verified": false,
+  "before_migrated_method_sha256": "5a080deecc6fd3b50ee5aec02a78ddbb42b1c3567943e6e2439181999809ad5a",
+  "after_method_sha256": "5f57332a4c1244b1ef81c9f4ae2b91ae06b6dab2bd57b9ad287658032d6c4ac9",
+  "new_leaf": "backend/crates/erp-supply/src/service/supplier_settlement/evidence_posting.rs",
+  "new_leaf_sha256": "0438e43f01194ba3cb379dba466b9b2543ac20d44c9620444a7f8ba631997218",
+  "observed_evidence_rs_sha256": "f7f3705b50ec3ca99f32160d3ac7434335885502a5496bb618a3d684e4681a0e",
+  "additional_imports_required": [],
+  "registration": "mod evidence_posting; (parent-owned, already observed)",
+  "method_signature": "pub async fn persist_difference_evidence(\n        &self,\n        difference_id: &str,\n        statement_id: &str,\n        expected_version: u64,\n        evidence: &SupplierSettlementDifferenceEvidence,\n        executor: &mut dyn Executor,\n    ) -> Result<()>",
+  "after_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "after_source": "git commit blobs verified against current source files",
+  "commit_binding_verified": true,
+  "commit_binding_verified_at_utc": "2026-09-07T06:01:44.286558+00:00",
+  "commit_binding_path_count": 3,
+  "after_files": [
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_settlement/evidence_posting.rs",
+      "sha256": "0438e43f01194ba3cb379dba466b9b2543ac20d44c9620444a7f8ba631997218",
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "git_blob_oid": "f0f340a01cff673ed6c690dc903c68f2b0c7d02e",
+      "commit_blob_sha256": "0438e43f01194ba3cb379dba466b9b2543ac20d44c9620444a7f8ba631997218",
+      "working_tree_sha256": "0438e43f01194ba3cb379dba466b9b2543ac20d44c9620444a7f8ba631997218",
+      "commit_blob_equals_current_file": true,
+      "verified": true,
+      "previously_recorded_sha256": "0438e43f01194ba3cb379dba466b9b2543ac20d44c9620444a7f8ba631997218",
+      "changed_since_previous_record": false
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_settlement/evidence.rs",
+      "sha256": "f7f3705b50ec3ca99f32160d3ac7434335885502a5496bb618a3d684e4681a0e",
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "git_blob_oid": "a1cf9c3b3ccc7138884d9fc5689bf27fb362c025",
+      "commit_blob_sha256": "f7f3705b50ec3ca99f32160d3ac7434335885502a5496bb618a3d684e4681a0e",
+      "working_tree_sha256": "f7f3705b50ec3ca99f32160d3ac7434335885502a5496bb618a3d684e4681a0e",
+      "commit_blob_equals_current_file": true,
+      "verified": true,
+      "previously_recorded_sha256": "a376cbc19fe1b3fb58106d5a8da25317b38dbd9620d33eaf792c280a8874a248",
+      "changed_since_previous_record": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_settlement/mod.rs",
+      "sha256": "549aba6f548d78720cbdbbe8b718057d22464aa4d494083691758540282ce300",
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "git_blob_oid": "29dff35ac107da0b2ac3831287f6248603fd330e",
+      "commit_blob_sha256": "549aba6f548d78720cbdbbe8b718057d22464aa4d494083691758540282ce300",
+      "working_tree_sha256": "549aba6f548d78720cbdbbe8b718057d22464aa4d494083691758540282ce300",
+      "commit_blob_equals_current_file": true,
+      "verified": true,
+      "previously_recorded_sha256": null,
+      "changed_since_previous_record": false
+    }
+  ],
+  "root_reported_gates": {
+    "reported_by": "root via parent message; not executed or independently inspected by this worker",
+    "clippy5_exit_code": 0,
+    "domain_exit_code": 0,
+    "permissions_exit_code": 0,
+    "lib_tests_status": "running as last reported; no completion claimed",
+    "mongodb_verified": false
+  },
+  "method_fragment_matches_previous_evidence": true,
+  "binding_changed_files": [
+    "backend/crates/erp-supply/src/service/supplier_settlement/evidence.rs"
+  ],
+  "verification_boundary": "Only per-path git show blob/current file SHA equality was performed for final binding. Existing source-contract evidence remains static. No Cargo/test/MongoDB run by this worker."
+}

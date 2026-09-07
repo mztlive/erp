@@ -1,0 +1,31 @@
+{
+  "phase": "16",
+  "code_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "raw_scan_exit_code": 1,
+  "raw_scan_status": "drift_detected",
+  "captured_contracts_equal": false,
+  "reviewed_wire_contracts_equal": true,
+  "changed_count": 1,
+  "missing_count": 0,
+  "added_count": 1,
+  "raw_needs_review_count": 50,
+  "review_dispositions": [
+    {
+      "raw_items": 47,
+      "evidence": "parser-limitations-review.json",
+      "result": "46 original tuple/index limitations and added Supply failure facts; raw changed1/added1 retain type ownership evidence with same eight wire values."
+    },
+    {
+      "raw_items": 2,
+      "evidence": "idempotency-transaction-review.json",
+      "result": "Actual idempotency and transaction provider extraction audited at the committed source."
+    },
+    {
+      "raw_items": 1,
+      "evidence": "catalog-semantic-review.json",
+      "result": "Money scanner names as_of/SellableSkuFilter/SellableSkuRow are preserved Catalog date/query/row contracts, separately reviewed."
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

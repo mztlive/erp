@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 16 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-supply` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；唯一共享注册集成负责人 |
+| 输入/输出提交 | 输入 `ed8015e2`；实现 `72a0c79a2261d33699b869329376e534edfb1ef4`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -74,6 +74,14 @@ erp-supply 内的 supplier_offering/api/fulfillment/settlement 可按实际依�
 
 此外必须按 source-symbols.tsv 的选定符号用 rg 检索全部生产消费者，并复核 grouped use、类型别名、pub use、impl、宏与 cfg(test) 调用。具体跨域消费者按第 7、8 节处理；每个旧引用必须改为直接目标合同或组合入口，不能新增旧路径转发。
 
+### 6.1 必须一并关闭的实际额外消费者
+
+- 商品混合查询由 `erp-catalog::ports::CatalogSupplyQueryPort` 定义事实合同；真实 Mongo 聚合唯一迁到 `erp-processes::adapters::catalog_supply_query::repository`，查询准备与结果投影留在商品领域，商品列表入口装配 `erp-read-models::catalog_center`。销售精确 SKU 资格查询复用同一 Port，保持原 Executor 和日期。
+- W13 应收详情及供应履约详情通过 `erp-read-models::ports::work_item_authorization` 接受原授权结果；Process adapter 调用原正式任务授权服务。读模型不得依赖 Process，不复制权限政策。
+- 供应商资格的六次实际读取通过 OfferingQualificationPort 及唯一 supplier eligibility provider 协作；结算复核的应付/成本准备和持久化使用 finance 的最小事实入口。
+- 支撑任务查询提供方、前序连接执行流程、采购创建依据和工作台事实只更新必要的实际提供方路径，保持原查询顺序及过滤。
+- 网关失败分类 `SupplierFailureClass` 由供应链域唯一拥有，八个 snake_case 值保持不变；integration 重试政策仍只在 integration。逐分支双向映射必须穷尽，不使用兜底分支。
+
 ## 7. 目标依赖合同
 
 supply 内部四组模块允许按实际方向调用；supply 不依赖 supplier/finance/integration/workflow/support 或旧三层；processes 负责跨域协作。
@@ -82,17 +90,17 @@ supply 内部四组模块允许按实际方向调用；supply 不依赖 supplier
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结供应商供给匹配、资质排除、API能力变更、下单/取消/拒绝/退款与结算证据/差异测试。
+1. [x] 冻结供应商供给匹配、资质排除、API能力变更、下单/取消/拒绝/退款与结算证据/差异测试。
 
-2. [ ] 迁入四组实体、DTO、拥有仓储、扩展与索引。供给和结算可调用同一 erp-supply 内本域能力；对 erp-supplier 主数据的读取改为资格/账期事实 Port。
+2. [x] 迁入四组实体、DTO、拥有仓储、扩展与索引。供给和结算可调用同一 erp-supply 内本域能力；对 erp-supplier 主数据的读取改为资格/账期事实 Port。
 
-3. [ ] 把 supplier_api 的 integration/bulk_job 协作迁 processes::supply_governance；把 supplier_fulfillment 的工作项推进及外部调用三段流程迁 processes::supply_execution。
+3. [x] 把 supplier_api 的 integration/bulk_job 协作迁 processes::supply_governance；把 supplier_fulfillment 的工作项推进及外部调用三段流程迁 processes::supply_execution。
 
-4. [ ] 保持 SupplierGateway/SupplierApiGateway/SupplierReferenceRegistry 的协议和错误分类；在 AppState 注入现有实现或原失败关闭实现，不更改外部地址、凭据、重试规则或 readiness 语义。
+4. [x] 保持 SupplierGateway/SupplierApiGateway/SupplierReferenceRegistry 的协议和错误分类；在 AppState 注入现有实现或原失败关闭实现，不更改外部地址、凭据、重试规则或 readiness 语义。
 
-5. [ ] 结算 source/projection/source_scope 的查询按实体归属限定在本供应链域；跨财务结算结果由 process 协调。保持草稿证据快照、差异判定与明细总额守恒。
+5. [x] 结算 source/projection/source_scope 的查询按实体归属限定在本供应链域；跨财务结算结果由 process 协调。保持草稿证据快照、差异判定与明细总额守恒。
 
-6. [ ] 更新四组 Handler、工作台供应协同摘要和其他领域 Port adapter，清空最后的旧供应链业务目录，执行门禁。
+6. [x] 更新四组 Handler、工作台供应协同摘要和其他领域 Port adapter，清空最后的旧供应链业务目录，执行门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -160,15 +168,28 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 ed8015e2；专用阶段 worktree | .domain-migration-evidence/16/input.json |
+| 文件与符号 | 88 个清单旧路径、21 个 owned 准备文件已清零；跨域符号按固定提供方拆分 | source-clearance.json、files.tsv及逐符号报告 |
+| 依赖 | normal/build/dev 全依赖闭包无其他业务域或旧三层 | domain-dependencies.json、metadata.json、boundary.log |
+| 测试 | 3594 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | raw changed=1、missing=0、added=1；类型归属变化与八个wire值逐项复核等价；原始50条needs_review逐项复核；权限生成物无漂移 | contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 实际生产调用链、同Executor、原首错/写入顺序和I/O边界逐项复核；真实数据库运行未验证 | idempotency-transaction-review.json及各分片语义报告 |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；516个第三方包版本和校验和不变 | quality-gates.log、dependency-lock.json |
+| 编译证据 | 本阶段边界与全workspace编译通过；最终三个性能场景统一在阶段17计时判定 | compile-applicability.json、domain-dependencies.json |
+| 阶段提交 | 实现72a0c79a；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/16/`。原始扫描保留exit1、类型声明差异与needs_review；必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- API 命令保持校验、权限、身份与回执顺序；外部引用解析位于事务外，事务内原复验保持。能力更新回放及提交后的完整详情两次读取不得缩减。
+- Offering 资格按 SKU、产品、当前能力指针、供应商、revision、第二能力的原顺序读取；命令恢复和任务/审计 ID 时点保持。列表精确SKU条件被后续集合条件覆盖的既有语义保持。
+- 履约意图事务结束后才能调用网关，结果在第二事务持久化。普通派发、回放、未知结果和退款各自原恢复差异保持；W26 工厂唯一，不补原不存在的退款校验。
+- 结算草稿替换保持有条件删除补证、有条件删除差异、无条件删除 items、statement CAS、无条件插入 items、有条件插入 differences。复核授权与岗位分离先于重读事实与写入，statement、任务、应付账户/分录、成本、回执的同Executor顺序保持。
+- 非零成本差额仍在 record_review 与根事务前失败；零成本差额仍真实创建应付。各种回执的版本等于或大于等于条件分别保留，不合并为统一政策。
+- 商品跨Supply聚合只有实际Process仓储实现；domain保查询准备、纯投影和唯一上架表达式。销售精确refs走同一Port，不新增排序、去重、日期或Executor替换。
+- W13 与供应履约详情通过窄授权Port调用原WorkItem授权，构造器不新增查询，读模型不依赖Process。
+- SupplierFailureClass拥有八个snake_case事实，integration重试政策仍归integration。原始扫描exit1/changed1/added1如实保留，结合穷尽映射和序列化测试核销，不能写成扫描器直接通过。
+- 仅运行无真实Mongo环境的纯内联库测试；历史tests档案、原ignore以及第三方锁文件保持。真实数据库运行未验证。

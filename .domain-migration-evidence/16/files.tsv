@@ -1,0 +1,288 @@
+M	backend/Cargo.lock
+M	backend/Cargo.toml
+M	backend/apps/web-api/Cargo.toml
+M	backend/apps/web-api/src/app_state.rs
+M	backend/apps/web-api/src/core/errors.rs
+M	backend/apps/web-api/src/core/handler/catalog/product.rs
+M	backend/apps/web-api/src/core/handler/receivable/mod.rs
+M	backend/apps/web-api/src/core/handler/supplier_api/mod.rs
+M	backend/apps/web-api/src/core/handler/supplier_fulfillment/mod.rs
+M	backend/apps/web-api/src/core/handler/supplier_offering/mod.rs
+M	backend/apps/web-api/src/core/handler/supplier_settlement/mod.rs
+M	backend/crates/erp-catalog/src/ports/mod.rs
+M	backend/crates/erp-catalog/src/ports/supply.rs
+M	backend/crates/erp-catalog/src/repository/catalog/listing.rs
+M	backend/crates/erp-catalog/src/repository/catalog/mod.rs
+M	backend/crates/erp-catalog/src/repository/catalog/product.rs
+M	backend/crates/erp-catalog/src/repository/catalog/sellable.rs
+M	backend/crates/erp-catalog/src/repository/catalog/shared.rs
+M	backend/crates/erp-catalog/src/repository/mod.rs
+M	backend/crates/erp-catalog/src/service/catalog/mod.rs
+M	backend/crates/erp-catalog/src/service/catalog/product_query.rs
+M	backend/crates/erp-catalog/src/service/catalog/sellable.rs
+M	backend/crates/erp-finance/src/repository/payable/command.rs
+A	backend/crates/erp-finance/src/repository/payable/command/initial.rs
+M	backend/crates/erp-finance/src/service/cost.rs
+A	backend/crates/erp-finance/src/service/cost/supplier_settlement.rs
+M	backend/crates/erp-finance/src/service/payable.rs
+A	backend/crates/erp-finance/src/service/payable/supplier_settlement.rs
+M	backend/crates/erp-processes/Cargo.toml
+A	backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs
+A	backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/mod.rs
+A	backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs
+R097	backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs	backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs
+A	backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs
+A	backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs
+M	backend/crates/erp-processes/src/adapters/mod.rs
+A	backend/crates/erp-processes/src/adapters/supplier_api.rs
+A	backend/crates/erp-processes/src/adapters/supplier_failure.rs
+R070	backend/services/src/supplier_fulfillment/gateway.rs	backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs
+A	backend/crates/erp-processes/src/adapters/workflow/mod.rs
+A	backend/crates/erp-processes/src/adapters/workflow/work_item_authorization.rs
+M	backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs
+M	backend/crates/erp-processes/src/lib.rs
+M	backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs
+A	backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs
+M	backend/crates/erp-processes/src/supplier_connection_execution/catalog.rs
+M	backend/crates/erp-processes/src/supplier_connection_execution/execution.rs
+M	backend/crates/erp-processes/src/supplier_connection_execution/failure.rs
+M	backend/crates/erp-processes/src/supplier_connection_execution/health.rs
+M	backend/crates/erp-processes/src/supplier_connection_execution/mod.rs
+R050	backend/services/src/supplier_fulfillment/cancel.rs	backend/crates/erp-processes/src/supply_execution/cancel.rs
+R065	backend/services/src/supplier_fulfillment/complete.rs	backend/crates/erp-processes/src/supply_execution/complete.rs
+A	backend/crates/erp-processes/src/supply_execution/dispatch_writes.rs
+A	backend/crates/erp-processes/src/supply_execution/dto.rs
+A	backend/crates/erp-processes/src/supply_execution/execution.rs
+R052	backend/services/src/supplier_fulfillment/investigate.rs	backend/crates/erp-processes/src/supply_execution/investigate.rs
+R058	backend/services/src/supplier_fulfillment/mod.rs	backend/crates/erp-processes/src/supply_execution/mod.rs
+A	backend/crates/erp-processes/src/supply_execution/place.rs
+R063	backend/services/src/supplier_fulfillment/receipt.rs	backend/crates/erp-processes/src/supply_execution/receipt.rs
+R080	backend/services/src/supplier_fulfillment/refund.rs	backend/crates/erp-processes/src/supply_execution/refund.rs
+A	backend/crates/erp-processes/src/supply_execution/refund_result.rs
+A	backend/crates/erp-processes/src/supply_execution/refund_writes.rs
+A	backend/crates/erp-processes/src/supply_execution/reject.rs
+A	backend/crates/erp-processes/src/supply_execution/work_item.rs
+A	backend/crates/erp-processes/src/supply_governance/mod.rs
+A	backend/crates/erp-processes/src/supply_governance/offering/command.rs
+A	backend/crates/erp-processes/src/supply_governance/offering/commit.rs
+A	backend/crates/erp-processes/src/supply_governance/offering/exception.rs
+A	backend/crates/erp-processes/src/supply_governance/offering/mod.rs
+A	backend/crates/erp-processes/src/supply_governance/offering/qualification.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/command.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/context.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/creation.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/jobs.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/mod.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/receipt.rs
+A	backend/crates/erp-processes/src/supply_governance/supplier_api/reference.rs
+A	backend/crates/erp-processes/src/supply_settlement/difference.rs
+A	backend/crates/erp-processes/src/supply_settlement/draft.rs
+A	backend/crates/erp-processes/src/supply_settlement/evidence.rs
+A	backend/crates/erp-processes/src/supply_settlement/mod.rs
+A	backend/crates/erp-processes/src/supply_settlement/repository/mod.rs
+A	backend/crates/erp-processes/src/supply_settlement/repository/persistence_tests.rs
+R058	backend/services/src/supplier_settlement/review.rs	backend/crates/erp-processes/src/supply_settlement/review.rs
+A	backend/crates/erp-processes/src/supply_settlement/review_posting.rs
+A	backend/crates/erp-processes/src/supply_settlement/review_preparation.rs
+A	backend/crates/erp-processes/src/supply_settlement/shared.rs
+A	backend/crates/erp-processes/src/supply_settlement/source.rs
+A	backend/crates/erp-processes/src/supply_settlement/tests.rs
+R066	backend/services/src/supplier_settlement/void.rs	backend/crates/erp-processes/src/supply_settlement/void.rs
+M	backend/crates/erp-read-models/Cargo.toml
+A	backend/crates/erp-read-models/src/catalog_center/mod.rs
+A	backend/crates/erp-read-models/src/catalog_center/tests.rs
+M	backend/crates/erp-read-models/src/finance/payable/account.rs
+M	backend/crates/erp-read-models/src/finance/payable/display.rs
+M	backend/crates/erp-read-models/src/finance/receivable/account.rs
+M	backend/crates/erp-read-models/src/lib.rs
+A	backend/crates/erp-read-models/src/ports/mod.rs
+A	backend/crates/erp-read-models/src/ports/work_item_authorization.rs
+M	backend/crates/erp-read-models/src/purchase_center/repository/creation_basis.rs
+M	backend/crates/erp-read-models/src/purchase_center/repository/mapping.rs
+A	backend/crates/erp-read-models/src/supplier_center/fulfillment_access.rs
+M	backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs
+A	backend/crates/erp-read-models/src/supplier_center/fulfillment_dto.rs
+M	backend/crates/erp-read-models/src/supplier_center/mod.rs
+A	backend/crates/erp-read-models/src/supplier_center/offering/dto.rs
+A	backend/crates/erp-read-models/src/supplier_center/offering/mod.rs
+A	backend/crates/erp-read-models/src/supplier_center/repository/mod.rs
+R093	backend/database/src/repository/supplier_offering/list_filter.rs	backend/crates/erp-read-models/src/supplier_center/repository/offering/list_filter.rs
+A	backend/crates/erp-read-models/src/supplier_center/repository/offering/mod.rs
+A	backend/crates/erp-read-models/src/supplier_center/settlement/dto.rs
+A	backend/crates/erp-read-models/src/supplier_center/settlement/mod.rs
+A	backend/crates/erp-read-models/src/supplier_center/settlement/query.rs
+A	backend/crates/erp-read-models/src/supplier_center/settlement/tests.rs
+A	backend/crates/erp-read-models/src/supplier_center/supplier_api/context.rs
+A	backend/crates/erp-read-models/src/supplier_center/supplier_api/dto.rs
+A	backend/crates/erp-read-models/src/supplier_center/supplier_api/jobs.rs
+A	backend/crates/erp-read-models/src/supplier_center/supplier_api/mod.rs
+R092	backend/services/src/supplier_api/governance/query.rs	backend/crates/erp-read-models/src/supplier_center/supplier_api/query.rs
+M	backend/crates/erp-read-models/src/workbench/facts.rs
+M	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs
+M	backend/crates/erp-supplier/src/entity/supplier/eligibility.rs
+M	backend/crates/erp-supplier/src/service/supplier/eligibility.rs
+A	backend/crates/erp-supply/Cargo.toml
+A	backend/crates/erp-supply/src/dto/mod.rs
+R098	backend/services/src/supplier_api/dto.rs	backend/crates/erp-supply/src/dto/supplier_api.rs
+R090	backend/services/src/supplier_fulfillment/dto.rs	backend/crates/erp-supply/src/dto/supplier_fulfillment.rs
+R075	backend/services/src/supplier_offering/dto.rs	backend/crates/erp-supply/src/dto/supplier_offering.rs
+R100	backend/services/src/supplier_settlement/dto/difference.rs	backend/crates/erp-supply/src/dto/supplier_settlement/difference.rs
+R100	backend/services/src/supplier_settlement/dto/draft.rs	backend/crates/erp-supply/src/dto/supplier_settlement/draft.rs
+R092	backend/services/src/supplier_settlement/dto.rs	backend/crates/erp-supply/src/dto/supplier_settlement/mod.rs
+R087	backend/services/src/supplier_settlement/dto/query.rs	backend/crates/erp-supply/src/dto/supplier_settlement/query.rs
+R083	backend/services/src/supplier_settlement/dto/review.rs	backend/crates/erp-supply/src/dto/supplier_settlement/review.rs
+R098	backend/services/src/supplier_settlement/dto/source.rs	backend/crates/erp-supply/src/dto/supplier_settlement/source.rs
+A	backend/crates/erp-supply/src/entity/failure.rs
+A	backend/crates/erp-supply/src/entity/mod.rs
+R100	backend/entities/src/supplier_api/capability.rs	backend/crates/erp-supply/src/entity/supplier_api/capability.rs
+R099	backend/entities/src/supplier_api/capability_change_set.rs	backend/crates/erp-supply/src/entity/supplier_api/capability_change_set.rs
+R100	backend/entities/src/supplier_api/connection.rs	backend/crates/erp-supply/src/entity/supplier_api/connection.rs
+R098	backend/entities/src/supplier_api/governance.rs	backend/crates/erp-supply/src/entity/supplier_api/governance.rs
+R100	backend/entities/src/supplier_api/mod.rs	backend/crates/erp-supply/src/entity/supplier_api/mod.rs
+R099	backend/entities/src/supplier_api/prepared_commands.rs	backend/crates/erp-supply/src/entity/supplier_api/prepared_commands.rs
+R100	backend/entities/src/supplier_fulfillment/fulfillment_item.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/fulfillment_item.rs
+R099	backend/entities/src/supplier_fulfillment/fulfillment_order.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/fulfillment_order.rs
+R097	backend/entities/src/supplier_fulfillment/mod.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/mod.rs
+R100	backend/entities/src/supplier_fulfillment/order_action.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/order_action.rs
+R100	backend/entities/src/supplier_fulfillment/refund.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/refund.rs
+R100	backend/entities/src/supplier_fulfillment/status.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/status.rs
+R100	backend/entities/src/supplier_fulfillment/status_history.rs	backend/crates/erp-supply/src/entity/supplier_fulfillment/status_history.rs
+R098	backend/entities/src/supplier_offering/availability.rs	backend/crates/erp-supply/src/entity/supplier_offering/availability.rs
+R090	backend/entities/src/supplier_offering/command.rs	backend/crates/erp-supply/src/entity/supplier_offering/command.rs
+R100	backend/entities/src/supplier_offering/mod.rs	backend/crates/erp-supply/src/entity/supplier_offering/mod.rs
+R099	backend/entities/src/supplier_offering/offering.rs	backend/crates/erp-supply/src/entity/supplier_offering/offering.rs
+R100	backend/entities/src/supplier_offering/types.rs	backend/crates/erp-supply/src/entity/supplier_offering/types.rs
+R100	backend/entities/src/supplier_offering/write_data.rs	backend/crates/erp-supply/src/entity/supplier_offering/write_data.rs
+R100	backend/entities/src/supplier_settlement/difference.rs	backend/crates/erp-supply/src/entity/supplier_settlement/difference.rs
+R099	backend/entities/src/supplier_settlement/draft_snapshot.rs	backend/crates/erp-supply/src/entity/supplier_settlement/draft_snapshot.rs
+R100	backend/entities/src/supplier_settlement/evidence.rs	backend/crates/erp-supply/src/entity/supplier_settlement/evidence.rs
+R100	backend/entities/src/supplier_settlement/item.rs	backend/crates/erp-supply/src/entity/supplier_settlement/item.rs
+R100	backend/entities/src/supplier_settlement/mod.rs	backend/crates/erp-supply/src/entity/supplier_settlement/mod.rs
+R100	backend/entities/src/supplier_settlement/review_reason.rs	backend/crates/erp-supply/src/entity/supplier_settlement/review_reason.rs
+R100	backend/entities/src/supplier_settlement/source_evidence.rs	backend/crates/erp-supply/src/entity/supplier_settlement/source_evidence.rs
+R099	backend/entities/src/supplier_settlement/statement.rs	backend/crates/erp-supply/src/entity/supplier_settlement/statement.rs
+A	backend/crates/erp-supply/src/error.rs
+A	backend/crates/erp-supply/src/indexes/mod.rs
+R098	backend/database/src/indexes/supplier_api.rs	backend/crates/erp-supply/src/indexes/supplier_api.rs
+R099	backend/database/src/indexes/supplier_fulfillment.rs	backend/crates/erp-supply/src/indexes/supplier_fulfillment.rs
+R098	backend/database/src/indexes/supplier_offering.rs	backend/crates/erp-supply/src/indexes/supplier_offering.rs
+R099	backend/database/src/indexes/supplier_settlement.rs	backend/crates/erp-supply/src/indexes/supplier_settlement.rs
+A	backend/crates/erp-supply/src/lib.rs
+A	backend/crates/erp-supply/src/ports/mod.rs
+A	backend/crates/erp-supply/src/ports/offering_qualification.rs
+A	backend/crates/erp-supply/src/ports/supplier_api_gateway.rs
+A	backend/crates/erp-supply/src/ports/supplier_gateway.rs
+A	backend/crates/erp-supply/src/ports/supplier_reference_registry.rs
+A	backend/crates/erp-supply/src/repository/extensions/mod.rs
+R100	backend/database/src/repository/extensions/supplier_api.rs	backend/crates/erp-supply/src/repository/extensions/supplier_api.rs
+R100	backend/database/src/repository/extensions/supplier_fulfillment.rs	backend/crates/erp-supply/src/repository/extensions/supplier_fulfillment.rs
+R091	backend/database/src/repository/extensions/supplier_offering.rs	backend/crates/erp-supply/src/repository/extensions/supplier_offering.rs
+R100	backend/database/src/repository/extensions/supplier_settlement.rs	backend/crates/erp-supply/src/repository/extensions/supplier_settlement.rs
+A	backend/crates/erp-supply/src/repository/mod.rs
+R081	backend/database/src/repository/owned/business_capability_confirmation.rs	backend/crates/erp-supply/src/repository/owned/business_capability_confirmation.rs
+A	backend/crates/erp-supply/src/repository/owned/mod.rs
+R082	backend/database/src/repository/owned/supplier_api_capability.rs	backend/crates/erp-supply/src/repository/owned/supplier_api_capability.rs
+R082	backend/database/src/repository/owned/supplier_api_connection.rs	backend/crates/erp-supply/src/repository/owned/supplier_api_connection.rs
+R081	backend/database/src/repository/owned/supplier_connection_command_receipt.rs	backend/crates/erp-supply/src/repository/owned/supplier_connection_command_receipt.rs
+R080	backend/database/src/repository/owned/supplier_fulfillment_item.rs	backend/crates/erp-supply/src/repository/owned/supplier_fulfillment_item.rs
+R081	backend/database/src/repository/owned/supplier_fulfillment_order.rs	backend/crates/erp-supply/src/repository/owned/supplier_fulfillment_order.rs
+R081	backend/database/src/repository/owned/supplier_health_check_run.rs	backend/crates/erp-supply/src/repository/owned/supplier_health_check_run.rs
+R082	backend/database/src/repository/owned/supplier_offering.rs	backend/crates/erp-supply/src/repository/owned/supplier_offering.rs
+R080	backend/database/src/repository/owned/supplier_offering_availability.rs	backend/crates/erp-supply/src/repository/owned/supplier_offering_availability.rs
+R081	backend/database/src/repository/owned/supplier_offering_command.rs	backend/crates/erp-supply/src/repository/owned/supplier_offering_command.rs
+R081	backend/database/src/repository/owned/supplier_offering_revision.rs	backend/crates/erp-supply/src/repository/owned/supplier_offering_revision.rs
+R081	backend/database/src/repository/owned/supplier_order_action.rs	backend/crates/erp-supply/src/repository/owned/supplier_order_action.rs
+R080	backend/database/src/repository/owned/supplier_order_action_line.rs	backend/crates/erp-supply/src/repository/owned/supplier_order_action_line.rs
+R080	backend/database/src/repository/owned/supplier_order_status_history.rs	backend/crates/erp-supply/src/repository/owned/supplier_order_status_history.rs
+R081	backend/database/src/repository/owned/supplier_refund_allocation.rs	backend/crates/erp-supply/src/repository/owned/supplier_refund_allocation.rs
+R081	backend/database/src/repository/owned/supplier_refund_fact.rs	backend/crates/erp-supply/src/repository/owned/supplier_refund_fact.rs
+R080	backend/database/src/repository/owned/supplier_settlement_difference.rs	backend/crates/erp-supply/src/repository/owned/supplier_settlement_difference.rs
+R079	backend/database/src/repository/owned/supplier_settlement_difference_evidence.rs	backend/crates/erp-supply/src/repository/owned/supplier_settlement_difference_evidence.rs
+R081	backend/database/src/repository/owned/supplier_settlement_item.rs	backend/crates/erp-supply/src/repository/owned/supplier_settlement_item.rs
+R079	backend/database/src/repository/owned/supplier_settlement_source_evidence.rs	backend/crates/erp-supply/src/repository/owned/supplier_settlement_source_evidence.rs
+R080	backend/database/src/repository/owned/supplier_settlement_statement.rs	backend/crates/erp-supply/src/repository/owned/supplier_settlement_statement.rs
+R090	backend/database/src/repository/supplier_api.rs	backend/crates/erp-supply/src/repository/supplier_api.rs
+R099	backend/database/src/repository/supplier_api/capability_change_batch.rs	backend/crates/erp-supply/src/repository/supplier_api/capability_change_batch.rs
+R099	backend/database/src/repository/supplier_fulfillment.rs	backend/crates/erp-supply/src/repository/supplier_fulfillment.rs
+R082	backend/database/src/repository/supplier_offering.rs	backend/crates/erp-supply/src/repository/supplier_offering.rs
+A	backend/crates/erp-supply/src/repository/supplier_offering/command_tests.rs
+R097	backend/database/src/repository/supplier_offering/query.rs	backend/crates/erp-supply/src/repository/supplier_offering/query.rs
+A	backend/crates/erp-supply/src/repository/supplier_offering/write.rs
+R062	backend/database/src/repository/supplier_settlement/command.rs	backend/crates/erp-supply/src/repository/supplier_settlement/command.rs
+A	backend/crates/erp-supply/src/repository/supplier_settlement/command/draft_write.rs
+A	backend/crates/erp-supply/src/repository/supplier_settlement/command/draft_write/tests.rs
+A	backend/crates/erp-supply/src/repository/supplier_settlement/detail_snapshot.rs
+R099	backend/database/src/repository/supplier_settlement/difference.rs	backend/crates/erp-supply/src/repository/supplier_settlement/difference.rs
+R099	backend/database/src/repository/supplier_settlement/item.rs	backend/crates/erp-supply/src/repository/supplier_settlement/item.rs
+R088	backend/database/src/repository/supplier_settlement/mod.rs	backend/crates/erp-supply/src/repository/supplier_settlement/mod.rs
+R100	backend/database/src/repository/supplier_settlement/projection.rs	backend/crates/erp-supply/src/repository/supplier_settlement/projection.rs
+R098	backend/database/src/repository/supplier_settlement/source_scope.rs	backend/crates/erp-supply/src/repository/supplier_settlement/source_scope.rs
+R099	backend/database/src/repository/supplier_settlement/statement.rs	backend/crates/erp-supply/src/repository/supplier_settlement/statement.rs
+R098	backend/database/src/repository/supplier_settlement/tests.rs	backend/crates/erp-supply/src/repository/supplier_settlement/tests.rs
+A	backend/crates/erp-supply/src/repository/supplier_settlement/wire_tests.rs
+A	backend/crates/erp-supply/src/service/mod.rs
+A	backend/crates/erp-supply/src/service/supplier_api/capability.rs
+A	backend/crates/erp-supply/src/service/supplier_api/command.rs
+A	backend/crates/erp-supply/src/service/supplier_api/confirmation.rs
+R052	backend/services/src/supplier_api/governance/context.rs	backend/crates/erp-supply/src/service/supplier_api/context.rs
+A	backend/crates/erp-supply/src/service/supplier_api/creation.rs
+A	backend/crates/erp-supply/src/service/supplier_api/intent.rs
+A	backend/crates/erp-supply/src/service/supplier_api/mod.rs
+A	backend/crates/erp-supply/src/service/supplier_api/query.rs
+A	backend/crates/erp-supply/src/service/supplier_api/reference.rs
+A	backend/crates/erp-supply/src/service/supplier_api/status.rs
+R098	backend/services/src/supplier_api/governance/tests.rs	backend/crates/erp-supply/src/service/supplier_api/tests.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/boundary_tests.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/cancel.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/complete.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs
+R084	backend/services/src/supplier_fulfillment/mapping.rs	backend/crates/erp-supply/src/service/supplier_fulfillment/mapping.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/mod.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs
+R092	backend/services/src/supplier_fulfillment/query.rs	backend/crates/erp-supply/src/service/supplier_fulfillment/query.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/refund_result.rs
+A	backend/crates/erp-supply/src/service/supplier_fulfillment/reject.rs
+A	backend/crates/erp-supply/src/service/supplier_offering/mod.rs
+A	backend/crates/erp-supply/src/service/supplier_offering/recovery.rs
+A	backend/crates/erp-supply/src/service/supplier_offering/write.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/difference.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/draft.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/evidence.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/evidence_posting.rs
+R096	backend/services/src/supplier_settlement/item.rs	backend/crates/erp-supply/src/service/supplier_settlement/item.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/mod.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/query.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/review.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/shared.rs
+R090	backend/services/src/supplier_settlement/source.rs	backend/crates/erp-supply/src/service/supplier_settlement/source.rs
+A	backend/crates/erp-supply/src/service/supplier_settlement/void.rs
+M	backend/crates/erp-support/src/repository/mod.rs
+A	backend/crates/erp-support/src/repository/supplier_connection_job.rs
+M	backend/database/Cargo.toml
+M	backend/database/src/indexes/mod.rs
+M	backend/database/src/lib.rs
+M	backend/database/src/repository/extensions/mod.rs
+M	backend/database/src/repository/mod.rs
+M	backend/database/src/repository/owned/mod.rs
+D	backend/database/src/repository/supplier_settlement/detail_snapshot.rs
+M	backend/entities/Cargo.toml
+M	backend/entities/src/lib.rs
+M	backend/services/Cargo.toml
+M	backend/services/src/errors.rs
+M	backend/services/src/lib.rs
+D	backend/services/src/supplier_api/governance/command.rs
+D	backend/services/src/supplier_api/governance/jobs.rs
+D	backend/services/src/supplier_api/governance/mod.rs
+D	backend/services/src/supplier_api/mod.rs
+D	backend/services/src/supplier_fulfillment/place.rs
+D	backend/services/src/supplier_fulfillment/refund_result.rs
+D	backend/services/src/supplier_fulfillment/reject.rs
+D	backend/services/src/supplier_offering/mod.rs
+D	backend/services/src/supplier_settlement/difference.rs
+D	backend/services/src/supplier_settlement/draft.rs
+D	backend/services/src/supplier_settlement/evidence.rs
+D	backend/services/src/supplier_settlement/mod.rs
+D	backend/services/src/supplier_settlement/query.rs
+M	backend/services/src/work_item/facts.rs
+M	backend/services/src/work_item/inventory_settlement_brief.rs

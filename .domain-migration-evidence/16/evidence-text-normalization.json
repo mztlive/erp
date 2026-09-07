@@ -1,0 +1,17 @@
+{
+  "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
+  "files": [
+    {
+      "path": "supplier-offering-body-diffs.txt",
+      "raw_attachment": "supplier-offering-body-diffs.txt.raw.gz",
+      "raw_sha256": "53908c3fe67a92b287c1a8452f4b892200562e5174810daa84604765b212e47a",
+      "normalized_sha256": "7172cef6e043fc9aea1a8dabdbc866fdfb4e8aa4cd2d0b5ee0cb9ba13bb5be3d"
+    },
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "bb6b6de7432861c83283a042bf8319b33d1bc7fe368a024afb4f7e1d1047b99d",
+      "normalized_sha256": "7fdb0969fa3ce02a34175a0ccd1ce41228e03df3e759b8efc57e895378112689"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "phase": "16",
+  "code_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "kinds": [
+    "normal",
+    "build",
+    "dev"
+  ],
+  "business_closures": {
+    "erp-finance": [
+      "erp-core",
+      "erp-finance"
+    ],
+    "erp-sales": [
+      "erp-core",
+      "erp-sales"
+    ],
+    "erp-procurement": [
+      "erp-core",
+      "erp-procurement"
+    ],
+    "erp-fulfillment": [
+      "erp-core",
+      "erp-fulfillment"
+    ],
+    "erp-returns": [
+      "erp-core",
+      "erp-returns"
+    ],
+    "erp-integration": [
+      "erp-core",
+      "erp-integration"
+    ],
+    "erp-supply": [
+      "erp-core",
+      "erp-supply"
+    ],
+    "erp-catalog": [
+      "erp-catalog",
+      "erp-core"
+    ]
+  },
+  "forbidden_business_dependencies": [],
+  "evidence": "metadata.json"
+}

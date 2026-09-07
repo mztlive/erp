@@ -1,0 +1,38 @@
+{
+  "supply16-settlement-persistence-result": {
+    "path_count": 29,
+    "after_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "verified": true,
+    "changed_paths": [],
+    "md_sha256": "03f6f02136a24a2db8d9f7bb2580364a31ded22a5a25f3f4f66b2ad2c3ea47d3",
+    "json_sha256": "42449d5ec9734d3908d58f8ecba223151b409b538657cae73d2d5b6f2252e488"
+  },
+  "supply16-settlement-evidence-posting-result": {
+    "path_count": 3,
+    "after_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "verified": true,
+    "changed_paths": [
+      "backend/crates/erp-supply/src/service/supplier_settlement/evidence.rs"
+    ],
+    "md_sha256": "39ca1caa276fbb849120df900e8f28f372ece4219dc67a643be41e3742aee4ed",
+    "json_sha256": "5c009a45ca44a4df6fa8dab90f97b1b13798a071afbe23ce270dc233c29476ee"
+  },
+  "supply16-settlement-test-comment-audit": {
+    "path_count": 45,
+    "after_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "verified": true,
+    "changed_paths": [
+      "backend/crates/erp-read-models/src/supplier_center/settlement/tests.rs"
+    ],
+    "md_sha256": "b079195620d442b454a700f87fe9384ec97cbf925dc3130af03600725e9b0d48",
+    "json_sha256": "be43598399c78e6048b68b244bc8013a49823fb667f0bc074e8e582e20ce4399"
+  },
+  "supply16-boundary-tests-result": {
+    "path_count": 29,
+    "after_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "verified": true,
+    "changed_paths": [],
+    "md_sha256": "74f91ea1a101076f4396704388a3e37da239a4a0cad87f2bb1ac57e81ed5b3c7",
+    "json_sha256": "8493f26f84b9cad36f0a95743f9363ad21f3f59ccc1f2244015ec7e065d481b1"
+  }
+}

@@ -1,0 +1,578 @@
+{
+  "phase": "16",
+  "source_count": 88,
+  "owned_count": 21,
+  "all_old_sources_removed": true,
+  "remaining_old_sources": [],
+  "sources": [
+    {
+      "source": "database/src/indexes/supplier_api.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/indexes/supplier_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/indexes/supplier_offering.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/indexes/supplier_settlement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/supplier_api.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/supplier_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/supplier_offering.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/supplier_settlement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_api.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_api/capability_change_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_offering.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_offering/list_filter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_offering/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/command.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/detail_snapshot.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/item.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/projection.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/source_scope.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/statement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/supplier_settlement/tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/capability.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/capability_change_set.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/connection.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/governance.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_api/prepared_commands.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/fulfillment_item.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/fulfillment_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/order_action.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/status.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_fulfillment/status_history.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/availability.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/command.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/offering.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/types.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_offering/write_data.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/draft_snapshot.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/evidence.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/item.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/review_reason.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/source_evidence.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/supplier_settlement/statement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/command.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/context.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/jobs.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/governance/tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_api/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/cancel.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/complete.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/gateway.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/investigate.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/mapping.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/place.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/receipt.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/refund_result.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_fulfillment/reject.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_offering/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_offering/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/draft.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto/difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto/draft.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto/review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/dto/source.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/evidence.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/item.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/source.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/supplier_settlement/void.rs",
+      "old_source_exists": false
+    }
+  ],
+  "owned": [
+    {
+      "entity": "BusinessCapabilityConfirmation",
+      "owned_type": "BusinessCapabilityConfirmationRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/business_capability_confirmation.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/business_capability_confirmation.rs",
+      "impl_sources": "database/src/repository/supplier_api.rs"
+    },
+    {
+      "entity": "SupplierApiCapability",
+      "owned_type": "SupplierApiCapabilityRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_api_capability.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_api_capability.rs",
+      "impl_sources": "database/src/repository/supplier_api.rs"
+    },
+    {
+      "entity": "SupplierApiConnection",
+      "owned_type": "SupplierApiConnectionRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_api_connection.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_api_connection.rs",
+      "impl_sources": "database/src/repository/supplier_api.rs"
+    },
+    {
+      "entity": "SupplierConnectionCommandReceipt",
+      "owned_type": "SupplierConnectionCommandReceiptRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_connection_command_receipt.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_connection_command_receipt.rs",
+      "impl_sources": "database/src/repository/supplier_api.rs"
+    },
+    {
+      "entity": "SupplierFulfillmentItem",
+      "owned_type": "SupplierFulfillmentItemRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_fulfillment_item.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_fulfillment_item.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierFulfillmentOrder",
+      "owned_type": "SupplierFulfillmentOrderRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_fulfillment_order.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_fulfillment_order.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierHealthCheckRun",
+      "owned_type": "SupplierHealthCheckRunRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_health_check_run.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_health_check_run.rs",
+      "impl_sources": "database/src/repository/supplier_api.rs"
+    },
+    {
+      "entity": "SupplierOffering",
+      "owned_type": "SupplierOfferingRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_offering.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_offering.rs",
+      "impl_sources": "database/src/repository/supplier_offering.rs,database/src/repository/supplier_offering/query.rs"
+    },
+    {
+      "entity": "SupplierOfferingAvailability",
+      "owned_type": "SupplierOfferingAvailabilityRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_offering_availability.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_offering_availability.rs",
+      "impl_sources": "database/src/repository/supplier_offering.rs"
+    },
+    {
+      "entity": "SupplierOfferingCommand",
+      "owned_type": "SupplierOfferingCommandRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_offering_command.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_offering_command.rs",
+      "impl_sources": "database/src/repository/supplier_offering.rs"
+    },
+    {
+      "entity": "SupplierOfferingRevision",
+      "owned_type": "SupplierOfferingRevisionRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_offering_revision.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_offering_revision.rs",
+      "impl_sources": "database/src/repository/supplier_offering.rs,database/src/repository/supplier_offering/query.rs"
+    },
+    {
+      "entity": "SupplierOrderAction",
+      "owned_type": "SupplierOrderActionRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_order_action.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_order_action.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierOrderActionLine",
+      "owned_type": "SupplierOrderActionLineRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_order_action_line.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_order_action_line.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierOrderStatusHistory",
+      "owned_type": "SupplierOrderStatusHistoryRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_order_status_history.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_order_status_history.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierRefundAllocation",
+      "owned_type": "SupplierRefundAllocationRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_refund_allocation.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_refund_allocation.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierRefundFact",
+      "owned_type": "SupplierRefundFactRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_refund_fact.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_refund_fact.rs",
+      "impl_sources": "database/src/repository/supplier_fulfillment.rs"
+    },
+    {
+      "entity": "SupplierSettlementDifference",
+      "owned_type": "SupplierSettlementDifferenceRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_settlement_difference.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_settlement_difference.rs",
+      "impl_sources": "database/src/repository/supplier_settlement/difference.rs"
+    },
+    {
+      "entity": "SupplierSettlementDifferenceEvidence",
+      "owned_type": "SupplierSettlementDifferenceEvidenceRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_settlement_difference_evidence.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_settlement_difference_evidence.rs",
+      "impl_sources": "database/src/repository/supplier_settlement/difference.rs"
+    },
+    {
+      "entity": "SupplierSettlementItem",
+      "owned_type": "SupplierSettlementItemRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_settlement_item.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_settlement_item.rs",
+      "impl_sources": "database/src/repository/supplier_settlement/item.rs"
+    },
+    {
+      "entity": "SupplierSettlementSourceEvidence",
+      "owned_type": "SupplierSettlementSourceEvidenceRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_settlement_source_evidence.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_settlement_source_evidence.rs",
+      "impl_sources": "database/src/repository/supplier_settlement/statement.rs"
+    },
+    {
+      "entity": "SupplierSettlementStatement",
+      "owned_type": "SupplierSettlementStatementRepository",
+      "preparation_phase": "01",
+      "owner_phase": "16",
+      "target_crate": "erp-supply",
+      "prepare_at": "database/src/repository/owned/supplier_settlement_statement.rs",
+      "final_type_definition": "crates/erp-supply/src/repository/owned/supplier_settlement_statement.rs",
+      "impl_sources": "database/src/repository/supplier_settlement/statement.rs"
+    }
+  ],
+  "extra_closure": [
+    "CatalogSupplyQueryPort plus actual mixed Mongo provider, listing expression and Sales exact-reference consumer",
+    "WorkItemAuthorizationReadPort, same original authorizer through Process adapter, W13 and supplier fulfillment details",
+    "supplier eligibility, support connection job query, finance settlement preparation and persistence, previous execution process and purchase/workbench consumers"
+  ]
+}

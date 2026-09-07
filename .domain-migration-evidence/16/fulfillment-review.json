@@ -1,0 +1,1607 @@
+{
+  "input_source_commit": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+  "worktree": "/private/tmp/erp-domain-crate-16-supply",
+  "observed_head": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "status": "implementation_review_bound_to_frozen_source",
+  "source_files": [
+    {
+      "path": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "sha256": "8619ec7e6eb4b80b59266c40a3e08880e5dd3fafb06b9d84703758c2355ee466",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/complete.rs",
+      "sha256": "57dbeab7190ed1b519e46f00501fe0638283637e81b63e75c5c9b1d254ad0ed0",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/dto.rs",
+      "sha256": "7b20f4b502115fc9a59f128075d7d58dc465ae4dfb99e96b205d0ff0097daf3f",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "sha256": "3d4c1d49893afaabb2068e9bc4f88c3ea1af31313c2fdd18d2bb8b8d5830ffe5",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "sha256": "1029afa3aee30433db6be6e9b8515bc203657bded61e6e29cf3812cc6436363e",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/mapping.rs",
+      "sha256": "24f0beb230294941e6fad8cabdd257042c8717836872d0b59f13091dcc7c1118",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/mod.rs",
+      "sha256": "b4ba7ae18a733c3bb48a730b6a632d91316db7dc504bbd4d148f33758af33a27",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/place.rs",
+      "sha256": "a6a2a2bbe711382c5e2ebaf74160511ef0fa5283925a87db0b2ade2f568dd36c",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/query.rs",
+      "sha256": "0f44e1b2d1f9405099fce71b58ef03cf8a46e56b2d33257eb5edd9faf6f6a286",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "sha256": "61555411cea89a4fd5b455f4b08538b9522075b7bc66e90a8d84d5361ba17d2a",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/refund.rs",
+      "sha256": "4143354f99561fd94e7e6f37fa8e4b7e9aea42e3d58ed8d8a00fb2f592a8506a",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/refund_result.rs",
+      "sha256": "8be8d81c8c7cef76869756026fa6da77d5e0cfe368e2356892253402e2394d7f",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/services/src/supplier_fulfillment/reject.rs",
+      "sha256": "6be72ebbd4b250c66300bf37b89efa8aadd0a4af70ad56e978d1f183af5da8dd",
+      "matches_accepted_input": true,
+      "old_path_removed": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "sha256": "a6e954e5a11412b99d757bdd2f8b8f91ea0e990e759595ba35c1f4b7237edd7f",
+      "matches_accepted_input": true,
+      "old_path_removed": false
+    }
+  ],
+  "counterpart_files": [
+    {
+      "path": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "sha256": "62e3dc2c322534a8e20d8c95160b9160aa80831f6c11de3b89be8c92b3ddd34b",
+      "tests": [
+        "ordinary_endpoint_never_simulates_accepted_place",
+        "simulated_endpoints_classify_failure_paths",
+        "successful_query_transport_is_not_a_verified_business_result",
+        "query_no_result_scenario_starts_unknown_before_proving_no_result",
+        "non_place_action_has_no_external_order_no",
+        "amounts_parse_from_string_shape"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "sha256": "a8289dbccc80433f0de5613d6d608ef6fa1b783f4bad728d3c9d3e560da0e3fe",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/cancel.rs",
+      "sha256": "bcdab4ca863d8b2930cc78313ee9624b0bce3bdbdd97e9a388c1b74543a2cf44",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/complete.rs",
+      "sha256": "1788ab4d9f9acd32b6393e8e1d987d6f5429984c8352534d8f461448a79294e9",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/dispatch_writes.rs",
+      "sha256": "4201e6c28f3eb211a70044b560963d389a710353738fb9a92a1ee3c756e8a245",
+      "tests": [
+        "dispatch_result_preserves_one_executor_and_original_write_order",
+        "dispatch_result_each_failure_stops_later_writes"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/dto.rs",
+      "sha256": "46ac081e9c29276532db7d56bc19fa68ce310d02c61ff2b5fe43c6833c6d4797",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/execution.rs",
+      "sha256": "99271da6a691222bad4401a6233ed3051bf55b5e36959395f954d6e2b5fb37e3",
+      "tests": [
+        "committed_intent_precedes_external_dispatch_and_result",
+        "failed_intent_never_dispatches_and_result_error_is_preserved",
+        "durable_prepared_reuse_skips_external_step_even_after_final_failure",
+        "fresh_prepare_failure_does_not_enter_final_recovery",
+        "final_recovery_reads_once_for_any_error_and_preserves_first_read_error"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "sha256": "60808e3f0b99a288492378026da5b362e190fe9e1b4de4d6b798b09485482265",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/mod.rs",
+      "sha256": "b223639067a04d9aad881cbc0708c0a734f616b4ebc7e2083b4988410b239947",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/place.rs",
+      "sha256": "b605f88c5a6675f7e5a0c4a6682d03351eec2c7cd592bdd80afa70faf9133e11",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "sha256": "001d329b637b72f6d7240b687a54c2e7dd5f969545e8d2fb714ffedf4b756e5b",
+      "tests": [
+        "receipt_duplicate_fields_fail_before_payload_identity_and_missing_fields",
+        "receipt_forward_fields_and_trimmed_versions_keep_original_wire_behavior",
+        "receipt_version_error_class_keeps_investigation_task_exception"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/refund.rs",
+      "sha256": "c2177f9f4c7a568e53bf534639e2d71fd0b792d0ca5859cba2d90cd2f2890d21",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/refund_result.rs",
+      "sha256": "b655d5dc2b17027f6022e3408c5e90a2b4d94cf7876ef55a218f3a1d378aa680",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/refund_writes.rs",
+      "sha256": "62c514ac16271c2de990f4f4bdbd73ce7a294d809d8291fb2c5c07e7e48176e3",
+      "tests": [
+        "refund_callback_preserves_one_executor_and_original_write_order",
+        "refund_callback_each_failure_stops_later_writes"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/reject.rs",
+      "sha256": "edab23d0bb6aabcb1d3f9341e888d0ae2375058a008b88870c4af4fc10a6515d",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-processes/src/supply_execution/work_item.rs",
+      "sha256": "63fd38ffaea41fd696a31efed1cc1705bbf1a280614618c44d8cfdfea8c24ac7",
+      "tests": [
+        "w26_factory_binds_order_current_subject_and_original_personal_responsibility",
+        "w26_factory_keeps_work_item_validation_for_empty_personal_owner"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_access.rs",
+      "sha256": "96bbeda8a9fd86eb1d614d1d5fa2bd2c31d9c500180c851011279b29f8a85864",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "sha256": "c86627e8daab09da8fcdf0d02fbc15f5aa0d1c488e7556a73308f304a22ea46a",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_dto.rs",
+      "sha256": "a2112c69bd5aa21bb05b50270799bb080c701ad37306dab1879922bfd156fd0c",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "sha256": "463abe91929696fa2dd823038336c5a221a12f2a74da952ac27b4b4ae5056f21",
+      "tests": [
+        "sort_whitelist_rejects_unknown_fields_and_directions",
+        "list_params_normalize_paging_filters_and_sort_defaults",
+        "list_params_reject_unbounded_page_size",
+        "place_request_rejects_blank_order_no_and_empty_items",
+        "w26_task_investigation_accepts_only_the_registered_shape",
+        "w26_task_completion_rejects_unregistered_decisions"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/ports/supplier_gateway.rs",
+      "sha256": "a01e267a1443f9d75dcc8907bc4c76f4e8afabcdb861adf94e8409a7498b3b09",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/boundary_tests.rs",
+      "sha256": "cc39db40459ca02b75a46d2b9263c5cd632b9dbde530a619b7dd0f4d02fa0af4",
+      "tests": [
+        "missing_external_order_number_keeps_ordinary_and_replay_rules_distinct",
+        "ordinary_retry_fact_preserves_pending_and_no_retry_fact_marks_exception",
+        "replay_failure_ignores_class_and_never_reuses_ordinary_retry_policy"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/cancel.rs",
+      "sha256": "acc677093d17eee8e553b70f85edbefcfffdc04d94e8c44f7f414f1227bef350",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/complete.rs",
+      "sha256": "db53a8e583a8ea218ee7b47f1aeec29f79c85876c78961dbf73d4c32059c3243",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "sha256": "fc350221d93e49977373c9f49040bd2e7a83dc9167ab790a2056d263ec092c7f",
+      "tests": [
+        "durable_intent_freezes_gateway_result_before_domain_reconciliation"
+      ],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/mapping.rs",
+      "sha256": "c386639fa58adfc3e756e1adb23cec41517293b8d3eadf3fc23b5c7d061c4b31",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/mod.rs",
+      "sha256": "1c5bb689d9e4af2c5f2554aa8075f2718741a31cf33c30e09bd3e98c39ea7a3f",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs",
+      "sha256": "5319762e1c0cb1c864ccfcba35257353480a7aab5da69e938ac569e19aacd4c6",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/query.rs",
+      "sha256": "fadc23b409db4618e07a7ca4b20e7eb248331701b99014ea595f47192e1cf92b",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "sha256": "c3a4737fb6385e18f8b03edc59c2f53cc9c24394d32e73b06059df9371df73ed",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/refund_result.rs",
+      "sha256": "f77334a85b472dafe76bbd05f914aa25476b2a737ced20e3deef58b884dc3cd3",
+      "tests": [],
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/crates/erp-supply/src/service/supplier_fulfillment/reject.rs",
+      "sha256": "3aef32df979faed5ee38586d0ef3a1ae7752173007d2314b341ce65f1c469f87",
+      "tests": [],
+      "ignore_count": 0
+    }
+  ],
+  "exact_function_dto_evidence_checks": [
+    {
+      "source": "backend/services/src/supplier_fulfillment/query.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/query.rs",
+      "symbol": "supplier_fulfillment_order_list",
+      "counterpart_symbol": "supplier_fulfillment_order_list",
+      "kind": "whole_function",
+      "source_sha256": "41de791efa9847d7eebdefc98f634458f09b0aad0316d3a0fe20c43f2c27a73f",
+      "counterpart_sha256": "41de791efa9847d7eebdefc98f634458f09b0aad0316d3a0fe20c43f2c27a73f",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/query.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/query.rs",
+      "symbol": "load_order",
+      "counterpart_symbol": "load_order",
+      "kind": "whole_function",
+      "source_sha256": "c6c245ff1f0ea16af7cff089b619277f4e7d732f01a2fd839fd176a37a155961",
+      "counterpart_sha256": "c6c245ff1f0ea16af7cff089b619277f4e7d732f01a2fd839fd176a37a155961",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/mapping.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/mapping.rs",
+      "symbol": "action_line_view",
+      "counterpart_symbol": "action_line_view",
+      "kind": "whole_function",
+      "source_sha256": "1077083ea1288f628f2a5845fa02ab96a2a8d718f19360416d2fa3bd3e8f9978",
+      "counterpart_sha256": "459df1110b29f5b7ee9db7467dbe06a0906641e19c3eedcd65cebc7d697fddc9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/mapping.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/mapping.rs",
+      "symbol": "refund_fact_view",
+      "counterpart_symbol": "refund_fact_view",
+      "kind": "whole_function",
+      "source_sha256": "db888a414921b1fc776b7501d187509e4f9f0fc5049f456183e267a4e5b156c7",
+      "counterpart_sha256": "73b76c76cb4f2be3cf03e36a5e6d017a58e7694e80b99085074b761d1bb05d14",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/mapping.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/mapping.rs",
+      "symbol": "refund_allocation_view",
+      "counterpart_symbol": "refund_allocation_view",
+      "kind": "whole_function",
+      "source_sha256": "37574c5968dbaa27c57d93be2362f4754818a3a55b990e23ec7cceaf859871c0",
+      "counterpart_sha256": "4c141a8f4279d39ef0d4770bd811de618cc4ec9a4e4af272cdcffbf868c2ca42",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs",
+      "symbol": "ensure_placeable",
+      "counterpart_symbol": "ensure_placeable",
+      "kind": "whole_function",
+      "source_sha256": "da9f4a30da2954ad6283b9cb4b90c504f7816a4c11638a09ea5755d1f0b109e0",
+      "counterpart_sha256": "48e18b2aa15a771c08df7c9cd35b69b6f2afb26422688a003aec4c283d25bc07",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs",
+      "symbol": "build_place_facts",
+      "counterpart_symbol": "build_place_facts",
+      "kind": "whole_function",
+      "source_sha256": "eb2ddeb1d95891548fe61a39ad0b364828ba416ae7465849b27eba8e14a9ac5c",
+      "counterpart_sha256": "fdd8fd5ee29c9307512151307abff3b85d115908f099d972caeda07330e2d503",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs",
+      "symbol": "build_place_items",
+      "counterpart_symbol": "build_place_items",
+      "kind": "whole_function",
+      "source_sha256": "2519be3b994ab8cee1419da77aae8e71f51508d8ef04701f19feaecb35ae514d",
+      "counterpart_sha256": "70b5f9b05eaf28f238ad810cd34a240155df56490f17b1ca82f3c3a0e13e7cef",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/place.rs",
+      "symbol": "ensure_capability",
+      "counterpart_symbol": "ensure_capability",
+      "kind": "whole_function",
+      "source_sha256": "d02200e2e07b72e8d27e3545689423333ca9989316efcd86b6ef456e2d7b1d55",
+      "counterpart_sha256": "d02200e2e07b72e8d27e3545689423333ca9989316efcd86b6ef456e2d7b1d55",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/cancel.rs",
+      "symbol": "build_after_sales_action",
+      "counterpart_symbol": "build_after_sales_action",
+      "kind": "whole_function",
+      "source_sha256": "0d5b02aec7b05afa316e0ce87b1ebf1ce42011165b85e57386b5ac505f07ab77",
+      "counterpart_sha256": "5e68ed4b4ab1fe22f5e4b1c3cc578fb96aa27e1c7d96681f3deb1e0b7bab30f5",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/cancel.rs",
+      "symbol": "build_action_lines",
+      "counterpart_symbol": "build_action_lines",
+      "kind": "whole_function",
+      "source_sha256": "f1603dc9f9eab3c3e3d1b5987ef46b790bdd15cf5804f5c91480bf3f8498caf5",
+      "counterpart_sha256": "a2f529b42945d6e90cd00ce9e1d952b23f438887d145a130d590e1d143b4080f",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/cancel.rs",
+      "symbol": "ensure_action_lines",
+      "counterpart_symbol": "ensure_action_lines",
+      "kind": "whole_function",
+      "source_sha256": "c0a74cf05e7c86ae41191b2434e026447253377e6ebb64dda8f149fee9ee7070",
+      "counterpart_sha256": "b4c977d1b85c3d6aca38b22d5479692c288f91d468cf3d423504332af6614757",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/reject.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/reject.rs",
+      "symbol": "latest_place_action",
+      "counterpart_symbol": "latest_place_action",
+      "kind": "whole_function",
+      "source_sha256": "f4d55f97a3f5b9f28c825b5572fb39f08ca8e71b41fe308b9bc2a1f9b00d9018",
+      "counterpart_sha256": "0bec62c053cb89a72bb0e880c829ccd1171534709bfb61b7e06007daf83a5712",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "target_supplier_action_id",
+      "counterpart_symbol": "target_supplier_action_id",
+      "kind": "whole_function",
+      "source_sha256": "762a89d734391d591ccefe2ac487eb118f8f5c6173f9f775b8124042e56f874d",
+      "counterpart_sha256": "762a89d734391d591ccefe2ac487eb118f8f5c6173f9f775b8124042e56f874d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "outcome",
+      "counterpart_symbol": "outcome",
+      "kind": "whole_function",
+      "source_sha256": "ac34887b29f9c46bbb4a16de607c070fabe24f97033ffd4b75e0178db6a1a64a",
+      "counterpart_sha256": "ac34887b29f9c46bbb4a16de607c070fabe24f97033ffd4b75e0178db6a1a64a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "verified_resolution",
+      "counterpart_symbol": "verified_resolution",
+      "kind": "whole_function",
+      "source_sha256": "0cbd7d024e69b62548e6c2395d288f1f3829f1f5920de69f62b7f4d9c584493c",
+      "counterpart_sha256": "0cbd7d024e69b62548e6c2395d288f1f3829f1f5920de69f62b7f4d9c584493c",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "summary",
+      "counterpart_symbol": "summary",
+      "kind": "whole_function",
+      "source_sha256": "c067ac05449297234f32d52d9eacbc3775f8c8f573752a668e90fe7e500b19e7",
+      "counterpart_sha256": "c067ac05449297234f32d52d9eacbc3775f8c8f573752a668e90fe7e500b19e7",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "capability_for_action",
+      "counterpart_symbol": "capability_for_action",
+      "kind": "whole_function",
+      "source_sha256": "efe9aead4d52e6955a31bee226037beb261010526fa9fd454e3420dd2c147ab3",
+      "counterpart_sha256": "efe9aead4d52e6955a31bee226037beb261010526fa9fd454e3420dd2c147ab3",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "ensure_replay_safe",
+      "counterpart_symbol": "ensure_replay_safe",
+      "kind": "whole_function",
+      "source_sha256": "bd1cffc968f192a3dcb9fe56880ea86947ac56586b7e899342e5acf582911d3b",
+      "counterpart_sha256": "bd1cffc968f192a3dcb9fe56880ea86947ac56586b7e899342e5acf582911d3b",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "bounded_prepared_investigation",
+      "counterpart_symbol": "bounded_prepared_investigation",
+      "kind": "whole_function",
+      "source_sha256": "2027138767bf9d5d1835f1279fab0c5da042361a6430d5951bb37926549db28c",
+      "counterpart_sha256": "b0998d7dad57deef393c16218c0d5335eb0a9f60793459be2d48aa0db1cb15d1",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "apply_replay_outcome",
+      "counterpart_symbol": "apply_replay_outcome",
+      "kind": "whole_function",
+      "source_sha256": "c603756d5addf4facff959230ec4dae38a5ea45ebe5f018364b245a3daf300ce",
+      "counterpart_sha256": "1fc6258fd6cb602beaacc956e3fea55cd4d859c13e37a47dd6e9a10f250030b4",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "evidence_action_status",
+      "counterpart_symbol": "evidence_action_status",
+      "kind": "whole_function",
+      "source_sha256": "08592e687fe78b714b95cf30953625c3e4a75a4048e3ff65167782dc7d7ef1ba",
+      "counterpart_sha256": "1dcb9c4afdcbd1b2591a5d62266cce03bc48ced3fb52dc8886e449c908468e27",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "verified_terminal_evidence",
+      "counterpart_symbol": "verified_terminal_evidence",
+      "kind": "whole_function",
+      "source_sha256": "6fa4d3f466e5c18e645451b83eb47211d043b533c30b16814e5724a58b93da36",
+      "counterpart_sha256": "6fa4d3f466e5c18e645451b83eb47211d043b533c30b16814e5724a58b93da36",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "parse_investigation_evidence",
+      "counterpart_symbol": "parse_investigation_evidence",
+      "kind": "whole_function",
+      "source_sha256": "f3f2f78b541028c3f470e74cd3c4e17559eda0d2845886dfdfa0d265e6483cc2",
+      "counterpart_sha256": "f3f2f78b541028c3f470e74cd3c4e17559eda0d2845886dfdfa0d265e6483cc2",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "bounded_summary",
+      "counterpart_symbol": "bounded_summary",
+      "kind": "whole_function",
+      "source_sha256": "287e57b50b7cb056f9f81dabc2756eaf380208a2e656bf685b5d287400d7f1d3",
+      "counterpart_sha256": "20d673ad3e181feb468002db1b9c16fc9e43e01fde4a3477625ac14a13472ffa",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "symbol": "parse_positive_version",
+      "counterpart_symbol": "parse_positive_version",
+      "kind": "whole_function",
+      "source_sha256": "9e850f194e41e3e06448dafe027d5a9ab972719f4e7551b99c58096b186b1c48",
+      "counterpart_sha256": "c5abee7e072973b0c22e57c15a5f6af564c1548023b580c2276c9968f8824c3e",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "symbol": "serialized_fingerprint",
+      "counterpart_symbol": "serialized_fingerprint",
+      "kind": "whole_function",
+      "source_sha256": "28b04a6b1854346349b2b1210cb5d8a4c38158bdcb4691b5fe34d3515a4cc84e",
+      "counterpart_sha256": "aae349c3764ce09fd7671f136db64f1805a24f6fd01a8f2a7a8ac69bb2f58735",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "symbol": "stable_evidence_id",
+      "counterpart_symbol": "stable_evidence_id",
+      "kind": "whole_function",
+      "source_sha256": "b34aba90914594e166dc26a40b270393ea2ccd27de244c821d0e49e193df0193",
+      "counterpart_sha256": "d35a456fd8a3f8650eeb04d0a6c60c0a867c2675fa542431a9379c382c3ac6ae",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "symbol": "stable_internal_idempotency_key",
+      "counterpart_symbol": "stable_internal_idempotency_key",
+      "kind": "whole_function",
+      "source_sha256": "4d503fe997bb1a8fedfeea1cf0728a11b58e7df4b96eb7c037a8cf9fd18470a7",
+      "counterpart_sha256": "21614531e2a42ce86b182282ef876c2ad6279c556a7a4c27316a8ed559e02221",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/receipt.rs",
+      "symbol": "stable_digest",
+      "counterpart_symbol": "stable_digest",
+      "kind": "whole_function",
+      "source_sha256": "ca544a3f7db0501d1651d61dfaf048495cabdaefd33dccc172b52df99b8d2faa",
+      "counterpart_sha256": "0c4f7f341be1b2e33831ce4da2aa648001cfd5f6f723138cea338ecb6bcd56ad",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/complete.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/complete.rs",
+      "symbol": "parse_completion_evidence",
+      "counterpart_symbol": "parse_completion_evidence",
+      "kind": "whole_function",
+      "source_sha256": "b109766360d9ddb866ab1cf6729459296bfe9d483949f6bb262d89b0d7119223",
+      "counterpart_sha256": "7a0c708077ac2bfc5a5277d284c1bed945378d298932e861e72d27b1260434ea",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/place.rs",
+      "symbol": "build_error_task",
+      "counterpart_symbol": "build_error_task",
+      "kind": "whole_function",
+      "source_sha256": "013bdbf8095f2af01469bce8bc0a938ab507c2216661289dc66f5d12ad14a0c9",
+      "counterpart_sha256": "013bdbf8095f2af01469bce8bc0a938ab507c2216661289dc66f5d12ad14a0c9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/place.rs",
+      "symbol": "build_action_message",
+      "counterpart_symbol": "build_action_message",
+      "kind": "whole_function",
+      "source_sha256": "11bb8a230ddb8d8c7089daf8cea4daf609961a32905dde0800f61e0c4440f964",
+      "counterpart_sha256": "11bb8a230ddb8d8c7089daf8cea4daf609961a32905dde0800f61e0c4440f964",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/place.rs",
+      "symbol": "supplier_source_system_id",
+      "counterpart_symbol": "supplier_source_system_id",
+      "kind": "whole_function",
+      "source_sha256": "0fda59ba6bb12d5d05219fda382968c69b7d320d643dbbb1360b1038bfb8bc01",
+      "counterpart_sha256": "0fda59ba6bb12d5d05219fda382968c69b7d320d643dbbb1360b1038bfb8bc01",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/place.rs",
+      "symbol": "outcome_label",
+      "counterpart_symbol": "outcome_label",
+      "kind": "whole_function",
+      "source_sha256": "32b0f7d81eb13ca1dc5b61f57c638459a926b9d6bd7c8b730477b3c192e5fd25",
+      "counterpart_sha256": "32b0f7d81eb13ca1dc5b61f57c638459a926b9d6bd7c8b730477b3c192e5fd25",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/cancel.rs",
+      "symbol": "submit_cancel",
+      "counterpart_symbol": "submit_cancel",
+      "kind": "whole_function",
+      "source_sha256": "9a33b84a1de3db59a49a3fd35f35f524649b1378bc964e6d32f31e0e11a0e148",
+      "counterpart_sha256": "9a33b84a1de3db59a49a3fd35f35f524649b1378bc964e6d32f31e0e11a0e148",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/refund.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/refund.rs",
+      "symbol": "submit_refund",
+      "counterpart_symbol": "submit_refund",
+      "kind": "whole_function",
+      "source_sha256": "75d0401d541dae4e1c3181954ef463a812b6693272ce1fd80cfd580dcbf6d28a",
+      "counterpart_sha256": "75d0401d541dae4e1c3181954ef463a812b6693272ce1fd80cfd580dcbf6d28a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/refund_result.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/refund_result.rs",
+      "symbol": "build_refund_message",
+      "counterpart_symbol": "build_refund_message",
+      "kind": "whole_function",
+      "source_sha256": "b64e43cd6f77e685ca69e10f7add9330d359ce11243b9120822d4c5e4e6e8b81",
+      "counterpart_sha256": "b64e43cd6f77e685ca69e10f7add9330d359ce11243b9120822d4c5e4e6e8b81",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "investigate_order",
+      "counterpart_symbol": "investigate_order",
+      "kind": "whole_function",
+      "source_sha256": "9cc6cd8be76cf4710937e4676c15ccd652f41a5d14b748a881d4936ea7626d0a",
+      "counterpart_sha256": "9cc6cd8be76cf4710937e4676c15ccd652f41a5d14b748a881d4936ea7626d0a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "investigate_order_task",
+      "counterpart_symbol": "investigate_order_task",
+      "kind": "whole_function",
+      "source_sha256": "4bc534779fb44f044abdda656a0f9757c89ff330be74975ab23fc18df354663d",
+      "counterpart_sha256": "4bc534779fb44f044abdda656a0f9757c89ff330be74975ab23fc18df354663d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "ensure_version",
+      "counterpart_symbol": "ensure_version",
+      "kind": "whole_function",
+      "source_sha256": "c51bd04492dd4f7daddd489200cbcb7701a8c96cd6c7db0b9d44d714a4a7b3bb",
+      "counterpart_sha256": "c51bd04492dd4f7daddd489200cbcb7701a8c96cd6c7db0b9d44d714a4a7b3bb",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "validate_w26_task",
+      "counterpart_symbol": "validate_w26_task",
+      "kind": "whole_function",
+      "source_sha256": "dd5568f93c7c0da86ba65308222ca7bd2bb16751256d15909c688dfa939994c6",
+      "counterpart_sha256": "dd5568f93c7c0da86ba65308222ca7bd2bb16751256d15909c688dfa939994c6",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "ensure_task_subject_matches_order",
+      "counterpart_symbol": "ensure_task_subject_matches_order",
+      "kind": "whole_function",
+      "source_sha256": "f88a121864e365f58fd3551e8b269236faa926d2f401f06cd26ada733b198790",
+      "counterpart_sha256": "f88a121864e365f58fd3551e8b269236faa926d2f401f06cd26ada733b198790",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "ensure_no_active_w26_task",
+      "counterpart_symbol": "ensure_no_active_w26_task",
+      "kind": "whole_function",
+      "source_sha256": "a07950cd64ab489aae6ab3056fea579063539b72492bab2d774442df935ae7b3",
+      "counterpart_sha256": "a07950cd64ab489aae6ab3056fea579063539b72492bab2d774442df935ae7b3",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/investigate.rs",
+      "symbol": "investigation_audit_id",
+      "counterpart_symbol": "investigation_audit_id",
+      "kind": "whole_function",
+      "source_sha256": "e008dd60981fb2d85701a4451ad961cb4edc44ca3e6b5ac2d5997653c3fb69e4",
+      "counterpart_sha256": "e008dd60981fb2d85701a4451ad961cb4edc44ca3e6b5ac2d5997653c3fb69e4",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/complete.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/complete.rs",
+      "symbol": "completion_result",
+      "counterpart_symbol": "completion_result",
+      "kind": "whole_function",
+      "source_sha256": "555beedf7fb73eb679985e821473425ac2540ef946eac98a043b436b21af4aa9",
+      "counterpart_sha256": "555beedf7fb73eb679985e821473425ac2540ef946eac98a043b436b21af4aa9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/complete.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/complete.rs",
+      "symbol": "completion_audit_id",
+      "counterpart_symbol": "completion_audit_id",
+      "kind": "whole_function",
+      "source_sha256": "a169f40328f1123d47c66faf031e990e84b9188b04e1c5893f153b2abcafeadb",
+      "counterpart_sha256": "a169f40328f1123d47c66faf031e990e84b9188b04e1c5893f153b2abcafeadb",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "investigation_receipt_message",
+      "counterpart_symbol": "investigation_receipt_message",
+      "kind": "whole_function",
+      "source_sha256": "446ad3f8f65e6277b2a3c47b0be23e9a42f7fbc819a11ffa05f5170c832f0302",
+      "counterpart_sha256": "446ad3f8f65e6277b2a3c47b0be23e9a42f7fbc819a11ffa05f5170c832f0302",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "parse_investigation_receipt",
+      "counterpart_symbol": "parse_investigation_receipt",
+      "kind": "whole_function",
+      "source_sha256": "d977061e1ecca9a9a1576305f5217520ed334931a0035a7e6a9610b51e1ad075",
+      "counterpart_sha256": "d977061e1ecca9a9a1576305f5217520ed334931a0035a7e6a9610b51e1ad075",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "completion_receipt_message",
+      "counterpart_symbol": "completion_receipt_message",
+      "kind": "whole_function",
+      "source_sha256": "8d5df43e70a7b20b763820ce08c4a01bf9ae3f2207fc21627ef83aaae4f3ba46",
+      "counterpart_sha256": "8d5df43e70a7b20b763820ce08c4a01bf9ae3f2207fc21627ef83aaae4f3ba46",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "parse_completion_receipt",
+      "counterpart_symbol": "parse_completion_receipt",
+      "kind": "whole_function",
+      "source_sha256": "aa38eed4dd6f04de0cf6d4c20916504d8fb85ca72a206a5be5c1c128b8390636",
+      "counterpart_sha256": "aa38eed4dd6f04de0cf6d4c20916504d8fb85ca72a206a5be5c1c128b8390636",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "receipt_fields",
+      "counterpart_symbol": "receipt_fields",
+      "kind": "whole_function",
+      "source_sha256": "ad713c0fb2b386f0849ff3b80abc1944d94e220a0bf1e6220312597ae82610c9",
+      "counterpart_sha256": "ad713c0fb2b386f0849ff3b80abc1944d94e220a0bf1e6220312597ae82610c9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "parse_receipt_version",
+      "counterpart_symbol": "parse_receipt_version",
+      "kind": "whole_function",
+      "source_sha256": "004bfa19bd09c04f62af3d0db37db73f6291cf9d428f5070ea4198c46338566f",
+      "counterpart_sha256": "004bfa19bd09c04f62af3d0db37db73f6291cf9d428f5070ea4198c46338566f",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "parse_resolution",
+      "counterpart_symbol": "parse_resolution",
+      "kind": "whole_function",
+      "source_sha256": "b60b4d92e960b1d6992f34486e77d9226caf02a12e0cf7721cb14d523a49bb30",
+      "counterpart_sha256": "b60b4d92e960b1d6992f34486e77d9226caf02a12e0cf7721cb14d523a49bb30",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_access.rs",
+      "symbol": "ensure_task_actor_eligible",
+      "counterpart_symbol": "ensure_task_actor_eligible",
+      "kind": "whole_function",
+      "source_sha256": "0447dcfa7eed296243b6388b47d2e3ca7afed3aa2035e37a65e5f573826fd218",
+      "counterpart_sha256": "0447dcfa7eed296243b6388b47d2e3ca7afed3aa2035e37a65e5f573826fd218",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "simulate_outcome",
+      "counterpart_symbol": "simulate_outcome",
+      "kind": "whole_function",
+      "source_sha256": "06291a3db1bfc279bc48a7d89156b6c8433fb3eeecdf5e6d002b54e280bf1bed",
+      "counterpart_sha256": "ba2f1bbc3fbac348d582c5bd1e2f7544db58972a206a0a65dce3d2fa7d8a56f5",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "simulate_investigation",
+      "counterpart_symbol": "simulate_investigation",
+      "kind": "whole_function",
+      "source_sha256": "10b48448da99a8a9de0567c769adba0de085837d7140ae8a663d8e5814667125",
+      "counterpart_sha256": "10b48448da99a8a9de0567c769adba0de085837d7140ae8a663d8e5814667125",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "sort_whitelist_rejects_unknown_fields_and_directions",
+      "counterpart_symbol": "sort_whitelist_rejects_unknown_fields_and_directions",
+      "kind": "original_test",
+      "source_sha256": "7caaf240bacd5cd41a263a2afe8158168fbb31eadae9c36411a950bc81e492a6",
+      "counterpart_sha256": "7caaf240bacd5cd41a263a2afe8158168fbb31eadae9c36411a950bc81e492a6",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "list_params_normalize_paging_filters_and_sort_defaults",
+      "counterpart_symbol": "list_params_normalize_paging_filters_and_sort_defaults",
+      "kind": "original_test",
+      "source_sha256": "c6a50c3f2546e11e52fe7b9216b0af792937a370bd06d09ddce672f22bd585da",
+      "counterpart_sha256": "c6a50c3f2546e11e52fe7b9216b0af792937a370bd06d09ddce672f22bd585da",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "list_params_reject_unbounded_page_size",
+      "counterpart_symbol": "list_params_reject_unbounded_page_size",
+      "kind": "original_test",
+      "source_sha256": "4c9ca3c8fb3660b62da40950c8e9de3324e59ded9a5a7142a6650ee39da4b683",
+      "counterpart_sha256": "4c9ca3c8fb3660b62da40950c8e9de3324e59ded9a5a7142a6650ee39da4b683",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "place_request_rejects_blank_order_no_and_empty_items",
+      "counterpart_symbol": "place_request_rejects_blank_order_no_and_empty_items",
+      "kind": "original_test",
+      "source_sha256": "39b23a49cad15a151661fe81e71f88311499839c9cd6001ffc33759258cc2ae7",
+      "counterpart_sha256": "39b23a49cad15a151661fe81e71f88311499839c9cd6001ffc33759258cc2ae7",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "w26_task_investigation_accepts_only_the_registered_shape",
+      "counterpart_symbol": "w26_task_investigation_accepts_only_the_registered_shape",
+      "kind": "original_test",
+      "source_sha256": "91a4687894c36138c6b66416d1e55fb6c1c6b267a659e58e9c284a0eeecf9d3a",
+      "counterpart_sha256": "91a4687894c36138c6b66416d1e55fb6c1c6b267a659e58e9c284a0eeecf9d3a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "w26_task_completion_rejects_unregistered_decisions",
+      "counterpart_symbol": "w26_task_completion_rejects_unregistered_decisions",
+      "kind": "original_test",
+      "source_sha256": "89bed1478f262c3b470ef110190ab35c9e26277dddaaf33a71a7f0d61a8bbd32",
+      "counterpart_sha256": "89bed1478f262c3b470ef110190ab35c9e26277dddaaf33a71a7f0d61a8bbd32",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "ordinary_endpoint_never_simulates_accepted_place",
+      "counterpart_symbol": "ordinary_endpoint_never_simulates_accepted_place",
+      "kind": "original_test",
+      "source_sha256": "59a227229510db32af7c0d8dcc45e85e64c035b044216e6815eee0f5688db8da",
+      "counterpart_sha256": "51ea68575205167b296f36e56bbd8ffd308c3df9db0558567586702ee160dd9d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "simulated_endpoints_classify_failure_paths",
+      "counterpart_symbol": "simulated_endpoints_classify_failure_paths",
+      "kind": "original_test",
+      "source_sha256": "08fba64924b1e6b3f2241c871cf6a436e41f79bc69f5e350c769f12ff2923e23",
+      "counterpart_sha256": "ecd5df9a83ad80c78f27e9f0a9c25064f575d726ef707f3be919deb40462023c",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "successful_query_transport_is_not_a_verified_business_result",
+      "counterpart_symbol": "successful_query_transport_is_not_a_verified_business_result",
+      "kind": "original_test",
+      "source_sha256": "200a926e704a06053c09731c50c51f62ee74dc45fbbf508fc37315a766d5e291",
+      "counterpart_sha256": "200a926e704a06053c09731c50c51f62ee74dc45fbbf508fc37315a766d5e291",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "query_no_result_scenario_starts_unknown_before_proving_no_result",
+      "counterpart_symbol": "query_no_result_scenario_starts_unknown_before_proving_no_result",
+      "kind": "original_test",
+      "source_sha256": "a40353e04a42dce7c579b70d640be66ac91e390c2b4e82395f07c696473a1fc0",
+      "counterpart_sha256": "a40353e04a42dce7c579b70d640be66ac91e390c2b4e82395f07c696473a1fc0",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "non_place_action_has_no_external_order_no",
+      "counterpart_symbol": "non_place_action_has_no_external_order_no",
+      "kind": "original_test",
+      "source_sha256": "3edc9febdd4f862bf35037b32091a67bb6b129af1719b642cb810aea60e68c2f",
+      "counterpart_sha256": "3edc9febdd4f862bf35037b32091a67bb6b129af1719b642cb810aea60e68c2f",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "counterpart": "backend/crates/erp-processes/src/adapters/supplier_fulfillment_gateway.rs",
+      "symbol": "amounts_parse_from_string_shape",
+      "counterpart_symbol": "amounts_parse_from_string_shape",
+      "kind": "original_test",
+      "source_sha256": "cceb8250b628682b2a5b1a987d6eb4cc01768b00a52548ec12ff4d06a7681601",
+      "counterpart_sha256": "cceb8250b628682b2a5b1a987d6eb4cc01768b00a52548ec12ff4d06a7681601",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "durable_intent_freezes_gateway_result_before_domain_reconciliation",
+      "counterpart_symbol": "durable_intent_freezes_gateway_result_before_domain_reconciliation",
+      "kind": "original_test",
+      "source_sha256": "8203fea8270e2cf9d7353643efb49ed98d4335c8a28002d1c7f229b63f78d4d8",
+      "counterpart_sha256": "8203fea8270e2cf9d7353643efb49ed98d4335c8a28002d1c7f229b63f78d4d8",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "InvestigationIntentRecord",
+      "counterpart_symbol": "InvestigationIntentRecord",
+      "kind": "evidence_declaration",
+      "source_sha256": "8c1fb68474cf30066f93c898e323ca147ad824b52a5ba59b7509aa7fbbae52cb",
+      "counterpart_sha256": "8c1fb68474cf30066f93c898e323ca147ad824b52a5ba59b7509aa7fbbae52cb",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "DurablePreparedInvestigation",
+      "counterpart_symbol": "DurablePreparedInvestigation",
+      "kind": "evidence_declaration",
+      "source_sha256": "eb2212516f19cc2fc70ab466e9d3863c7405254b22e09c04b3a0a26be0ff53fe",
+      "counterpart_sha256": "eb2212516f19cc2fc70ab466e9d3863c7405254b22e09c04b3a0a26be0ff53fe",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "InvestigationEvidenceRecord",
+      "counterpart_symbol": "InvestigationEvidenceRecord",
+      "kind": "evidence_declaration",
+      "source_sha256": "5750d908a9057edc2aa9d861675cd7edc52a320ed1fe0525040b6ba4f205aa10",
+      "counterpart_sha256": "5750d908a9057edc2aa9d861675cd7edc52a320ed1fe0525040b6ba4f205aa10",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "PreparedInvestigation",
+      "counterpart_symbol": "PreparedInvestigation",
+      "kind": "evidence_declaration",
+      "source_sha256": "ffeaeb5ecfaa8f6828b030e43afe8b39fd908eae5e8033c26b3ce71f5ecaad2a",
+      "counterpart_sha256": "1a8298e61357e4d5adeae60f087396cbb1ca9e59b268e239d977a00d3020dacd",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/complete.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/complete.rs",
+      "symbol": "CompletionEvidenceRecord",
+      "counterpart_symbol": "CompletionEvidenceRecord",
+      "kind": "evidence_declaration",
+      "source_sha256": "6fa80238161ba3b29e4919d76bb553f3071fbfc158bf105b96217ea470d7a0d8",
+      "counterpart_sha256": "7522b409dd147cb355f05821d6f80f6d1b700ae2947b732b084fe6ec12550a9f",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "InvestigationReceipt",
+      "counterpart_symbol": "InvestigationReceipt",
+      "kind": "receipt_declaration",
+      "source_sha256": "e4530d8990ca4923b0ac9f4f5968850225c4e10dd8fa002c654a67374037ca81",
+      "counterpart_sha256": "e4530d8990ca4923b0ac9f4f5968850225c4e10dd8fa002c654a67374037ca81",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/receipt.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/receipt.rs",
+      "symbol": "CompletionReceipt",
+      "counterpart_symbol": "CompletionReceipt",
+      "kind": "receipt_declaration",
+      "source_sha256": "2f40650990d0ba5bfc2a65eb43c292453ad202901e5e9c90174a7c1bfd3ad74d",
+      "counterpart_sha256": "2f40650990d0ba5bfc2a65eb43c292453ad202901e5e9c90174a7c1bfd3ad74d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/dto.rs",
+      "symbol": "SupplierOrderInvestigationWorkItemView",
+      "counterpart_symbol": "SupplierOrderInvestigationWorkItemView",
+      "kind": "moved_dto_declaration",
+      "source_sha256": "db449be59892df38f86bbca03c379f5d55372325358b39aa3d65b0f05c774ca4",
+      "counterpart_sha256": "db449be59892df38f86bbca03c379f5d55372325358b39aa3d65b0f05c774ca4",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/dto.rs",
+      "symbol": "SupplierOrderInvestigationResultView",
+      "counterpart_symbol": "SupplierOrderInvestigationResultView",
+      "kind": "moved_dto_declaration",
+      "source_sha256": "391b073159078fb368f3114f6d6bcaea7ffd29585585f1fc6db30166a4b70046",
+      "counterpart_sha256": "391b073159078fb368f3114f6d6bcaea7ffd29585585f1fc6db30166a4b70046",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-processes/src/supply_execution/dto.rs",
+      "symbol": "SupplierOrderTaskCompletionResultView",
+      "counterpart_symbol": "SupplierOrderTaskCompletionResultView",
+      "kind": "moved_dto_declaration",
+      "source_sha256": "e70dbf7c3bb8322e97b21e0a4e9d614f5ed63d97e2e32c2fc82adaa271a1f2b2",
+      "counterpart_sha256": "e70dbf7c3bb8322e97b21e0a4e9d614f5ed63d97e2e32c2fc82adaa271a1f2b2",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_dto.rs",
+      "symbol": "SupplierFulfillmentOrderDetailView",
+      "counterpart_symbol": "SupplierFulfillmentOrderDetailView",
+      "kind": "moved_dto_declaration",
+      "source_sha256": "b006c5a8daca3113f6ec3fbbc5accb9fa33c93422636a20c62278d3bd9da4f35",
+      "counterpart_sha256": "b006c5a8daca3113f6ec3fbbc5accb9fa33c93422636a20c62278d3bd9da4f35",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/dto.rs",
+      "counterpart": "backend/crates/erp-supply/src/dto/supplier_fulfillment.rs",
+      "symbol": "domain_dto_remaining_production",
+      "counterpart_symbol": "domain_dto_remaining_production",
+      "kind": "complete_remaining_dto",
+      "source_sha256": "e7caefa89ad09b1179d6a2be969daa6228d05bd8a8a931751056380969eb4d61",
+      "counterpart_sha256": "1341210a91c86f2a7c30da0d7a3390008b4067e95cd11a010560565451c9d537",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "investigation_intent_record",
+      "counterpart_symbol": "investigation_intent_record",
+      "kind": "subject_type_adaptation",
+      "source_sha256": "bc3efc41ed79edcf0ef4d8742b0c553aed2d03186c22cfdc71179436c6b34a99",
+      "counterpart_sha256": "bc3efc41ed79edcf0ef4d8742b0c553aed2d03186c22cfdc71179436c6b34a99",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "bb92244216a3a5fec9b78a18db6c5361d34645d767f48b0f115a03beeb738914",
+      "adaptation": "Only parameter type InvestigationCommandContext to five-field InvestigationSubject; no expression changes."
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "validate_investigation_intent",
+      "counterpart_symbol": "validate_investigation_intent",
+      "kind": "subject_type_adaptation",
+      "source_sha256": "480527e4f46470c3d9651ef243b2ee9071b2a97a68fe27b745689a69d98daf7b",
+      "counterpart_sha256": "561af176d9e81c8349241c2674df288d94f89754b8f440344c5f4c98f7122d4d",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "9489fe0fa780be71d4d89e5b8456de7e9c583f6cc0903efc339c61418a4e4108",
+      "adaptation": "Only parameter type InvestigationCommandContext to five-field InvestigationSubject; no expression changes."
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "parse_prepared_investigation",
+      "counterpart_symbol": "parse_prepared_investigation",
+      "kind": "subject_type_adaptation",
+      "source_sha256": "e5faa345861153801b8244e23d0dbbb8ca9624d5a8073b21f92223d698f112ef",
+      "counterpart_sha256": "d3e52a12dd21e5771a41eb697a824083d4babcde717847247bb11bd3c112e955",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "c67f9edb2835073e229c29f04affe20644a6f60c08df5319cb4888f20d31001f",
+      "adaptation": "Only parameter type InvestigationCommandContext to five-field InvestigationSubject; no expression changes."
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/investigate.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/investigate.rs",
+      "symbol": "apply_prepared_investigation",
+      "counterpart_symbol": "apply_prepared_investigation",
+      "kind": "subject_type_adaptation",
+      "source_sha256": "02dc9358cc2d542af4aeb5278c8f2fb1ab5ba86d71ff6a059fb6fe65f7387dd0",
+      "counterpart_sha256": "89567560e8de247068d601121c73b27533439a7982ab56f395cacca1983848c0",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "beaf2d56b60351fc26ab4f2b77e366b40daee6565d8965a04f070181e8520571",
+      "adaptation": "Only parameter type InvestigationCommandContext to five-field InvestigationSubject; no expression changes."
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/refund_result.rs",
+      "counterpart": "backend/crates/erp-supply/src/service/supplier_fulfillment/refund_result.rs",
+      "symbol": "build_refund_fact",
+      "counterpart_symbol": "build_refund_fact",
+      "kind": "inbox_identity_port_adaptation",
+      "source_sha256": "870370067097cc9b06588ba29d10a8c27de2a1f197400367825b2e2f1c47d025",
+      "counterpart_sha256": "5bf75a67a78f504bf50d1af9c843f5e3ff760c88695596edde3853e84723002d",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "ddaff83a65f26e73f33facc59d3497942b5ca1ddf3869947dce92eac0e3bbbc8",
+      "adaptation": "Only complete InboxMessage argument replaced with its original typed ID, prepared immediately before the same invocation."
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "new",
+      "counterpart_symbol": "new",
+      "kind": "whole_function",
+      "source_sha256": "e11152894a7cb5a0355bcabe512604d41fdfd259f22f529741ff1c9e3bad18f5",
+      "counterpart_sha256": "e11152894a7cb5a0355bcabe512604d41fdfd259f22f529741ff1c9e3bad18f5",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "supplier_fulfillment_order_detail",
+      "counterpart_symbol": "supplier_fulfillment_order_detail",
+      "kind": "narrow_authorization_read_port_adaptation",
+      "source_sha256": "b2e56cb6ac92af6e611d739c725001356fa7ee81238867418954fbfa0a763381",
+      "counterpart_sha256": "51c898011d84ce89eb3baea871a3c85e528be6fad93208f3700cc28506cacb30",
+      "normalized_tokens_equal": true,
+      "source_raw_sha256": "94dee3285011a35aade8d0635158a3f129cc2c8f56d6286b6a00f6cd83a5e1c7",
+      "adaptation": "Only final argument and original authorize call -> unique C ReadPort; four nested item fields -> flat AuthorizedTaskFact. No query/guard/re-read order change."
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "project_supplier_order_actions",
+      "counterpart_symbol": "project_supplier_order_actions",
+      "kind": "whole_function",
+      "source_sha256": "0ca821a36f1c46916a6ee79c4fd0d5303372998f49ac195c1ad67f793cf98e3d",
+      "counterpart_sha256": "0ca821a36f1c46916a6ee79c4fd0d5303372998f49ac195c1ad67f793cf98e3d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "refund_views_for_order",
+      "counterpart_symbol": "refund_views_for_order",
+      "kind": "whole_function",
+      "source_sha256": "08ba11e90fe9117948f5f6d099f8b336e6abe0f047590e9ce1dd7d74d4b38976",
+      "counterpart_sha256": "08ba11e90fe9117948f5f6d099f8b336e6abe0f047590e9ce1dd7d74d4b38976",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "supplier_order_blocker",
+      "counterpart_symbol": "supplier_order_blocker",
+      "kind": "whole_function",
+      "source_sha256": "d7db2fb4b8c1d19ba54336088ddc209f257259c0b9c78b1f7919e403f0340029",
+      "counterpart_sha256": "d7db2fb4b8c1d19ba54336088ddc209f257259c0b9c78b1f7919e403f0340029",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "block_supplier_order_domain_actions",
+      "counterpart_symbol": "block_supplier_order_domain_actions",
+      "kind": "whole_function",
+      "source_sha256": "241b1872b0c1b7b42c4817e4420e6faf9cc84d3430b9bca0f29ae4b413a43fc6",
+      "counterpart_sha256": "241b1872b0c1b7b42c4817e4420e6faf9cc84d3430b9bca0f29ae4b413a43fc6",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "investigation_evidence_view",
+      "counterpart_symbol": "investigation_evidence_view",
+      "kind": "whole_function",
+      "source_sha256": "17c0e831ee1c75cf576ca8a32d68afac444023bb97e678bed695dd571849b356",
+      "counterpart_sha256": "17c0e831ee1c75cf576ca8a32d68afac444023bb97e678bed695dd571849b356",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "counterpart": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "symbol": "item_view",
+      "counterpart_symbol": "item_view",
+      "kind": "whole_function",
+      "source_sha256": "b95f46c3dc579dcda96283bcdca37ed52a5c10f4f40833827479ce4b17ada303",
+      "counterpart_sha256": "b95f46c3dc579dcda96283bcdca37ed52a5c10f4f40833827479ce4b17ada303",
+      "normalized_tokens_equal": true
+    }
+  ],
+  "normalization_scope": [
+    "specific provider/type namespace relocation; failure enum only explicit original eight class replacement (mapping owned D)",
+    "complete DTO comparison excludes use imports only; includes all remaining declarations and implementation bodies",
+    "pub visibility only",
+    "rustfmt whitespace/comments and trailing comma before closing parenthesis"
+  ],
+  "normalization_exclusions": [
+    "no status/error literal/serde/collection/index normalization",
+    "no scanner or allowlist modification"
+  ],
+  "counts": {
+    "original_tests_G": 13,
+    "original_tests_A": 66,
+    "original_total": 79,
+    "new_tests_G": 17,
+    "ignored": 0
+  },
+  "delegated_persistence": "/private/tmp/supply16-fulfillment-persistence-result.json",
+  "execution": "No Cargo, database, external supplier or historical integration tests run by G; root owns gates",
+  "split_production_symbols": {
+    "place.rs": {
+      "submit_place": [
+        "process:submit_place",
+        "domain:ensure_placeable",
+        "domain:build_place_facts",
+        "domain:persist_place_facts",
+        "process:execution::after_intent"
+      ],
+      "settle_dispatch": [
+        "process:settle_dispatch",
+        "domain:apply_dispatch_outcome",
+        "process:adapters::supplier_failure::integration_class"
+      ],
+      "apply_dispatch_outcome": [
+        "domain:place::apply_dispatch_outcome",
+        "process:settle_dispatch",
+        "process:build_error_task"
+      ],
+      "write_dispatch_result": [
+        "process:write_dispatch_result",
+        "process:dispatch_writes::MongoWrites",
+        "domain:persist_dispatch_entities",
+        "process:work_item::create"
+      ]
+    },
+    "cancel.rs": {
+      "submit_after_sales_action": [
+        "process:submit_after_sales_action",
+        "domain:advance_after_sales",
+        "domain:persist_after_sales",
+        "process:execution::after_intent"
+      ]
+    },
+    "reject.rs": {
+      "record_reject": [
+        "process:record_reject",
+        "domain:prepare_reject",
+        "domain:persist_reject"
+      ]
+    },
+    "refund_result.rs": {
+      "record_refund_result": [
+        "process:record_refund_result",
+        "domain:advance_refund_result",
+        "domain:build_refund_fact",
+        "process:refund_writes::MongoWrites",
+        "domain:persist_refund_result"
+      ]
+    },
+    "investigate.rs": {
+      "execute_investigation": [
+        "process:execute_investigation",
+        "process:execution::reuse_or_prepare",
+        "process:execution::recover_final_result",
+        "domain:apply_prepared_investigation",
+        "domain:investigation_evidence_record",
+        "domain:finish_evidence",
+        "domain:persist_order",
+        "domain:persist_action"
+      ],
+      "ensure_investigation_intent": [
+        "process:ensure_investigation_intent",
+        "domain:prepare_intent",
+        "domain:create_action"
+      ],
+      "persist_prepared_investigation": [
+        "process:persist_prepared_investigation",
+        "domain:prepare_durable_evidence",
+        "domain:persist_action"
+      ],
+      "prepare_investigation": [
+        "process:prepare_investigation",
+        "domain:capability_for_action",
+        "domain:ensure_replay_safe",
+        "domain:ensure_capability",
+        "domain:SupplierGateway"
+      ],
+      "replay_investigation": [
+        "process:replay_investigation",
+        "domain:InvestigationEvidenceRecord::operation_id"
+      ],
+      "investigation_result": [
+        "process:investigation_result",
+        "domain:InvestigationEvidenceRecord getters",
+        "process:dto"
+      ]
+    },
+    "complete.rs": {
+      "complete_order_task": [
+        "process:complete_order_task",
+        "domain:ensure_current_resolution",
+        "domain:prepare_terminal_action",
+        "domain:create_action",
+        "process:execution::recover_final_result"
+      ],
+      "replay_task_completion": [
+        "process:replay_task_completion",
+        "domain:CompletionEvidenceRecord getters"
+      ]
+    },
+    "gateway.rs": {
+      "SupplierGateway": [
+        "domain:ports::supplier_gateway",
+        "process:adapters::supplier_fulfillment_gateway",
+        "D:entity::failure::SupplierFailureClass"
+      ]
+    },
+    "mod.rs": {
+      "SupplierFulfillmentService": [
+        "domain:service::supplier_fulfillment::SupplierFulfillmentService",
+        "process:supply_execution::SupplierFulfillmentProcess"
+      ]
+    }
+  },
+  "preserved_sequences": [
+    {
+      "case": "ordinary submit replay",
+      "order": [
+        "validate",
+        "existing fulfillment_order_no read",
+        "on hit current order view return",
+        "connection/active/supplier/capability/revision guards only on miss",
+        "IDs/entity constructors",
+        "intent transaction order/items/action/inbox/audit",
+        "after commit gateway",
+        "result transaction"
+      ],
+      "preserved_exclusions": [
+        "no payload equality on hit",
+        "no new transaction-error replay"
+      ]
+    },
+    {
+      "case": "after sales replay",
+      "order": [
+        "validate",
+        "load order",
+        "derive order_no+action_type",
+        "existing action",
+        "on hit lines then view",
+        "connection/capabilities/item membership",
+        "action/lines/Pending/inbox/audit",
+        "action then each line then order CAS then inbox then audit",
+        "after commit gateway"
+      ],
+      "preserved_exclusions": [
+        "no new expected-lock guard",
+        "no connection-active check",
+        "no aftersale existence or net-balance check"
+      ]
+    },
+    {
+      "case": "refund callback replay and writes",
+      "order": [
+        "validate",
+        "load order",
+        "find by connection/refund_no/refund_version",
+        "on hit allocations then original view",
+        "cost sum then refunded sum",
+        "amount upper bound and refund progress",
+        "inbox identity/time then fact and allocations in input order",
+        "validate allocations",
+        "audit construct",
+        "same Executor inbox then order CAS then fact then allocations then audit"
+      ],
+      "preserved_exclusions": [
+        "no payload or path order comparison on hit",
+        "no new finance lookup",
+        "no transaction-error replay"
+      ]
+    },
+    {
+      "case": "ordinary dispatch versus replay",
+      "ordinary": [
+        "Succeeded missing order number still Accepted",
+        "retryable Failed record_attempt(Some(now)) only",
+        "nonretryable Failed action Failed then PLACE Exception"
+      ],
+      "replay": [
+        "Succeeded missing order number only action ResultUnknown",
+        "Failed ignores classification; record_attempt(None) then ResultUnknown",
+        "no integration retry policy in domain"
+      ]
+    },
+    {
+      "case": "W26 producer",
+      "order": [
+        "WorkItemId generated before result transaction",
+        "order/action CAS",
+        "integration error and message or message only",
+        "active tasks read",
+        "first matching type",
+        "refresh only different subject then audit OR actual WorkItem::new then create then audit"
+      ],
+      "fields": [
+        "SUPPLIER_FULFILLMENT_ORDER/order ID/current order version",
+        "role-procurement/company/current actor",
+        "SystemRule/High/None",
+        "original SUPPLIER_RESULT_UNKNOWN or SUPPLIER_BUSINESS_EXCEPTION reasons"
+      ]
+    },
+    {
+      "case": "durable investigation",
+      "order": [
+        "initial receipt",
+        "intent transaction with original guards and actual authorization",
+        "existing prepared skips gateway",
+        "otherwise NoTransaction prepare and gateway",
+        "separate durable persist transaction before final CAS",
+        "final domain reconcile conditional writes",
+        "serialize record/load intent/validate/compare first durable result",
+        "final evidence CAS",
+        "then W26 re-read, guard, actual authorization, activity/CAS",
+        "audit receipt last",
+        "only final error single fresh receipt read"
+      ],
+      "preserved_exclusions": [
+        "no recovery added to intent/prepare/persist-prepared errors",
+        "no external Executor parameter",
+        "no early authorization factory I/O"
+      ]
+    },
+    {
+      "case": "completion",
+      "order": [
+        "initial receipt",
+        "WorkItem guards then no-op eligibility then real workflow auth",
+        "order/version/subject",
+        "evidence identity/schema/selected terminal",
+        "target association then current resolution",
+        "terminal construct",
+        "activity/complete",
+        "terminal action create then WorkItem CAS then audit",
+        "any final transaction error single receipt recovery"
+      ],
+      "receipt": [
+        "duplicate key error precedes fingerprint",
+        "fingerprint precedes missing fields",
+        "unknown fields accepted",
+        "investigation t validation category remains Validation; other receipt version errors Internal"
+      ]
+    },
+    {
+      "case": "detail authorization",
+      "order": [
+        "order/items/actions/history/refunds/supplier name/projection",
+        "trim optional task ID",
+        "unique ReadPort authorize at original location",
+        "same four identity comparisons and literal || false",
+        "active tasks query",
+        "raw WorkItem re-read then unique original no-op",
+        "original blockers/capability checks"
+      ],
+      "authority": "C owns sole Port and actual adapter; G owns one unchanged no-op consumed by both Process and RM"
+    }
+  ],
+  "source_inventory_binding": "/private/tmp/supply16-g-input.json",
+  "shared_registration_observed": [
+    "erp-supply service root supplier_fulfillment",
+    "erp-supply dto root supplier_fulfillment",
+    "erp-supply ports root supplier_gateway",
+    "erp-processes supply_execution root",
+    "erp-processes adapters supplier_fulfillment_gateway",
+    "erp-read-models supplier_center fulfillment_detail/fulfillment_dto/fulfillment_access",
+    "HTTP 10 original handlers: 1 domain list, 1 RM detail, 8 Process writes",
+    "AppState domain new(db), Process new(db,same gateway Arc), detail unique authorization adapter",
+    "AppState fail_closed uses UnavailableSupplierGateway"
+  ],
+  "source_cleanup": {
+    "old_service_files_removed": 13,
+    "old_persistence_entity_files_removed_by_A": 17,
+    "in_place_RM_files": 1,
+    "total_contract_source_files": 31,
+    "compatibility_facade_added": false
+  },
+  "gate_observation": {
+    "workspace_check_log": "/private/tmp/erp-supply16-check-4.log",
+    "workspace_check_log_sha256": "a4ae52d29284af293d69e37f58792ab291aaf54e0b890e25fff0639861164db1",
+    "observed_outcome": "Finished dev profile; no G warnings",
+    "tests_clippy_boundaries": "root-owned; not claimed passed by this static review"
+  },
+  "review_limit": "95 token checks cover unchanged/adapted units. Split method sequences are explicitly recorded against source snapshots and final file hashes; this is not a claim that a scanner directly proved arbitrary split functions.",
+  "after_source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "after_commit_blob_hashes_verified": true,
+  "root_gate_report": {
+    "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "lib": {
+      "exit_code": 0,
+      "passed": 3594,
+      "failed": 0,
+      "ignored": 68,
+      "packages": 36
+    },
+    "strict_clippy": "pass",
+    "domain_boundaries": "pass",
+    "permissions": "pass",
+    "evidence_origin": "root report; G did not run these commands"
+  }
+}

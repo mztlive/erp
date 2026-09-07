@@ -1,0 +1,42 @@
+rustc --version: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo --version: cargo 1.97.0 (c980f4866 2026-06-30)
+python3 --version: Python 3.14.7
+COMMAND cargo fmt --all -- --check
+EXIT 0
+EVIDENCE fmt.log
+
+COMMAND cargo check --workspace --locked
+EXIT 0
+EVIDENCE check.log
+
+COMMAND cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+EXIT 0
+EVIDENCE clippy.log
+
+COMMAND env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+EXIT 0
+EVIDENCE unit-tests.log
+
+COMMAND ./scripts/check-bpm-boundaries.sh
+EXIT 0
+EVIDENCE bpm-boundaries.log
+
+COMMAND ./scripts/check-service-boundaries.sh
+EXIT 0
+EVIDENCE service-boundaries.log
+
+COMMAND ./scripts/check-domain-boundaries.sh
+EXIT 0
+EVIDENCE boundary.log
+
+COMMAND ./scripts/check-permissions-drift.sh
+EXIT 0
+EVIDENCE permissions.log
+
+COMMAND git diff --check -- backend; git diff --cached --check
+EXIT 0
+EVIDENCE implementation commit checks
+COMMAND compare-domain-contracts.py
+EXIT 1
+EVIDENCE contract-scan.log, contract-review.json
+真实数据库运行未验证

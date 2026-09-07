@@ -1,0 +1,615 @@
+--- backend/database/src/repository/supplier_offering.rs:create_with_revision_and_availability
+
++++ backend/crates/erp-supply/src/repository/supplier_offering.rs:create_with_revision_and_availability
+
+@@ -1,20 +1,8 @@
+
+ {
+-        mongo_ops::insert_one(
+-            &self.db.collection::<SupplierOffering>(OFFERINGS),
++        write::create_triple(
++            &write::MongoOfferingWrite::new(self.db),
+             offering,
+-            executor,
+-        )
+-        .await?;
+-        mongo_ops::insert_one(
+-            &self.db.collection::<SupplierOfferingRevision>(OFFERING_REVISIONS),
+             revision,
+-            executor,
+-        )
+-        .await?;
+-        mongo_ops::insert_one(
+-            &self
+-                .db
+-                .collection::<SupplierOfferingAvailability>(OFFERING_AVAILABILITIES),
+             availability,
+             executor,
+         )
+
+--- backend/database/src/repository/supplier_offering.rs:append_revision
+
++++ backend/crates/erp-supply/src/repository/supplier_offering.rs:append_revision
+
+@@ -1,11 +1,9 @@
+
+ {
+-        mongo_ops::insert_one(
+-            &self.db.collection::<SupplierOfferingRevision>(OFFERING_REVISIONS),
++        write::append_revision(
++            &write::MongoOfferingWrite::new(self.db),
++            offering,
+             revision,
+             executor,
+         )
+-        .await?;
+-        SupplierOfferingRepository::new(self.db, OFFERINGS)
+-            .update(offering, executor)
+-            .await
++        .await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:list
+
++++ backend/crates/erp-read-models/src/supplier_center/offering/mod.rs:list
+
+@@ -19,9 +19,7 @@
+
+             sort_by: Some(sort_by.to_string()),
+             sort_ascending: sort_dir == SortDir::Asc,
+         };
+-        let bundle = self
+-            .db
+-            .supplier_offering_repository()
++        let bundle = SupplierOfferingReadRepository::new(&self.db)
+             .load_offering_list_page(&query, &mut NoTransaction)
+             .await?;
+         let context = OfferingListContext {
+
+--- backend/services/src/supplier_offering/mod.rs:create
+
++++ backend/crates/erp-processes/src/supply_governance/offering/command.rs:create
+
+@@ -1,77 +1,37 @@
+
+ {
+-        req.validate()?;
+-        let fingerprint = req.command_fingerprint()?;
+-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+-            command
+-                .ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint)
+-                .map_err(|e| Error::ConflictError(e.to_string()))?;
+-            return command
+-                .replay_result()
+-                .map_err(|e| Error::Internal(e.to_string()));
+-        }
+-        let offering_id = SupplierOfferingId::new(next_id());
+-        let mut offering =
+-            SupplierOffering::new(offering_id.clone(), req.try_into_offering_data()?, actor.id())?;
+-        self.ensure_identity_available(&offering).await?;
+-        self.ensure_source_connection(&offering).await?;
+-        let revision_data = req.terms.try_into_revision_data(offering_id.clone(), 1)?;
+-        let revision =
+-            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
+-        self.ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from)
++        let prepared = self
++            .domain()
++            .prepare_create(&req, actor.id(), self.qualification.as_ref(), &mut NoTransaction)
+             .await?;
+-        let received_at = Instant::now();
+-        let source_updated_at = dto::resolve_source_updated_at(req.source_updated_at, received_at);
+-        let availability_data = req.try_into_availability_data(
+-            offering_id.clone(),
+-            source_updated_at,
+-            received_at,
+-            actor.id().to_string(),
+-        )?;
+-        let availability = SupplierOfferingAvailability::new(
+-            SupplierOfferingAvailabilityId::new(next_id()),
+-            availability_data,
+-        )?;
+-        offering.stable.current_revision_id = Some(revision.base.id.clone());
+-        let result = CreateSupplierOfferingResult {
+-            offering_id: offering.base.id.clone(),
+-            revision_id: revision.base.id.clone(),
+-            availability_id: availability.base.id.clone(),
+-            revision_no: 1,
+-            status: offering.stable.status,
++        let CommandPreparation::Apply(prepared) = prepared else {
++            let CommandPreparation::Replay(result) = prepared else {
++                unreachable!()
++            };
++            return Ok(result);
+         };
+-        let command = SupplierOfferingCommand::with_result(
+-            next_id(),
+-            &req.idempotency_key,
+-            CREATE_OFFERING_COMMAND,
+-            &fingerprint,
+-            &result,
+-        )?;
++        let fingerprint = prepared.fingerprint.clone();
++        let result = prepared.result.clone();
+         let audit = actor.clone().resource_log_with_message(
+             "supplier_offering.create",
+             "supplier_offering",
+-            offering.base.id.clone(),
++            prepared.offering.base.id.clone(),
+             Some(req.change_reason),
+         )?;
+         let db = self.db.clone();
+         let client = db.client().clone();
+         let transaction_result = client
+             .with_transaction(move |session| {
+-                Box::pin(async move {
+-                    db.supplier_offering_repository()
+-                        .create_with_revision_and_availability(&offering, &revision, &availability, session)
+-                        .await?;
+-                    db.supplier_offering_commands().create(&command, session).await?;
+-                    db.audit_logs().create(&audit, session).await?;
+-                    Ok::<(), Error>(())
+-                })
++                Box::pin(async move { super::commit::created(&db, &prepared, &audit, session).await })
+             })
+             .await;
+-        self.resolve_command_result(
+-            transaction_result,
+-            result,
+-            &req.idempotency_key,
+-            "create_offering",
+-            &fingerprint,
+-        )
+-        .await
++        self.domain()
++            .resolve_command_result(
++                transaction_result,
++                result,
++                &req.idempotency_key,
++                "create_offering",
++                &fingerprint,
++                &mut NoTransaction,
++            )
++            .await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:revise
+
++++ backend/crates/erp-processes/src/supply_governance/offering/command.rs:revise
+
+@@ -1,81 +1,41 @@
+
+ {
+-        req.validate()?;
+-        let fingerprint = req.command_fingerprint(id)?;
+-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+-            command
+-                .ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint)
+-                .map_err(|e| Error::ConflictError(e.to_string()))?;
+-            return command
+-                .replay_result()
+-                .map_err(|e| Error::Internal(e.to_string()));
+-        }
+-        let mut offering = self
+-            .db
+-            .supplier_offerings()
+-            .find_by_id(id, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
+-        let current_no = self.current_revision_no(&offering).await?;
+-        let next_no = offering
+-            .next_revision_no(current_no, req.expected_revision_no)
+-            .map_err(|_| Error::ConflictError("供给版本已经变化，请刷新后重新保存".to_string()))?;
+-        let revision_data = req
+-            .terms
+-            .try_into_revision_data(SupplierOfferingId::new(offering.base.id.clone()), next_no)?;
+-        let revision =
+-            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
+-        let next_status = req.status.unwrap_or(offering.stable.status);
+-        if next_status == OfferingStatus::Active {
+-            self.ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from)
+-                .await?;
+-        }
+-        offering.update_status(next_status, actor.id())?;
+-        offering.stable.current_revision_id = Some(revision.base.id.clone());
+-        let expected_version = offering.next_persisted_version()?;
++        let prepared = self
++            .domain()
++            .prepare_revise(
++                id,
++                &req,
++                actor.id(),
++                self.qualification.as_ref(),
++                &mut NoTransaction,
++            )
++            .await?;
++        let CommandPreparation::Apply(mut prepared) = prepared else {
++            let CommandPreparation::Replay(result) = prepared else {
++                unreachable!()
++            };
++            return Ok(result);
++        };
++        let fingerprint = prepared.fingerprint.clone();
+         let audit = actor.clone().resource_log_with_message(
+             "supplier_offering.revise",
+             "supplier_offering",
+-            offering.base.id.clone(),
++            prepared.offering.base.id.clone(),
+             Some(req.change_reason),
+         )?;
+         let db = self.db.clone();
+         let client = db.client().clone();
+-        let idempotency_key = req.idempotency_key.clone();
+-        let fingerprint_for_tx = fingerprint.clone();
+-        let offering_id = offering.base.id.clone();
+-        let revision_id = revision.base.id.clone();
+         let transaction_result = client
+             .with_transaction(move |session| {
+-                Box::pin(async move {
+-                    db.supplier_offering_repository()
+-                        .append_revision(&mut offering, &revision, session)
+-                        .await?;
+-                    let result = ReviseSupplierOfferingResult {
+-                        offering_id,
+-                        revision_id,
+-                        revision_no: next_no,
+-                        status: next_status,
+-                        version: expected_version,
+-                        safety_pause: None,
+-                    };
+-                    let command = SupplierOfferingCommand::with_result(
+-                        next_id(),
+-                        &idempotency_key,
+-                        REVISE_OFFERING_COMMAND,
+-                        &fingerprint_for_tx,
+-                        &result,
+-                    )?;
+-                    db.supplier_offering_commands().create(&command, session).await?;
+-                    db.audit_logs().create(&audit, session).await?;
+-                    Ok::<ReviseSupplierOfferingResult, Error>(result)
+-                })
++                Box::pin(async move { super::commit::revised(&db, &mut prepared, &audit, session).await })
+             })
+             .await;
+-        self.resolve_written_result(
+-            transaction_result,
+-            &req.idempotency_key,
+-            "revise_offering",
+-            &fingerprint,
+-        )
+-        .await
++        self.domain()
++            .resolve_written_result(
++                transaction_result,
++                &req.idempotency_key,
++                "revise_offering",
++                &fingerprint,
++                &mut NoTransaction,
++            )
++            .await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:update_availability
+
++++ backend/crates/erp-processes/src/supply_governance/offering/command.rs:update_availability
+
+@@ -1,41 +1,15 @@
+
+ {
+-        req.validate()?;
+-        let fingerprint = req.command_fingerprint(id)?;
+-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+-            command
+-                .ensure_replayable(UPDATE_OFFERING_AVAILABILITY_COMMAND, &fingerprint)
+-                .map_err(|e| Error::ConflictError(e.to_string()))?;
+-            return command
+-                .replay_result()
+-                .map_err(|e| Error::Internal(e.to_string()));
+-        }
+-        let offering_id = SupplierOfferingId::new(id.trim());
+-        self.db
+-            .supplier_offerings()
+-            .find_by_id(&offering_id, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
+-        let mut availability = self
+-            .db
+-            .supplier_offering_availabilities()
+-            .find_by_offering_id(&offering_id, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::NotFound("供给可供状态不存在".to_string()))?;
+-        if let Some(expected_version) = req.expected_version {
+-            availability
+-                .ensure_version(expected_version)
+-                .map_err(|_| Error::ConflictError("可供状态已经变化，请刷新后重新保存".to_string()))?;
+-        }
+-        let received_at = Instant::now();
+-        let source_updated_at = dto::resolve_source_updated_at(req.source_updated_at, received_at);
+-        let availability_data = req.try_into_availability_data(
+-            offering_id.clone(),
+-            source_updated_at,
+-            received_at,
+-            actor.id().to_string(),
+-        )?;
+-        availability.apply(availability_data)?;
+-        let result_version = availability.next_persisted_version()?;
++        let prepared = self
++            .domain()
++            .prepare_availability(id, &req, actor.id(), &mut NoTransaction)
++            .await?;
++        let CommandPreparation::Apply(mut prepared) = prepared else {
++            let CommandPreparation::Replay(result) = prepared else {
++                unreachable!()
++            };
++            return Ok(result);
++        };
++        let fingerprint = prepared.fingerprint.clone();
+         let audit = actor.clone().resource_log_with_message(
+             "supplier_offering.availability.update",
+             "supplier_offering",
+@@ -44,42 +18,20 @@
+
+         )?;
+         let db = self.db.clone();
+         let client = db.client().clone();
+-        let idempotency_key = req.idempotency_key.clone();
+-        let fingerprint_for_tx = fingerprint.clone();
+-        let result_offering_id = offering_id.to_string();
+-        let result_status = availability.availability_status;
+-        let result_source_updated_at = availability.source_updated_at.unix_secs();
+         let transaction_result = client
+             .with_transaction(move |session| {
+-                Box::pin(async move {
+-                    db.supplier_offering_availabilities()
+-                        .update(&mut availability, session)
+-                        .await?;
+-                    let result = UpdateSupplierOfferingAvailabilityResult {
+-                        offering_id: result_offering_id,
+-                        availability_status: result_status,
+-                        availability_version: result_version,
+-                        source_updated_at: result_source_updated_at,
+-                        safety_pause: None,
+-                    };
+-                    let command = SupplierOfferingCommand::with_result(
+-                        next_id(),
+-                        &idempotency_key,
+-                        UPDATE_OFFERING_AVAILABILITY_COMMAND,
+-                        &fingerprint_for_tx,
+-                        &result,
+-                    )?;
+-                    db.supplier_offering_commands().create(&command, session).await?;
+-                    db.audit_logs().create(&audit, session).await?;
+-                    Ok::<UpdateSupplierOfferingAvailabilityResult, Error>(result)
+-                })
++                Box::pin(
++                    async move { super::commit::availability(&db, &mut prepared, &audit, session).await },
++                )
+             })
+             .await;
+-        self.resolve_written_result(
+-            transaction_result,
+-            &req.idempotency_key,
+-            "update_offering_availability",
+-            &fingerprint,
+-        )
+-        .await
++        self.domain()
++            .resolve_written_result(
++                transaction_result,
++                &req.idempotency_key,
++                "update_offering_availability",
++                &fingerprint,
++                &mut NoTransaction,
++            )
++            .await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:complete_supply_exception_task
+
++++ backend/crates/erp-processes/src/supply_governance/offering/exception.rs:complete_supply_exception_task
+
+@@ -25,7 +25,7 @@
+
+
+         let db = self.db.clone();
+         let client = db.client().clone();
+-        let rbac = crate::identity_compose::shared_rbac_service(db.clone());
++        let rbac = services::identity_compose::shared_rbac_service(db.clone());
+         let actor_for_tx = actor.clone();
+         let req_for_tx = req.clone();
+         let receipt_for_tx = receipt.clone();
+@@ -67,9 +67,16 @@
+
+                     )?;
+                     let receipt_audit =
+                         receipt_for_tx.audit(actor_for_tx.clone(), work_item.base.id.clone())?;
+-                    db.work_items().update(&mut work_item, session).await?;
+-                    db.audit_logs().create(&decision_audit, session).await?;
+-                    db.audit_logs().create(&receipt_audit, session).await?;
++                    persist_completion(
++                        &mut MongoCompletionWrite {
++                            db: &db,
++                            work_item: &mut work_item,
++                            decision: &decision_audit,
++                            receipt: &receipt_audit,
++                        },
++                        session,
++                    )
++                    .await?;
+
+                     Ok::<CompleteSupplierSupplyExceptionTaskResult, Error>(
+                         supply_exception_completion_result(&work_item, &req_for_tx),
+
+--- backend/services/src/supplier_offering/mod.rs:ensure_identity_available
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:ensure_identity_available
+
+@@ -2,11 +2,7 @@
+
+         let existing = self
+             .db
+             .supplier_offerings()
+-            .find_by_supplier_identity(
+-                &offering.supplier_id,
+-                &offering.supplier_sku_code,
+-                &mut NoTransaction,
+-            )
++            .find_by_supplier_identity(&offering.supplier_id, &offering.supplier_sku_code, executor)
+             .await?;
+         if existing.is_some() {
+             return Err(Error::ConflictError("该供应商 SKU 已登记供给".to_string()));
+
+--- backend/services/src/supplier_offering/mod.rs:ensure_source_connection
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:ensure_source_connection
+
+@@ -5,7 +5,7 @@
+
+         let connection = self
+             .db
+             .supplier_api_connections()
+-            .find_by_id(connection_id, &mut NoTransaction)
++            .find_by_id(connection_id, executor)
+             .await?
+             .ok_or_else(|| Error::NotFound("供应商 API 连接不存在".to_string()))?;
+         if connection.supplier_id != offering.supplier_id || !connection.is_active() {
+
+--- backend/services/src/supplier_offering/mod.rs:ensure_qualified
+
++++ backend/crates/erp-processes/src/supply_governance/offering/qualification.rs:ensure_qualified
+
+@@ -1,36 +1,3 @@
+
+ {
+-        let sku = self
+-            .db
+-            .skus()
+-            .find_by_id(sku_id, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::NotFound("公司 SKU 不存在".to_string()))?;
+-        if !sku.is_active() {
+-            return Err(Error::BusinessLogicError("公司 SKU 未启用".to_string()));
+-        }
+-        let product = self
+-            .db
+-            .products()
+-            .find_by_id(&sku.product_id, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::NotFound("公司商品不存在".to_string()))?;
+-        let code = match product.product_kind {
+-            ProductKind::Physical => CapabilityCode::Physical,
+-            ProductKind::Virtual | ProductKind::Voucher => CapabilityCode::Virtual,
+-            ProductKind::OfflineService => CapabilityCode::OfflineService,
+-        };
+-        let capability = self
+-            .db
+-            .supplier_capabilities()
+-            .find_by_supplier_and_code(supplier_id, code, &mut NoTransaction)
+-            .await?
+-            .ok_or_else(|| Error::BusinessLogicError("供应商未启用该商品类型所需能力".to_string()))?;
+-        let revision_id = capability
+-            .stable
+-            .current_revision_id
+-            .as_deref()
+-            .map(erp_core::ids::SupplierCapabilityRevisionId::new)
+-            .ok_or_else(|| Error::BusinessLogicError("供应商能力缺少当前版本".to_string()))?;
+-        erp_supplier::ensure_capability_qualified(&self.db, supplier_id, &revision_id, on_date).await?;
+-        Ok(())
++        qualify(self, supplier_id, sku_id, on_date, executor).await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:current_revision_no
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:current_revision_no
+
+@@ -1,10 +1,7 @@
+
+ {
+         self.db
+             .supplier_offering_revisions()
+-            .current_revision_no(
+-                &SupplierOfferingId::new(offering.base.id.clone()),
+-                &mut NoTransaction,
+-            )
++            .current_revision_no(&SupplierOfferingId::new(offering.base.id.clone()), executor)
+             .await
+             .map_err(Into::into)
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:command_record
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:command_record
+
+@@ -1,7 +1,7 @@
+
+ {
+         self.db
+             .supplier_offering_commands()
+-            .find_by_idempotency_key(idempotency_key, &mut NoTransaction)
++            .find_by_idempotency_key(idempotency_key, executor)
+             .await
+             .map_err(Into::into)
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:resolve_command_result
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:resolve_command_result
+
+@@ -1,16 +1,11 @@
+
+ {
+-        match transaction_result {
+-            Ok(()) => Ok(intended_result),
+-            Err(error) => match self.command_record(idempotency_key).await? {
+-                Some(command) => {
+-                    command
+-                        .ensure_replayable(operation, fingerprint)
+-                        .map_err(|e| Error::ConflictError(e.to_string()))?;
+-                    command
+-                        .replay_result()
+-                        .map_err(|e| Error::Internal(e.to_string()))
+-                }
+-                None => Err(error),
+-            },
+-        }
++        recovery::resolve(
++            self,
++            transaction_result.map(|()| intended_result),
++            idempotency_key,
++            operation,
++            fingerprint,
++            executor,
++        )
++        .await
+     }
+
+--- backend/services/src/supplier_offering/mod.rs:resolve_written_result
+
++++ backend/crates/erp-supply/src/service/supplier_offering/mod.rs:resolve_written_result
+
+@@ -1,16 +1,11 @@
+
+ {
+-        match transaction_result {
+-            Ok(result) => Ok(result),
+-            Err(error) => match self.command_record(idempotency_key).await? {
+-                Some(command) => {
+-                    command
+-                        .ensure_replayable(operation, fingerprint)
+-                        .map_err(|e| Error::ConflictError(e.to_string()))?;
+-                    command
+-                        .replay_result()
+-                        .map_err(|e| Error::Internal(e.to_string()))
+-                }
+-                None => Err(error),
+-            },
+-        }
++        recovery::resolve(
++            self,
++            transaction_result,
++            idempotency_key,
++            operation,
++            fingerprint,
++            executor,
++        )
++        .await
+     }

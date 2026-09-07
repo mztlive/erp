@@ -1,0 +1,12 @@
+{
+  "phase": "16",
+  "input_head": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+  "integrator": "Codex",
+  "branch": "chore/domain-crate-16-supply",
+  "status": "本地门禁通过",
+  "preceding_phase_evidence": ".domain-migration-evidence/15",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "output_code_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "review_kind": "源码合同复核与纯内联门禁；非人工阶段验收"
+}

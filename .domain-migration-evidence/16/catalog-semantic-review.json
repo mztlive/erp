@@ -1,0 +1,3608 @@
+{
+  "schema": "supply16-catalog-independent-semantic-review-v1",
+  "input_commit": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+  "review_tree": "/private/tmp/erp-domain-crate-16-supply",
+  "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "source_commit_binding": "sealed",
+  "capture_utc": "2026-09-07T05:50:17.596783+00:00",
+  "original_files": [
+    {
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "before_sha256": "d6f0fb059a92bbf6cfb79351c65c1c9a4707e034addb9503216915cc31e17389",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+      "before_sha256": "d5ca83a2aff934449b28de78680eb3fd1815bed5f0c6e2aec4d56c303f52de57",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "before_sha256": "39dcbb3f18ed3f54e68769a94e25f6f8e9a4c8fabc16f866712a2a5c1ffd1906",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+      "before_sha256": "a42521ccc194c5f4734be249f393fa834d97faf42ce81830c1e9cfdd7688a2bc",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "before_sha256": "5c0986382dbbafd760466061a7c930f484776e88603b90bac9d2e41b138182e2",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+      "before_sha256": "8b222ae5aa7c115fd583d77d6ab2d8e409fc4ddd3d8b67d8b6154df61611b8a9",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "before_sha256": "14af783b97461184e10a47611cc4c9f2476674c518bdfe04acc49f89209aa25d",
+      "backup_matches_input_blob": true
+    },
+    {
+      "before_path": "backend/crates/erp-catalog/src/ports/supply.rs",
+      "before_sha256": "163be059fb6de0a151ff13ea7c9827bd3f507fe0a53955992d5783f6b6a15fcd",
+      "backup_matches_input_blob": true
+    }
+  ],
+  "original_function_disposition": [
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductFilter::to_doc",
+        "line": 123,
+        "body_sha256": "d260c0f318808187a31bcbaaca5886f51b957454ab388b73e61d903352af22c0"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductFilter::to_doc",
+        "line": 105,
+        "body_sha256": "d260c0f318808187a31bcbaaca5886f51b957454ab388b73e61d903352af22c0"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductFilter::page_and_size",
+        "line": 141,
+        "body_sha256": "6a6ef16d148076d3fbc835ffffbd327eb3aea1a5cf12d9a694192e1780e8561b"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductFilter::page_and_size",
+        "line": 123,
+        "body_sha256": "6a6ef16d148076d3fbc835ffffbd327eb3aea1a5cf12d9a694192e1780e8561b"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRepository::find_by_ids",
+        "line": 158,
+        "body_sha256": "2db97eb97319deea74f62c4c1acd76994346c85b4c82096925554d791f37cd59"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRepository::find_by_ids",
+        "line": 140,
+        "body_sha256": "2db97eb97319deea74f62c4c1acd76994346c85b4c82096925554d791f37cd59"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionFilter::to_doc",
+        "line": 236,
+        "body_sha256": "b537bb2bb9e5f1ca63e1b5a26690d9b054a9f6eeeccaedff1ba5561674708cc0"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionFilter::to_doc",
+        "line": 218,
+        "body_sha256": "b537bb2bb9e5f1ca63e1b5a26690d9b054a9f6eeeccaedff1ba5561674708cc0"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionFilter::page_and_size",
+        "line": 253,
+        "body_sha256": "6a6ef16d148076d3fbc835ffffbd327eb3aea1a5cf12d9a694192e1780e8561b"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionFilter::page_and_size",
+        "line": 235,
+        "body_sha256": "6a6ef16d148076d3fbc835ffffbd327eb3aea1a5cf12d9a694192e1780e8561b"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::search_product_revisions",
+        "line": 273,
+        "body_sha256": "37dfe25af66803d6d8375ca76a1c9834e2002f297ab3df43fc34bcdf52295e17"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::search_product_revisions",
+        "line": 255,
+        "body_sha256": "37dfe25af66803d6d8375ca76a1c9834e2002f297ab3df43fc34bcdf52295e17"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::find_by_ids",
+        "line": 308,
+        "body_sha256": "2db97eb97319deea74f62c4c1acd76994346c85b4c82096925554d791f37cd59"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::find_by_ids",
+        "line": 290,
+        "body_sha256": "2db97eb97319deea74f62c4c1acd76994346c85b4c82096925554d791f37cd59"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::find_by_product_ids",
+        "line": 333,
+        "body_sha256": "02a01db7fce8bc312eda85732673a1ffcf77b837f5a969e1745d466b0655d656"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionRepository::find_by_product_ids",
+        "line": 315,
+        "body_sha256": "02a01db7fce8bc312eda85732673a1ffcf77b837f5a969e1745d466b0655d656"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionMediaRepository::find_media_by_revision_ids",
+        "line": 359,
+        "body_sha256": "583319fd00a3c699e2394274c151da3fe485c7ed286e53794620512c86f2d4c9"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::ProductRevisionMediaRepository::find_media_by_revision_ids",
+        "line": 341,
+        "body_sha256": "583319fd00a3c699e2394274c151da3fe485c7ed286e53794620512c86f2d4c9"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::search_products",
+        "line": 393,
+        "body_sha256": "28e27fded99728c0488ca06178786ba19e463d794f69f4521222bb4dbc135b7b"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::search_products",
+        "line": 42,
+        "body_sha256": "28e27fded99728c0488ca06178786ba19e463d794f69f4521222bb4dbc135b7b"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::product_page",
+        "line": 418,
+        "body_sha256": "9c42bb74d0f55e91f95d160ab0dead312b6253e034e41a0fdd1b7aef3d1e5ac9"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::product_page",
+        "line": 67,
+        "body_sha256": "9c42bb74d0f55e91f95d160ab0dead312b6253e034e41a0fdd1b7aef3d1e5ac9"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::product_revision_page",
+        "line": 437,
+        "body_sha256": "34f0b4cae5d05343b07579bd69da55e282562b4dd315f64b4181229c1943dd5b"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::product_revision_page",
+        "line": 372,
+        "body_sha256": "34f0b4cae5d05343b07579bd69da55e282562b4dd315f64b4181229c1943dd5b"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::latest_product_revision_no",
+        "line": 463,
+        "body_sha256": "8a8820754d8cbced29bc5ef5a82415fb30f584b8fa2b2e1bd5d84f8551112900"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::latest_product_revision_no",
+        "line": 398,
+        "body_sha256": "8a8820754d8cbced29bc5ef5a82415fb30f584b8fa2b2e1bd5d84f8551112900"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::product_disable_snapshot",
+        "line": 490,
+        "body_sha256": "ec1d3c59926ce7272ecdb18b6f9e97401d57c4b966b0a7d699ea2d81326457ca"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::product_disable_snapshot",
+        "line": 425,
+        "body_sha256": "ec1d3c59926ce7272ecdb18b6f9e97401d57c4b966b0a7d699ea2d81326457ca"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::current_product_revisions",
+        "line": 529,
+        "body_sha256": "78f92f44dc4fcf6ff04a20727f174a677e4cbf2e129a76c873ba24a8321b99bd"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::current_product_revisions",
+        "line": 464,
+        "body_sha256": "78f92f44dc4fcf6ff04a20727f174a677e4cbf2e129a76c873ba24a8321b99bd"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::current_product_revision",
+        "line": 557,
+        "body_sha256": "94952bfeb3adc4acf0a3470d8f154418f6ebbdf65f637864c52840eccc615daa"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::current_product_revision",
+        "line": 492,
+        "body_sha256": "94952bfeb3adc4acf0a3470d8f154418f6ebbdf65f637864c52840eccc615daa"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::attach_product_revision_media",
+        "line": 579,
+        "body_sha256": "97f331f691f485b0ec92a3ca62204e120674e550afa6e7700b7f3b7190641743"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::attach_product_revision_media",
+        "line": 514,
+        "body_sha256": "97f331f691f485b0ec92a3ca62204e120674e550afa6e7700b7f3b7190641743"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::media_for_current_product_revision",
+        "line": 611,
+        "body_sha256": "f10c1b6792d40aceac266bff722620fd9027d2c9d2ba6d3635eda8422152260c"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::media_for_current_product_revision",
+        "line": 546,
+        "body_sha256": "f10c1b6792d40aceac266bff722620fd9027d2c9d2ba6d3635eda8422152260c"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::aggregate_products",
+        "line": 626,
+        "body_sha256": "05a8e4f551d53ac10a67dbbd8cb29d1e5a9429473a8e4addbd64a260051c71ae"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::aggregate_products",
+        "line": 76,
+        "body_sha256": "05a8e4f551d53ac10a67dbbd8cb29d1e5a9429473a8e4addbd64a260051c71ae"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::create_product_revision_with_media",
+        "line": 675,
+        "body_sha256": "89013e058b225e02ffa1d8d9b5a87d78a281225b05d81853dd47d75f009e7f01"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::CatalogRepository::create_product_revision_with_media",
+        "line": 575,
+        "body_sha256": "89013e058b225e02ffa1d8d9b5a87d78a281225b05d81853dd47d75f009e7f01"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::select_current_product_revision",
+        "line": 710,
+        "body_sha256": "4c768aef34f496d43c3f8707b9b7bc79140d7de34d75adb2647c133514f41a05"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::select_current_product_revision",
+        "line": 610,
+        "body_sha256": "4c768aef34f496d43c3f8707b9b7bc79140d7de34d75adb2647c133514f41a05"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::select_current_product_revisions",
+        "line": 737,
+        "body_sha256": "967f8d9fa2f360b46b52adeeea8bf949d58277e28b4c25f4991267af56c00269"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::select_current_product_revisions",
+        "line": 637,
+        "body_sha256": "967f8d9fa2f360b46b52adeeea8bf949d58277e28b4c25f4991267af56c00269"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::group_product_revision_media",
+        "line": 769,
+        "body_sha256": "502c2ea91f60126c52eb83ac5ddbaded45f38c6b7febfd530abd0cb34990100f"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::group_product_revision_media",
+        "line": 669,
+        "body_sha256": "502c2ea91f60126c52eb83ac5ddbaded45f38c6b7febfd530abd0cb34990100f"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::product_revision_sort_doc",
+        "line": 786,
+        "body_sha256": "be340b08759a4b09f2fea665b7977dd5b89c890f8570d050ef14d731e6684437"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::product_revision_sort_doc",
+        "line": 686,
+        "body_sha256": "be340b08759a4b09f2fea665b7977dd5b89c890f8570d050ef14d731e6684437"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::product_revision_projection",
+        "line": 795,
+        "body_sha256": "96995e669925618a6eb9db6d5abd9d6e92675b2d41da57a78f65c1f43ffc15e5"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product::product_revision_projection",
+        "line": 695,
+        "body_sha256": "96995e669925618a6eb9db6d5abd9d6e92675b2d41da57a78f65c1f43ffc15e5"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::product_list_pipeline",
+        "line": 14,
+        "body_sha256": "cd8ebb7651b6a2969a14186a694d44d885d2f92a72e01776bfc592b59c723fe0"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_list_pipeline",
+        "line": 14,
+        "body_sha256": "cd8ebb7651b6a2969a14186a694d44d885d2f92a72e01776bfc592b59c723fe0"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::product_revision_lookup",
+        "line": 87,
+        "body_sha256": "801fe95f3d34509131d674f311fcb5a3ea2bf008e3f7b9b1a950756b9be23a59"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_revision_lookup",
+        "line": 87,
+        "body_sha256": "801fe95f3d34509131d674f311fcb5a3ea2bf008e3f7b9b1a950756b9be23a59"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::product_sku_lookup",
+        "line": 104,
+        "body_sha256": "8ca715a8713a14691baa2f6b48e8be87aa23622d943c78a72c9085e74d04b13e"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_sku_lookup",
+        "line": 104,
+        "body_sha256": "8ca715a8713a14691baa2f6b48e8be87aa23622d943c78a72c9085e74d04b13e"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::append_product_revision_filters",
+        "line": 173,
+        "body_sha256": "dba020aa287ee8e59fcc419749c71468e9e7a3f6bedda8e21d8ac3e17e2d9879"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_product_revision_filters",
+        "line": 173,
+        "body_sha256": "dba020aa287ee8e59fcc419749c71468e9e7a3f6bedda8e21d8ac3e17e2d9879"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::append_product_aggregate_filters",
+        "line": 183,
+        "body_sha256": "c2244d346bbe1bfbd9a4d0c60b3ad2d5a7eb6aca473a081fd297786e6257bf99"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_product_aggregate_filters",
+        "line": 183,
+        "body_sha256": "c2244d346bbe1bfbd9a4d0c60b3ad2d5a7eb6aca473a081fd297786e6257bf99"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::append_sales_price_filter",
+        "line": 211,
+        "body_sha256": "7da10c8ff8f513c3fee17527bd255f27851d8656e320973a852a811e4b6e4130"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_sales_price_filter",
+        "line": 211,
+        "body_sha256": "7da10c8ff8f513c3fee17527bd255f27851d8656e320973a852a811e4b6e4130"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::amount_filter_bson",
+        "line": 232,
+        "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::amount_filter_bson",
+        "line": 232,
+        "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::append_coverage_filter",
+        "line": 242,
+        "body_sha256": "131331103a91b138308cd6badfc030e3cf4c1aa3a34e6fb30c2854ccc8c698bb"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_coverage_filter",
+        "line": 242,
+        "body_sha256": "131331103a91b138308cd6badfc030e3cf4c1aa3a34e6fb30c2854ccc8c698bb"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::product_facet",
+        "line": 268,
+        "body_sha256": "079d2acbc15b30c6e7603d03a397da52cabe8f9885d513001e8f5971b367322e"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_facet",
+        "line": 268,
+        "body_sha256": "079d2acbc15b30c6e7603d03a397da52cabe8f9885d513001e8f5971b367322e"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::product_sort_doc",
+        "line": 303,
+        "body_sha256": "7f1df713deebdd7f452a449021a5de1ad17d0b1337a5bba14492879cf293ab50"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_sort_doc",
+        "line": 303,
+        "body_sha256": "7f1df713deebdd7f452a449021a5de1ad17d0b1337a5bba14492879cf293ab50"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::tests::product_list_pipeline_applies_keyword_and_sku_coverage_filters",
+        "line": 320,
+        "body_sha256": "9cbac5a38b5c9ccc59307c0daf14472151721439f2923c6f0154ede26b1c4ca9"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::tests::product_list_pipeline_applies_keyword_and_sku_coverage_filters",
+        "line": 320,
+        "body_sha256": "9cbac5a38b5c9ccc59307c0daf14472151721439f2923c6f0154ede26b1c4ca9"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter::as_of",
+        "line": 66,
+        "body_sha256": "c484c911e57efede113fa4cbf857a64aa8f908612368bbb79923d52cc95a2130"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter::as_of",
+        "line": 50,
+        "body_sha256": "c484c911e57efede113fa4cbf857a64aa8f908612368bbb79923d52cc95a2130"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::CatalogRepository::search_sellable_skus",
+        "line": 166,
+        "body_sha256": "609db4452e6a8f4c0c9c734c57d08bd49a0d4a1597e1e3b0caa1a5e1ad3bbf15"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::search_sellable_skus",
+        "line": 59,
+        "body_sha256": "609db4452e6a8f4c0c9c734c57d08bd49a0d4a1597e1e3b0caa1a5e1ad3bbf15"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::CatalogRepository::find_sellable_sku_refs",
+        "line": 192,
+        "body_sha256": "7ebd6caca6abf384af375ad8c81c473b5d7aaab9982b3d06b3ce61ee52ba8ed0"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::find_sellable_sku_refs",
+        "line": 85,
+        "body_sha256": "7ebd6caca6abf384af375ad8c81c473b5d7aaab9982b3d06b3ce61ee52ba8ed0"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::CatalogRepository::aggregate_sellable_skus",
+        "line": 208,
+        "body_sha256": "1061f009beb825930aed566ea0cbfb1683a7740ea73edb6dfa774a7a4095bdaf"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::aggregate_sellable_skus",
+        "line": 101,
+        "body_sha256": "1061f009beb825930aed566ea0cbfb1683a7740ea73edb6dfa774a7a4095bdaf"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::sellable_sku_match",
+        "line": 241,
+        "body_sha256": "b342f1f588c0c0dd0104bbd2f2b152305cf3fb4bf6ad8ce5f83721895376ab72"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_match",
+        "line": 134,
+        "body_sha256": "b342f1f588c0c0dd0104bbd2f2b152305cf3fb4bf6ad8ce5f83721895376ab72"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::bson_for",
+        "line": 269,
+        "body_sha256": "2751238f50b339dee35ba6c31e74f11280b1288d82f8447e34d7ca4c7511354e"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::bson_for",
+        "line": 162,
+        "body_sha256": "2751238f50b339dee35ba6c31e74f11280b1288d82f8447e34d7ca4c7511354e"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::amount_filter_bson",
+        "line": 283,
+        "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::amount_filter_bson",
+        "line": 176,
+        "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::append_sellable_optional_filters",
+        "line": 303,
+        "body_sha256": "65f3dc00d5837d31880ed9199db0768fc2aa9bdb35671d4415a197649b2239e8"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::append_sellable_optional_filters",
+        "line": 196,
+        "body_sha256": "65f3dc00d5837d31880ed9199db0768fc2aa9bdb35671d4415a197649b2239e8"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::sellable_sku_pipeline",
+        "line": 398,
+        "body_sha256": "98451a84c58d0811e39ac98d15c883148814b4f32a6ed551df0c747af163e2c1"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_pipeline",
+        "line": 291,
+        "body_sha256": "98451a84c58d0811e39ac98d15c883148814b4f32a6ed551df0c747af163e2c1"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::tests::sellable_sku_pipeline_is_fail_closed_and_cost_safe",
+        "line": 609,
+        "body_sha256": "868adf173c6f3bfc5eda9ef4f6dc506efdba126c21bb744d62ddfca9459d8fae"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_pipeline_is_fail_closed_and_cost_safe",
+        "line": 502,
+        "body_sha256": "868adf173c6f3bfc5eda9ef4f6dc506efdba126c21bb744d62ddfca9459d8fae"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::tests::sellable_sku_reference_filter_matches_exact_pair",
+        "line": 653,
+        "body_sha256": "2779a54ac527061b291daedc3ddb24e36a8f40d169c95b64fdb66d4fb7afdb24"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_reference_filter_matches_exact_pair",
+        "line": 546,
+        "body_sha256": "2779a54ac527061b291daedc3ddb24e36a8f40d169c95b64fdb66d4fb7afdb24"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::in_filter",
+        "line": 24,
+        "body_sha256": "15e5774ca6ac259f20d3bb26d4b3dc63612de06b91573f561e8a677b148f63a9"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::in_filter",
+        "line": 22,
+        "body_sha256": "15e5774ca6ac259f20d3bb26d4b3dc63612de06b91573f561e8a677b148f63a9"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::sort_doc",
+        "line": 37,
+        "body_sha256": "c5becdcd270a88e65964419264fd84c01a61f6ccc6956fbbb7f1d2b239f72f7e"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::sort_doc",
+        "line": 35,
+        "body_sha256": "c5becdcd270a88e65964419264fd84c01a61f6ccc6956fbbb7f1d2b239f72f7e"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::tests::sort_doc_applies_direction",
+        "line": 47,
+        "body_sha256": "324b0a1bcee46e3cc9fd48528b6985b618f83d61d754c589df7aa1b00ac9f83f"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::tests::sort_doc_applies_direction",
+        "line": 45,
+        "body_sha256": "324b0a1bcee46e3cc9fd48528b6985b618f83d61d754c589df7aa1b00ac9f83f"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::ProductListingSummary::new",
+        "line": 42,
+        "body_sha256": "a8c243fabfcdc4ac16bd2a89e0b83a4abc6aeb70020a09a0f6242d03ce918a12"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::ProductListingSummary::new",
+        "line": 42,
+        "body_sha256": "a8c243fabfcdc4ac16bd2a89e0b83a4abc6aeb70020a09a0f6242d03ce918a12"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::CatalogRepository::listing_summaries",
+        "line": 72,
+        "body_sha256": "988d658672c3c2adfebe9246068c74fea40aea7a575753e11ad68a9e87f33e1f"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::CatalogRepository::listing_summaries",
+        "line": 72,
+        "body_sha256": "988d658672c3c2adfebe9246068c74fea40aea7a575753e11ad68a9e87f33e1f"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::CatalogRepository::listing_summary_aggregation_pipeline",
+        "line": 98,
+        "body_sha256": "400cfe260b8cddee5e83557adb5409a556b720506308096a0118c3ca7278daa8"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::CatalogRepository::listing_summary_aggregation_pipeline",
+        "line": 98,
+        "body_sha256": "400cfe260b8cddee5e83557adb5409a556b720506308096a0118c3ca7278daa8"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::sku_is_listed_expr",
+        "line": 115,
+        "body_sha256": "2ce1d7fc3593f91114ff4fbff0cf31c967809648732193e797cad4e3ef7d9f28"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::sku_is_listed_expr",
+        "line": 115,
+        "body_sha256": "2ce1d7fc3593f91114ff4fbff0cf31c967809648732193e797cad4e3ef7d9f28"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::listing_summary_pipeline",
+        "line": 134,
+        "body_sha256": "f553749193e95a995daf92a1dfb1f90aab8e5fd6db3d09eeb6cc35c95e963556"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::listing_summary_pipeline",
+        "line": 134,
+        "body_sha256": "f553749193e95a995daf92a1dfb1f90aab8e5fd6db3d09eeb6cc35c95e963556"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::aggregate_listing_summaries",
+        "line": 177,
+        "body_sha256": "cde3db6178f040c1e5da19ffc579764a3c1d4a51a3667b077b9a43ed6fc8894f"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::aggregate_listing_summaries",
+        "line": 177,
+        "body_sha256": "cde3db6178f040c1e5da19ffc579764a3c1d4a51a3667b077b9a43ed6fc8894f"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::unique_product_ids",
+        "line": 216,
+        "body_sha256": "65b9a4ac04853dad068f46b6e4e6fa0b47215f8ad8ab25a71a347f4093db3af5"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::unique_product_ids",
+        "line": 216,
+        "body_sha256": "65b9a4ac04853dad068f46b6e4e6fa0b47215f8ad8ab25a71a347f4093db3af5"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::fill_listing_summaries",
+        "line": 239,
+        "body_sha256": "589f172a5da2eb4fcd4612c1786cb525e61a986c17efd254fba5159563511c6b"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::fill_listing_summaries",
+        "line": 239,
+        "body_sha256": "589f172a5da2eb4fcd4612c1786cb525e61a986c17efd254fba5159563511c6b"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::summary",
+        "line": 263,
+        "body_sha256": "68b44949f9a1bfab088d0cf2f0e5ca69abf36900bad1d6be0dfbb388d07a8622"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::summary",
+        "line": 263,
+        "body_sha256": "68b44949f9a1bfab088d0cf2f0e5ca69abf36900bad1d6be0dfbb388d07a8622"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::listing_summary_pipeline_is_bounded_and_shares_listed_expr",
+        "line": 269,
+        "body_sha256": "1d77eceea1585201cdce55b22ab046d38fedd255a6f93ea7290d888acb61df41"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::listing_summary_pipeline_is_bounded_and_shares_listed_expr",
+        "line": 269,
+        "body_sha256": "1d77eceea1585201cdce55b22ab046d38fedd255a6f93ea7290d888acb61df41"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_zero_and_disabled",
+        "line": 289,
+        "body_sha256": "5fa56a7ae8989e393b762fb95486ae58aa108dd7a155b129488b5977dbdc7a27"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_zero_and_disabled",
+        "line": 289,
+        "body_sha256": "5fa56a7ae8989e393b762fb95486ae58aa108dd7a155b129488b5977dbdc7a27"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_listed_partial_unlisted_and_batch",
+        "line": 297,
+        "body_sha256": "c690a661a3135f6d35bc3dc7c2f53369e95878d1f13724e4ff78c586c821fd41"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_listed_partial_unlisted_and_batch",
+        "line": 297,
+        "body_sha256": "c690a661a3135f6d35bc3dc7c2f53369e95878d1f13724e4ff78c586c821fd41"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::unique_product_ids_preserve_first_seen_order",
+        "line": 320,
+        "body_sha256": "925cc59c8d424875afe2438580850432437052ff06980f281c5d7eb1835e0b50"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::unique_product_ids_preserve_first_seen_order",
+        "line": 320,
+        "body_sha256": "925cc59c8d424875afe2438580850432437052ff06980f281c5d7eb1835e0b50"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::product_list",
+        "line": 32,
+        "body_sha256": "cf8056b3fd74687bebdf369a631ed5afc4f643d635081964543c6ff97a69262d"
+      },
+      "disposition": "split_pure_prepare_actual_port_query_pure_projection",
+      "after": [
+        {
+          "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+          "qualified_symbol": "erp_catalog::service::catalog::product_query::prepare_product_list",
+          "line": 208,
+          "body_sha256": "3413c355428a2f0c5855af257aed8426024aa05f6e37807d13a832a2460156c0"
+        },
+        {
+          "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+          "qualified_symbol": "erp_read_models::catalog_center::CatalogCenterReadService::product_list",
+          "line": 21,
+          "body_sha256": "4c9615abc350026c4d294f94186c6e8e500e5eefa3c5394912317ef312f9e0ab"
+        },
+        {
+          "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+          "qualified_symbol": "erp_catalog::service::catalog::product_query::product_page_view",
+          "line": 231,
+          "body_sha256": "00eb9595cd1151fec57f1ce57eb6077352eb91da5c3c4f2a311deda99b419256"
+        }
+      ]
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::product_revision_list",
+        "line": 96,
+        "body_sha256": "a630eef2a160cdbb1c097df82bd007ffa643a038a1d301cab11d562f32c2bd80"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::product_revision_list",
+        "line": 32,
+        "body_sha256": "a630eef2a160cdbb1c097df82bd007ffa643a038a1d301cab11d562f32c2bd80"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::sku_list",
+        "line": 163,
+        "body_sha256": "7e05638fdadea8fab96cd0d59e8ac31c0b6dce95bbfced305b63431a110459c4"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::sku_list",
+        "line": 99,
+        "body_sha256": "7e05638fdadea8fab96cd0d59e8ac31c0b6dce95bbfced305b63431a110459c4"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::sku_revision_list",
+        "line": 218,
+        "body_sha256": "75610b873cf63dc90a48f013d4e818d65dacf26d120795ff88bd64e5950d8534"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::CatalogService::sku_revision_list",
+        "line": 154,
+        "body_sha256": "75610b873cf63dc90a48f013d4e818d65dacf26d120795ff88bd64e5950d8534"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::specification_attribute_views",
+        "line": 128,
+        "body_sha256": "f6dc3122e27feb628fa7935d4690faac0653c1700b9eedc83c6cad374d2109f5"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::specification_attribute_views",
+        "line": 127,
+        "body_sha256": "f6dc3122e27feb628fa7935d4690faac0653c1700b9eedc83c6cad374d2109f5"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::normalized_text",
+        "line": 151,
+        "body_sha256": "370e89457d3f4e944a1cac17d424d55c194c8c09b97a4805ee214d86e3ab1b45"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::normalized_text",
+        "line": 150,
+        "body_sha256": "370e89457d3f4e944a1cac17d424d55c194c8c09b97a4805ee214d86e3ab1b45"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::CatalogService::sellable_sku_list",
+        "line": 169,
+        "body_sha256": "8d17e82609d1cdd375ba68b2cefb19dd025c9c78cf7e717b64f5ce7f46647fc3"
+      },
+      "disposition": "split_pure_prepare_actual_port_query_pure_projection",
+      "after": [
+        {
+          "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+          "qualified_symbol": "erp_catalog::service::catalog::sellable::prepare_sellable_sku_list",
+          "line": 172,
+          "body_sha256": "60109feeac3ba5a1ea346986d92d3becf5b2f739f336fd1d127a68fa0c09484f"
+        },
+        {
+          "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+          "qualified_symbol": "erp_read_models::catalog_center::CatalogCenterReadService::sellable_sku_list",
+          "line": 31,
+          "body_sha256": "4fce796516f6da50c9a024c2b41f0d4f7384fbd56f24856911efff7c62a6c8a5"
+        },
+        {
+          "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+          "qualified_symbol": "erp_catalog::service::catalog::sellable::sellable_sku_page_view",
+          "line": 195,
+          "body_sha256": "a1c8ec9cbe8cce2b2669db5f0615ae83041abcbe178202f077f342f7e852dfc6"
+        }
+      ]
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::sellable_sku_invalid_error",
+        "line": 241,
+        "body_sha256": "e90370af729df2dd305223e587fca24542eec28c9792c4813b5c1c147878fc90"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::sellable_sku_invalid_error",
+        "line": 164,
+        "body_sha256": "e90370af729df2dd305223e587fca24542eec28c9792c4813b5c1c147878fc90"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_page_size_is_bounded",
+        "line": 255,
+        "body_sha256": "26311bbb401ea2ac9aa6c47e7f02c6a859ecd284fa1e905726c77c8aa22ee0f7"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_page_size_is_bounded",
+        "line": 245,
+        "body_sha256": "26311bbb401ea2ac9aa6c47e7f02c6a859ecd284fa1e905726c77c8aa22ee0f7"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_max_supplier_count_rejects_zero",
+        "line": 276,
+        "body_sha256": "b86ca1fd3227528ca0d06dd0c15bfbac7f437166d808d4134ea01ce65097091d"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_max_supplier_count_rejects_zero",
+        "line": 266,
+        "body_sha256": "b86ca1fd3227528ca0d06dd0c15bfbac7f437166d808d4134ea01ce65097091d"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_specification_attributes_come_from_stable_identity",
+        "line": 297,
+        "body_sha256": "c59815e35cbb01f5bac05e60088d8ba4332f3db2ea3ada75b4cdccb25ac0b103"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_specification_attributes_come_from_stable_identity",
+        "line": 287,
+        "body_sha256": "c59815e35cbb01f5bac05e60088d8ba4332f3db2ea3ada75b4cdccb25ac0b103"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+        "qualified_symbol": "erp_catalog::ports::supply::OfferingStatus::as_str",
+        "line": 24,
+        "body_sha256": "92aaadf303504aa22d9d5c90b1c50e823277b00696580bcc29d900a4fb798d36"
+      },
+      "after": {
+        "path": "backend/crates/erp-supply/src/entity/supplier_offering/types.rs",
+        "qualified_symbol": "erp_supply::entity::supplier_offering::types::OfferingStatus::as_str",
+        "line": 60,
+        "body_sha256": "03b510844d5b67eb3fb0482f3579aba44d52b80de77b977dfd2d5edbe48c4a16"
+      },
+      "disposition": "replace_shadow_status_with_owner_enum",
+      "body_tokens_equal": false,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+        "qualified_symbol": "erp_catalog::ports::supply::AvailabilityStatus::as_str",
+        "line": 40,
+        "body_sha256": "89cdd056ec6350dd2bc1df0984bdd9656886439b3f701b3011cad49de8cd7194"
+      },
+      "after": {
+        "path": "backend/crates/erp-supply/src/entity/supplier_offering/types.rs",
+        "qualified_symbol": "erp_supply::entity::supplier_offering::types::AvailabilityStatus::as_str",
+        "line": 124,
+        "body_sha256": "b1aac39797ce7ceff657652d70dfb1383db795879bcbe8f3ee5e8200a2715d23"
+      },
+      "disposition": "replace_shadow_status_with_owner_enum",
+      "body_tokens_equal": false,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+        "qualified_symbol": "erp_catalog::ports::supply::tests::supply_status_wire_values_stay_uppercase",
+        "line": 52,
+        "body_sha256": "eb1726ac214518fe923b492830c02efc4d4694fa70c7f43e82b4f100c52cb9b6"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::shared::tests::supply_status_wire_values_stay_uppercase",
+        "line": 22,
+        "body_sha256": "37df2816c00d888ff7f7e17ed3d5e119e44520dbe2ffeb3e310b819d4124bcf0"
+      },
+      "disposition": "test_moved_to_real_supply_provider",
+      "body_tokens_equal": false,
+      "known_trait_constant_binding_only": true,
+      "used_status_arm_same_literal": null
+    }
+  ],
+  "original_tests": [
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/product_pipeline.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::product_pipeline::tests::product_list_pipeline_applies_keyword_and_sku_coverage_filters",
+        "line": 320,
+        "body_sha256": "9cbac5a38b5c9ccc59307c0daf14472151721439f2923c6f0154ede26b1c4ca9"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::tests::product_list_pipeline_applies_keyword_and_sku_coverage_filters",
+        "line": 320,
+        "body_sha256": "9cbac5a38b5c9ccc59307c0daf14472151721439f2923c6f0154ede26b1c4ca9"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::tests::sellable_sku_pipeline_is_fail_closed_and_cost_safe",
+        "line": 609,
+        "body_sha256": "868adf173c6f3bfc5eda9ef4f6dc506efdba126c21bb744d62ddfca9459d8fae"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_pipeline_is_fail_closed_and_cost_safe",
+        "line": 502,
+        "body_sha256": "868adf173c6f3bfc5eda9ef4f6dc506efdba126c21bb744d62ddfca9459d8fae"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::sellable::tests::sellable_sku_reference_filter_matches_exact_pair",
+        "line": 653,
+        "body_sha256": "2779a54ac527061b291daedc3ddb24e36a8f40d169c95b64fdb66d4fb7afdb24"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_reference_filter_matches_exact_pair",
+        "line": 546,
+        "body_sha256": "2779a54ac527061b291daedc3ddb24e36a8f40d169c95b64fdb66d4fb7afdb24"
+      },
+      "disposition": "moved_to_real_supply_provider",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::tests::sort_doc_applies_direction",
+        "line": 47,
+        "body_sha256": "324b0a1bcee46e3cc9fd48528b6985b618f83d61d754c589df7aa1b00ac9f83f"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::shared::tests::sort_doc_applies_direction",
+        "line": 45,
+        "body_sha256": "324b0a1bcee46e3cc9fd48528b6985b618f83d61d754c589df7aa1b00ac9f83f"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::listing_summary_pipeline_is_bounded_and_shares_listed_expr",
+        "line": 269,
+        "body_sha256": "1d77eceea1585201cdce55b22ab046d38fedd255a6f93ea7290d888acb61df41"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::listing_summary_pipeline_is_bounded_and_shares_listed_expr",
+        "line": 269,
+        "body_sha256": "1d77eceea1585201cdce55b22ab046d38fedd255a6f93ea7290d888acb61df41"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_zero_and_disabled",
+        "line": 289,
+        "body_sha256": "5fa56a7ae8989e393b762fb95486ae58aa108dd7a155b129488b5977dbdc7a27"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_zero_and_disabled",
+        "line": 289,
+        "body_sha256": "5fa56a7ae8989e393b762fb95486ae58aa108dd7a155b129488b5977dbdc7a27"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_listed_partial_unlisted_and_batch",
+        "line": 297,
+        "body_sha256": "c690a661a3135f6d35bc3dc7c2f53369e95878d1f13724e4ff78c586c821fd41"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_listed_partial_unlisted_and_batch",
+        "line": 297,
+        "body_sha256": "c690a661a3135f6d35bc3dc7c2f53369e95878d1f13724e4ff78c586c821fd41"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::unique_product_ids_preserve_first_seen_order",
+        "line": 320,
+        "body_sha256": "925cc59c8d424875afe2438580850432437052ff06980f281c5d7eb1835e0b50"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+        "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::unique_product_ids_preserve_first_seen_order",
+        "line": 320,
+        "body_sha256": "925cc59c8d424875afe2438580850432437052ff06980f281c5d7eb1835e0b50"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_page_size_is_bounded",
+        "line": 255,
+        "body_sha256": "26311bbb401ea2ac9aa6c47e7f02c6a859ecd284fa1e905726c77c8aa22ee0f7"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_page_size_is_bounded",
+        "line": 245,
+        "body_sha256": "26311bbb401ea2ac9aa6c47e7f02c6a859ecd284fa1e905726c77c8aa22ee0f7"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_max_supplier_count_rejects_zero",
+        "line": 276,
+        "body_sha256": "b86ca1fd3227528ca0d06dd0c15bfbac7f437166d808d4134ea01ce65097091d"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_max_supplier_count_rejects_zero",
+        "line": 266,
+        "body_sha256": "b86ca1fd3227528ca0d06dd0c15bfbac7f437166d808d4134ea01ce65097091d"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_specification_attributes_come_from_stable_identity",
+        "line": 297,
+        "body_sha256": "c59815e35cbb01f5bac05e60088d8ba4332f3db2ea3ada75b4cdccb25ac0b103"
+      },
+      "after": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_specification_attributes_come_from_stable_identity",
+        "line": 287,
+        "body_sha256": "c59815e35cbb01f5bac05e60088d8ba4332f3db2ea3ada75b4cdccb25ac0b103"
+      },
+      "disposition": "retained_in_catalog",
+      "body_tokens_equal": true,
+      "known_trait_constant_binding_only": false,
+      "used_status_arm_same_literal": null
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+        "qualified_symbol": "erp_catalog::ports::supply::tests::supply_status_wire_values_stay_uppercase",
+        "line": 52,
+        "body_sha256": "eb1726ac214518fe923b492830c02efc4d4694fa70c7f43e82b4f100c52cb9b6"
+      },
+      "after": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::shared::tests::supply_status_wire_values_stay_uppercase",
+        "line": 22,
+        "body_sha256": "37df2816c00d888ff7f7e17ed3d5e119e44520dbe2ffeb3e310b819d4124bcf0"
+      },
+      "disposition": "test_moved_to_real_supply_provider",
+      "body_tokens_equal": false,
+      "known_trait_constant_binding_only": true,
+      "used_status_arm_same_literal": null
+    }
+  ],
+  "split_checks": [
+    {
+      "original_symbol": "erp_catalog::service::catalog::product_query::CatalogService::product_list",
+      "prepare_exact_original_prefix_except_return_wrapper": true,
+      "projection_exact_original_suffix_except_retained_filter_aliases": true,
+      "query_extraction": "letpage=self.db.catalog().product_page(&filter,&mutNoTransaction).await?;",
+      "prepare": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::prepare_product_list",
+        "line": 208,
+        "body_sha256": "3413c355428a2f0c5855af257aed8426024aa05f6e37807d13a832a2460156c0"
+      },
+      "projection": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::product_query::product_page_view",
+        "line": 231,
+        "body_sha256": "00eb9595cd1151fec57f1ce57eb6077352eb91da5c3c4f2a311deda99b419256"
+      }
+    },
+    {
+      "original_symbol": "erp_catalog::service::catalog::sellable::CatalogService::sellable_sku_list",
+      "prepare_exact_original_prefix_except_return_wrapper": true,
+      "projection_exact_original_suffix_except_retained_filter_aliases": true,
+      "query_extraction": "letrows=self.db.catalog().search_sellable_skus(&filter,&mutNoTransaction).await?;",
+      "prepare": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::prepare_sellable_sku_list",
+        "line": 172,
+        "body_sha256": "60109feeac3ba5a1ea346986d92d3becf5b2f739f336fd1d127a68fa0c09484f"
+      },
+      "projection": {
+        "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+        "qualified_symbol": "erp_catalog::service::catalog::sellable::sellable_sku_page_view",
+        "line": 195,
+        "body_sha256": "a1c8ec9cbe8cce2b2669db5f0615ae83041abcbe178202f077f342f7e852dfc6"
+      }
+    }
+  ],
+  "schema_checks": [
+    {
+      "name": "ProductRow",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "after_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "eed1158fe5570d38de3bc9e9f649f588284bba38c81d129ec969da108e52c1b9",
+      "after_sha256": "eed1158fe5570d38de3bc9e9f649f588284bba38c81d129ec969da108e52c1b9",
+      "fields_in_order": [
+        [
+          "id",
+          "String,"
+        ],
+        [
+          "product_no",
+          "String,"
+        ],
+        [
+          "product_kind",
+          "ProductKind,"
+        ],
+        [
+          "name",
+          "Option<String>,"
+        ],
+        [
+          "category_id",
+          "Option<String>,"
+        ],
+        [
+          "brand_id",
+          "Option<String>,"
+        ],
+        [
+          "status",
+          "EnableStatus,"
+        ],
+        [
+          "listing_status",
+          "ProductListingStatus,"
+        ],
+        [
+          "listed_sku_count",
+          "u32,"
+        ],
+        [
+          "sku_count",
+          "u32,"
+        ],
+        [
+          "supplied_sku_count",
+          "u32,"
+        ],
+        [
+          "priced_sku_count",
+          "u32,"
+        ],
+        [
+          "current_revision_id",
+          "Option<String>,"
+        ],
+        [
+          "version",
+          "u64,"
+        ],
+        [
+          "created_at",
+          "u64,"
+        ]
+      ]
+    },
+    {
+      "name": "ProductFilter",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "after_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "9442a7620ef3d2d164627972113afe759e724318db654bf49f4da8ef5dd1fccf",
+      "after_sha256": "9442a7620ef3d2d164627972113afe759e724318db654bf49f4da8ef5dd1fccf",
+      "fields_in_order": [
+        [
+          "product_no",
+          "Option<String>,"
+        ],
+        [
+          "keyword",
+          "Option<String>,"
+        ],
+        [
+          "product_kind",
+          "Option<ProductKind>,"
+        ],
+        [
+          "category_id",
+          "Option<String>,"
+        ],
+        [
+          "brand_id",
+          "Option<String>,"
+        ],
+        [
+          "supplier_id",
+          "Option<String>,"
+        ],
+        [
+          "status",
+          "Option<EnableStatus>,"
+        ],
+        [
+          "listing_status",
+          "Option<ProductListingStatus>,"
+        ],
+        [
+          "supply_coverage",
+          "Option<SkuCoverageStatus>,"
+        ],
+        [
+          "sales_price_min",
+          "Option<Amount>,"
+        ],
+        [
+          "sales_price_max",
+          "Option<Amount>,"
+        ],
+        [
+          "page",
+          "u64,"
+        ],
+        [
+          "page_size",
+          "u32,"
+        ],
+        [
+          "sort_by",
+          "Option<String>,"
+        ],
+        [
+          "sort_ascending",
+          "bool,"
+        ]
+      ]
+    },
+    {
+      "name": "ProductFacet",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "after_path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "ff38ad6c1a3f2a09025f5bdb6e1e928dd9eaa2f756280dd9a5387ca109fc33b0",
+      "after_sha256": "ff38ad6c1a3f2a09025f5bdb6e1e928dd9eaa2f756280dd9a5387ca109fc33b0",
+      "fields_in_order": [
+        [
+          "items",
+          "Vec<ProductRow>,"
+        ],
+        [
+          "total",
+          "Vec<ProductTotal>,"
+        ]
+      ]
+    },
+    {
+      "name": "ProductTotal",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "after_path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "249d34e3195669c5df945fe5194ab5b1b40467c7ee15ea235e995989ff656761",
+      "after_sha256": "249d34e3195669c5df945fe5194ab5b1b40467c7ee15ea235e995989ff656761",
+      "fields_in_order": [
+        [
+          "count",
+          "i64,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuFilter",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "dea465c0fa6b65f669b6568757ad6654380aa71c6f72497a943c7f2785d5a5f3",
+      "after_sha256": "dea465c0fa6b65f669b6568757ad6654380aa71c6f72497a943c7f2785d5a5f3",
+      "fields_in_order": [
+        [
+          "keyword",
+          "Option<String>,"
+        ],
+        [
+          "product_kind",
+          "Option<ProductKind>,"
+        ],
+        [
+          "category_id",
+          "Option<String>,"
+        ],
+        [
+          "brand_id",
+          "Option<String>,"
+        ],
+        [
+          "supplier_id",
+          "Option<String>,"
+        ],
+        [
+          "supply_region",
+          "Option<String>,"
+        ],
+        [
+          "max_supplier_count",
+          "Option<u32>,"
+        ],
+        [
+          "sales_price_min",
+          "Option<Amount>,"
+        ],
+        [
+          "sales_price_max",
+          "Option<Amount>,"
+        ],
+        [
+          "eligibility_as_of",
+          "BusinessDate,"
+        ],
+        [
+          "page",
+          "u64,"
+        ],
+        [
+          "page_size",
+          "u32,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuRow",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "0e5825b71c477fec4e42547f078173b534c2c09ecd78735c0aa7cdd2a865d45f",
+      "after_sha256": "0e5825b71c477fec4e42547f078173b534c2c09ecd78735c0aa7cdd2a865d45f",
+      "fields_in_order": [
+        [
+          "sku_id",
+          "String,"
+        ],
+        [
+          "sku_version",
+          "u64,"
+        ],
+        [
+          "sku_revision_id",
+          "String,"
+        ],
+        [
+          "sku_revision_no",
+          "u32,"
+        ],
+        [
+          "sku_no",
+          "String,"
+        ],
+        [
+          "product_id",
+          "String,"
+        ],
+        [
+          "product_no",
+          "String,"
+        ],
+        [
+          "product_kind",
+          "ProductKind,"
+        ],
+        [
+          "name",
+          "String,"
+        ],
+        [
+          "specification_signature",
+          "String,"
+        ],
+        [
+          "specification",
+          "Option<String>,"
+        ],
+        [
+          "barcode",
+          "Option<String>,"
+        ],
+        [
+          "base_unit_id",
+          "String,"
+        ],
+        [
+          "base_unit_code",
+          "Option<String>,"
+        ],
+        [
+          "base_unit_name",
+          "Option<String>,"
+        ],
+        [
+          "sales_visible_price_gross",
+          "Amount,"
+        ],
+        [
+          "market_price",
+          "Option<Amount>,"
+        ],
+        [
+          "main_image_asset_id",
+          "Option<String>,"
+        ],
+        [
+          "effective_from",
+          "BusinessDate,"
+        ],
+        [
+          "effective_to",
+          "Option<BusinessDate>,"
+        ],
+        [
+          "supplier_count",
+          "u32,"
+        ],
+        [
+          "supply_regions",
+          "Vec<String>,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuFacet",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "854507828d4d32bd10cfc49c657f4be3f11539b9e3336f5e880f0ad2a505402e",
+      "after_sha256": "854507828d4d32bd10cfc49c657f4be3f11539b9e3336f5e880f0ad2a505402e",
+      "fields_in_order": [
+        [
+          "items",
+          "Vec<SellableSkuRow>,"
+        ],
+        [
+          "total",
+          "Vec<SellableSkuTotal>,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuTotal",
+      "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "bb1c8857b21df218f4a10f7b1e836accdf90b57315162efe067b1797c7240267",
+      "after_sha256": "bb1c8857b21df218f4a10f7b1e836accdf90b57315162efe067b1797c7240267",
+      "fields_in_order": [
+        [
+          "count",
+          "i64,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuListParams",
+      "before_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "8ca4d2e058c55c3db2e601180ce062f9b0a6359b3afed92b0d5591d37a1039b1",
+      "after_sha256": "8ca4d2e058c55c3db2e601180ce062f9b0a6359b3afed92b0d5591d37a1039b1",
+      "fields_in_order": [
+        [
+          "q",
+          "Option<String>,"
+        ],
+        [
+          "product_kind",
+          "Option<ProductKind>,"
+        ],
+        [
+          "category_id",
+          "Option<String>,"
+        ],
+        [
+          "brand_id",
+          "Option<String>,"
+        ],
+        [
+          "supplier_id",
+          "Option<String>,"
+        ],
+        [
+          "supply_region",
+          "Option<String>,"
+        ],
+        [
+          "max_supplier_count",
+          "Option<u32>,"
+        ],
+        [
+          "sales_price_min",
+          "Option<Amount>,"
+        ],
+        [
+          "sales_price_max",
+          "Option<Amount>,"
+        ],
+        [
+          "eligibility_as_of",
+          "Option<BusinessDate>,"
+        ],
+        [
+          "page",
+          "Option<u64>,"
+        ],
+        [
+          "page_size",
+          "Option<u32>,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuView",
+      "before_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "37e1709ab2f5317adf05bb706f39844d1b8779258e3b5bcfa34e53b69862b76d",
+      "after_sha256": "37e1709ab2f5317adf05bb706f39844d1b8779258e3b5bcfa34e53b69862b76d",
+      "fields_in_order": [
+        [
+          "sku_id",
+          "String,"
+        ],
+        [
+          "sku_version",
+          "u64,"
+        ],
+        [
+          "sku_revision_id",
+          "String,"
+        ],
+        [
+          "sku_revision_no",
+          "u32,"
+        ],
+        [
+          "sku_no",
+          "String,"
+        ],
+        [
+          "product_id",
+          "String,"
+        ],
+        [
+          "product_no",
+          "String,"
+        ],
+        [
+          "product_kind",
+          "ProductKind,"
+        ],
+        [
+          "name",
+          "String,"
+        ],
+        [
+          "specification_attributes",
+          "Vec<SellableSkuSpecificationAttributeView>,"
+        ],
+        [
+          "specification",
+          "Option<String>,"
+        ],
+        [
+          "barcode",
+          "Option<String>,"
+        ],
+        [
+          "base_unit_id",
+          "String,"
+        ],
+        [
+          "base_unit_code",
+          "Option<String>,"
+        ],
+        [
+          "base_unit_name",
+          "Option<String>,"
+        ],
+        [
+          "sales_visible_price_gross",
+          "Amount,"
+        ],
+        [
+          "market_price",
+          "Option<Amount>,"
+        ],
+        [
+          "main_image_asset_id",
+          "Option<String>,"
+        ],
+        [
+          "effective_from",
+          "BusinessDate,"
+        ],
+        [
+          "effective_to",
+          "Option<BusinessDate>,"
+        ],
+        [
+          "supplier_count",
+          "u32,"
+        ],
+        [
+          "supply_regions",
+          "Vec<String>,"
+        ],
+        [
+          "eligibility_as_of",
+          "BusinessDate,"
+        ]
+      ]
+    },
+    {
+      "name": "SellableSkuSpecificationAttributeView",
+      "before_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "after_path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "entire_declaration_tokens_equal": true,
+      "before_sha256": "b9abb080e89cf9727264cfad9ef0097a5bcd573b70a07a68ec71b57d2b968fed",
+      "after_sha256": "b9abb080e89cf9727264cfad9ef0097a5bcd573b70a07a68ec71b57d2b968fed",
+      "fields_in_order": [
+        [
+          "name",
+          "String,"
+        ],
+        [
+          "value",
+          "String,"
+        ]
+      ]
+    }
+  ],
+  "unchanged_support_files": [
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/product.rs",
+      "before_sha256": "b10b8e33d28232189248f41bc6d318e8ee0664fb518d174ba06def37153ecce6",
+      "after_sha256": "b10b8e33d28232189248f41bc6d318e8ee0664fb518d174ba06def37153ecce6",
+      "bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/common.rs",
+      "before_sha256": "fe4720a50f867bcac88eb4fab2b626432cdfbf3648825ae9499678733e254dcd",
+      "after_sha256": "fe4720a50f867bcac88eb4fab2b626432cdfbf3648825ae9499678733e254dcd",
+      "bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/error.rs",
+      "before_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "after_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/error.rs",
+      "before_sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "after_sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/service/sales_order/sellable.rs",
+      "before_sha256": "dcc049f8348fc7e23111f72cf0bfa9b003de704fce08047001ec951811555606",
+      "after_sha256": "dcc049f8348fc7e23111f72cf0bfa9b003de704fce08047001ec951811555606",
+      "bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/ports/sales_order.rs",
+      "before_sha256": "43419beb3c05d8cdd1739a0275f02e4f9dba908d04fbe4dca9647e2c1a3fa1c9",
+      "after_sha256": "43419beb3c05d8cdd1739a0275f02e4f9dba908d04fbe4dca9647e2c1a3fa1c9",
+      "bytes_equal": true
+    }
+  ],
+  "sales_consumer": {
+    "before": {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::CatalogQualificationAdapter::qualified_refs",
+      "line": 20,
+      "body_sha256": "3f57ff872e5b22ac45bb309906d63a31d34355962e109b88cb28354f70d13a90"
+    },
+    "after": {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::CatalogQualificationAdapter::qualified_refs",
+      "line": 23,
+      "body_sha256": "fa689b4607f8f44d62b01a095acbb9124835c097f6af842aabbdaf5377fa30d7"
+    },
+    "body_equal_with_repository_receiver_rebound": true,
+    "return_error": "erp_sales::Result; raw persistence error converted by original From implementation",
+    "incoming_executor_forwarded": true,
+    "production_constructor": {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new",
+      "line": 15,
+      "body_sha256": "551dd72060afb7c21de38e63ecffc9b827d8241636938396ae7a24bf3c902588",
+      "verified_body": "Self { query: std::sync::Arc::new(MongoCatalogSupplyQuery::new(db)) }",
+      "no_io": true,
+      "field_type": "std::sync::Arc<dyn CatalogSupplyQueryPort>",
+      "test_injection_changes_production_query_logic": false
+    }
+  },
+  "glue_checks": [
+    {
+      "symbol": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::MongoCatalogSupplyQuery::product_page",
+        "line": 22,
+        "body_sha256": "3de3728e4903520642ceabd287180dcabd469fcae6ab5c9f9d13170b0043893a"
+      },
+      "exact_forwarding_body": true
+    },
+    {
+      "symbol": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::MongoCatalogSupplyQuery::search_sellable_skus",
+        "line": 31,
+        "body_sha256": "aeaacfe143b7d75c94a45d6a37789b50f173dac6b9c79ceda64e896f594b1852"
+      },
+      "exact_forwarding_body": true
+    },
+    {
+      "symbol": {
+        "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs",
+        "qualified_symbol": "erp_processes::adapters::catalog_supply_query::MongoCatalogSupplyQuery::find_sellable_sku_refs",
+        "line": 40,
+        "body_sha256": "463135f15274784f9cf811963c87a97676cdfc1374e95c99df3726e2173a1ce4"
+      },
+      "exact_forwarding_body": true
+    },
+    {
+      "symbol": {
+        "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+        "qualified_symbol": "erp_read_models::catalog_center::CatalogCenterReadService::product_list",
+        "line": 21,
+        "body_sha256": "4c9615abc350026c4d294f94186c6e8e500e5eefa3c5394912317ef312f9e0ab"
+      },
+      "exact_forwarding_body": true
+    },
+    {
+      "symbol": {
+        "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+        "qualified_symbol": "erp_read_models::catalog_center::CatalogCenterReadService::sellable_sku_list",
+        "line": 31,
+        "body_sha256": "4fce796516f6da50c9a024c2b41f0d4f7384fbd56f24856911efff7c62a6c8a5"
+      },
+      "exact_forwarding_body": true
+    }
+  ],
+  "after_source_hashes": [
+    {
+      "path": "backend/apps/web-api/src/core/errors.rs",
+      "sha256": "e275addbd6b9a5166ff4d38b2dbd24a6309721867a233999af6162631a032220"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/common.rs",
+      "sha256": "fe4720a50f867bcac88eb4fab2b626432cdfbf3648825ae9499678733e254dcd"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/product.rs",
+      "sha256": "b10b8e33d28232189248f41bc6d318e8ee0664fb518d174ba06def37153ecce6"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/error.rs",
+      "sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+      "sha256": "586ffc9936689d059f943d5d8ad29439cdf1c16712ac2defe8a7da734a25fdfa"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "sha256": "c3f6663e3a55f1b90e2f5c79e82d439e51f7cda689bb19ec0f60056f4a83cc7f"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/mod.rs",
+      "sha256": "2f157d31595f27a56e6bd56fe12b8081913263a8b3b91236a5eb0c2517c45e60"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "sha256": "64d6fa23fa635bbc9b23ada634de20a518a3bdaec28767eb926525091854a1de"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "sha256": "28fafccad4527ca131b79b997df65a4b3ae558e94d349be0554131940bc92a92"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+      "sha256": "f1ca55ad43560606f4975da966b8f78f19596e529fad4772b63af56e24fb3437"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/extensions/catalog.rs",
+      "sha256": "fc8973a89405690c1398355bf76c7e333316546db5dc7f13b1b4efdf8ce329d7"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/mod.rs",
+      "sha256": "cef56737a23125121165d770434ccdc170743bcb13cef747871707f15f38d9a5"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/mod.rs",
+      "sha256": "8ebb435f5e716c8fddf948de5c370781dad439ee2f23d8954cd95e628a82f617"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+      "sha256": "92dd37d76a8abd01df01c2d3867b7e5cd3a384a6114fd06b9d86b859ecdbfc72"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "sha256": "f361b0bb4307b4859e9ae82818b3af6beb2b7f388c0c5e3e0eaae4a2b6c13d7f"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs",
+      "sha256": "22e9de7fa9aefcf37eb7d7f978b0a0942caa911d7cf4b2fdba50889fc41f18b8"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/mod.rs",
+      "sha256": "02b487a2f090c8db42dbd5bb0e680a6324e05ce5e291d0d74c6259180900ae1d"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+      "sha256": "f88bfe0731636ce8b80f8005fce057989e696ae891aab821734eaacd2c832cbc"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+      "sha256": "f95e194ce6c08e9ba82eb07797e262f6f4c4f0f55618af321813748058c23ff3"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "sha256": "a66eb839317d1e3c28b2839f2b08e60b8c6a53bfa20592ab045dce9140286338"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs",
+      "sha256": "0132b10458a6b110b34b3137c20bfad43716e9aae61861b92332fe97bc6a7cd6"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "sha256": "87b9ac4fd220df52b8f1a54d607998fd5ceafebe561b64c618b46c4fb06f2873"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+      "sha256": "e698933e9e36b91f2194303df409629fd05b912ec946706ec8519698d8a89c4b"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/lib.rs",
+      "sha256": "dfce87e446592453b8181b613fc533ae0061b64f40975b1a8da8d7678c85b071"
+    },
+    {
+      "path": "backend/crates/erp-sales/src/error.rs",
+      "sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0"
+    },
+    {
+      "path": "backend/crates/erp-supply/src/entity/supplier_offering/types.rs",
+      "sha256": "e02af7a3022cb8d51b41250b2d032f7f20b6b3973c545482e54aeae34d93e87e"
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_offering.rs",
+      "sha256": "494200814c2a36dd9e0b805fcc24b8a698c6844ad186e9a43a7d6295f528520b"
+    },
+    {
+      "path": "backend/services/src/errors.rs",
+      "sha256": "7666307ce6617948104ad9683c09beabe861268caaf98bb34a60269f26db7e82"
+    },
+    {
+      "path": "backend/apps/web-api/src/app_state.rs",
+      "sha256": "01be54e298ccd5dec552a93fa2d9615a894359a14223e8ac22ed7fa0789d2715"
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+      "sha256": "d5cc8c86a26a284deda7db110389943d227a5e9ce54af82fb4346e2b76b5b217"
+    },
+    {
+      "path": "backend/crates/erp-sales/src/service/sales_order/sellable.rs",
+      "sha256": "dcc049f8348fc7e23111f72cf0bfa9b003de704fce08047001ec951811555606"
+    },
+    {
+      "path": "backend/crates/erp-sales/src/ports/sales_order.rs",
+      "sha256": "43419beb3c05d8cdd1739a0275f02e4f9dba908d04fbe4dca9647e2c1a3fa1c9"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "sha256": "f8e8b784dd1f554800365edd8ff3f26e0e5f0f763ffceb890c68c955c6c83a47"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "sha256": "353d4df4adb394941320658ed0e12de67d1d01b403603a58a6f430ee3c5dcb62"
+    }
+  ],
+  "findings": [],
+  "validation_boundary": {
+    "source_only": true,
+    "cargo_run": false,
+    "rust_tests_run": false,
+    "mongo_run": false,
+    "historical_tests_modified": false,
+    "source_modified_by_reviewer": false,
+    "ERP_TEST_MONGO_URI": "unset"
+  },
+  "after_source_hashes_stable_at_end": true,
+  "http_handler_checks": [
+    {
+      "before": {
+        "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+        "qualified_symbol": "backend::apps::web_api::core::handler::catalog::product::product_list",
+        "line": 71,
+        "body_sha256": "b342dd2b4c8c4a6d110d969e0b5555344ba4b866f86383805f526810574ab3eb"
+      },
+      "after": {
+        "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+        "qualified_symbol": "backend::apps::web_api::core::handler::catalog::product::product_list",
+        "line": 71,
+        "body_sha256": "6bd2dee655743aefd823350e0c3777cc490be6894fca166cc2ea86b5b01b64fc"
+      },
+      "body_equal_except_catalog_service_to_catalog_center": true
+    },
+    {
+      "before": {
+        "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+        "qualified_symbol": "backend::apps::web_api::core::handler::catalog::product::sellable_sku_list",
+        "line": 48,
+        "body_sha256": "606ce620e2337cd900365504296d422c0f73a5843f0e257479d72c6dd58d2ae6"
+      },
+      "after": {
+        "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+        "qualified_symbol": "backend::apps::web_api::core::handler::catalog::product::sellable_sku_list",
+        "line": 48,
+        "body_sha256": "8a82e9726299492c42cf4a40b10a9377bf83ab157854a732c556e08447df3fcc"
+      },
+      "body_equal_except_catalog_service_to_catalog_center": true
+    }
+  ],
+  "error_conversion_checks": [
+    {
+      "before": {
+        "path": "backend/services/src/errors.rs",
+        "qualified_symbol": "backend::services::errors::Error::from",
+        "line": 158,
+        "body_sha256": "f357391ca47641cab97fd4155ece8b1013f154300d28a9fb874a7ca6c6eb2982"
+      },
+      "after": {
+        "path": "backend/services/src/errors.rs",
+        "qualified_symbol": "backend::services::errors::Error::from",
+        "line": 158,
+        "body_sha256": "f357391ca47641cab97fd4155ece8b1013f154300d28a9fb874a7ca6c6eb2982"
+      },
+      "impl": "impl From<erp_catalog::Error> for Error",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "qualified_symbol": "backend::apps::web_api::core::errors::Error::from",
+        "line": 184,
+        "body_sha256": "69ad3492d6a175eaba8a31d5ba91a5a93e691696f672c650f252b5f01b8b522a"
+      },
+      "after": {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "qualified_symbol": "backend::apps::web_api::core::errors::Error::from",
+        "line": 184,
+        "body_sha256": "69ad3492d6a175eaba8a31d5ba91a5a93e691696f672c650f252b5f01b8b522a"
+      },
+      "impl": "impl From<erp_catalog::Error> for Error",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "qualified_symbol": "backend::apps::web_api::core::errors::Error::from",
+        "line": 267,
+        "body_sha256": "e0d355dcc8a25c5462bc2b9a6f3d6a3245dabace0f5f0be9d07dd95a6ac78540"
+      },
+      "after": {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "qualified_symbol": "backend::apps::web_api::core::errors::Error::from",
+        "line": 274,
+        "body_sha256": "e0d355dcc8a25c5462bc2b9a6f3d6a3245dabace0f5f0be9d07dd95a6ac78540"
+      },
+      "impl": "impl From<services::Error> for Error",
+      "body_tokens_equal": true
+    }
+  ],
+  "actual_wiring": {
+    "app_state": {
+      "path": "backend/apps/web-api/src/app_state.rs",
+      "field": "catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort>",
+      "construction": "Arc::new(MongoCatalogSupplyQuery::new(db.clone()))",
+      "construction_reads_facts": false,
+      "page_accessor": "CatalogCenterReadService::new(Arc::clone(&self.catalog_supply_query))"
+    },
+    "sales_adapter": "CatalogQualificationAdapter::new(Database) stores Arc<dyn CatalogSupplyQueryPort> containing the same MongoCatalogSupplyQuery::new(db); construction only binds Database. Exact refs method body is unchanged by Arc injection. Page Arc and sales Arc need not be the same instance.",
+    "domain_policy": "Exactly one sku_is_listed_expr definition remains erp_catalog::repository::catalog::listing; existing listing_summary_pipeline and relocated product_sku_lookup call it",
+    "provider_visibility": "MongoCatalogSupplyQuery public; repository module and children private; CatalogSupplyRepository pub(super)",
+    "catalog_boundary": "CatalogSupplyQueryPort contains filters/rows/BusinessDate/Executor and persistence_core::Result; no Supply constants or shadow status variants remain in catalog Port"
+  },
+  "constants_and_status_bindings": [
+    {
+      "original": "erp_catalog::ports::supply::SUPPLIER_OFFERINGS",
+      "after": "<mongodb::Database as erp_supply::repository::SupplierOfferingExt>::SUPPLIER_OFFERINGS",
+      "literal": "supplier_offerings"
+    },
+    {
+      "original": "erp_catalog::ports::supply::SUPPLIER_OFFERING_REVISIONS",
+      "after": "<mongodb::Database as erp_supply::repository::SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS",
+      "literal": "supplier_offering_revisions"
+    },
+    {
+      "original": "erp_catalog::ports::supply::SUPPLIER_OFFERING_AVAILABILITIES",
+      "after": "<mongodb::Database as erp_supply::repository::SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES",
+      "literal": "supplier_offering_availabilities"
+    },
+    {
+      "original": "erp_catalog::ports::supply::OfferingStatus::Active.as_str()",
+      "after": "erp_supply::entity::supplier_offering::OfferingStatus::Active.as_str()",
+      "literal": "ACTIVE"
+    },
+    {
+      "original": "erp_catalog::ports::supply::AvailabilityStatus::Available.as_str()",
+      "after": "erp_supply::entity::supplier_offering::AvailabilityStatus::Available.as_str()",
+      "literal": "AVAILABLE"
+    }
+  ],
+  "critical_production_contracts": [
+    {
+      "contract": "exact_refs",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::find_sellable_sku_refs",
+          "line": 85,
+          "body_sha256": "7ebd6caca6abf384af375ad8c81c473b5d7aaab9982b3d06b3ce61ee52ba8ed0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_match",
+          "line": 134,
+          "body_sha256": "b342f1f588c0c0dd0104bbd2f2b152305cf3fb4bf6ad8ce5f83721895376ab72"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_pipeline",
+          "line": 291,
+          "body_sha256": "98451a84c58d0811e39ac98d15c883148814b4f32a6ed551df0c747af163e2c1"
+        }
+      ],
+      "verified_semantics": "Empty refs return Ok(Vec::new()) before match/filter/pipeline/session access. Nonempty refs retain ordered $or of exact (id,current_revision_id) pairs; as_of filter has original defaults; paging=None retains sort and skip=0 without $limit."
+    },
+    {
+      "contract": "session_and_facets_product",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::search_products",
+          "line": 42,
+          "body_sha256": "28e27fded99728c0488ca06178786ba19e463d794f69f4521222bb4dbc135b7b"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::product_page",
+          "line": 67,
+          "body_sha256": "9c42bb74d0f55e91f95d160ab0dead312b6253e034e41a0fdd1b7aef3d1e5ac9"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product::CatalogSupplyRepository::aggregate_products",
+          "line": 76,
+          "body_sha256": "05a8e4f551d53ac10a67dbbd8cb29d1e5a9429473a8e4addbd64a260051c71ae"
+        }
+      ],
+      "verified_semantics": "Same executor is forwarded throughout. Some(session): aggregate.with_type.session(&mut *session).await?.stream(session).try_collect().await?. None: same aggregate without session. First facet only; no rows -> empty items/total. First count or zero; no added transaction/query/retry."
+    },
+    {
+      "contract": "session_and_facets_sellable",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::search_sellable_skus",
+          "line": 59,
+          "body_sha256": "609db4452e6a8f4c0c9c734c57d08bd49a0d4a1597e1e3b0caa1a5e1ad3bbf15"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::CatalogSupplyRepository::aggregate_sellable_skus",
+          "line": 101,
+          "body_sha256": "1061f009beb825930aed566ea0cbfb1683a7740ea73edb6dfa774a7a4095bdaf"
+        }
+      ],
+      "verified_semantics": "Same Session/NoTransaction branching and same typed facet collection as original product executor. Provider never creates a new NoTransaction; caller controls executor. The two page consumers still explicitly pass NoTransaction."
+    },
+    {
+      "contract": "product_pipeline",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_list_pipeline",
+          "line": 14,
+          "body_sha256": "cd8ebb7651b6a2969a14186a694d44d885d2f92a72e01776bfc592b59c723fe0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_revision_lookup",
+          "line": 87,
+          "body_sha256": "801fe95f3d34509131d674f311fcb5a3ea2bf008e3f7b9b1a950756b9be23a59"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_sku_lookup",
+          "line": 104,
+          "body_sha256": "8ca715a8713a14691baa2f6b48e8be87aa23622d943c78a72c9085e74d04b13e"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_product_revision_filters",
+          "line": 173,
+          "body_sha256": "dba020aa287ee8e59fcc419749c71468e9e7a3f6bedda8e21d8ac3e17e2d9879"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_product_aggregate_filters",
+          "line": 183,
+          "body_sha256": "c2244d346bbe1bfbd9a4d0c60b3ad2d5a7eb6aca473a081fd297786e6257bf99"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_sales_price_filter",
+          "line": 211,
+          "body_sha256": "7da10c8ff8f513c3fee17527bd255f27851d8656e320973a852a811e4b6e4130"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::amount_filter_bson",
+          "line": 232,
+          "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::append_coverage_filter",
+          "line": 242,
+          "body_sha256": "131331103a91b138308cd6badfc030e3cf4c1aa3a34e6fb30c2854ccc8c698bb"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_facet",
+          "line": 268,
+          "body_sha256": "079d2acbc15b30c6e7603d03a397da52cabe8f9885d513001e8f5971b367322e"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::product_sort_doc",
+          "line": 303,
+          "body_sha256": "7f1df713deebdd7f452a449021a5de1ad17d0b1337a5bba14492879cf293ab50"
+        }
+      ],
+      "verified_semantics": "All 10 bodies exact token equality: base match, current product revision lookup/unwind preserving null, revision category/brand filter, active SKU/current revision/supply lookup, counts, inherited listing status, keyword/listing/supplier/coverage/price filter, facet. Supply coverage remains original active offering+non-null current pointer predicate; it does not acquire sellable availability/date checks. Price uses Decimal128 inclusive endpoints and one SKU $elemMatch. Total applies after all filters; item sort/skip/limit/project order unchanged."
+    },
+    {
+      "contract": "sellable_pipeline",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_match",
+          "line": 134,
+          "body_sha256": "b342f1f588c0c0dd0104bbd2f2b152305cf3fb4bf6ad8ce5f83721895376ab72"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::bson_for",
+          "line": 162,
+          "body_sha256": "2751238f50b339dee35ba6c31e74f11280b1288d82f8447e34d7ca4c7511354e"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::amount_filter_bson",
+          "line": 176,
+          "body_sha256": "7dfdb02babef8eaf3b9caa2f5d88a59579fc5d9726b72a391d03d002af1b98a8"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::append_sellable_optional_filters",
+          "line": 196,
+          "body_sha256": "65f3dc00d5837d31880ed9199db0768fc2aa9bdb35671d4415a197649b2239e8"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+          "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::sellable_sku_pipeline",
+          "line": 291,
+          "body_sha256": "98451a84c58d0811e39ac98d15c883148814b4f32a6ed551df0c747af163e2c1"
+        }
+      ],
+      "verified_semantics": "Stable SKU active, listing_status in [listed,null], current pointer; current SKU revision active/non-null price/effective [from,to); active product/current revision effective [from,to); optional unit unwind preserves null; offering active/current pointer, current offering revision valid [from,to), availability AVAILABLE with absent/null quantity or Decimal128 >0; nonempty offering requirement; setUnion supplier ids and regions; filters in original kind/category/brand/supplier/region/max count/price/keyword order; facet count and sku_no,id sort unchanged. Projection omits supplier identity and procurement amounts/rates."
+    },
+    {
+      "contract": "single_listing_policy",
+      "production_symbols": [
+        {
+          "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+          "qualified_symbol": "erp_catalog::repository::catalog::listing::sku_is_listed_expr",
+          "line": 115,
+          "body_sha256": "2ce1d7fc3593f91114ff4fbff0cf31c967809648732193e797cad4e3ef7d9f28"
+        }
+      ],
+      "verified_semantics": "Exactly one listing expression remains in catalog; only visibility changed pub(super)->pub. $ifNull listing_status defaults Listed then $eq Listed, both existing summary and relocated product list reuse it."
+    }
+  ],
+  "prepare_and_projection_order": {
+    "product": [
+      "params.validate",
+      "params.normalized: normalize_sort before validate_sales_price_range, then normalized_text fields and paging defaults",
+      "construct same 15-field ProductFilter",
+      "actual Port product_page with NoTransaction",
+      "map original row fields in order",
+      "same total/page/page_size"
+    ],
+    "sellable": [
+      "params.validate",
+      "validate_sales_price_range: negative endpoints before inverted bounds",
+      "page default 1",
+      "page_size default 20",
+      "explicit eligibility_as_of or lazy BusinessDate::today at original location",
+      "text normalizations in original filter field order",
+      "actual Port search_sellable_skus with NoTransaction",
+      "original for-row projection; parse specification_signature using the same catalog grammar",
+      "legacy noncanonical signature => empty specification_attributes",
+      "response eligibility_as_of is exactly the date used for query"
+    ],
+    "sales": [
+      "unchanged ensure_sellable_refs empty guard",
+      "BusinessDate::today inside existing qualified_refs argument evaluation",
+      "incoming Executor through Sales Port, actual adapter and repository",
+      "same exact returned (sku_id,sku_revision_id) map and downstream fail-closed set comparison"
+    ]
+  },
+  "error_chains": {
+    "pages_before": "MongoDB -> persistence_core::Error -> erp_catalog::Error -> services::Error -> HTTP Error",
+    "pages_after": "MongoDB -> persistence_core::Error -> explicit erp_catalog::Error::from -> erp_read_models::errors::Error (current alias services::Error) -> HTTP Error",
+    "sales_before_and_after": "MongoDB -> persistence_core::Error -> erp_sales::Error through unchanged From implementation; qualified_refs retains ? and does not convert through catalog or read models",
+    "preserved_mappings": {
+      "DuplicateKey": "generic ConflictError (data already exists)",
+      "OptimisticLockingError": "ConflictError with original refresh/retry message",
+      "TransientTransactionConflict": "TransientTransaction keeps typed source",
+      "CommitOutcomeUnknown": "OutcomeUnknown keeps typed source",
+      "other": "RepositoryError keeps typed source"
+    },
+    "preparation_error": "Catalog validator/business/core error converts once to services error via exact original exhaustive From<erp_catalog::Error>; HTTP receives identical variant/message/source"
+  },
+  "review_scope_counts": {
+    "original_files": 8,
+    "original_function_definitions": 77,
+    "original_production_functions": 64,
+    "production_body_tokens_equal": 60,
+    "production_split_with_exact_prefix_suffix_proof": 2,
+    "shadow_status_functions_replaced_by_real_owner_arms": 2,
+    "original_test_functions": 12,
+    "original_test_helpers": 1,
+    "original_tests_moved": 4,
+    "original_tests_retained_catalog": 8,
+    "moved_mongo_pipeline_function_bodies_equal": 21,
+    "complete_declarations_checked": 11,
+    "additional_real_entry_tests_reviewed": 7
+  },
+  "non_semantic_observations": [
+    {
+      "observation": "New sellable production helpers initially followed tests module",
+      "status": "resolved in current snapshot; production helpers precede original tests",
+      "source": "backend/crates/erp-catalog/src/service/catalog/sellable.rs"
+    },
+    {
+      "observation": "Root rustfmt orders final catalog_center/ports module declarations",
+      "status": "Reviewed; current RM services Error alias and both module registrations unchanged",
+      "path": "backend/crates/erp-read-models/src/lib.rs",
+      "previous_sha256": "0d45b24776755181e9007e39987d9ef15b50f97bec91db4a8e64e993de9809be",
+      "current_sha256": "dfce87e446592453b8181b613fc533ae0061b64f40975b1a8da8d7678c85b071"
+    }
+  ],
+  "additional_test_review": [
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::invalid_product_page_stops_before_any_query",
+      "line": 81,
+      "body_sha256": "d3026132ad9acec370b9862a3a94118fa9b559f604d4f1a3add6b7548d67a08d",
+      "drives_actual_production_entry": "CatalogCenterReadService::product_list",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Invalid page returns real preparation ValidationError and RecordingQuery call list is empty.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::product_projection_preserves_optional_fields_counts_and_page",
+      "line": 93,
+      "body_sha256": "b7836a6449df86864b6f0413c6d7bb3f80196c8a67f37276a9651bd9ec04ff8b",
+      "drives_actual_production_entry": "CatalogCenterReadService::product_list",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Real prepare trims product_no; Port sees page 2/size 3 and NoTransaction; production projection retains optional None fields, all 4 counts, version/time and PageView total. Exactly one product query.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::product_repository_failure_keeps_original_catalog_error_mapping",
+      "line": 117,
+      "body_sha256": "d5ed9bf80b6f474d79513284b4aae6806b328bbb192d5683cd6299f41ec45de6",
+      "drives_actual_production_entry": "CatalogCenterReadService::product_list",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Real RM entry converts injected persistence OptimisticLockingError through original Catalog converter to services ConflictError with exact original Chinese message; one call.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::sellable_validation_precedes_price_validation_and_query",
+      "line": 130,
+      "body_sha256": "ac448d89ffb96de274b0623ce64bd04b849d481039abf04da8068c54fdeb0ff2",
+      "drives_actual_production_entry": "CatalogCenterReadService::sellable_sku_list",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Real preparation rejects invalid page before inverted prices; then inverted bounds exact message with valid page; both failures make zero Port calls.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::sellable_query_keeps_normalized_filters_explicit_date_and_default_page",
+      "line": 144,
+      "body_sha256": "f5e0c436368ab5ff465101d847b9822229ab958084e5e4b9c57ac8114c730559",
+      "drives_actual_production_entry": "CatalogCenterReadService::sellable_sku_list",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Real prepare trims q/region, empty supplier->None, retains explicit date; Port sees NoTransaction. Response default page/size and total retained, exactly one sellable query.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::tests::exact_qualification_keeps_refs_date_and_nonzero_executor",
+      "line": 71,
+      "body_sha256": "21941d852936c3ccb3e856a46d015d6f4d55c2d31e8deb7504670f1f2ef2678a",
+      "drives_actual_production_entry": "CatalogQualificationAdapter::qualified_refs",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Actual production adapter passes ordered exact refs and explicit date to exact-query method; a nonzero-sized Executor is checked by data pointer and session witness; real row-to-pair projection keeps order. List methods panic if selected, exact query count one.",
+      "executed_by_reviewer": false
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::tests::exact_qualification_keeps_persistence_failure_without_retry",
+      "line": 90,
+      "body_sha256": "f63ead12313e57003100bc40095586e1cee2dc75297ce6e733dbdccd0a106487",
+      "drives_actual_production_entry": "CatalogQualificationAdapter::qualified_refs",
+      "independently_read_full_test_and_fake_implementation": true,
+      "coverage": "Actual production adapter passes the same Executor pointer/date/refs and maps persistence OptimisticLockingError through unchanged Sales From with exact message, call count one.",
+      "executed_by_reviewer": false
+    }
+  ],
+  "additional_test_limitations": [
+    "These 7 tests drive real RM or Sales adapter production functions through recording Port implementations; they do not execute Mongo aggregation or a real ClientSession.",
+    "Sellable new positive test uses empty rows and an explicit date; it does not independently exercise lazy today or nonempty sellable projection. Those paths are covered here by exact original prefix/suffix and existing Catalog helper-test preservation, without claiming new runtime coverage.",
+    "Product preparation first-error ordering is partially exercised (page invalid); normalized sort versus price order remains supported by unchanged original ProductListParams::normalized source."
+  ],
+  "previous_capture_delta": [
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "old_sha256": "3ddcebabcc0dd27aaeecd6c50dea53846e620ac105e3366d63454e93d9e13555",
+      "current_sha256": "87b9ac4fd220df52b8f1a54d607998fd5ceafebe561b64c618b46c4fb06f2873",
+      "state": "changed_source"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "old_sha256": null,
+      "current_sha256": "f8e8b784dd1f554800365edd8ff3f26e0e5f0f763ffceb890c68c955c6c83a47",
+      "state": "added_test_source"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "old_sha256": null,
+      "current_sha256": "353d4df4adb394941320658ed0e12de67d1d01b403603a58a6f430ee3c5dcb62",
+      "state": "added_test_source"
+    }
+  ],
+  "sealed_utc": "2026-09-07T06:00:31.578618+00:00",
+  "sealed_source_blobs": [
+    {
+      "path": "backend/apps/web-api/src/core/errors.rs",
+      "git_blob_oid": "ab76f67262cf55c5c7c433a96131077ee8beb1c2",
+      "sha256": "e275addbd6b9a5166ff4d38b2dbd24a6309721867a233999af6162631a032220",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/common.rs",
+      "git_blob_oid": "d3c85d041a25f7d24540e964abe19f7a3440c3a6",
+      "sha256": "fe4720a50f867bcac88eb4fab2b626432cdfbf3648825ae9499678733e254dcd",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/dto/catalog/product.rs",
+      "git_blob_oid": "0e9ec4f50760e2bdfc574d545e01a0395772cd9c",
+      "sha256": "b10b8e33d28232189248f41bc6d318e8ee0664fb518d174ba06def37153ecce6",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/error.rs",
+      "git_blob_oid": "49f65993aa44fb3796278bda6cc11b60879bef7a",
+      "sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/ports/supply.rs",
+      "git_blob_oid": "48349d263e51adb511756f0af4d5b15dd6330753",
+      "sha256": "586ffc9936689d059f943d5d8ad29439cdf1c16712ac2defe8a7da734a25fdfa",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "git_blob_oid": "cae4307c8f6922f46b82991247b01fa64c4340c7",
+      "sha256": "c3f6663e3a55f1b90e2f5c79e82d439e51f7cda689bb19ec0f60056f4a83cc7f",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/mod.rs",
+      "git_blob_oid": "202430f1a1c622af232e0ffcb4006ce0d79b3ac3",
+      "sha256": "2f157d31595f27a56e6bd56fe12b8081913263a8b3b91236a5eb0c2517c45e60",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/product.rs",
+      "git_blob_oid": "115d74aa383f0bef639072b591e815da3825d7de",
+      "sha256": "64d6fa23fa635bbc9b23ada634de20a518a3bdaec28767eb926525091854a1de",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+      "git_blob_oid": "b4afb4f725a8b198bfe5c62300d25c70fd7b3199",
+      "sha256": "28fafccad4527ca131b79b997df65a4b3ae558e94d349be0554131940bc92a92",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+      "git_blob_oid": "bf9cfa05a9511acabe1961e51a1c355e6870e970",
+      "sha256": "f1ca55ad43560606f4975da966b8f78f19596e529fad4772b63af56e24fb3437",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/extensions/catalog.rs",
+      "git_blob_oid": "99e0ef7791426c08cf589f5a902ece1fe9b90272",
+      "sha256": "fc8973a89405690c1398355bf76c7e333316546db5dc7f13b1b4efdf8ce329d7",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/mod.rs",
+      "git_blob_oid": "a4eb04b57aa8352fd21fa1459d8730670ea2f016",
+      "sha256": "cef56737a23125121165d770434ccdc170743bcb13cef747871707f15f38d9a5",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/mod.rs",
+      "git_blob_oid": "7d051ef92609d96b5c604d600ca8e598e09be335",
+      "sha256": "8ebb435f5e716c8fddf948de5c370781dad439ee2f23d8954cd95e628a82f617",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/product_query.rs",
+      "git_blob_oid": "bdaa4b5942a4d0e0f8de76a2bcf9591862d29c8e",
+      "sha256": "92dd37d76a8abd01df01c2d3867b7e5cd3a384a6114fd06b9d86b859ecdbfc72",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "git_blob_oid": "153b65e0674cad0c304cf3d6d793ae5b43f1188d",
+      "sha256": "f361b0bb4307b4859e9ae82818b3af6beb2b7f388c0c5e3e0eaae4a2b6c13d7f",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/mod.rs",
+      "git_blob_oid": "7d4a5e19f9e7522a2740b4903a93bd42e14b76c3",
+      "sha256": "22e9de7fa9aefcf37eb7d7f978b0a0942caa911d7cf4b2fdba50889fc41f18b8",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/mod.rs",
+      "git_blob_oid": "415761a184d848fb83f24dbdec7566146efaabcd",
+      "sha256": "02b487a2f090c8db42dbd5bb0e680a6324e05ce5e291d0d74c6259180900ae1d",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product.rs",
+      "git_blob_oid": "c836e655a8a2893ad9cc70c252f3133fe7167b95",
+      "sha256": "f88bfe0731636ce8b80f8005fce057989e696ae891aab821734eaacd2c832cbc",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+      "git_blob_oid": "0f9c808c82bbb783b902d23fc6d5a90155408114",
+      "sha256": "f95e194ce6c08e9ba82eb07797e262f6f4c4f0f55618af321813748058c23ff3",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "git_blob_oid": "49357b6b2211dc7370ac6d5b60c03bfc6e6807f6",
+      "sha256": "a66eb839317d1e3c28b2839f2b08e60b8c6a53bfa20592ab045dce9140286338",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs",
+      "git_blob_oid": "c499c6d7a63cc9836c32ab93bfcdad72bf6c1e55",
+      "sha256": "0132b10458a6b110b34b3137c20bfad43716e9aae61861b92332fe97bc6a7cd6",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs",
+      "git_blob_oid": "d07a7c3a979e6817afdb20ec34e40602817c68fa",
+      "sha256": "87b9ac4fd220df52b8f1a54d607998fd5ceafebe561b64c618b46c4fb06f2873",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+      "git_blob_oid": "e0aed1b0fbde3f8bdb6cef558a8b5fd0295fa301",
+      "sha256": "e698933e9e36b91f2194303df409629fd05b912ec946706ec8519698d8a89c4b",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/lib.rs",
+      "git_blob_oid": "8856c3ee40bb8ea9834e4ffeca73a385b96be426",
+      "sha256": "dfce87e446592453b8181b613fc533ae0061b64f40975b1a8da8d7678c85b071",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/error.rs",
+      "git_blob_oid": "6533153003454e33f1920d0aeae26ca9e9cc5175",
+      "sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/entity/supplier_offering/types.rs",
+      "git_blob_oid": "00ddd023f39b93739f94ae6d91e1131f13308fd0",
+      "sha256": "e02af7a3022cb8d51b41250b2d032f7f20b6b3973c545482e54aeae34d93e87e",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_offering.rs",
+      "git_blob_oid": "1edbba9ef2c49a4ba73aea469b54797bdba00af6",
+      "sha256": "494200814c2a36dd9e0b805fcc24b8a698c6844ad186e9a43a7d6295f528520b",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/services/src/errors.rs",
+      "git_blob_oid": "9bcc7ad2d3dca3cf2f27980d023bbacd4843ea06",
+      "sha256": "7666307ce6617948104ad9683c09beabe861268caaf98bb34a60269f26db7e82",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/apps/web-api/src/app_state.rs",
+      "git_blob_oid": "a3d311ee36286cd7ce522721d81df15008f68f09",
+      "sha256": "01be54e298ccd5dec552a93fa2d9615a894359a14223e8ac22ed7fa0789d2715",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+      "git_blob_oid": "ef846c07083777fc6a752ce28c341c337c548719",
+      "sha256": "d5cc8c86a26a284deda7db110389943d227a5e9ce54af82fb4346e2b76b5b217",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/service/sales_order/sellable.rs",
+      "git_blob_oid": "25393fbb71a0a4ab42356268a6eca77d3d072644",
+      "sha256": "dcc049f8348fc7e23111f72cf0bfa9b003de704fce08047001ec951811555606",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/ports/sales_order.rs",
+      "git_blob_oid": "5479b4d59220c59f9858e013c43bbc38bff99593",
+      "sha256": "43419beb3c05d8cdd1739a0275f02e4f9dba908d04fbe4dca9647e2c1a3fa1c9",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "git_blob_oid": "17dd267351be4fe36ac35dcb6a050fdd7648f69e",
+      "sha256": "f8e8b784dd1f554800365edd8ff3f26e0e5f0f763ffceb890c68c955c6c83a47",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "git_blob_oid": "61c7a3905ef0c949be06b7b0935bdac523daf640",
+      "sha256": "353d4df4adb394941320658ed0e12de67d1d01b403603a58a6f430ee3c5dcb62",
+      "matches_previously_reviewed_file": true,
+      "working_tree_matches_commit": true
+    }
+  ],
+  "seal_validation": {
+    "file_count": 34,
+    "all_reviewed_hashes_equal_frozen_commit_blobs": true,
+    "all_frozen_blobs_equal_current_working_files": true,
+    "production_or_test_body_changes_since_review": false,
+    "cargo_run_by_sealer": false,
+    "mongo_run_by_sealer": false,
+    "repo_modified_by_sealer": false
+  },
+  "sealed_test_body_checks": [
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+      "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::product_pipeline::tests::product_list_pipeline_applies_keyword_and_sku_coverage_filters",
+      "body_sha256": "9cbac5a38b5c9ccc59307c0daf14472151721439f2923c6f0154ede26b1c4ca9",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_pipeline_is_fail_closed_and_cost_safe",
+      "body_sha256": "868adf173c6f3bfc5eda9ef4f6dc506efdba126c21bb744d62ddfca9459d8fae",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs",
+      "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::sellable::tests::sellable_sku_reference_filter_matches_exact_pair",
+      "body_sha256": "2779a54ac527061b291daedc3ddb24e36a8f40d169c95b64fdb66d4fb7afdb24",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/shared.rs",
+      "qualified_symbol": "erp_catalog::repository::catalog::shared::tests::sort_doc_applies_direction",
+      "body_sha256": "324b0a1bcee46e3cc9fd48528b6985b618f83d61d754c589df7aa1b00ac9f83f",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::listing_summary_pipeline_is_bounded_and_shares_listed_expr",
+      "body_sha256": "1d77eceea1585201cdce55b22ab046d38fedd255a6f93ea7290d888acb61df41",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_zero_and_disabled",
+      "body_sha256": "5fa56a7ae8989e393b762fb95486ae58aa108dd7a155b129488b5977dbdc7a27",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::fill_listing_summaries_covers_listed_partial_unlisted_and_batch",
+      "body_sha256": "c690a661a3135f6d35bc3dc7c2f53369e95878d1f13724e4ff78c586c821fd41",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/catalog/listing.rs",
+      "qualified_symbol": "erp_catalog::repository::catalog::listing::tests::unique_product_ids_preserve_first_seen_order",
+      "body_sha256": "925cc59c8d424875afe2438580850432437052ff06980f281c5d7eb1835e0b50",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_page_size_is_bounded",
+      "body_sha256": "26311bbb401ea2ac9aa6c47e7f02c6a859ecd284fa1e905726c77c8aa22ee0f7",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_max_supplier_count_rejects_zero",
+      "body_sha256": "b86ca1fd3227528ca0d06dd0c15bfbac7f437166d808d4134ea01ce65097091d",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/service/catalog/sellable.rs",
+      "qualified_symbol": "erp_catalog::service::catalog::sellable::tests::sellable_sku_specification_attributes_come_from_stable_identity",
+      "body_sha256": "c59815e35cbb01f5bac05e60088d8ba4332f3db2ea3ada75b4cdccb25ac0b103",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/shared.rs",
+      "qualified_symbol": "erp_processes::adapters::catalog_supply_query::repository::shared::tests::supply_status_wire_values_stay_uppercase",
+      "body_sha256": "37df2816c00d888ff7f7e17ed3d5e119e44520dbe2ffeb3e310b819d4124bcf0",
+      "source": "original_test"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::invalid_product_page_stops_before_any_query",
+      "body_sha256": "d3026132ad9acec370b9862a3a94118fa9b559f604d4f1a3add6b7548d67a08d",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::product_projection_preserves_optional_fields_counts_and_page",
+      "body_sha256": "b7836a6449df86864b6f0413c6d7bb3f80196c8a67f37276a9651bd9ec04ff8b",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::product_repository_failure_keeps_original_catalog_error_mapping",
+      "body_sha256": "d5ed9bf80b6f474d79513284b4aae6806b328bbb192d5683cd6299f41ec45de6",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::sellable_validation_precedes_price_validation_and_query",
+      "body_sha256": "ac448d89ffb96de274b0623ce64bd04b849d481039abf04da8068c54fdeb0ff2",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "qualified_symbol": "erp_read_models::catalog_center::tests::sellable_query_keeps_normalized_filters_explicit_date_and_default_page",
+      "body_sha256": "f5e0c436368ab5ff465101d847b9822229ab958084e5e4b9c57ac8114c730559",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::tests::exact_qualification_keeps_refs_date_and_nonzero_executor",
+      "body_sha256": "21941d852936c3ccb3e856a46d015d6f4d55c2d31e8deb7504670f1f2ef2678a",
+      "source": "additional_test"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/order_to_cash/adapters/catalog/tests.rs",
+      "qualified_symbol": "erp_processes::order_to_cash::adapters::catalog::tests::exact_qualification_keeps_persistence_failure_without_retry",
+      "body_sha256": "f63ead12313e57003100bc40095586e1cee2dc75297ce6e733dbdccd0a106487",
+      "source": "additional_test"
+    }
+  ],
+  "raw_foundation_money_disposition": {
+    "raw_path": "/private/tmp/erp-supply16-contract-sealed/missing-drift-report.json",
+    "raw_sha256": "10857599382053d1b19c049878b2dec37aff1b07a4b01fca54ad396ba221c6e0",
+    "raw_status": "needs_review (left unchanged)",
+    "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "changed_symbol_count": 3,
+    "disposition_complete": true,
+    "raw_modified": false,
+    "after_money_selected_paths": [
+      "backend/crates/erp-core/src/money.rs",
+      "backend/crates/erp-finance/src/repository/payable/account/write.rs",
+      "backend/crates/erp-finance/src/repository/receivable/account.rs",
+      "backend/crates/erp-finance/src/repository/receivable/customer_center.rs",
+      "backend/crates/erp-inventory/src/repository/inventory/shared.rs",
+      "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/product_pipeline.rs",
+      "backend/crates/erp-processes/src/adapters/catalog_supply_query/repository/sellable.rs"
+    ],
+    "scope_statement": "The money scanner after set contains the relocated Mongo provider and omits the retained Catalog contracts leaf. These three names still have real Catalog definitions; omission from this capture set is not deletion. Actual builder amount_filter_bson remains Decimal128 and all moved pipeline bodies already match original source.",
+    "symbols": [
+      {
+        "raw_symbol": "fn::as_of",
+        "raw_json_pointer": "/foundation_comparison/money/changed_symbols",
+        "raw_before_record": {
+          "symbol": "fn::as_of",
+          "token_sha256": "08942f972745e955bd4e66b7da9f878ca3a73564f9c346725cc1f1d72c61c36b",
+          "line": 66
+        },
+        "raw_before_source": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "actual_after": {
+          "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter::as_of",
+          "line": 50,
+          "body_sha256": "c484c911e57efede113fa4cbf857a64aa8f908612368bbb79923d52cc95a2130"
+        },
+        "disposition": "retained_in_catalog_not_selected_in_after_money_source_set",
+        "actual_symbol_deleted": false,
+        "money_serde_time_contract": "Retained Catalog filter constructor; sets every optional filter including both Option<Amount> bounds to None, forwards the caller BusinessDate unchanged, keeps page=1/page_size=1 and performs no clock/ID/I/O operation.",
+        "existing_detailed_evidence": {
+          "before": {
+            "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+            "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter::as_of",
+            "line": 66,
+            "body_sha256": "c484c911e57efede113fa4cbf857a64aa8f908612368bbb79923d52cc95a2130"
+          },
+          "after": {
+            "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+            "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter::as_of",
+            "line": 50,
+            "body_sha256": "c484c911e57efede113fa4cbf857a64aa8f908612368bbb79923d52cc95a2130"
+          },
+          "disposition": "retained_in_catalog",
+          "body_tokens_equal": true,
+          "known_trait_constant_binding_only": false,
+          "used_status_arm_same_literal": null
+        }
+      },
+      {
+        "raw_symbol": "struct::SellableSkuFilter",
+        "raw_json_pointer": "/foundation_comparison/money/changed_symbols",
+        "raw_before_record": {
+          "symbol": "struct::SellableSkuFilter",
+          "token_sha256": "f4c0ea7ce599976469e0eedbef4235968da7f37a5e010ead6825962380138ac3",
+          "line": 28
+        },
+        "raw_before_source": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "actual_after": {
+          "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuFilter",
+          "public_export": "erp_catalog::repository::SellableSkuFilter",
+          "line": 12,
+          "complete_declaration_token_sha256": "dea465c0fa6b65f669b6568757ad6654380aa71c6f72497a943c7f2785d5a5f3"
+        },
+        "disposition": "retained_in_catalog_not_selected_in_after_money_source_set",
+        "actual_symbol_deleted": false,
+        "money_serde_time_contract": "Retained Catalog-owned filter with identical 12 fields/derive: sales_price_min/max are Option<erp_core::money::Amount>, eligibility_as_of remains BusinessDate; no amount casts/default values or time evaluation added.",
+        "existing_detailed_evidence": {
+          "name": "SellableSkuFilter",
+          "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "after_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "entire_declaration_tokens_equal": true,
+          "before_sha256": "dea465c0fa6b65f669b6568757ad6654380aa71c6f72497a943c7f2785d5a5f3",
+          "after_sha256": "dea465c0fa6b65f669b6568757ad6654380aa71c6f72497a943c7f2785d5a5f3",
+          "fields_in_order": [
+            [
+              "keyword",
+              "Option<String>,"
+            ],
+            [
+              "product_kind",
+              "Option<ProductKind>,"
+            ],
+            [
+              "category_id",
+              "Option<String>,"
+            ],
+            [
+              "brand_id",
+              "Option<String>,"
+            ],
+            [
+              "supplier_id",
+              "Option<String>,"
+            ],
+            [
+              "supply_region",
+              "Option<String>,"
+            ],
+            [
+              "max_supplier_count",
+              "Option<u32>,"
+            ],
+            [
+              "sales_price_min",
+              "Option<Amount>,"
+            ],
+            [
+              "sales_price_max",
+              "Option<Amount>,"
+            ],
+            [
+              "eligibility_as_of",
+              "BusinessDate,"
+            ],
+            [
+              "page",
+              "u64,"
+            ],
+            [
+              "page_size",
+              "u32,"
+            ]
+          ]
+        }
+      },
+      {
+        "raw_symbol": "struct::SellableSkuRow",
+        "raw_json_pointer": "/foundation_comparison/money/changed_symbols",
+        "raw_before_record": {
+          "symbol": "struct::SellableSkuRow",
+          "token_sha256": "4d29b2ef0613c77789252ef30626e4648e9468cd96c1b65854f4ae7b61db3abd",
+          "line": 86
+        },
+        "raw_before_source": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+        "actual_after": {
+          "path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "qualified_symbol": "erp_catalog::repository::catalog::sellable::SellableSkuRow",
+          "public_export": "erp_catalog::repository::SellableSkuRow",
+          "line": 70,
+          "complete_declaration_token_sha256": "0e5825b71c477fec4e42547f078173b534c2c09ecd78735c0aa7cdd2a865d45f"
+        },
+        "disposition": "retained_in_catalog_not_selected_in_after_money_source_set",
+        "actual_symbol_deleted": false,
+        "money_serde_time_contract": "Retained Catalog-owned 22-field row with identical Serialize/Deserialize/PartialEq/Eq and field order: sales_visible_price_gross remains Amount, market_price Option<Amount>, BusinessDate fields unchanged, supply_regions retains serde(default); no custom money serializer, precision conversion or supplier cost fields added.",
+        "existing_detailed_evidence": {
+          "name": "SellableSkuRow",
+          "before_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "after_path": "backend/crates/erp-catalog/src/repository/catalog/sellable.rs",
+          "entire_declaration_tokens_equal": true,
+          "before_sha256": "0e5825b71c477fec4e42547f078173b534c2c09ecd78735c0aa7cdd2a865d45f",
+          "after_sha256": "0e5825b71c477fec4e42547f078173b534c2c09ecd78735c0aa7cdd2a865d45f",
+          "fields_in_order": [
+            [
+              "sku_id",
+              "String,"
+            ],
+            [
+              "sku_version",
+              "u64,"
+            ],
+            [
+              "sku_revision_id",
+              "String,"
+            ],
+            [
+              "sku_revision_no",
+              "u32,"
+            ],
+            [
+              "sku_no",
+              "String,"
+            ],
+            [
+              "product_id",
+              "String,"
+            ],
+            [
+              "product_no",
+              "String,"
+            ],
+            [
+              "product_kind",
+              "ProductKind,"
+            ],
+            [
+              "name",
+              "String,"
+            ],
+            [
+              "specification_signature",
+              "String,"
+            ],
+            [
+              "specification",
+              "Option<String>,"
+            ],
+            [
+              "barcode",
+              "Option<String>,"
+            ],
+            [
+              "base_unit_id",
+              "String,"
+            ],
+            [
+              "base_unit_code",
+              "Option<String>,"
+            ],
+            [
+              "base_unit_name",
+              "Option<String>,"
+            ],
+            [
+              "sales_visible_price_gross",
+              "Amount,"
+            ],
+            [
+              "market_price",
+              "Option<Amount>,"
+            ],
+            [
+              "main_image_asset_id",
+              "Option<String>,"
+            ],
+            [
+              "effective_from",
+              "BusinessDate,"
+            ],
+            [
+              "effective_to",
+              "Option<BusinessDate>,"
+            ],
+            [
+              "supplier_count",
+              "u32,"
+            ],
+            [
+              "supply_regions",
+              "Vec<String>,"
+            ]
+          ]
+        }
+      }
+    ]
+  }
+}

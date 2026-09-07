@@ -1,0 +1,161 @@
+{
+  "file_count": 31,
+  "all_byte_identical": true,
+  "files": [
+    {
+      "path": "backend/crates/id-generator/tests/common/mod.rs",
+      "sha256": "2ee94720db21571cad0f19356f046b0ed2564a9c0050587410283ed933a6a235",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/id-generator/tests/number_concurrency.rs",
+      "sha256": "8ff2504e7b9cfdc96d9a8d9caf744b0062724aa605f1ad4fd8b33aeb9de4846f",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/id-generator/tests/number_rollback.rs",
+      "sha256": "d551f02d355305984e5bea04140e641d6f857f2de372546b9b861036a2c32d6e",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/test-support/tests/smoke.rs",
+      "sha256": "68b05ad3e747958c6ca744c92d86fbf5c93b898b24b99a1b3ba9c7772974d015",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/README.md",
+      "sha256": "ffe0a22516057df2c8399e07ed1b89381b9d8665d3228b35755683c8d337af8c",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/approval_work_item_page.rs",
+      "sha256": "52f0c11890ff191812b557d97dab13c25d28f4690a7ea9f3cd318f34fe84c5e5",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/approval_workflow_repository.rs",
+      "sha256": "3c6cd155e2271556d51109c1caa64c83b653fa1c8427a814e32f6b4df13fae9a",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/catalog_listing_summaries.rs",
+      "sha256": "a9408fec8fb2bb8d25a53e8336e877bb3f3e16508a65f1e2208fe74a62551538",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/catalog_parent_chain.rs",
+      "sha256": "259ecf3faeefe221404870042a1af4f330fc85a75d793611602bf86385b6c03b",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/core_layering_remediation.rs",
+      "sha256": "c6b8755c164b94b31cf1f088f9d868b5994418b24d31ca95848f7bd55a57179e",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/customer_profile_idempotency.rs",
+      "sha256": "99e02cb19355882d09793949ed2e49be1249dfd1c08663170710b088549855ee",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/fulfillment_purchase_receipt_totals.rs",
+      "sha256": "b2f3bbac7d8a30c850dc5db1e3915a02d8d1e47b4848219324c09df5a1c715b8",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/receivable_layering_remediation.rs",
+      "sha256": "3ac8198c868004211be77d1e956a42ff33966210edd9207db73754531fe3f06b",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/receivable_sales_invoice_concurrency.rs",
+      "sha256": "f35111358d88cafd55813ba08f51975a0993e9090340a2f60b692348e3514a33",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/sales_order_existing_ids.rs",
+      "sha256": "1bc3da5b0ead89880d462526320103932af562d46cf14347012c81dcbbf5fa18",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/supplier_fulfillment_refund_scope.rs",
+      "sha256": "c944ee80d4dbcd1515b4fae18a71c039b9db176046cb2c8ad5ba57ff5d2e472e",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/supplier_offering_initial_revision.rs",
+      "sha256": "5588694cc2d6af2d97dcfa592c33ec81eb713f8788d73645e678a4b84f35b9d0",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/tests/supplier_settlement_source_scope.rs",
+      "sha256": "c595c674398d283bfb3e70bf0581ab4a31a6cb80835848d11baba0b26abf2c8d",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/approval_binding_upgrade.rs",
+      "sha256": "6bec8f17b465efc486f79c24fbe0e83321ce0cfbdf6c43540749120a55824a8b",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/approval_definition_idempotency.rs",
+      "sha256": "74a9826cebc12b38751589975cb8e1fdbf81751b2eaf629e0b942f569c4df4f9",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/approval_runtime_authorization.rs",
+      "sha256": "3200e2b39763d86021748f351f166ae5ff1c6a2fd11b2311502da74e8cf5b229",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/approval_runtime_decision.rs",
+      "sha256": "686ed884118df3e9afc0e61a3cb4292b9b39de5df3588a31a28bfdb6e891544a",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/payable_purchase_invoice_register.rs",
+      "sha256": "d5139bd43876f1c48bc6c15d32e8a86d646cacb640b3e4c61b3e5f6ffe2aee39",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/receivable_customer_receipt_posting.rs",
+      "sha256": "af8571b6ef27e51b8b4587acea408754ce5f28edf1e54b6d872acad7376184f6",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/receivable_sales_invoice_posting.rs",
+      "sha256": "81dfbe27dbcd327fef50ef5899c0f793f08fc4e46261c971b482105bf60ecb6f",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/stock_adjustment_approval_atomicity.rs",
+      "sha256": "69a584d9530029aec1690268a111cd066f23d3f5aca2812daff57a5145f0a139",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/stock_adjustment_authorization.rs",
+      "sha256": "1775c6dcd063ebfe5677b3290441835813bad246670cd831cd37adff59e295e1",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/stock_list_authorization.rs",
+      "sha256": "f8d2276e920a739bab547342cd898de495c42d9c00ec9d8f70d263c915e04edc",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/supplier_payment_posting.rs",
+      "sha256": "31d84cc9db34cc7ec4e4c5594abae9f1507eaaba98dcd2961dc7ec6eee48809f",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/supplier_settlement_draft_equivalence.rs",
+      "sha256": "e88adfe800e6e3dfdbc80e37434a3a2ee47867cadc5b0bc86d03a6d697e13d02",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/services/tests/supplier_settlement_source_evidence.rs",
+      "sha256": "fb4ec237a06b721406e318fe6f6b941b45cd93656024916317ddc52801f9d539",
+      "byte_identical": true
+    }
+  ]
+}

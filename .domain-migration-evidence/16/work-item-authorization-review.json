@@ -1,0 +1,213 @@
+{
+  "phase": "16",
+  "after_source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "binding": "source_commit",
+  "before_commit": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+  "scope": [
+    "crates/erp-read-models/src/ports/work_item_authorization.rs",
+    "crates/erp-processes/src/adapters/workflow/work_item_authorization.rs",
+    "crates/erp-read-models/src/finance/receivable/account.rs"
+  ],
+  "status": "source_reviewed_bound_pending_root_runtime_gates",
+  "contracts": [
+    "唯一消费端 WorkItemAuthorizationReadPort: Send+Sync，async_trait object-safe，authorize(&self,id,&AuditActor)->erp_workflow::Result<AuthorizedTaskFact>；不接 Executor，保留原授权读取快照边界。",
+    "AuthorizedTaskFact 仅 work_item_type、business_object_type、business_object_id、subject_version、allowed_actions 五字段；没有 serde、WorkItem 实体、RBAC、processing_state 或 blocker 泄漏。",
+    "唯一生产 WorkItemAuthorizationAdapter::new(Database,SharedRbacService) 仅调用原 work_item_service 装配；authorize 原位调用 service.authorize_work_item().await?，直接返回原 typed workflow 错误，再显式映射五字段。",
+    "W13 在原末参 rbac 后追加 task_auth:&dyn WorkItemAuthorizationReadPort；HTTP 由 root 注入。W26 由 G 消费同一个Port，本分片不改W26/HTTP。",
+    "实际 load_review_task helper 顺序：detail future先 await → work_item_id trim/空则返回原view且Port零调用 → authorize → CardFundsReview/Delta类型 → receivable_account类型/id/current sales revision及原||false → active review type → Process能力。",
+    "缺 Process 仍创建同五条 CURRENT_RESPONSIBILITY_REQUIRED blocker 后返回，不调用raw仓储；有 Process 才调用真实closure按 NoTransaction 再读 WorkItem，NotFound原文案，Open/当前owner不满足同样阻断。",
+    "新helper只把原W13读取/guard段移出；raw callback实际仓储方法/错误映射不改。返回原raw实体，保留其真实base.version，不能用第一次授权的事实省掉重读。",
+    "之后账户读取、snapshot、复核状态、岗位分离、领域动作投影和 customer_receipt:create → invoice:create 两次RBAC检查整段字节相同。rbac保留，不由Port.allowed_actions代替。",
+    "本轮不迁移旧workflow_compose/work_item/workbench事实reader；authority来源单一化留17。三个自有文件不改领域DTO或HTTP wire，不增加数据库/网关执行。"
+  ],
+  "before_account_file_sha256": "ca617e2fc958290f4dcdf22295834e0a59dd039652e8b234372fb953c8d4a229",
+  "sources": [
+    {
+      "path": "crates/erp-read-models/src/ports/work_item_authorization.rs",
+      "sha256": "48d3ddb207620b5d4c66383c2d86cd8af980e6e5564bf895c4b8969ef12091d5",
+      "actual_functions": []
+    },
+    {
+      "path": "crates/erp-processes/src/adapters/workflow/work_item_authorization.rs",
+      "sha256": "59ce765ce0c1821b4233f8e01c9a59c7f1c09b6343e2920917226389ac6fe53d",
+      "actual_functions": [
+        {
+          "name": "new",
+          "line": 18,
+          "body_sha256": "adb91356197aaa5a087ad9fa34b957b107b9ccc608e94b8668e0fd3e099d6def"
+        },
+        {
+          "name": "authorize",
+          "line": 31,
+          "body_sha256": "069edbafe1dd56cd426980d9edc126b218770da962781d5527eeb21a73f5b02c"
+        }
+      ]
+    },
+    {
+      "path": "crates/erp-read-models/src/finance/receivable/account.rs",
+      "sha256": "5c44822631e9578220876cee9e1fc62801d899e82cc85c2bd6678fb88df8970a",
+      "actual_functions": [
+        {
+          "name": "receivable_account_list",
+          "line": 52,
+          "body_sha256": "e437d65fcf5ab2e3948a2a1783b16526d30e2780de0d1c75e827dbdf1c4682a4"
+        },
+        {
+          "name": "receivable_account_detail",
+          "line": 224,
+          "body_sha256": "5e9786fb6e7b59e9bd2afe14d448090132aabfa23f743971253b5a94b0091441"
+        },
+        {
+          "name": "receivable_account_detail_with_actions",
+          "line": 236,
+          "body_sha256": "bf88bcd9bcebd23f3aa2e90c444b52f3d67d20dc44f4dc55714c6ca7bbbf46b5"
+        },
+        {
+          "name": "receivable_account_view",
+          "line": 383,
+          "body_sha256": "b5974adfa4c4903f624a24ba9e6d7a9a524aaad03000cc65f12bf9b34692f426"
+        },
+        {
+          "name": "push_card_funds_blocker",
+          "line": 489,
+          "body_sha256": "78db99e63bc037e94b44ab74c9a7ec59fedbb357970bcb68bdbed2dc433ea342"
+        },
+        {
+          "name": "block_card_funds_review_decisions",
+          "line": 501,
+          "body_sha256": "237d8f4d004680fd73ec5be30d03d02f68054ab6ab378342406a967ba41e257c"
+        },
+        {
+          "name": "block_card_funds_actions",
+          "line": 510,
+          "body_sha256": "1ea267e78ce9166b2675520dfe1eef40ddb4028279c9629f4e20ff94cf2bfc69"
+        },
+        {
+          "name": "project_registration_action",
+          "line": 519,
+          "body_sha256": "5261a79c98bb819b26bcc37d5449490773c625f1951b4d980b35d3bd9407535e"
+        },
+        {
+          "name": "load_review_task",
+          "line": 551,
+          "body_sha256": "492c0fb2a62fda25704407faafafb5626f81d46a8affcde1801f2b38c33857e1"
+        }
+      ]
+    }
+  ],
+  "original_symbol_comparison": [
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::receivable_account_list",
+      "before_line": 50,
+      "after_line": 52,
+      "before_body_sha256": "e437d65fcf5ab2e3948a2a1783b16526d30e2780de0d1c75e827dbdf1c4682a4",
+      "after_body_sha256": "e437d65fcf5ab2e3948a2a1783b16526d30e2780de0d1c75e827dbdf1c4682a4",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::receivable_account_detail",
+      "before_line": 222,
+      "after_line": 224,
+      "before_body_sha256": "5e9786fb6e7b59e9bd2afe14d448090132aabfa23f743971253b5a94b0091441",
+      "after_body_sha256": "5e9786fb6e7b59e9bd2afe14d448090132aabfa23f743971253b5a94b0091441",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::receivable_account_detail_with_actions",
+      "before_line": 234,
+      "after_line": 236,
+      "before_body_sha256": "660cac57ca4769937f859324b963e89fc52f63daca696192772762418a457e9a",
+      "after_body_sha256": "bf88bcd9bcebd23f3aa2e90c444b52f3d67d20dc44f4dc55714c6ca7bbbf46b5",
+      "status": "actual_helper_extraction_reviewed"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::receivable_account_view",
+      "before_line": 413,
+      "after_line": 383,
+      "before_body_sha256": "b5974adfa4c4903f624a24ba9e6d7a9a524aaad03000cc65f12bf9b34692f426",
+      "after_body_sha256": "b5974adfa4c4903f624a24ba9e6d7a9a524aaad03000cc65f12bf9b34692f426",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::push_card_funds_blocker",
+      "before_line": 519,
+      "after_line": 489,
+      "before_body_sha256": "78db99e63bc037e94b44ab74c9a7ec59fedbb357970bcb68bdbed2dc433ea342",
+      "after_body_sha256": "78db99e63bc037e94b44ab74c9a7ec59fedbb357970bcb68bdbed2dc433ea342",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::block_card_funds_review_decisions",
+      "before_line": 531,
+      "after_line": 501,
+      "before_body_sha256": "237d8f4d004680fd73ec5be30d03d02f68054ab6ab378342406a967ba41e257c",
+      "after_body_sha256": "237d8f4d004680fd73ec5be30d03d02f68054ab6ab378342406a967ba41e257c",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::block_card_funds_actions",
+      "before_line": 540,
+      "after_line": 510,
+      "before_body_sha256": "1ea267e78ce9166b2675520dfe1eef40ddb4028279c9629f4e20ff94cf2bfc69",
+      "after_body_sha256": "1ea267e78ce9166b2675520dfe1eef40ddb4028279c9629f4e20ff94cf2bfc69",
+      "status": "body_tokens_equal"
+    },
+    {
+      "qualified_symbol": "erp_read_models::finance::receivable::account::project_registration_action",
+      "before_line": 549,
+      "after_line": 519,
+      "before_body_sha256": "5261a79c98bb819b26bcc37d5449490773c625f1951b4d980b35d3bd9407535e",
+      "after_body_sha256": "5261a79c98bb819b26bcc37d5449490773c625f1951b4d980b35d3bd9407535e",
+      "status": "body_tokens_equal"
+    }
+  ],
+  "unchanged_actual_workflow_providers": [
+    {
+      "path": "services/src/workflow_compose.rs",
+      "name": "work_item_service",
+      "before_line": 1134,
+      "after_line": 1134,
+      "before_file_sha256": "e88d2a5a93165fe244f23859f2e13b332056b3ea058186eda982680911cd9e3a",
+      "after_file_sha256": "e88d2a5a93165fe244f23859f2e13b332056b3ea058186eda982680911cd9e3a",
+      "body_sha256": "4ec440d45432daaabb2f4cc0e55a2297c677f5051964e8982f3a5e20d77b160d",
+      "status": "body_tokens_equal"
+    },
+    {
+      "path": "crates/erp-workflow/src/service/work_item/write.rs",
+      "name": "authorize_work_item",
+      "before_line": 116,
+      "after_line": 116,
+      "before_file_sha256": "39fd0a81a7c37e15d1d1a41c38998611cebc9fe173a4465315a7ab40d568fecc",
+      "after_file_sha256": "39fd0a81a7c37e15d1d1a41c38998611cebc9fe173a4465315a7ab40d568fecc",
+      "body_sha256": "2f048cbebbfa549f9e6639cd6b97d179e5bb57876c09a9eaedfe2ccd850a7333",
+      "status": "body_tokens_equal"
+    }
+  ],
+  "unchanged_w13_remaining_body": {
+    "before_sha256": "bc2f0b9d85fc57bc25e0217364a4bb676c33e432610ab33000cbd3d51c0c80a7",
+    "after_sha256": "bc2f0b9d85fc57bc25e0217364a4bb676c33e432610ab33000cbd3d51c0c80a7",
+    "comparison": "byte_identical"
+  },
+  "tests": {
+    "defined": [
+      "empty_task_id_keeps_detail_and_skips_authority_and_raw_reload",
+      "detail_failure_precedes_authority",
+      "authority_error_precedes_formal_binding_checks_and_preserves_type",
+      "formal_type_object_identity_and_subject_checks_precede_raw_reload",
+      "missing_process_action_blocks_all_five_actions_without_raw_reload",
+      "raw_reload_failure_is_preserved_after_authorization",
+      "raw_reload_rechecks_open_status_and_current_owner",
+      "authorized_review_preserves_opening_and_delta_type_and_raw_task"
+    ],
+    "count": 8,
+    "execution": "not_run_by_this_agent; root owns workspace gates"
+  },
+  "checks": {
+    "targeted_rustfmt": "passed",
+    "owned_git_diff_check": "passed",
+    "cargo": "not_run",
+    "real_database": "真实数据库运行未验证"
+  },
+  "source_deletions": [],
+  "registration": "root owns ports/mod.rs, adapters/workflow/mod.rs and both HTTP injection sites; no root files edited by this agent"
+}
