@@ -1,0 +1,40 @@
+重新构建 web-api 以生成权限定义…
+    Blocking waiting for file lock on build directory
+   Compiling persistence-core v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/persistence-core)
+   Compiling erp-core v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-core)
+   Compiling storage v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/storage)
+   Compiling config v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/config)
+   Compiling application-core v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/application-core)
+   Compiling id-generator v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/id-generator)
+   Compiling erp-supplier v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-supplier)
+   Compiling erp-contract v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-contract)
+   Compiling erp-sales v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-sales)
+   Compiling erp-warehouse v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-warehouse)
+   Compiling erp-audit v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-audit)
+   Compiling erp-party v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-party)
+   Compiling erp-customer v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-customer)
+   Compiling erp-identity v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-identity)
+   Compiling erp-workflow v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-workflow)
+   Compiling erp-catalog v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-catalog)
+   Compiling erp-procurement v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-procurement)
+   Compiling erp-fulfillment v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-fulfillment)
+   Compiling erp-support v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-support)
+   Compiling erp-inventory v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-inventory)
+   Compiling erp-finance v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-finance)
+   Compiling erp-import v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-import)
+   Compiling entities v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/entities)
+   Compiling database v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/database)
+   Compiling services v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/services)
+   Compiling erp-read-models v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-read-models)
+   Compiling erp-processes v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/crates/erp-processes)
+   Compiling web-api v0.1.0 (/private/tmp/erp-domain-crate-12-fulfillment/backend/apps/web-api)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `web-api` (bin "web-api") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 10s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+检查生成物: /private/tmp/erp-domain-crate-12-fulfillment/erp-client/lib/permissions.generated.ts
+权限生成物无漂移。

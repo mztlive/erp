@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 12 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-fulfillment` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；唯一共享注册集成负责人 |
+| 输入/输出提交 | 输入 `cf89fb47`；实现 `de112614e03714bb6d1ca4ac9e25f580c5c273c8`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -75,17 +75,17 @@ fulfillment 不依赖 inventory/procurement/sales/support/workflow；流程在 p
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固定履约资格、批次行、数量分摊、累计验收、部分履约/反向事实、电子密文与服务证据行为。
+1. [x] 固定履约资格、批次行、数量分摊、累计验收、部分履约/反向事实、电子密文与服务证据行为。
 
-2. [ ] 迁入履约实体、DTO、拥有仓储和索引；采购来源、库存与销售事实通过窄 Port 输入，禁止持有外域完整聚合。
+2. [x] 迁入履约实体、DTO、拥有仓储和索引；采购来源、库存与销售事实通过窄 Port 输入，禁止持有外域完整聚合。
 
-3. [ ] 将 *_posting、purchase_receipt、service_fulfillment_confirm 及 customer_acceptance_task 的跨域外层过程移到 processes::fulfillment_execution；履约、库存、采购、销售、WorkItem 依次调用各自事务内接口。
+3. [x] 将 *_posting、purchase_receipt、service_fulfillment_confirm 及 customer_acceptance_task 的跨域外层过程移到 processes::fulfillment_execution；履约、库存、采购、销售、WorkItem 依次调用各自事务内接口。
 
-4. [ ] 电子交付加解密规则保留原算法/密钥注入，外部发送放事务外；服务证据和文件引用按既有附件编排接线。
+4. [x] 电子交付加解密规则保留原算法/密钥注入，外部发送放事务外；服务证据和文件引用按既有附件编排接线。
 
-5. [ ] 替换采购阶段暂留的旧履约调用，更新 fulfillment Handler、履约队列/工作台/销售进度与退货消费方。
+5. [x] 替换采购阶段暂留的旧履约调用，更新 fulfillment Handler、履约队列/工作台/销售进度与退货消费方。
 
-6. [ ] 清除旧模块，执行纯守恒与失败轨迹测试和公共门禁；检查记录的反向事实引用没有改变。
+6. [x] 清除旧模块，执行纯守恒与失败轨迹测试和公共门禁；检查记录的反向事实引用没有改变。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -153,15 +153,27 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 cf89fb47；专用阶段 worktree | .domain-migration-evidence/12/input.json |
+| 文件与符号 | 45 个清单旧路径、5 个 owned 准备文件已清零；跨域符号按固定提供方拆分 | source-clearance.json、files.tsv及逐符号报告 |
+| 依赖 | normal/build/dev 全依赖闭包无其他业务域或旧三层 | domain-dependencies.json、metadata.json、boundary.log |
+| 测试 | 3440 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | changed/missing/added 均为0；原始48条needs_review逐项复核；权限生成物无漂移 | contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 实际生产调用链、同Executor、原首错/写入顺序和I/O边界逐项复核；真实数据库运行未验证 | idempotency-transaction-review.json及各分片语义报告 |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；516个第三方包版本和校验和不变 | quality-gates.log、dependency-lock.json |
+| 编译证据 | 本阶段边界与全workspace编译通过；最终三个性能场景统一在阶段17计时判定 | compile-applicability.json、domain-dependencies.json |
+| 阶段提交 | 实现de112614；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/12/`。原始扫描保留exit2与needs_review；必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- `erp-fulfillment` 持有履约实体、资格和数量规则、DTO、仓储、索引及本域写入；采购/销售/文件元数据通过最小消费事实输入，领域不得持有外域聚合或仓储依赖。
+- `fulfillment_execution::FulfillmentProcess` 保留原密钥、敏感数据codec、默认RBAC与对象读取注入；客户验收沿用唯一 `CustomerAcceptanceProcess`，跨域工作台归 `fulfillment_center::FulfillmentReadService`。
+- 收货按原逐行顺序写余额、库存流水、最后流水、销售分配、预占、冻结与分录；全部行成功后才写收货状态、完成任务、更新采购进度、处理仓发草稿及审计。每行失败必须停止后续行。
+- 仓发保持消耗预占、分录、释放预占、扣减可用量、流水、最后流水的原顺序；供应商直发只执行原采购与先款门槛，不新增自有库存动作。
+- 服务确认保留原地点规范化、codec加密、同明文指纹、pending引用解析和证据校验顺序；同一Executor内先凭证登记、再确认写入、任务与条件验收任务、最后审计。提交结果未知时沿用原附件补偿判断。
+- 验收进度为空时不读取财务余额或刷新销售资金进度；反向事实、分配引用与任务重开保持原合同。
+- 编号仍按上海业务日生成，计数器使用NoTransaction；不得纳入业务事务回滚回收。
+- 真实数据库运行未验证；纯测试与源码复核不构成实际MongoDB回滚、并发或未知提交恢复证明。

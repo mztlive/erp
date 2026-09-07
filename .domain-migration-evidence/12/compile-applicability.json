@@ -1,0 +1,9 @@
+{
+  "phase": "12",
+  "code_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "isolated_domain": "erp-fulfillment",
+  "normal_build_dev_proof": "domain-dependencies.json",
+  "timed_probe": "not separately required in this phase",
+  "reason": "阶段12任务要求完整workspace编译与领域依赖边界，不另设计时探针；Customer/Sales/Finance最终check/build收益统一按阶段17判定。",
+  "final_performance_gate_phase": "17"
+}

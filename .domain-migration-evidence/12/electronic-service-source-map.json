@@ -1,0 +1,2442 @@
+{
+  "schema": "fulfillment-stage12-D-static-semantic-review-v1",
+  "generated_at": "2026-09-07T03:58:46.038512+00:00",
+  "input_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "before_root": "/private/tmp/erp-domain-crate-11-procurement",
+  "after_root": "/private/tmp/erp-domain-crate-12-fulfillment",
+  "reference_worktree_head": "cf89fb4774fd3b81d477e9088be1d6c2f699f46e",
+  "after_head": "cf89fb4774fd3b81d477e9088be1d6c2f699f46e",
+  "scope": [
+    "electronic_delivery.rs",
+    "electronic_delivery_crypto.rs",
+    "service_fulfillment.rs",
+    "service_fulfillment_crypto.rs",
+    "service_fulfillment_confirm.rs"
+  ],
+  "method": {
+    "basis": "input commit git objects, not moving before HEAD",
+    "body_tokens": "comments/whitespace discarded with literal bytes retained; equality is a comparison aid, not a semantic proof",
+    "manual_review": "all source changes and actual production adapters/providers expanded",
+    "cargo_executed": false,
+    "mongo_executed": false,
+    "source_mutated": false
+  },
+  "conclusion": "No semantic deviation identified in scoped snapshot by static source review",
+  "symbol_count": 35,
+  "primary_token_equal_count": 20,
+  "source_hashes_stable_at_capture_end": true,
+  "files": [
+    {
+      "side": "before",
+      "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+      "sha256": "5878651364cf2bc241a3cd6082eef6e51370b442cdc059d524b3bd913aa571d0",
+      "bytes": 29727,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/apps/web-api/src/core/handler/fulfillment/mod.rs",
+      "sha256": "9d0a7ddd934598875da6ef5eb9b33da69f3112f848386f0d13f2c5b1d4b47c3e",
+      "bytes": 32926,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/erp-party/src/service/party/sensitive.rs",
+      "sha256": "794a4c6689dd05d2a1eb997004006984085f74b25102d4789787a49708cbda7c",
+      "bytes": 11638,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/erp-processes/src/attachments/fulfillment.rs",
+      "sha256": "0f7d4a814a033f85cf18418d5a39b97d3edc0b5e315210a6ee251aecbb2d164d",
+      "bytes": 1615,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/erp-processes/src/attachments/pending.rs",
+      "sha256": "d06282722acc45280631b301a208ca7d2a18e3ae7cefb5105ce1b1fdb43198b8",
+      "bytes": 6393,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+      "sha256": "2f6babb56223e2497886f30ff881e1e8be615c284f1c9300ac2c909a6d23dab0",
+      "bytes": 29,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "bytes": 23400,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/persistence-core/src/repository/base.rs",
+      "sha256": "466d0bb968a321422e288e5355ca4814b5fe6e1e801409ea3408824db64b715c",
+      "bytes": 20107,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/database/src/repository/fulfillment/mod.rs",
+      "sha256": "9ca17b61c3f0fcf23703384f0f0bc706c78e5261117d701a09e0102bad3e1b5b",
+      "bytes": 38908,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "sha256": "975530318b785d2c3a10511da5b23b4a4ea32a046df1e228f8f02fd19a2b4057",
+      "bytes": 28949,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "bytes": 7342,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/fingerprint.rs",
+      "sha256": "ce1ef6f861b62c6e4ccc9b159e1bf5902b48f0d9afc67c0cd11034a0ea277dc4",
+      "bytes": 8579,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/service_evidence.rs",
+      "sha256": "3c6dc8eac248822140e4759b6b5ded4bc9a2a1f6d4f0f5e31678c44bcdd4fc7a",
+      "bytes": 8712,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "sha256": "f67bb603d39bcd7ff515dd54d150e596cbd231c9015822aa39e8ec88624f557e",
+      "bytes": 44909,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "bytes": 9637,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/errors.rs",
+      "sha256": "f5fa4957c5907321e0b6fec2b1584b15da11a17e739a6e204b6c3f157a2ab97f",
+      "bytes": 37879,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+      "sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4",
+      "bytes": 25004,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+      "sha256": "3501ec7565001d533088f9da10d70834e9c5d0a93fff93f558ca0a7f2c8e0bb9",
+      "bytes": 3964,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/mod.rs",
+      "sha256": "8dec1394ce4fd844ebfb31d1c072ea356169406ae6d8d2c78d1a41e8bc0d7cf5",
+      "bytes": 5399,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/purchase_context.rs",
+      "sha256": "5402363327deaad4214eff256376474475377c97107ba369261affbd29b86e7d",
+      "bytes": 9054,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+      "sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0",
+      "bytes": 21446,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+      "sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96",
+      "bytes": 15141,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+      "sha256": "251aa7e366a47470e3cd0e7793174ef5eb8243058d4b4de7ec0057a9d207dc17",
+      "bytes": 5516,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "after",
+      "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+      "sha256": "5878651364cf2bc241a3cd6082eef6e51370b442cdc059d524b3bd913aa571d0",
+      "bytes": 29727,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/apps/web-api/src/core/handler/fulfillment/mod.rs",
+      "sha256": "a2a3208a3d757812f17ea2cf7660cfa9c8d2ba65b2d9aa54b2649799b66c4ac3",
+      "bytes": 33286,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-finance/src/repository/fulfillment_facts.rs",
+      "sha256": "b472ae19f0e4d4785719c692e3eb40fc2a1551dac73d0555348d6cb851627312",
+      "bytes": 1187,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/facts.rs",
+      "sha256": "054351e7685e1f829576310fcfd41a3b74c98cdcbc0d013630144226d7543cae",
+      "bytes": 3618,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "sha256": "f0df4dba1c996a6f7d36f63d259c7ff5f5d48ae21cae903e52ec12fe94f5573f",
+      "bytes": 28203,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+      "sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "bytes": 7342,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/fingerprint.rs",
+      "sha256": "ce1ef6f861b62c6e4ccc9b159e1bf5902b48f0d9afc67c0cd11034a0ea277dc4",
+      "bytes": 8579,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_evidence.rs",
+      "sha256": "4d3340151d288fde1296eb528dcef78551acdb5a70920ed13ad36bec0a0ddb09",
+      "bytes": 8885,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "sha256": "ec3632faf11b7c6f4b08075724955930d6a84e637f672d0cacd861c90705f4ea",
+      "bytes": 44286,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "bytes": 9637,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/error.rs",
+      "sha256": "186bbe5f29d55bd501fa11b3af7a1c2ba96a78173b5790b8a366286214b364f5",
+      "bytes": 5432,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/ports/service_crypto.rs",
+      "sha256": "11fbfcb977617ba5554f898e8415d8b972f8d6fdf39f303b9ca79055cf383ef9",
+      "bytes": 514,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+      "sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1",
+      "bytes": 6236,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+      "sha256": "1b69894895a597f78b99bbce0d214779ea8322503f0f06da0500691b5c66d3a7",
+      "bytes": 3919,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/mod.rs",
+      "sha256": "66740b770594440c7a27448284ee1734fe337570ffd511b97b10df2e17097242",
+      "bytes": 882,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs",
+      "sha256": "d075f44821c3ee03775dd3caa839c4a8d500f16b8f4641e265165647b8ab1e82",
+      "bytes": 5168,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+      "sha256": "73eca6d500dd81e0cb330151c2f94d050099f4b2f2757ff3450ed6c5cb9ffce1",
+      "bytes": 5864,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+      "sha256": "05d49be711e27a1ad384477e5be1900897962d110c064503b6f0e7f2410d8edb",
+      "bytes": 5471,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-party/src/service/party/sensitive.rs",
+      "sha256": "794a4c6689dd05d2a1eb997004006984085f74b25102d4789787a49708cbda7c",
+      "bytes": 11638,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/attachments/fulfillment.rs",
+      "sha256": "890e1edb5f391c97c69eb5630f562defcac9d2b8da6936b5a06fd741c4edf20e",
+      "bytes": 1794,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/attachments/pending.rs",
+      "sha256": "d06282722acc45280631b301a208ca7d2a18e3ae7cefb5105ce1b1fdb43198b8",
+      "bytes": 6393,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+      "sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a",
+      "bytes": 20478,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+      "sha256": "c3a937ca9942ace08035a8ab6c1600cd7f260f1287d6f62ca4880f9cfb1538ab",
+      "bytes": 1734,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_context.rs",
+      "sha256": "05f17f3694b50b6965410d14267907220fe7426e89548e360bc1e39481b5f54c",
+      "bytes": 10411,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+      "sha256": "e6a59d6ff1ad9e5ff6767b6bd5e371c8bd7dba4450bf8323d51102b6412e2bfb",
+      "bytes": 22652,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs",
+      "sha256": "19b70f2b674899818910cfbf95a67a1fa115f106c4961d3b501ff20687c9ee82",
+      "bytes": 2642,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+      "sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17",
+      "bytes": 17123,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-sales/src/repository/fulfillment_facts.rs",
+      "sha256": "4dfc1198570f0b90fe1f45010558a23bc31fffd927836a8491d2cbd081a22c48",
+      "bytes": 1323,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "bytes": 23400,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/persistence-core/src/repository/base.rs",
+      "sha256": "466d0bb968a321422e288e5355ca4814b5fe6e1e801409ea3408824db64b715c",
+      "bytes": 20107,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/services/src/errors.rs",
+      "sha256": "5dbebfb7a2f912cd266aa01b02f41e9f7e156c14e80742ef84f7067f369d8372",
+      "bytes": 39157,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+      "bytes": 6232,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+      "bytes": 6232,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/persistence-core/src/executor.rs",
+      "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+      "bytes": 2533,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "before",
+      "path": "backend/crates/persistence-core/src/executor.rs",
+      "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+      "bytes": 2533,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "sha256": "0fd4a98695f01d0cf0cb559a3dfa63bd1229956f0b294e233484310320ed3cca",
+      "bytes": 6286,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "sha256": "b8bc33ebee4c4f08aeb4f43c0fa521261688f4934e203910c1dc0260950fb7b0",
+      "bytes": 4564,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-fulfillment/src/dto/mod.rs",
+      "sha256": "a4a8f05e9eff1835f5b24b4079e10451a807fe18d7ff4c405b189fdee52994ff",
+      "bytes": 10519,
+      "provenance": "committed_source",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/fulfillment/dto.rs",
+      "sha256": "e711624cca9a6c7aa112c8078a44d265309af3a18cdceff62d98cc15980a734c",
+      "bytes": 43831,
+      "provenance": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "reference_worktree_matches_input": true
+    }
+  ],
+  "symbol_map": [
+    {
+      "before": {
+        "name": "electronic_delivery_list",
+        "line": 56,
+        "end_line": 98,
+        "body_sha256": "144776192ff3ac4ad2867f094cfca53b98c2157ad3540282d886209def8be538",
+        "tokens_sha256": "660954d885f0da675cb855ccb3a45a37f2080e04ee0dba0ed4738b43510fd4b3",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_delivery_list",
+          "line": 36,
+          "end_line": 78,
+          "body_sha256": "144776192ff3ac4ad2867f094cfca53b98c2157ad3540282d886209def8be538",
+          "tokens_sha256": "660954d885f0da675cb855ccb3a45a37f2080e04ee0dba0ed4738b43510fd4b3",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "electronic_delivery_detail",
+        "line": 122,
+        "end_line": 130,
+        "body_sha256": "33505044a7eecd9896a5e5df4a5626f26e96b102079a6e54830f566fd57d3509",
+        "tokens_sha256": "801527acaece6a6a30aefe4575ddf5c18a2f6a4ca40b4cbb1e0b2f911ee45aa6",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_delivery_detail",
+          "line": 102,
+          "end_line": 110,
+          "body_sha256": "33505044a7eecd9896a5e5df4a5626f26e96b102079a6e54830f566fd57d3509",
+          "tokens_sha256": "801527acaece6a6a30aefe4575ddf5c18a2f6a4ca40b4cbb1e0b2f911ee45aa6",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "create_electronic_delivery",
+        "line": 159,
+        "end_line": 175,
+        "body_sha256": "1371e0b4cb039744114c425d5a11351713e66a7dd78412d70caca64b9f77732a",
+        "tokens_sha256": "ddb5029acd73414ef8faf7e7225128181080d62347345726298a00710e01506d",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "create_electronic_delivery",
+          "line": 56,
+          "end_line": 72,
+          "body_sha256": "535b91c3d5eeffe7f190116563cb81f9cda13a452546f82311642af1d9f85ee2",
+          "tokens_sha256": "5113e4034b86181b0a6c866ed22e9351314a8346c424f26ce83351202dc5ce83",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+    },
+    {
+      "before": {
+        "name": "confirm_electronic_delivery",
+        "line": 204,
+        "end_line": 266,
+        "body_sha256": "e9c61fdc3ada45acfc35bc6d56e18e38339bfaf96ae78be522ff5128f984730f",
+        "tokens_sha256": "8788d66d59cd296f2445b2857faa84bacec53643a23dc96f7136dc28ec5dcf4d",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "confirm_electronic_delivery",
+          "line": 101,
+          "end_line": 159,
+          "body_sha256": "1a63c66af00f5cd66fa6dc7412f53c6895a13c55d1536ce07e685e0f675f0004",
+          "tokens_sha256": "dfd6ece49727fff1d43dbd7fc3e1dc0caee62184e2c490cdb9cf31b92b6abab4",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        },
+        {
+          "name": "prepare_electronic_confirmation",
+          "line": 146,
+          "end_line": 161,
+          "body_sha256": "a8c6bf53e27a9ffa7af409f39a8d974afefc70ef99c8c161ea48fc1bda508edd",
+          "tokens_sha256": "992470db1211364a6d332907aef10b366664c019e41e55d77d4f99d3efe99fc8",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        },
+        {
+          "name": "persist_electronic_confirmation",
+          "line": 164,
+          "end_line": 172,
+          "body_sha256": "448101e2c61c2f8b150d118f84682b02e8dbbe0943e1ce6b003abebfa914cf2d",
+          "tokens_sha256": "9f5d22ba2165abb2aaf480d64dc88b04a9190509af85d0d28718842abc3252e1",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "original load/state guard and state mutation/write delegated to domain at unchanged process positions; procurement gates/task/acceptance/audit retained"
+    },
+    {
+      "before": {
+        "name": "from",
+        "line": 271,
+        "end_line": 285,
+        "body_sha256": "82100de2046dd72bef0bd04728638c66fb8b4d69bc678936bec2716078f8670f",
+        "tokens_sha256": "d61c50dd8e9043db2b63030abdbdf162fec164c4719d9ae7d9dbd11fd095ff7e",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "from",
+          "line": 115,
+          "end_line": 129,
+          "body_sha256": "82100de2046dd72bef0bd04728638c66fb8b4d69bc678936bec2716078f8670f",
+          "tokens_sha256": "d61c50dd8e9043db2b63030abdbdf162fec164c4719d9ae7d9dbd11fd095ff7e",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "electronic_delivery_create_binding_decision",
+        "line": 295,
+        "end_line": 308,
+        "body_sha256": "1d4453219941efc8debc86a90651c639065cda72bf12820d400ad6519c83b565",
+        "tokens_sha256": "43d187b071e2e234e526c6f456db75a171299947173aea16e8c67584c202fa9c",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_delivery_create_binding_decision",
+          "line": 169,
+          "end_line": 182,
+          "body_sha256": "1d4453219941efc8debc86a90651c639065cda72bf12820d400ad6519c83b565",
+          "tokens_sha256": "43d187b071e2e234e526c6f456db75a171299947173aea16e8c67584c202fa9c",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "ensure_electronic_delivery_skips_approval_binding",
+        "line": 314,
+        "end_line": 320,
+        "body_sha256": "1c91052e7634294aea150570602f8f088f6aa947db88b1faba91a03f992cce7e",
+        "tokens_sha256": "68e4b3359b4727c41074144f9fdb65ad789499e6b32a345a4e340208d0c7badd",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "ensure_electronic_delivery_skips_approval_binding",
+          "line": 188,
+          "end_line": 194,
+          "body_sha256": "1c91052e7634294aea150570602f8f088f6aa947db88b1faba91a03f992cce7e",
+          "tokens_sha256": "68e4b3359b4727c41074144f9fdb65ad789499e6b32a345a4e340208d0c7badd",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "ensure_electronic_delivery_has_no_adapter",
+        "line": 326,
+        "end_line": 331,
+        "body_sha256": "d285cf8bacc103b8e93e8d6dc92fbea1718b8993ed58263f5e592941fce6f154",
+        "tokens_sha256": "401324ea5c5617dbae5a5e4661f935b18f9d109051172a8c9578c3387d1023ed",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "ensure_electronic_delivery_has_no_adapter",
+          "line": 200,
+          "end_line": 205,
+          "body_sha256": "d285cf8bacc103b8e93e8d6dc92fbea1718b8993ed58263f5e592941fce6f154",
+          "tokens_sha256": "401324ea5c5617dbae5a5e4661f935b18f9d109051172a8c9578c3387d1023ed",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "electronic_delivery_bind_command",
+        "line": 341,
+        "end_line": 357,
+        "body_sha256": "5dfe61836c4247a1b80b500544feb87d4373878d4678a2db1a31551f9053fa8a",
+        "tokens_sha256": "16010d8836525661cf1f57f36e46d71b5331cdc1803593cff584a1ba310eceeb",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_delivery_bind_command",
+          "line": 215,
+          "end_line": 231,
+          "body_sha256": "5dfe61836c4247a1b80b500544feb87d4373878d4678a2db1a31551f9053fa8a",
+          "tokens_sha256": "16010d8836525661cf1f57f36e46d71b5331cdc1803593cff584a1ba310eceeb",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "persist_unbound_electronic_delivery_document",
+        "line": 365,
+        "end_line": 392,
+        "body_sha256": "32babecfd0127a9abae208268a17f6913f6864ae3a9d3f5aa8849bc118c2f235",
+        "tokens_sha256": "c2d26a0a40b9577a55368b2e573e51ec795ddd83e30f8b452b7eefcbb8f36de2",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "persist_unbound_electronic_delivery_document",
+          "line": 239,
+          "end_line": 266,
+          "body_sha256": "27fb4decd2c05ecc97983b10d401862847169a1c9f19281373e178f10c6ad737",
+          "tokens_sha256": "2f72026324da748129778a1f4cacd54c70e0c59eae40cfd72aff20da4bf1ab9b",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "register_created_electronic_delivery_document",
+        "line": 398,
+        "end_line": 423,
+        "body_sha256": "368848f1ffdaf9666048772e7d8ac9e86bc2163104490fbd59fce2c6c4f25f87",
+        "tokens_sha256": "eb4137b34a3c781b9970c94df39362eab9523d0f8adaa27f135c68f0894c8ca2",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "register_created_electronic_delivery_document",
+          "line": 272,
+          "end_line": 297,
+          "body_sha256": "8efbc4348875ceeeeef2366281b0c30d6d5cc5cf2fb4c5aa92fa762ee9f7ee94",
+          "tokens_sha256": "c9296c9e45c79578ae0dc0cbeea0f85eb3dc80c61719c743326b229f7f94990f",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "persist_created_electronic_delivery",
+        "line": 429,
+        "end_line": 469,
+        "body_sha256": "17fe1f304b4e6aff789c216ebfd44fb3cb92edaf6a0d4e541ff77b1bc0b8c9c1",
+        "tokens_sha256": "ed193b8366bc03ef96926aa1d335bba9cc413bb911fbc2eafcbcf3a46381f4b0",
+        "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+      },
+      "after": [
+        {
+          "name": "persist_created_electronic_delivery",
+          "line": 303,
+          "end_line": 345,
+          "body_sha256": "ac5e424b8d7668e5c24d5f0ed84a23288fcf57ebfc66276a5cf883ee367d8d11",
+          "tokens_sha256": "e72508ca4de721bbfef2c9910dfa282ee9732df65c5a3e7c6b50c2c1e4679acb",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+        },
+        {
+          "name": "persist_created_electronic_delivery",
+          "line": 134,
+          "end_line": 141,
+          "body_sha256": "2462c18adc70437c6b8c33b683e79d646e1832df0d37eaeef3274ac51c7027e6",
+          "tokens_sha256": "7947fd739d81d4275b958c0abeca9eed34da7f6c22a25c46155e474e39c2506a",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+    },
+    {
+      "before": {
+        "name": "electronic_recipient_fingerprint",
+        "line": 31,
+        "end_line": 36,
+        "body_sha256": "c3c6a7488d4c7dbfd7997190798b95be9311bbe6cef8f5de1accfc111ed89af8",
+        "tokens_sha256": "dc75fc6dfea9a3069651530130b3b0c7b2b4f630c6a1105a417886fa848aa009",
+        "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_recipient_fingerprint",
+          "line": 30,
+          "end_line": 35,
+          "body_sha256": "c3c6a7488d4c7dbfd7997190798b95be9311bbe6cef8f5de1accfc111ed89af8",
+          "tokens_sha256": "dc75fc6dfea9a3069651530130b3b0c7b2b4f630c6a1105a417886fa848aa009",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "electronic_delivery_draft_from_request",
+        "line": 50,
+        "end_line": 79,
+        "body_sha256": "68cdef11d2c9b310ac5dd34e8795dc54d1727558096c7fab23ce2d89a7ef3f28",
+        "tokens_sha256": "ddb90d45dcc0efb65764ba7d95336610d5f7cfc4acdbe421a4148b3c809aa91e",
+        "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs"
+      },
+      "after": [
+        {
+          "name": "electronic_delivery_draft_from_request",
+          "line": 49,
+          "end_line": 78,
+          "body_sha256": "c6bcdca08f06d0c6b2cb9057dd68c666f2418fde056416a921a2fdce7649d637",
+          "tokens_sha256": "475cdc6ca6fc3f5fd7d2ca1aca9b5fd9227648c27e4ef0df20f47986f8ed18a8",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained"
+    },
+    {
+      "before": {
+        "name": "service_fulfillment_list",
+        "line": 54,
+        "end_line": 96,
+        "body_sha256": "b532e8bf215364183ea7d4220cd7c69077328889f076405a1fc8bd35f0c8d224",
+        "tokens_sha256": "14c3a6e0946e25bdb62537b5cb4e98601e9fb1b9736cd1a31e1caee93524e55f",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "service_fulfillment_list",
+          "line": 36,
+          "end_line": 78,
+          "body_sha256": "b532e8bf215364183ea7d4220cd7c69077328889f076405a1fc8bd35f0c8d224",
+          "tokens_sha256": "14c3a6e0946e25bdb62537b5cb4e98601e9fb1b9736cd1a31e1caee93524e55f",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "service_fulfillment_detail",
+        "line": 120,
+        "end_line": 128,
+        "body_sha256": "3d302f63d79cb70c769e26090c7be3ba8a392c2fa33b4803dc8141eb9d9a20d0",
+        "tokens_sha256": "31da4a3cdaa30135163d39835883229382967570d9ca2daa7c749244e6cb7720",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "service_fulfillment_detail",
+          "line": 102,
+          "end_line": 110,
+          "body_sha256": "3d302f63d79cb70c769e26090c7be3ba8a392c2fa33b4803dc8141eb9d9a20d0",
+          "tokens_sha256": "31da4a3cdaa30135163d39835883229382967570d9ca2daa7c749244e6cb7720",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "create_service_fulfillment",
+        "line": 157,
+        "end_line": 173,
+        "body_sha256": "4f87fe4bed668c6d0d96a6904bd4fd835701a9018e01adf4a57c6aec34156612",
+        "tokens_sha256": "0047330fa3f8063123f6b464f2a87f7bb5b1c94309e9b8548c34bb75021ce6c6",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "create_service_fulfillment",
+          "line": 53,
+          "end_line": 69,
+          "body_sha256": "6f35ddf82d0eee05050ee5568d9e8bf3c6660c04304f073e5ed48a9c2fc846cb",
+          "tokens_sha256": "d2967322fd3d7661b2addf2cd98dffb77fc82b8cd36eabb91aeae16db14780bc",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+    },
+    {
+      "before": {
+        "name": "from",
+        "line": 178,
+        "end_line": 192,
+        "body_sha256": "82100de2046dd72bef0bd04728638c66fb8b4d69bc678936bec2716078f8670f",
+        "tokens_sha256": "d61c50dd8e9043db2b63030abdbdf162fec164c4719d9ae7d9dbd11fd095ff7e",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "from",
+          "line": 115,
+          "end_line": 129,
+          "body_sha256": "82100de2046dd72bef0bd04728638c66fb8b4d69bc678936bec2716078f8670f",
+          "tokens_sha256": "d61c50dd8e9043db2b63030abdbdf162fec164c4719d9ae7d9dbd11fd095ff7e",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "service_fulfillment_create_binding_decision",
+        "line": 202,
+        "end_line": 215,
+        "body_sha256": "5e15141a0a77543ca805c2b304ad750b4cef0ce4fdc9edbc4072b6fdb5a69319",
+        "tokens_sha256": "dad0e07137b7ce63110a67a508d98d8da804ec8371de0b900f345c73f637183b",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "service_fulfillment_create_binding_decision",
+          "line": 79,
+          "end_line": 92,
+          "body_sha256": "5e15141a0a77543ca805c2b304ad750b4cef0ce4fdc9edbc4072b6fdb5a69319",
+          "tokens_sha256": "dad0e07137b7ce63110a67a508d98d8da804ec8371de0b900f345c73f637183b",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "ensure_service_fulfillment_skips_approval_binding",
+        "line": 221,
+        "end_line": 227,
+        "body_sha256": "5cecdc6e9f4d08d6e22da1fe5cb9d4e6d63e747d8f7211ba36a37b3503b05f8e",
+        "tokens_sha256": "7740acf2593229a3e858c3c73a02bc6e82a2ba06cdb1ebb34b717cdbacccab94",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "ensure_service_fulfillment_skips_approval_binding",
+          "line": 98,
+          "end_line": 104,
+          "body_sha256": "5cecdc6e9f4d08d6e22da1fe5cb9d4e6d63e747d8f7211ba36a37b3503b05f8e",
+          "tokens_sha256": "7740acf2593229a3e858c3c73a02bc6e82a2ba06cdb1ebb34b717cdbacccab94",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "ensure_service_fulfillment_has_no_adapter",
+        "line": 233,
+        "end_line": 238,
+        "body_sha256": "6d9fd7649f4b7100aeb06d943af6ab871f7c427f45e0d4f8b6ccee25d36d9414",
+        "tokens_sha256": "329bb1a9f8fd80ef7c34572582aadfd8570f5a3897cd0e87f41d7c382fcb7de6",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "ensure_service_fulfillment_has_no_adapter",
+          "line": 110,
+          "end_line": 115,
+          "body_sha256": "6d9fd7649f4b7100aeb06d943af6ab871f7c427f45e0d4f8b6ccee25d36d9414",
+          "tokens_sha256": "329bb1a9f8fd80ef7c34572582aadfd8570f5a3897cd0e87f41d7c382fcb7de6",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "service_fulfillment_bind_command",
+        "line": 248,
+        "end_line": 264,
+        "body_sha256": "6f3ced8699d3715911ede73db878c78b5818c4055d1ee9f0954a51d944739519",
+        "tokens_sha256": "81f69d39078bad02ff46e98e0b47181985b2dbbbce545250bc874cb291b05c3a",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "service_fulfillment_bind_command",
+          "line": 125,
+          "end_line": 141,
+          "body_sha256": "6f3ced8699d3715911ede73db878c78b5818c4055d1ee9f0954a51d944739519",
+          "tokens_sha256": "81f69d39078bad02ff46e98e0b47181985b2dbbbce545250bc874cb291b05c3a",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "persist_unbound_service_fulfillment_document",
+        "line": 272,
+        "end_line": 299,
+        "body_sha256": "c3b27b734fdd77cf7a2f12d723f9a5f11ff344f0bb30f7cf7f6c579e4791ab6b",
+        "tokens_sha256": "f46d4483763ca1ce700e594077f43056bf4d61701d38a65588740c24287dc14f",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "persist_unbound_service_fulfillment_document",
+          "line": 149,
+          "end_line": 176,
+          "body_sha256": "028cb00e034431d0f9bcc8299f3100a3ca665b7224be81c9e4e63b361a3fcabe",
+          "tokens_sha256": "41004fd6c8617fa300786577189db847e4fab625e74e22545cef92a200edd8c3",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "register_created_service_fulfillment_document",
+        "line": 305,
+        "end_line": 330,
+        "body_sha256": "d0f57e9a8409c13628d798e220f8368dc10945a3e5127c6708fd833ce0ab4945",
+        "tokens_sha256": "e907de1966958edb0e1babd132d42bf64cc694a12a794c27c5c39dc520be7ae6",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "register_created_service_fulfillment_document",
+          "line": 182,
+          "end_line": 207,
+          "body_sha256": "abd268d155e06208cb5313d343528b94fddc45878c86f9fd1fd26e37251acfb8",
+          "tokens_sha256": "a0972109258cd28811b2d9013056b9e7ef4c3675709fb7bd02311684054f91fc",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "persist_created_service_fulfillment",
+        "line": 336,
+        "end_line": 376,
+        "body_sha256": "e22a23702b539b571a11aae69a8fbe3b5453ef56f311505009c9aaedf170b992",
+        "tokens_sha256": "f54f4c74fbc0a3fc99f13998ad254dff4df3c0a627d02d33c2275dd4c04e6a66",
+        "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+      },
+      "after": [
+        {
+          "name": "persist_created_service_fulfillment",
+          "line": 213,
+          "end_line": 255,
+          "body_sha256": "0bd69082c26282c23eb6cfb4b767c3b2cc37c8e952542e856d219fb889a68bf6",
+          "tokens_sha256": "d064e79026e7ab2e606393a805d12f7e50bd7853b4e35d0b15cd96336e9a262f",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+        },
+        {
+          "name": "persist_created_service_fulfillment",
+          "line": 134,
+          "end_line": 141,
+          "body_sha256": "1c087f042c2c2698043ff3147a589fce0c55ab8f1f7d3dc5b2549d707d975eda",
+          "tokens_sha256": "70eb48f37f6f04273ac03ffb8ce606baf17ca26aac59e4f63bbf2f819bb3983d",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+    },
+    {
+      "before": {
+        "name": "service_recipient_fingerprint",
+        "line": 32,
+        "end_line": 37,
+        "body_sha256": "15faa8607ef25298eaf7b9233e4ce39fbbc6c9671e8f037dc17793f410c4bcb3",
+        "tokens_sha256": "ff2909d52e97611eb8a848f15515681e5e7b5fc5419259054a120ce31d00db7a",
+        "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs"
+      },
+      "after": [
+        {
+          "name": "service_recipient_fingerprint",
+          "line": 31,
+          "end_line": 36,
+          "body_sha256": "15faa8607ef25298eaf7b9233e4ce39fbbc6c9671e8f037dc17793f410c4bcb3",
+          "tokens_sha256": "ff2909d52e97611eb8a848f15515681e5e7b5fc5419259054a120ce31d00db7a",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "service_location_fingerprint",
+        "line": 53,
+        "end_line": 56,
+        "body_sha256": "b2fd5808907fef895976193e0d1b1413bfd6ae87864ee8147623daf6b69e2e9b",
+        "tokens_sha256": "a9410c836f883bb3fdc503ec8bd0abdf1709430dbce90bd30019f8f1b0e2aa66",
+        "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs"
+      },
+      "after": [
+        {
+          "name": "service_location_fingerprint",
+          "line": 52,
+          "end_line": 55,
+          "body_sha256": "b2fd5808907fef895976193e0d1b1413bfd6ae87864ee8147623daf6b69e2e9b",
+          "tokens_sha256": "a9410c836f883bb3fdc503ec8bd0abdf1709430dbce90bd30019f8f1b0e2aa66",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "service_fulfillment_draft_from_request",
+        "line": 70,
+        "end_line": 107,
+        "body_sha256": "7ada0c2c73345ed08ad21e47fb15f816cc6f8adaa17e45ef5ac056e602739c65",
+        "tokens_sha256": "afe0416c1824047d51b6e8d7c99bdc24fe464e016513461c2410a1ea285fbed9",
+        "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs"
+      },
+      "after": [
+        {
+          "name": "service_fulfillment_draft_from_request",
+          "line": 69,
+          "end_line": 106,
+          "body_sha256": "d6896972c19bea5501589998bae015da92669750fd244243107da9234495dfcb",
+          "tokens_sha256": "a304d224e9b7ff0bca7759b0381997c3abab3c59d4c16394681ac254034b32b7",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained"
+    },
+    {
+      "before": {
+        "name": "confirm_service_fulfillment",
+        "line": 44,
+        "end_line": 52,
+        "body_sha256": "2ba81e3d61cbfe386ee1e47b2529df7d301dd6412ac74a9d267f608f4f7a9bff",
+        "tokens_sha256": "e60747e5b6107d73bed9499074188f65c381ddbb511de8d8f991af3d6a99db45",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "confirm_service_fulfillment",
+          "line": 45,
+          "end_line": 53,
+          "body_sha256": "2ba81e3d61cbfe386ee1e47b2529df7d301dd6412ac74a9d267f608f4f7a9bff",
+          "tokens_sha256": "e60747e5b6107d73bed9499074188f65c381ddbb511de8d8f991af3d6a99db45",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "confirm_service_fulfillment_with_assets",
+        "line": 82,
+        "end_line": 106,
+        "body_sha256": "353e2338e9d0dd7a864ce82e7bf4429bd1b92909adda945f98933784debcaa6f",
+        "tokens_sha256": "f42cdea88439a07aba83128d76b8a2404691c2bdf99a012c9d376c9668d68b0d",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "confirm_service_fulfillment_with_assets",
+          "line": 83,
+          "end_line": 107,
+          "body_sha256": "729d92f0fb63115524b02f8dc2bd89617a9b28e9570c61e335b5203f97b6eead",
+          "tokens_sha256": "5e523627a1f9338ec7d8930faef6a1a7d4cf90941c748c6fa1344e1974cc26bd",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "same request validation, pending resolve/all-used, confirmation factory before root; inject original codec adapter"
+    },
+    {
+      "before": {
+        "name": "service_confirmation_from_request",
+        "line": 125,
+        "end_line": 148,
+        "body_sha256": "f97d9c78b5726107e32ae5d1e3bfa13103174cc03e08733aaeea33669177ddcb",
+        "tokens_sha256": "e211bc22da1a4dc58833213927a42936f19111ae2bdde709a76d9b08d6d03130",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "service_confirmation_from_request",
+          "line": 32,
+          "end_line": 56,
+          "body_sha256": "a27a876dc513afbf8b43c8331eef1aa0fd29a98b470dcf16db491200ea10af74",
+          "tokens_sha256": "fe7035a37e54b9755eaa590a7d7f8e0c61c96d0702365c35a601f54cee5c6ee1",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs"
+        },
+        {
+          "name": "encrypt",
+          "line": 13,
+          "end_line": 15,
+          "body_sha256": "231f234a0ba25a8b95837e038e743f79a6cd124b2ee6ab4603daac39e3381c22",
+          "tokens_sha256": "427b7e22d5930c21d2f3a2d4eb48e60fd4da33cf6bd35d418f91b7feff3cca4f",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "same normalized location and original codec via ServiceLocationCryptoPort; associated provider error preserves original error category"
+    },
+    {
+      "before": {
+        "name": "persist_confirmed_service_fulfillment",
+        "line": 165,
+        "end_line": 192,
+        "body_sha256": "9408fcd3a1393e78869b390bad6139eead8b9d5ff396d8b5bf73e84ac4acd3b4",
+        "tokens_sha256": "ee369b62ff6a8a8d961f246f3488f05d13a90cc0131fa67867a6dbf950896337",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "persist_confirmed_service_fulfillment",
+          "line": 125,
+          "end_line": 152,
+          "body_sha256": "9408fcd3a1393e78869b390bad6139eead8b9d5ff396d8b5bf73e84ac4acd3b4",
+          "tokens_sha256": "ee369b62ff6a8a8d961f246f3488f05d13a90cc0131fa67867a6dbf950896337",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "confirm_service_fulfillment_in_transaction",
+        "line": 210,
+        "end_line": 276,
+        "body_sha256": "c36abdb1f1500bef1b0e5c2d3052780fc04178733dd855feb2ad8d7e2f30a28d",
+        "tokens_sha256": "7542d60c41662d43584a315f9edb6b2d0f258445f2c071aba2ebc3ffa3c4e43b",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "confirm_service_fulfillment_in_transaction",
+          "line": 170,
+          "end_line": 191,
+          "body_sha256": "8b9819b835bac3e1ae7db55831bea8c4552ecc6e6cc14073f054a47f9965f373",
+          "tokens_sha256": "a5c93471f5c0627de6c6da0924d0c6fa4e123c34c005c605578213cffb251ec0",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "execute_confirmation",
+          "line": 277,
+          "end_line": 293,
+          "body_sha256": "7fa49464182aa7ed90cd54ce0619c8c05d16497a224a329c415da178fb762b8f",
+          "tokens_sha256": "ce5ed5b353ced1994565f522398dba1f109b4786f0256b405b6a4d39f939c34f",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "load",
+          "line": 309,
+          "end_line": 313,
+          "body_sha256": "0663a0a1bf9469278fd8b7460214eb71950ef224245c2ce4bda6935e733e95bc",
+          "tokens_sha256": "77ef39c1eaf81e18b244bc2851ef89cb99a70318ebaddea631ce8763026053bd",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "purchase",
+          "line": 315,
+          "end_line": 325,
+          "body_sha256": "fb5f6d4a73442d80a66450de467589e3819f1e6ca92305ee35c2e4373c1ea6fe",
+          "tokens_sha256": "8140d4fae3e2b55aa1d250ea81de9d1abb03000443848b078c7801ed7963edf8",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "allocation",
+          "line": 327,
+          "end_line": 341,
+          "body_sha256": "acff2dbcb2b1eda22dacd95bf55eb5d3724ec1657fd3942778724010b62d7870",
+          "tokens_sha256": "d7db0dd4810d84923a3cc5b7111c006a162b98c33b22fd2ff1d80d1efb2cb975",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "evidence",
+          "line": 343,
+          "end_line": 351,
+          "body_sha256": "23554fa08135ca9aca351777accef79b7c2225925c233322ca04b9144c1d510a",
+          "tokens_sha256": "1c7ab6d5385bfece57926ace4ea46789f62fbc5fdcd5dd34ff88bd34aef45271",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "pending",
+          "line": 353,
+          "end_line": 356,
+          "body_sha256": "2e1565c0746fa1b52381a0b25efde40718afa19e8120d4d1415daba0a280ced9",
+          "tokens_sha256": "1635d7b46e1cc63f9e68c7ceba7bed4cc5730385a26c1e387f68a25c910648db",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "confirm",
+          "line": 358,
+          "end_line": 363,
+          "body_sha256": "925fd35cd15818c803660bb30e5a5e58c3577f50face79bad59547534302e59a",
+          "tokens_sha256": "5849ef77ca74a83684cec34e1c93d0ab88f9ab5572453fdfead07f1d8d100a39",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "task",
+          "line": 365,
+          "end_line": 373,
+          "body_sha256": "28973d3156d20b67f930b53d12e4a8763770ef61a9fa64b8fd09f86fdf2542c9",
+          "tokens_sha256": "486b5b7286376a73e53255c7b1edbfb0fa50f4e7eb249fa1d7d326c7ad41c084",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "is_acceptance_eligible",
+          "line": 375,
+          "end_line": 377,
+          "body_sha256": "d22bec47f2c724e1600a1c9e7850edf609eb51e0fe80e786a2c49382b3d6168f",
+          "tokens_sha256": "d2dc56a0c98e0ed49b31d1607ff6b828ac4ff67313f6a129dd9bdd117c55b398",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "acceptance",
+          "line": 379,
+          "end_line": 388,
+          "body_sha256": "280b5a233e36455b5838b8ecb5d5b0b0f3534cc1b2a222bc4e8b95d68cd30af4",
+          "tokens_sha256": "6e0d6232f427f5fd38ae96fab6042e2b77c0d1ca59c6f6497be44e00d2d73282",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "audit",
+          "line": 390,
+          "end_line": 398,
+          "body_sha256": "a33d36e2a05a73cfc7431b1248c91e431266e377325160f678d770cc5806f323",
+          "tokens_sha256": "b40414d0a19aae00a0e7f5dea556f2c4bc760570484ba8031ac5f4686183b9fb",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "prepare_service_confirmation",
+          "line": 60,
+          "end_line": 76,
+          "body_sha256": "ee4ce25a42827faded2c9b76e54ce4b7a95c4eab179ab5e68c1ee3a802cfefcf",
+          "tokens_sha256": "1f82891e12cdd28fd9589480a642d7a0c6223f624e5870ba7db79d78c379dd91",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs"
+        },
+        {
+          "name": "persist_service_confirmation",
+          "line": 79,
+          "end_line": 89,
+          "body_sha256": "c91f69ec5b1529b466bf48bac7deea00fbaf5b97b65f77c095f4042cb2e936f9",
+          "tokens_sha256": "3a3ef80e773d953eeafab55657dc16112548b51b5f7ef3487a164583e04b87eb",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "expanded into execute_confirmation and actual MongoServiceConfirmation provider; same nine-step sequence and optional eligibility branch"
+    },
+    {
+      "before": {
+        "name": "resolve_service_evidence_id",
+        "line": 289,
+        "end_line": 297,
+        "body_sha256": "5cc481f2f78f9f1954c7a9fd15af429ed96a90565d257de712b419c62a007212",
+        "tokens_sha256": "f6c2e80e3702b79ff21aadb7ef42e06a438f0ea7cad654d301996b8bb1d43382",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "resolve_service_evidence_id",
+          "line": 204,
+          "end_line": 212,
+          "body_sha256": "5cc481f2f78f9f1954c7a9fd15af429ed96a90565d257de712b419c62a007212",
+          "tokens_sha256": "f6c2e80e3702b79ff21aadb7ef42e06a438f0ea7cad654d301996b8bb1d43382",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        }
+      ],
+      "primary_tokens_equal": true,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "owner/import movement only"
+    },
+    {
+      "before": {
+        "name": "ensure_service_evidence_asset_in_transaction",
+        "line": 315,
+        "end_line": 336,
+        "body_sha256": "08261c637eecd1219a920dd184ad8ade7e19d86f40bc370a8290b58872922fab",
+        "tokens_sha256": "3b5cb314225aa9ef0ac222dbe3d5069b7fdfe9f86055e3a910fc2add6b558788",
+        "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+      },
+      "after": [
+        {
+          "name": "ensure_service_evidence_asset_in_transaction",
+          "line": 230,
+          "end_line": 252,
+          "body_sha256": "3e4e38f3736af368314e740e98d00f2e9e171a2223909ac719779de766b267a1",
+          "tokens_sha256": "4967adaeed326c6d77064041e9feb1f8d194211a28daeb4e0aabf8f7562939a6",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+        },
+        {
+          "name": "evidence_metadata",
+          "line": 19,
+          "end_line": 33,
+          "body_sha256": "ef3ea9cce81274562ffa2ca44d79b5ea36e23834711f09f4982318a54b65bc32",
+          "tokens_sha256": "48daa0507bccd7daab8404ad184e312b34dc42307f1a86599437db5a3761369d",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs"
+        }
+      ],
+      "primary_tokens_equal": false,
+      "review_disposition": "preserved_static_review",
+      "adaptation": "exhaustive provider enum conversion before unchanged domain evidence policy; same pending shortcut and query executor"
+    }
+  ],
+  "original_inline_tests": [
+    {
+      "before_path": "backend/services/src/fulfillment/electronic_delivery.rs",
+      "tests": [
+        {
+          "name": "electronic_delivery_policy_is_no_approval_identity_only",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 398
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_registers_document_and_returns_empty_binding",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 418
+            },
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 336
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_does_not_query_definition_or_start_instance",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 450
+            },
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 368
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_uses_draft_factory_and_typed_fingerprint",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 481
+            }
+          ],
+          "retained": true
+        }
+      ]
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+      "tests": [
+        {
+          "name": "recipient_fingerprint_golden_pins_algorithm_and_key_version",
+          "after": [
+            {
+              "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+              "line": 86
+            }
+          ],
+          "retained": true
+        }
+      ]
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/service_fulfillment.rs",
+      "tests": [
+        {
+          "name": "service_fulfillment_policy_is_no_approval_identity_only",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 316
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_registers_document_and_returns_empty_binding",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 418
+            },
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 336
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_does_not_query_definition_or_start_instance",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+              "line": 450
+            },
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 368
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "create_uses_draft_factory_and_dual_fingerprints",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+              "line": 399
+            }
+          ],
+          "retained": true
+        }
+      ]
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+      "tests": [
+        {
+          "name": "dual_fingerprints_golden_pin_algorithm_and_key_version",
+          "after": [
+            {
+              "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+              "line": 114
+            }
+          ],
+          "retained": true
+        }
+      ]
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+      "tests": [
+        {
+          "name": "confirmation_encrypts_normalized_service_location",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+              "line": 414
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "confirm_does_not_start_approval",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+              "line": 451
+            }
+          ],
+          "retained": true
+        },
+        {
+          "name": "evidence_rules_do_not_stay_in_service",
+          "after": [
+            {
+              "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+              "line": 474
+            }
+          ],
+          "retained": true
+        }
+      ]
+    }
+  ],
+  "review_limits": [
+    "Real database execution not verified",
+    "Replacement tests were source-reviewed, not run by this reviewer",
+    "Task provider internals and acceptance reverse/reopen excluded from this independent D review; calls/parameters/order covered"
+  ],
+  "supporting_entity_symbol_comparisons": [
+    {
+      "before_path": "backend/entities/src/fulfillment/service_evidence.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_evidence.rs",
+      "name": "parse",
+      "before_line": 40,
+      "after_line": 40,
+      "before_body_tokens_sha256": "ee9d3ec86978c750e16e46d7d6b9c0a5e3242dd64cedd494a6626ed9f80e2bd8",
+      "after_body_tokens_sha256": "ee9d3ec86978c750e16e46d7d6b9c0a5e3242dd64cedd494a6626ed9f80e2bd8",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_evidence.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_evidence.rs",
+      "name": "as_str",
+      "before_line": 55,
+      "after_line": 55,
+      "before_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "after_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_evidence.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_evidence.rs",
+      "name": "validate",
+      "before_line": 83,
+      "after_line": 83,
+      "before_body_tokens_sha256": "86d54ba71e2e76a043873be93045e3f30c3ad88401b77db1530c590a10f25004",
+      "after_body_tokens_sha256": "86d54ba71e2e76a043873be93045e3f30c3ad88401b77db1530c590a10f25004",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "label",
+      "before_line": 57,
+      "after_line": 57,
+      "before_body_tokens_sha256": "5f93e291e7ac55f47e07c36ad030d51dd32f023060e96cb339017863036a6768",
+      "after_body_tokens_sha256": "5f93e291e7ac55f47e07c36ad030d51dd32f023060e96cb339017863036a6768",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "as_str",
+      "before_line": 69,
+      "after_line": 69,
+      "before_body_tokens_sha256": "7a0df1bab24c009561f3d67fd8c1b018bdadb858b984491f0705aad1956d9d01",
+      "after_body_tokens_sha256": "7a0df1bab24c009561f3d67fd8c1b018bdadb858b984491f0705aad1956d9d01",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "is_editable",
+      "before_line": 81,
+      "after_line": 81,
+      "before_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "after_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "is_confirmable",
+      "before_line": 89,
+      "after_line": 89,
+      "before_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "after_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "is_acceptance_eligible",
+      "before_line": 97,
+      "after_line": 97,
+      "before_body_tokens_sha256": "32c87e2f7295df2298b7dfbd8ce6858c8c9217ece9c72cfdc983ee7756161d01",
+      "after_body_tokens_sha256": "32c87e2f7295df2298b7dfbd8ce6858c8c9217ece9c72cfdc983ee7756161d01",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "allowed_next",
+      "before_line": 104,
+      "after_line": 104,
+      "before_body_tokens_sha256": "80f491caa1f6370d3e8aa309dfd0ad714269571aa36971647e6b06cb4dc58348",
+      "after_body_tokens_sha256": "80f491caa1f6370d3e8aa309dfd0ad714269571aa36971647e6b06cb4dc58348",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "label",
+      "before_line": 132,
+      "after_line": 132,
+      "before_body_tokens_sha256": "695cfbb3badda41f3cad4ac69d91bcdff2828bff4fcec7dfb9ca963fdf7c7f05",
+      "after_body_tokens_sha256": "695cfbb3badda41f3cad4ac69d91bcdff2828bff4fcec7dfb9ca963fdf7c7f05",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "as_str",
+      "before_line": 144,
+      "after_line": 144,
+      "before_body_tokens_sha256": "d09e49935f20300024d6e9a50b38d8c0b07d9da81d4cca15154306dc7afbedeb",
+      "after_body_tokens_sha256": "d09e49935f20300024d6e9a50b38d8c0b07d9da81d4cca15154306dc7afbedeb",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "fmt",
+      "before_line": 236,
+      "after_line": 236,
+      "before_body_tokens_sha256": "f3d3706023343028420ac7ad1b5b1795d9265c7ea36de3578d52b2a324931c1a",
+      "after_body_tokens_sha256": "f3d3706023343028420ac7ad1b5b1795d9265c7ea36de3578d52b2a324931c1a",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "eq",
+      "before_line": 267,
+      "after_line": 267,
+      "before_body_tokens_sha256": "6806da3f9d169ce3c3bae621b76aa5737bdd4047ce5bf19289e86a35cf2babf0",
+      "after_body_tokens_sha256": "6806da3f9d169ce3c3bae621b76aa5737bdd4047ce5bf19289e86a35cf2babf0",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "recipient_snapshot_fingerprint",
+      "before_line": 304,
+      "after_line": 304,
+      "before_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "after_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "new",
+      "before_line": 324,
+      "after_line": 324,
+      "before_body_tokens_sha256": "4f8aff44609b3fd8d387445bc4cf1519c0225abc8d3d9bb56575a8842246b326",
+      "after_body_tokens_sha256": "4f8aff44609b3fd8d387445bc4cf1519c0225abc8d3d9bb56575a8842246b326",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "registration_context_id",
+      "before_line": 388,
+      "after_line": 388,
+      "before_body_tokens_sha256": "03a4569b2dd0c3f511e2e9aa3744bf1aa21866e0da493adbe99f40519574700f",
+      "after_body_tokens_sha256": "03a4569b2dd0c3f511e2e9aa3744bf1aa21866e0da493adbe99f40519574700f",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "ensure_confirmable",
+      "before_line": 403,
+      "after_line": 403,
+      "before_body_tokens_sha256": "9a76cc88ac6df3a9408f247de10a2f84196f4124458d8054ece3a0996328e203",
+      "after_body_tokens_sha256": "9a76cc88ac6df3a9408f247de10a2f84196f4124458d8054ece3a0996328e203",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "acceptance_quantity",
+      "before_line": 420,
+      "after_line": 420,
+      "before_body_tokens_sha256": "5d95aff04f996d41ebc793a1713641a33462674212be72d667baf4d95d8d6d32",
+      "after_body_tokens_sha256": "5d95aff04f996d41ebc793a1713641a33462674212be72d667baf4d95d8d6d32",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "update",
+      "before_line": 442,
+      "after_line": 442,
+      "before_body_tokens_sha256": "0f6cf8a1e3607a8b39402fd4bd1c804e654802a37ec9faaad43355002784c54e",
+      "after_body_tokens_sha256": "0f6cf8a1e3607a8b39402fd4bd1c804e654802a37ec9faaad43355002784c54e",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "confirm",
+      "before_line": 460,
+      "after_line": 460,
+      "before_body_tokens_sha256": "a52f7b44c354f0a29707554fef085843d7cf7a0c0882e8a6e3db2cd5933328ba",
+      "after_body_tokens_sha256": "a52f7b44c354f0a29707554fef085843d7cf7a0c0882e8a6e3db2cd5933328ba",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "reverse",
+      "before_line": 476,
+      "after_line": 476,
+      "before_body_tokens_sha256": "c045d6b6591dfa74f453cd18d4a6a4f5935ee9e0764fc1689780426072400ba3",
+      "after_body_tokens_sha256": "c045d6b6591dfa74f453cd18d4a6a4f5935ee9e0764fc1689780426072400ba3",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "is_editable",
+      "before_line": 486,
+      "after_line": 486,
+      "before_body_tokens_sha256": "4601f3dd87b355a52b0c2be43b1ed46e358ea237ca560033911c9994c71a76f5",
+      "after_body_tokens_sha256": "4601f3dd87b355a52b0c2be43b1ed46e358ea237ca560033911c9994c71a76f5",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "ensure_editable",
+      "before_line": 497,
+      "after_line": 497,
+      "before_body_tokens_sha256": "ee8bea460368ea4516c4a70e23f61bcc8031afdd38465f1307ad30dcf3d155ad",
+      "after_body_tokens_sha256": "ee8bea460368ea4516c4a70e23f61bcc8031afdd38465f1307ad30dcf3d155ad",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs",
+      "name": "normalize_optional_source_reference",
+      "before_line": 512,
+      "after_line": 512,
+      "before_body_tokens_sha256": "b6434277a9e07aeaaa523ff56c3e4e0184992f9dd03e20b05f85f5ff8ef45667",
+      "after_body_tokens_sha256": "b6434277a9e07aeaaa523ff56c3e4e0184992f9dd03e20b05f85f5ff8ef45667",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "label",
+      "before_line": 61,
+      "after_line": 61,
+      "before_body_tokens_sha256": "5f93e291e7ac55f47e07c36ad030d51dd32f023060e96cb339017863036a6768",
+      "after_body_tokens_sha256": "5f93e291e7ac55f47e07c36ad030d51dd32f023060e96cb339017863036a6768",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "as_str",
+      "before_line": 73,
+      "after_line": 73,
+      "before_body_tokens_sha256": "7a0df1bab24c009561f3d67fd8c1b018bdadb858b984491f0705aad1956d9d01",
+      "after_body_tokens_sha256": "7a0df1bab24c009561f3d67fd8c1b018bdadb858b984491f0705aad1956d9d01",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "is_editable",
+      "before_line": 85,
+      "after_line": 85,
+      "before_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "after_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "is_confirmable",
+      "before_line": 93,
+      "after_line": 93,
+      "before_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "after_body_tokens_sha256": "95a073b5923c02b21c7a295441b66091cd28c9db70527ca7107373f93c130a02",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "is_acceptance_eligible",
+      "before_line": 101,
+      "after_line": 101,
+      "before_body_tokens_sha256": "32c87e2f7295df2298b7dfbd8ce6858c8c9217ece9c72cfdc983ee7756161d01",
+      "after_body_tokens_sha256": "32c87e2f7295df2298b7dfbd8ce6858c8c9217ece9c72cfdc983ee7756161d01",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "allowed_next",
+      "before_line": 108,
+      "after_line": 108,
+      "before_body_tokens_sha256": "80f491caa1f6370d3e8aa309dfd0ad714269571aa36971647e6b06cb4dc58348",
+      "after_body_tokens_sha256": "80f491caa1f6370d3e8aa309dfd0ad714269571aa36971647e6b06cb4dc58348",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "new",
+      "before_line": 235,
+      "after_line": 235,
+      "before_body_tokens_sha256": "e5841bcc41163988b6990a0633c083baad30ac51924c4eb7e2980791bf97f741",
+      "after_body_tokens_sha256": "e5841bcc41163988b6990a0633c083baad30ac51924c4eb7e2980791bf97f741",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "fmt",
+      "before_line": 317,
+      "after_line": 317,
+      "before_body_tokens_sha256": "cac663babb4dae7a4b03a666516c019920fc6f8bb663a92b6490401fd4a37a3f",
+      "after_body_tokens_sha256": "cac663babb4dae7a4b03a666516c019920fc6f8bb663a92b6490401fd4a37a3f",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "eq",
+      "before_line": 353,
+      "after_line": 353,
+      "before_body_tokens_sha256": "5fa515762076edca06573a5bbff0d96386a68a3c6c8e4730f7837170fe141267",
+      "after_body_tokens_sha256": "5fa515762076edca06573a5bbff0d96386a68a3c6c8e4730f7837170fe141267",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "recipient_snapshot_fingerprint",
+      "before_line": 395,
+      "after_line": 395,
+      "before_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "after_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "service_location_fingerprint",
+      "before_line": 410,
+      "after_line": 410,
+      "before_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "after_body_tokens_sha256": "5d7ecf55c0ec3c912ed4114218aecc9c15cf5ef28457ef50a4933b653e5ab8bf",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "new",
+      "before_line": 431,
+      "after_line": 431,
+      "before_body_tokens_sha256": "9cd3bc296f71e308f1ac6f293ef6320065ea8b800c7dd63bd527f1f667ebf917",
+      "after_body_tokens_sha256": "9cd3bc296f71e308f1ac6f293ef6320065ea8b800c7dd63bd527f1f667ebf917",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "registration_context_id",
+      "before_line": 515,
+      "after_line": 515,
+      "before_body_tokens_sha256": "d2380e59f6d79ef93e223c3e8a49fccf828d37c860463cf2521ad1d94109689f",
+      "after_body_tokens_sha256": "d2380e59f6d79ef93e223c3e8a49fccf828d37c860463cf2521ad1d94109689f",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_confirmable",
+      "before_line": 530,
+      "after_line": 530,
+      "before_body_tokens_sha256": "e47147104eb9d6016243f6fb20a0ed9693a7bce7dcd1a07cac028d944856b389",
+      "after_body_tokens_sha256": "e47147104eb9d6016243f6fb20a0ed9693a7bce7dcd1a07cac028d944856b389",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_draft_version",
+      "before_line": 547,
+      "after_line": 547,
+      "before_body_tokens_sha256": "f7b8a23cfd87a270f1484cfe793e413ffb8ef49efc05eb8440694bf098112593",
+      "after_body_tokens_sha256": "f7b8a23cfd87a270f1484cfe793e413ffb8ef49efc05eb8440694bf098112593",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_evidence_present",
+      "before_line": 562,
+      "after_line": 562,
+      "before_body_tokens_sha256": "116f07e2ed8e0d185d69f1753987b8b9de506ee5fbc0c1b8f32589402c8132c5",
+      "after_body_tokens_sha256": "116f07e2ed8e0d185d69f1753987b8b9de506ee5fbc0c1b8f32589402c8132c5",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "acceptance_quantity",
+      "before_line": 580,
+      "after_line": 580,
+      "before_body_tokens_sha256": "83cae75689c1c934890fccc5125ff7f45398f81ddbf335672efa0980242e5a45",
+      "after_body_tokens_sha256": "83cae75689c1c934890fccc5125ff7f45398f81ddbf335672efa0980242e5a45",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "is_acceptance_eligible",
+      "before_line": 594,
+      "after_line": 594,
+      "before_body_tokens_sha256": "8dc6267b71de8c5d13cb54dd5c8e534e098fb4985d9f3f108e4a23d948998d50",
+      "after_body_tokens_sha256": "8dc6267b71de8c5d13cb54dd5c8e534e098fb4985d9f3f108e4a23d948998d50",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "update",
+      "before_line": 610,
+      "after_line": 610,
+      "before_body_tokens_sha256": "2f738c8baf68ada52f877c168797faa2bc2150815ec3cb95ad74fe2f5e9ee6be",
+      "after_body_tokens_sha256": "2f738c8baf68ada52f877c168797faa2bc2150815ec3cb95ad74fe2f5e9ee6be",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "apply_confirmation",
+      "before_line": 635,
+      "after_line": 635,
+      "before_body_tokens_sha256": "dfb3cf10f3c2d4175ae570089c15f7284a5cfad3adb24965332695b28f2b174b",
+      "after_body_tokens_sha256": "dfb3cf10f3c2d4175ae570089c15f7284a5cfad3adb24965332695b28f2b174b",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "confirm",
+      "before_line": 660,
+      "after_line": 660,
+      "before_body_tokens_sha256": "9a1789f4a366d8aa16bc8fb9b6f18200f6cad5434776b38de3a19b0dc328f88f",
+      "after_body_tokens_sha256": "9a1789f4a366d8aa16bc8fb9b6f18200f6cad5434776b38de3a19b0dc328f88f",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "reverse",
+      "before_line": 681,
+      "after_line": 681,
+      "before_body_tokens_sha256": "c03a0f48d98bf77c844853fc610064cbca5db8bb946ae566a82c0b68223b4281",
+      "after_body_tokens_sha256": "c03a0f48d98bf77c844853fc610064cbca5db8bb946ae566a82c0b68223b4281",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "is_editable",
+      "before_line": 691,
+      "after_line": 691,
+      "before_body_tokens_sha256": "4601f3dd87b355a52b0c2be43b1ed46e358ea237ca560033911c9994c71a76f5",
+      "after_body_tokens_sha256": "4601f3dd87b355a52b0c2be43b1ed46e358ea237ca560033911c9994c71a76f5",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_editable",
+      "before_line": 702,
+      "after_line": 702,
+      "before_body_tokens_sha256": "bf00a0ff5aa2184de9527e45d616d2c126465a6d44b551a28e25dd6c435fd0ac",
+      "after_body_tokens_sha256": "bf00a0ff5aa2184de9527e45d616d2c126465a6d44b551a28e25dd6c435fd0ac",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_positive_quantity",
+      "before_line": 720,
+      "after_line": 720,
+      "before_body_tokens_sha256": "cb523ff4e8ff589596560e98018411d5a6e791d2ab021ea9d261703ad82b36eb",
+      "after_body_tokens_sha256": "cb523ff4e8ff589596560e98018411d5a6e791d2ab021ea9d261703ad82b36eb",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_service_window",
+      "before_line": 738,
+      "after_line": 738,
+      "before_body_tokens_sha256": "b3f2afc078417394551c59da561b59436b7a93e4c88fc2cea31a127826597bf4",
+      "after_body_tokens_sha256": "b3f2afc078417394551c59da561b59436b7a93e4c88fc2cea31a127826597bf4",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "ensure_binary_service_result",
+      "before_line": 755,
+      "after_line": 755,
+      "before_body_tokens_sha256": "c837ea688bd296cd11300c441514c6d185c73f2c8589470dd70ef2821c0eab59",
+      "after_body_tokens_sha256": "c837ea688bd296cd11300c441514c6d185c73f2c8589470dd70ef2821c0eab59",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs",
+      "name": "require_evidence_attachment_id",
+      "before_line": 772,
+      "after_line": 772,
+      "before_body_tokens_sha256": "7620f05bb77caf57f2ba582b7d50b91f3a69220c0f15b8534e3904d3e70a13f2",
+      "after_body_tokens_sha256": "7620f05bb77caf57f2ba582b7d50b91f3a69220c0f15b8534e3904d3e70a13f2",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+      "name": "from_precomputed",
+      "before_line": 37,
+      "after_line": 37,
+      "before_body_tokens_sha256": "b074f9dd386796a2903e2331cde513de9842b0d5cacde5566c4f17f766bc8fe2",
+      "after_body_tokens_sha256": "b074f9dd386796a2903e2331cde513de9842b0d5cacde5566c4f17f766bc8fe2",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+      "name": "as_str",
+      "before_line": 57,
+      "after_line": 57,
+      "before_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "after_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+      "name": "build",
+      "before_line": 111,
+      "after_line": 111,
+      "before_body_tokens_sha256": "e0684114cfd9bc70d869ed3e0e8cbbbe532f58ab07ef41fa0b8dbeece478dffa",
+      "after_body_tokens_sha256": "e0684114cfd9bc70d869ed3e0e8cbbbe532f58ab07ef41fa0b8dbeece478dffa",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "typed_fingerprint",
+      "before_line": 20,
+      "after_line": 20,
+      "before_body_tokens_sha256": "a0a5eb25b5bd3ec30f39bdd6c64a5c89bdd252dfce37a136681bfa37bd207036",
+      "after_body_tokens_sha256": "a0a5eb25b5bd3ec30f39bdd6c64a5c89bdd252dfce37a136681bfa37bd207036",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "from_precomputed",
+      "before_line": 46,
+      "after_line": 46,
+      "before_body_tokens_sha256": "d34d340e17bb97105f9d4bc994dabf6279eb1da41da9ebd2a23ee27ccac4614c",
+      "after_body_tokens_sha256": "d34d340e17bb97105f9d4bc994dabf6279eb1da41da9ebd2a23ee27ccac4614c",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "as_str",
+      "before_line": 57,
+      "after_line": 57,
+      "before_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "after_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "from_precomputed",
+      "before_line": 80,
+      "after_line": 80,
+      "before_body_tokens_sha256": "600fc892d0a927fd2c846e43f4ffbf499b9316e43790f26074d4c5848d815fa2",
+      "after_body_tokens_sha256": "600fc892d0a927fd2c846e43f4ffbf499b9316e43790f26074d4c5848d815fa2",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "as_str",
+      "before_line": 91,
+      "after_line": 91,
+      "before_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "after_body_tokens_sha256": "643999d1eb99ec3e7b044eaccbd594fa5e01124f10d4ad758ed2e0d36b3cdda6",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+      "name": "build",
+      "before_line": 155,
+      "after_line": 155,
+      "before_body_tokens_sha256": "cad6fc8c60491d2f47054b52e9f0e930c2ee039d2043b5056443325d2796b52d",
+      "after_body_tokens_sha256": "cad6fc8c60491d2f47054b52e9f0e930c2ee039d2043b5056443325d2796b52d",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/fingerprint.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/fingerprint.rs",
+      "name": "hmac_sha256_hex",
+      "before_line": 28,
+      "after_line": 28,
+      "before_body_tokens_sha256": "5576ce0555f5117ed689051cacaf315587f4b5298f593043095f0da6460bb0b6",
+      "after_body_tokens_sha256": "5576ce0555f5117ed689051cacaf315587f4b5298f593043095f0da6460bb0b6",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/fingerprint.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/fingerprint.rs",
+      "name": "validate_fingerprint",
+      "before_line": 64,
+      "after_line": 64,
+      "before_body_tokens_sha256": "b9070d8be433a72d03d3439792903c9135e7e71b788e25e0291480ef52d40ff9",
+      "after_body_tokens_sha256": "b9070d8be433a72d03d3439792903c9135e7e71b788e25e0291480ef52d40ff9",
+      "equal": true
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/fingerprint.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/entity/fulfillment/fingerprint.rs",
+      "name": "sha256",
+      "before_line": 78,
+      "after_line": 78,
+      "before_body_tokens_sha256": "55a951ab51b46770edbb887a4ae328d43fe150105cbb3cfc81fe16c390cb5b4e",
+      "after_body_tokens_sha256": "55a951ab51b46770edbb887a4ae328d43fe150105cbb3cfc81fe16c390cb5b4e",
+      "equal": true
+    }
+  ],
+  "supporting_contract_comparisons": [
+    {
+      "path": "backend/crates/erp-processes/src/attachments/pending.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/crates/erp-party/src/service/party/sensitive.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/executor.rs",
+      "full_file_unchanged": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/fulfillment/mod.rs",
+      "name": "validate_service_evidence_upload",
+      "before_line": 558,
+      "after_line": 565,
+      "before_body_tokens_sha256": "9fb69e54e52503cf130295bde8fd25f419212501611b8758bf9e30d4f4e2ff85",
+      "after_body_tokens_sha256": "9fb69e54e52503cf130295bde8fd25f419212501611b8758bf9e30d4f4e2ff85",
+      "body_tokens_equal": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+      "name": "should_compensate_pending_assets",
+      "before_line": 524,
+      "after_line": 524,
+      "before_body_tokens_sha256": "c5a936d101ec423878af7af6b130d8e66b08b047f69d0577af2faa961d3eaf8f",
+      "after_body_tokens_sha256": "c5a936d101ec423878af7af6b130d8e66b08b047f69d0577af2faa961d3eaf8f",
+      "body_tokens_equal": true
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/dto.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "struct": "CreateElectronicDeliveryRequest",
+      "field_tokens_equal": true
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/dto.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "struct": "CreateServiceFulfillmentRequest",
+      "field_tokens_equal": true
+    },
+    {
+      "before_path": "backend/services/src/fulfillment/dto.rs",
+      "after_path": "backend/crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "struct": "ConfirmServiceFulfillmentRequest",
+      "field_tokens_equal": true
+    }
+  ],
+  "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "sealed_at": "2026-09-07T04:09:26.353734+00:00",
+  "seal_recheck": {
+    "after_files_checked_against_committed_bytes": 36,
+    "after_hash_changes_since_original_capture": [],
+    "all_scoped_working_files_match_source_commit": true,
+    "task_command_file_outside_D_scope": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+    "task_command_evidence": "/private/tmp/fulfillment12-task-evidence.json",
+    "repository_writes_performed": false
+  },
+  "integration_lib_log_verified": {
+    "executor": "root integration; this reviewer read the completed log only",
+    "log": "/private/tmp/erp-fulfillment12-lib-tests-2.log",
+    "sha256": "d73266848b7cfc85bd7e3b5c220cdfe8047d1e60ce1589e56ff56872fd4b664c",
+    "test_groups": 33,
+    "passed": 3440,
+    "failed": 0,
+    "ignored": 68,
+    "task_test_results": [
+      "test fulfillment_execution::task::command::tests::frozen_responsibility_mismatch_stops_before_authorization ... ok",
+      "test fulfillment_execution::task::command::tests::wrong_actor_stops_before_permission_revalidation ... ok",
+      "test fulfillment_execution::task::command::tests::task_command_preserves_executor_and_original_mutate_authorize_write_order ... ok",
+      "test fulfillment_execution::task::command::tests::task_command_stops_at_every_provider_failure ... ok"
+    ],
+    "real_database_execution": "not verified",
+    "original_13_inline_test_results": {
+      "electronic_delivery_policy_is_no_approval_identity_only": [
+        "test fulfillment_execution::electronic_delivery::electronic_delivery_no_approval_tests::electronic_delivery_policy_is_no_approval_identity_only ... ok"
+      ],
+      "create_registers_document_and_returns_empty_binding": [
+        "test finance_posting::receivable::invoice::invoice_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test fulfillment_execution::delivery::delivery_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test fulfillment_execution::customer_acceptance::registration::customer_acceptance_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test fulfillment_execution::electronic_delivery::electronic_delivery_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test fulfillment_execution::purchase_receipt::purchase_receipt_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test fulfillment_execution::service_fulfillment::service_fulfillment_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test returns::purchase_return::purchase_return_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok",
+        "test returns::sales_return::sales_return_case_no_approval_tests::create_registers_document_and_returns_empty_binding ... ok"
+      ],
+      "create_does_not_query_definition_or_start_instance": [
+        "test finance_posting::receivable::invoice::invoice_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test fulfillment_execution::delivery::delivery_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test fulfillment_execution::customer_acceptance::registration::customer_acceptance_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test fulfillment_execution::electronic_delivery::electronic_delivery_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test fulfillment_execution::purchase_receipt::purchase_receipt_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test fulfillment_execution::service_fulfillment::service_fulfillment_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test returns::purchase_return::purchase_return_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok",
+        "test returns::sales_return::sales_return_case_no_approval_tests::create_does_not_query_definition_or_start_instance ... ok"
+      ],
+      "create_uses_draft_factory_and_typed_fingerprint": [
+        "test fulfillment_execution::electronic_delivery::electronic_delivery_no_approval_tests::create_uses_draft_factory_and_typed_fingerprint ... ok"
+      ],
+      "recipient_fingerprint_golden_pins_algorithm_and_key_version": [
+        "test service::electronic_delivery_crypto::tests::recipient_fingerprint_golden_pins_algorithm_and_key_version ... ok"
+      ],
+      "service_fulfillment_policy_is_no_approval_identity_only": [
+        "test fulfillment_execution::service_fulfillment::service_fulfillment_no_approval_tests::service_fulfillment_policy_is_no_approval_identity_only ... ok"
+      ],
+      "create_uses_draft_factory_and_dual_fingerprints": [
+        "test fulfillment_execution::service_fulfillment::service_fulfillment_no_approval_tests::create_uses_draft_factory_and_dual_fingerprints ... ok"
+      ],
+      "dual_fingerprints_golden_pin_algorithm_and_key_version": [
+        "test service::service_fulfillment_crypto::tests::dual_fingerprints_golden_pin_algorithm_and_key_version ... ok"
+      ],
+      "confirmation_encrypts_normalized_service_location": [
+        "test fulfillment_execution::service_confirm::tests::confirmation_encrypts_normalized_service_location ... ok"
+      ],
+      "confirm_does_not_start_approval": [
+        "test fulfillment_execution::service_confirm::tests::confirm_does_not_start_approval ... ok"
+      ],
+      "evidence_rules_do_not_stay_in_service": [
+        "test fulfillment_execution::service_confirm::tests::evidence_rules_do_not_stay_in_service ... ok"
+      ]
+    }
+  }
+}

@@ -1,0 +1,248 @@
+{
+  "phase": "12",
+  "source_count": 45,
+  "owned_count": 5,
+  "all_old_sources_removed": true,
+  "remaining_old_sources": [],
+  "sources": [
+    {
+      "source": "database/src/indexes/fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/customer_acceptance.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/electronic_delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/purchase_receipt.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/purchase_receipt_totals.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/fulfillment/service_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/acceptance_eligibility.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/acceptance_fulfillment_allocation.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/customer_acceptance.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/customer_acceptance_line_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/delivery_line_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/electronic_delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/electronic_delivery_draft.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/fingerprint.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/purchase_receipt.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/purchase_receipt_line_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/service_evidence.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/service_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/fulfillment/service_fulfillment_draft.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/acceptance_eligibility.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/customer_acceptance.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/customer_acceptance_lines.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/customer_acceptance_posting.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/customer_acceptance_task.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/delivery_lines.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/delivery_posting.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/document_number.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/electronic_delivery.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/electronic_delivery_crypto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/purchase_context.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/purchase_receipt.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/purchase_receipt_lines.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/purchase_receipt_posting.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/service_fulfillment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/service_fulfillment_confirm.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/service_fulfillment_crypto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/fulfillment/task.rs",
+      "old_source_exists": false
+    }
+  ],
+  "owned": [
+    {
+      "entity": "CustomerAcceptance",
+      "owned_type": "CustomerAcceptanceRepository",
+      "preparation_phase": "01",
+      "owner_phase": "12",
+      "target_crate": "erp-fulfillment",
+      "prepare_at": "database/src/repository/owned/customer_acceptance.rs",
+      "final_type_definition": "crates/erp-fulfillment/src/repository/owned/customer_acceptance.rs",
+      "impl_sources": "database/src/repository/fulfillment/customer_acceptance.rs"
+    },
+    {
+      "entity": "Delivery",
+      "owned_type": "DeliveryRepository",
+      "preparation_phase": "01",
+      "owner_phase": "12",
+      "target_crate": "erp-fulfillment",
+      "prepare_at": "database/src/repository/owned/delivery.rs",
+      "final_type_definition": "crates/erp-fulfillment/src/repository/owned/delivery.rs",
+      "impl_sources": "database/src/repository/fulfillment/delivery.rs"
+    },
+    {
+      "entity": "ElectronicDelivery",
+      "owned_type": "ElectronicDeliveryRepository",
+      "preparation_phase": "01",
+      "owner_phase": "12",
+      "target_crate": "erp-fulfillment",
+      "prepare_at": "database/src/repository/owned/electronic_delivery.rs",
+      "final_type_definition": "crates/erp-fulfillment/src/repository/owned/electronic_delivery.rs",
+      "impl_sources": "database/src/repository/fulfillment/electronic_delivery.rs"
+    },
+    {
+      "entity": "PurchaseReceipt",
+      "owned_type": "PurchaseReceiptRepository",
+      "preparation_phase": "01",
+      "owner_phase": "12",
+      "target_crate": "erp-fulfillment",
+      "prepare_at": "database/src/repository/owned/purchase_receipt.rs",
+      "final_type_definition": "crates/erp-fulfillment/src/repository/owned/purchase_receipt.rs",
+      "impl_sources": "database/src/repository/fulfillment/purchase_receipt.rs"
+    },
+    {
+      "entity": "ServiceFulfillment",
+      "owned_type": "ServiceFulfillmentRepository",
+      "preparation_phase": "01",
+      "owner_phase": "12",
+      "target_crate": "erp-fulfillment",
+      "prepare_at": "database/src/repository/owned/service_fulfillment.rs",
+      "final_type_definition": "crates/erp-fulfillment/src/repository/owned/service_fulfillment.rs",
+      "impl_sources": "database/src/repository/fulfillment/service_fulfillment.rs"
+    }
+  ],
+  "extra_closure": [
+    "finance/sales/inventory repository fulfillment facts",
+    "inventory service fulfillment receipt and delivery writes",
+    "existing customer_acceptance process",
+    "procure_to_pay task/document_number consumers",
+    "HTTP and workbench consumers"
+  ]
+}

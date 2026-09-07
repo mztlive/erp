@@ -1,0 +1,4021 @@
+{
+  "schema_version": 1,
+  "phase": "12",
+  "evidence_kind": "manual_production_semantic_review",
+  "before_commit": "cf89fb4774fd3b81d477e9088be1d6c2f699f46e",
+  "before_repo": "/private/tmp/erp-domain-crate-11-procurement",
+  "after_repo": "/private/tmp/erp-domain-crate-12-fulfillment",
+  "reviewed_at_utc": "2026-09-07T04:07:49.370985+00:00",
+  "raw_dir": "/private/tmp/erp-fulfillment12-contract-sealed",
+  "raw_immutable_artifacts": [
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-sealed/contract-comparison.json",
+      "sha256": "29d22d71f65fd2ee9c97e61993dc8e88c0dece9bacb9389db6b5e357340165aa"
+    },
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-sealed/missing-drift-report.json",
+      "sha256": "d130e7c3ea08f116c88775756f41331b55134a99f75e32270bcba86da7532394"
+    },
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-sealed/transaction-contract.json",
+      "sha256": "f964c4689676c3fe609cc95aff00494b2ab60f78a59a507e9a900972e43ecb49"
+    }
+  ],
+  "raw_counts": {
+    "idempotency": 18,
+    "transaction": 16
+  },
+  "disposition_count": 34,
+  "status": "reviewed_no_semantic_drift_identified",
+  "unresolved_semantic_drift": [],
+  "resolved_editing_intermediate_states": [
+    "ReceiptReservationPosting::entry stale self.db reference was corrected by B to self.store.entry before final review; no production behavior change intended."
+  ],
+  "review_basis": "展开原/新真实生产wrapper、领域事务内方法、Mongo adapter、已有owned repository和错误映射；并非仅Port轨迹或terminal名称。",
+  "validation": {
+    "cargo_executed": false,
+    "mongo_executed": false,
+    "real_database_verified": false,
+    "raw_or_allowlist_modified": false,
+    "before_scoped_source_diff_to_commit": "empty",
+    "runtime_rollbacks_and_concurrency": "not_verified",
+    "source_changes_during_review": "Only explicitly authorized service_evidence.rs single-element test-loop lint fix; production source was read only.",
+    "independent_report_is_not_raw_status_override": true,
+    "raw_after_lexical_omissions_with_live_actual_symbol": 9,
+    "integration_gate_results": "Not executed by this reviewer; root reported 3440 passed / 0 failed / 68 ignored. Refer to root gate artifacts for verification."
+  },
+  "groups": {
+    "R1": {
+      "title": "采购收货根事务与库存真实adapter",
+      "result": "preserved",
+      "facts": [
+        "请求validate在事务前；事务内receipt find→draft/version→冻结仓校验→receipt.update（内存）→行读取/非空归属→采购读取/状态→PREPAY→当前版本再次读取/版本行→累计合格收货→Instant::now。",
+        "每行先当前采购行查找→已收数量→ensure_within_revision；合格数<=0跳过库存，成功后才更新内存received；没有提前批量校验后续行。",
+        "真实MongoReceiptStore：find_by_dimensions→increase_on_hand或next_id/new balance/create；之后movement ID→fact_no ID→movement create→apply_last_movement。",
+        "采购allocations读取→空分配短路→版本quantity→reservation_shares（最后份额吸收6位尾差）→销售版本行批量读取→每个销售归属查找→reservation ID/Active/零consumed/released→reservation create→reserve_quantity CAS→entry ID/Establish→entry create。",
+        "receipt.mark_posted/update→complete task→采购progress计算/set/update→自动仓发草稿→audit构造/create；所有步骤传同session，失败?中止后续。",
+        "已复看B完成的ReceiptReservationPosting::entry→self.store.entry→MongoReceiptStore::entry→原stock_reservation_entries.create，编辑中间态self.db引用已修正。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::execute_posting",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 139,
+          "body_sha256": "9d0bdb586d295b26a234bbb1d869173c7743d23831871afbd74a7f80de2a648c",
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::post_receipt_line",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 280,
+          "body_sha256": "c40e68e8c9c7f88c57cad58276f8eed058f1393e2fcda68c41a299fe01b853ed",
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::execute_receipt_stock",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 116,
+          "body_sha256": "b9422bcf89d6141310c27c10fb3b6ce838a3c9d1117cc658fc9ea9b33b66a729",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::execute_receipt_reservation",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 266,
+          "body_sha256": "a2cb995200f8ce219e7b7dbef613167c3442b25df6123e15a8741a99dc85b5bb",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ensure_or_create_balance",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 214,
+          "body_sha256": "dbd9680bccfbbfe8d4232453c696775f03cfda22f83c03af431df79a9a7d28e6",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        }
+      ],
+      "real_adapter_methods": [
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::balance",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 44,
+          "body_sha256": "3e721be505d79d9c01c6a4e471763c4e0808055f43a853a48915eeae76c84a52",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::increase",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 57,
+          "body_sha256": "6b3fcde2ac153c47e9000a1a000992ba9b35cab37e3457775dd9a982073ca3df",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::create_balance",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 60,
+          "body_sha256": "6113c46ab1366f85ba5d85b75598fdba4646cabdd81b5b682829ddb3db6c0af8",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::movement",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 64,
+          "body_sha256": "12db732e515045f7340b6224a607e7639522d075e25ab64c7b2d43ba57c6c5ce",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::last_movement",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 68,
+          "body_sha256": "e7cf9330afa96f896038c4ede1c4a69f124dcb38d645b4c60108664b1457e78a",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::reservation",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 80,
+          "body_sha256": "5d3ff8fa8c22f9263db50c7a75bb888cff1bbb8ed7b93e560a307c9421861c1f",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::reserve",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 84,
+          "body_sha256": "d34b75434016ffabe271caa8ee965beacffa25ad8802075bd1c29bcd0773505e",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::MongoReceiptStore::entry",
+          "implementation_trait": "ReceiptInventoryStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 87,
+          "body_sha256": "3ce3e623bf6c48f1fd626c27c48275519e548f83da0fd1575247b148d678e02e",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptStockPosting::balance",
+          "implementation_trait": "ReceiptStockSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 133,
+          "body_sha256": "678945c205578559893a69ce692696407541b1805a40dd96b522d1b08a8c4026",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptStockPosting::movement",
+          "implementation_trait": "ReceiptStockSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 143,
+          "body_sha256": "ec654795c7d2305995a41f7cf7e3c878d31098aa681f67d8fe95e597c1b10c92",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptStockPosting::last_movement",
+          "implementation_trait": "ReceiptStockSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 168,
+          "body_sha256": "c5ce9ee62db05c137521a7b5e69be3532f24eaac9a4bf3b170713f09664940fe",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptReservationPosting::reservation",
+          "implementation_trait": "ReceiptReservationSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 280,
+          "body_sha256": "954b56ebfcbbfe9c5e4688fe0af41787c67f17c6c50181bf571e691846526d10",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptReservationPosting::reserve",
+          "implementation_trait": "ReceiptReservationSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 300,
+          "body_sha256": "bb8d7b2c1a0465412ce91117b03ae58ef5254c952842df60ed0d3b728d8cbc2d",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::ReceiptReservationPosting::entry",
+          "implementation_trait": "ReceiptReservationSteps",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 312,
+          "body_sha256": "321d0712e1524c520ac891eca32ba5668a4b2fee276e5614034f372334829bda",
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        }
+      ]
+    },
+    "R2": {
+      "title": "发货根事务与库存真实adapter",
+      "result": "preserved",
+      "facts": [
+        "事务前validate；事务内delivery find→Draft→version→carrier/tracking update→lines非空→Instant::now。",
+        "WarehouseShip逐行：reservation_id存在→reservation查询→销售归属→预占量→发货仓存在/一致→balance查询→consume_quantity CAS→entry ID/Consume/create→release_reserved→deduct_available→movement ID/fact_no/create→apply_last_movement。",
+        "MongoShipmentStore每个方法转发原inventory owned仓储；既有repository quantity/state CAS文件未改变。",
+        "SupplierDirect仅来源采购ID→采购load→状态→PREPAY，没有库存写入；随后mark_shipped/update→complete task→ensure acceptance task→audit。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::post_warehouse_ship_line",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 51,
+          "body_sha256": "6b3c9296491cbb60525e1975566792b6f677dc82f96679634f6f627dcd0e5626",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::post_with_store",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 209,
+          "body_sha256": "548af36b93484b3ece896fd6d3a591604e5c10cf9d06a5db0dbfe9389cd0921b",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        }
+      ],
+      "real_adapter_methods": [
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::reservation",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 120,
+          "body_sha256": "bfef3625f2955b0dd81b106cddbcd6c492071d6626e2430fb891541ba8944899",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::balance",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 138,
+          "body_sha256": "da267db47772ea12763c367bbfaeb5aa9104b42cd331a8c8badcbb897b3d33a1",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::consume",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 151,
+          "body_sha256": "675e3ddb9083b994aa878bcc1a4c758dfce70816b99b43ad4a9bb06cbcf264ac",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::reservation_entry",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 158,
+          "body_sha256": "3fbad27b7881c3fb7ceae981a328ed7dd4d52666553aadad0264b98deb8d51db",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::release_reserved",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 166,
+          "body_sha256": "10b586727d192591c7e337d6308bdfcdcae33a7b8bdaceba020622953b85f5fa",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::deduct_available",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 178,
+          "body_sha256": "664725aae2b74f951c7da8d113f40de9a7a8bdc34de4ef5ae2760c73697d84a4",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::movement",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 190,
+          "body_sha256": "8983f675330f4273571a78adc0a742b3ab41420f841210a3bc24f5739d6bbd61",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::MongoShipmentStore::last_movement",
+          "implementation_trait": "ShipmentStore",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 194,
+          "body_sha256": "c816ae71aa60c037742d84f931f312807ebc9c1df183de5c13c70fdb0acfd2c3",
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        }
+      ]
+    },
+    "R3": {
+      "title": "自动仓发草稿幂等复用与编号",
+      "result": "preserved",
+      "facts": [
+        "收货行空短路；按receipt line IDs读取未删除预占，无状态新增过滤；预占空短路；HashSet收集销售稳定行ID（保留原集合语义）→批量读取→缺归属原错；BTreeMap按sales_order_id+warehouse_id顺序处理。",
+        "已有draft：delivery lines读取→existing reservation IDs→过滤pending→max line_no+1→仅pending逐项next_id→DeliveryLineBatch→逐行create→ensure task。",
+        "新draft：先delivery ID再next_delivery_no再构造header，再逐行ID/Batch/header+lines写入，最后ensure task。",
+        "DocumentNumberGenerator仍以NoTransaction自增，Shanghai固定+08:00日期求值位置不变，号码消耗不随业务事务回收。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::ensure_receipt_stock_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 480,
+          "body_sha256": "f47c0b424e82fa40e6eae6e0a1dbb244139c7e9db0a664f43191b3ebe9973bb3",
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::DocumentNumberGenerator::next_delivery_no",
+          "path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+          "line": 26,
+          "body_sha256": "1e920c353231cb69400885984c52d7a22381a840413b65bb33e4217849a56d67",
+          "source_sha256": "e6be719ee5af769c4d6f6350e3c73564bdead31145a3ff85adc1d7fb75ff9fe1"
+        }
+      ]
+    },
+    "R4": {
+      "title": "发货创建与更新",
+      "result": "preserved",
+      "facts": [
+        "create_delivery wrapper仍存在；prepare_delivery依次validate→header next_id→Delivery::new→delivery_line_specs逐行next_id→Batch；audit在事务前构造。",
+        "组合persist_created_delivery只持一个根事务：NO_APPROVAL binding decision/adapter guard/registration→domain header+lines→ensure task→audit。",
+        "update_delivery读取/版本检查/实体update/audit构造在NoTransaction和根事务之前；事务内owned update→activity→audit。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::delivery::register_created_delivery_document",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 222,
+          "body_sha256": "58c3e7656673da704b7eeba0e2585cd36140bd6a9f4df367c4debcb40d7125c1",
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        }
+      ]
+    },
+    "R5": {
+      "title": "采购收货创建与更新",
+      "result": "preserved",
+      "facts": [
+        "create准备依次validate→header ID→PurchaseReceipt::new→line specs逐行ID/Batch；audit仍在persist根事务前。",
+        "根事务registration→header/lines→ensure task→audit；registration仍NoApproval且没有审批任务/流程绑定新增。",
+        "update准备依次validate→NoTransaction find→version→冻结仓→实体update；audit构造在事务前，事务内update→activity→audit。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt::register_created_purchase_receipt_document",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "line": 278,
+          "body_sha256": "9968cbda10cc73d24f8352f838a7b98318b33f79c319b9e7e88a7efea2fe531b",
+          "source_sha256": "76ba4da93f4ff90839f643d5cb1f33e66e359ddf3eeb99e0d05990ff8099f152"
+        }
+      ]
+    },
+    "R6": {
+      "title": "客户验收reverse回执、写序和完成投影",
+      "result": "preserved",
+      "facts": [
+        "reverse request validate→CommandReceipt::from_resource_parts固定prefix/action/resource/id/key/[expected_version,reason]→事务前committed_resource_id回放；事务失败后再次同query，成功回放detail，不扩大普通post幂等行为。",
+        "persist_customer_acceptance_reverse在前后函数体逐字相同：original load/reversible→原行→原分配→ensure_reversible_source→reverse header next_id+REV-no+Instant::now→镜像行next_id→按原分配顺序reverse allocation next_id+原allocation引用→header/lines create→逐分配create→reverse header mark_posted/update→original reverse/update。",
+        "write_acceptance_allocation和load_fulfillment_fact前后函数体逐字相同；履约头行仓储写序和serde不变。",
+        "completion真实DatabaseCompletion先同Executor读取销售current revision/lines/goods、三类履约、三类分配，再唯一资格builder/derive；builder只字段路径改为窄facts，保重复stable line后行覆盖required量与首次顺序。",
+        "None不写销售进度也不刷新money；有投影则显式三枚举等价映射→原sales progress writer；reverse仅remaining=true时ensure_customer_acceptance_task，随后原resource业务audit→command receipt audit。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::customer_acceptance_posting::write_acceptance_allocation",
+          "path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+          "line": 391,
+          "body_sha256": "c5aa7c4287f3eefb6a6d645d78548b73a4a47c01e8274de078f6632de1793d2d",
+          "source_sha256": "534ce8effe9b37baf0f49f50f8aa0465fabbe87593894629ab73eb3713df2619"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::customer_acceptance_posting::load_fulfillment_fact",
+          "path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+          "line": 455,
+          "body_sha256": "7e9820cc20186fb91b99f10b568309cb2c1037290b0376cf2ba2ff004743941c",
+          "source_sha256": "534ce8effe9b37baf0f49f50f8aa0465fabbe87593894629ab73eb3713df2619"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::finish",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 73,
+          "body_sha256": "161fe64ee06f4ff9886c2874295547ec8cf16e9ec223f3db1d899682688fa4ff",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::apply_projection",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 173,
+          "body_sha256": "43d3564aafc28261938a622b4b77b14a010e8973c1e9d170b3ee1dc7d2765042",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::acceptance_eligibility::build_line_eligibilities",
+          "path": "backend/crates/erp-fulfillment/src/service/acceptance_eligibility.rs",
+          "line": 49,
+          "body_sha256": "d002d601b44e7a2671b452c5898a0341eb3af16059e70034e067b0a4f34bbb1b",
+          "source_sha256": "d7e83c5db1875050ea7ba4b7703cdbe2825dd17a47bc3314cedac96529cc8541"
+        },
+        {
+          "qualified_symbol": "erp_read_models::fulfillment_center::repository::load_customer_acceptance_progress",
+          "path": "backend/crates/erp-read-models/src/fulfillment_center/repository.rs",
+          "line": 24,
+          "body_sha256": "5229b604294fa557f37f23709e5b3870d7a438c76306f00495b7c9faf4ea05cd",
+          "source_sha256": "d3568391843fc79659fa222fd720c30c45b22df8066b42c60c02c080ebb95382"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::task::ensure_customer_acceptance_task",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+          "line": 44,
+          "body_sha256": "f03e33af5f602340674771dc27012cd3880f7950a243e3195829cbc59cb9796e",
+          "source_sha256": "8eca450070a8c2d603609bbf7510a5a55e86722acc0f4652b731549671b83fc2"
+        }
+      ],
+      "real_adapter_methods": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::DatabaseCompletion::refresh_sales",
+          "implementation_trait": "AcceptanceCompletion",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 98,
+          "body_sha256": "0996363b03f2ff0553f2280891d55d59334cb8ef7e7ae830392388a6c1ccdfb6",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::DatabaseCompletion::persist_task",
+          "implementation_trait": "AcceptanceCompletion",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 117,
+          "body_sha256": "fe3b80e5a63d35803f06a36f3b7a9a2d3c334e01a5f67e8a0329b8d49fc302a3",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::DatabaseCompletion::business_audit",
+          "implementation_trait": "AcceptanceCompletion",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 142,
+          "body_sha256": "2fe38fe90c932b125304b30df5982a6762c8a78cc1d935872930a386b1b9a7f2",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::DatabaseCompletion::command_receipt",
+          "implementation_trait": "AcceptanceCompletion",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 157,
+          "body_sha256": "227382466b90d2f009a6c94c5b1bf8d8d721d2150b240dfebe3b14ac867acf77",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::SalesProgressWriter::write",
+          "implementation_trait": "AcceptanceSalesProgress",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 202,
+          "body_sha256": "cf2d0a7a140a2995859f44f2e256458cc0101f654ad3b38de281244e3ca2b3bb",
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        }
+      ]
+    },
+    "R7": {
+      "title": "任务读取、冻结身份、授权与写入",
+      "result": "preserved",
+      "facts": [
+        "独立对比task及acceptance task原生产函数；除路径/可见性和record/complete抽Port外函数体同构。",
+        "record/complete展开command::execute→MongoTaskCommand：load_single_open_task→ensure frozen identity→Instant::now+WorkItem变更→ensure_current_owner_execution_access→owned update。没有将授权移到WorkItem业务错误之前。",
+        "验收ensure_customer_acceptance_task与reopen来源reason枚举/ID/clock/owner/RBAC/open查询顺序保持。",
+        "实施者额外证据仅作补充引用：/private/tmp/fulfillment12-task-evidence.json；本结论已独立展开真实adapter。"
+      ],
+      "production_anchors": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::command::execute",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+          "line": 50,
+          "body_sha256": "be3c7f96893ad44354859ab8d1ea5cfd1f07ee4737305703f5a386e4ebabf478",
+          "source_sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::record_fulfillment_activity",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+          "line": 232,
+          "body_sha256": "e417de9abb1faf56f8b99d10d60c9b6767d8821c95c572e516a2f8cee41b785d",
+          "source_sha256": "98eb722997dc67c2ea3d58ba9c8ffc4bb3db515ad523af57a4e0891bef12e625"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::complete_fulfillment_task",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+          "line": 254,
+          "body_sha256": "ae28ec77c6db37596c3b8e44a5f2929e58fce6bb928a8f6dc2a964a9e31b0d56",
+          "source_sha256": "98eb722997dc67c2ea3d58ba9c8ffc4bb3db515ad523af57a4e0891bef12e625"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::task::ensure_customer_acceptance_task",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+          "line": 44,
+          "body_sha256": "f03e33af5f602340674771dc27012cd3880f7950a243e3195829cbc59cb9796e",
+          "source_sha256": "8eca450070a8c2d603609bbf7510a5a55e86722acc0f4652b731549671b83fc2"
+        }
+      ],
+      "real_adapter_methods": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::command::MongoTaskCommand::load_open",
+          "implementation_trait": "TaskCommandPort",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+          "line": 34,
+          "body_sha256": "529cdb459941367631adf693330a1b80e736133e71bb92ab3afdaf7b4ef31fee",
+          "source_sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::command::MongoTaskCommand::authorize",
+          "implementation_trait": "TaskCommandPort",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+          "line": 42,
+          "body_sha256": "5995d8a712d58d158d3063e3e3c48b7c83b7c82ec6210178f61ee13ecba01482",
+          "source_sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::task::command::MongoTaskCommand::update",
+          "implementation_trait": "TaskCommandPort",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+          "line": 45,
+          "body_sha256": "41718b0a2580bf8fed2b0a21dc9979f204c3301cec5016a5b43d3de6c3f6ed4b",
+          "source_sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4"
+        }
+      ]
+    },
+    "R8": {
+      "title": "组合状态与本域服务归属",
+      "result": "preserved",
+      "facts": [
+        "原FulfillmentService五个字段db/fingerprint_key/sensitive_data/rbac/object_read完整转给FulfillmentProcess；new仍同shared_rbac_service、同FailClosed默认。",
+        "新本域FulfillmentService仅db，domain()只clone db，无查询、ID、clock或新增根事务。"
+      ]
+    },
+    "D": {
+      "title": "电子交付/服务确认独立审核",
+      "result": "preserved",
+      "evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "facts": [
+        "独立报告核销旧五叶35个生产函数：20个主目标函数体token相同，15个变化逐项展开真实Provider；六个支持实体文件64个生产函数体token相同；13个旧内联测试入口保留。",
+        "电子确认保持本域读取/状态首错→来源采购/付款门槛→分配→confirm/update→complete task→无条件ensure acceptance task→audit，一个根事务。",
+        "服务确认在事务外保留validate→证据resolve/all-used→规范化地点→原codec加密→同明文HMAC→时间转换/确认实体；关联错误类型保留services Error分类。",
+        "事务内MongoServiceConfirmation依次load→purchase→allocation→evidence→pending persist（file assets后audit logs）→confirm/update→task→仅成功且eligible时acceptance→audit，全部同Executor。",
+        "真实finance/sales事实Provider保持原条件；附件敏感性和保留枚举显式映射；OutcomeUnknown传播与HTTP保留已上传对象分类不变。",
+        "独立报告以0a297ab0为输入；其26个before文件已逐字节核对等于本报告要求的cf89fb47，36个after文件在本报告合并时hash仍一致。"
+      ]
+    }
+  },
+  "entries": [
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::confirm_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "6fc0f0b81497f540e621a1a7bc541be1da558054dc5ba1f5749affd4b5f25b5a",
+          "line": 204
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "187ef7f61cfc9229ad19edfc29782a78dfed9c796ae76ebd09ca2ce28dc9153e",
+          "line": 101
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::confirm_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 204,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::confirm_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 101,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_electronic_confirmation",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 146,
+          "body_sha256": "a8c6bf53e27a9ffa7af409f39a8d974afefc70ef99c8c161ea48fc1bda508edd",
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_electronic_confirmation",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 164,
+          "body_sha256": "448101e2c61c2f8b150d118f84682b02e8dbbe0943e1ce6b003abebfa914cf2d",
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original load/state guard and state mutation/write delegated to domain at unchanged process positions; procurement gates/task/acceptance/audit retained；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "confirm_electronic_delivery",
+          "line": 204,
+          "end_line": 266,
+          "body_sha256": "e9c61fdc3ada45acfc35bc6d56e18e38339bfaf96ae78be522ff5128f984730f",
+          "tokens_sha256": "8788d66d59cd296f2445b2857faa84bacec53643a23dc96f7136dc28ec5dcf4d",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "confirm_electronic_delivery",
+            "line": 101,
+            "end_line": 159,
+            "body_sha256": "1a63c66af00f5cd66fa6dc7412f53c6895a13c55d1536ce07e685e0f675f0004",
+            "tokens_sha256": "dfd6ece49727fff1d43dbd7fc3e1dc0caee62184e2c490cdb9cf31b92b6abab4",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          },
+          {
+            "name": "prepare_electronic_confirmation",
+            "line": 146,
+            "end_line": 161,
+            "body_sha256": "a8c6bf53e27a9ffa7af409f39a8d974afefc70ef99c8c161ea48fc1bda508edd",
+            "tokens_sha256": "992470db1211364a6d332907aef10b366664c019e41e55d77d4f99d3efe99fc8",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          },
+          {
+            "name": "persist_electronic_confirmation",
+            "line": 164,
+            "end_line": 172,
+            "body_sha256": "448101e2c61c2f8b150d118f84682b02e8dbbe0943e1ce6b003abebfa914cf2d",
+            "tokens_sha256": "9f5d22ba2165abb2aaf480d64dc88b04a9190509af85d0d28718842abc3252e1",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original load/state guard and state mutation/write delegated to domain at unchanged process positions; procurement gates/task/acceptance/audit retained"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "6fc0f0b81497f540e621a1a7bc541be1da558054dc5ba1f5749affd4b5f25b5a",
+          "line": 204
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "187ef7f61cfc9229ad19edfc29782a78dfed9c796ae76ebd09ca2ce28dc9153e",
+          "line": 101
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::confirm_service_fulfillment_with_assets",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "78da9c4831d0f5eaf04d0a6f723f4a7ce9b72b5842629c92ac077f4a8e055d42",
+          "line": 82
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "9fed33c482f78bf1d65f51c55b5367cb6dfee8135757ecbad2773a855b2043ae",
+          "line": 83
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::confirm_service_fulfillment_with_assets",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "line": 82,
+          "source_sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::confirm_service_fulfillment_with_assets",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "line": 83,
+          "source_sha256": "e6a59d6ff1ad9e5ff6767b6bd5e371c8bd7dba4450bf8323d51102b6412e2bfb"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "same request validation, pending resolve/all-used, confirmation factory before root; inject original codec adapter；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "confirm_service_fulfillment_with_assets",
+          "line": 82,
+          "end_line": 106,
+          "body_sha256": "353e2338e9d0dd7a864ce82e7bf4429bd1b92909adda945f98933784debcaa6f",
+          "tokens_sha256": "f42cdea88439a07aba83128d76b8a2404691c2bdf99a012c9d376c9668d68b0d",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+        },
+        "after": [
+          {
+            "name": "confirm_service_fulfillment_with_assets",
+            "line": 83,
+            "end_line": 107,
+            "body_sha256": "729d92f0fb63115524b02f8dc2bd89617a9b28e9570c61e335b5203f97b6eead",
+            "tokens_sha256": "5e523627a1f9338ec7d8930faef6a1a7d4cf90941c748c6fa1344e1974cc26bd",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "same request validation, pending resolve/all-used, confirmation factory before root; inject original codec adapter"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "78da9c4831d0f5eaf04d0a6f723f4a7ce9b72b5842629c92ac077f4a8e055d42",
+          "line": 82
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "9fed33c482f78bf1d65f51c55b5367cb6dfee8135757ecbad2773a855b2043ae",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::create_delivery",
+          "token_sha256": "3b3fab3557eb9bdca0b3b63af9dea796c9848424607fd4f12dfe97c527d740fd",
+          "line": 150
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 150,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 44,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 117,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::delivery::persist_created_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 244,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "原外层仍存在；请求校验→表头ID→Delivery构造→逐行ID→行批工厂前移到本域prepare，仍在根事务之前。扫描器未选wrapper不表示删除。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::create_delivery",
+          "token_sha256": "3b3fab3557eb9bdca0b3b63af9dea796c9848424607fd4f12dfe97c527d740fd",
+          "line": 150
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f046afa101ad2a37c21464406cfea220fa2d7615c049e833cfce12784cf7814c",
+          "line": 159
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f4305025edea1fb0b3f7af49af92e301f1c4955e6aed3845ff57e69e9621c39f",
+          "line": 56
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 159,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 56,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "factory actor.id projection only; same validation/construction/persist order；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "create_electronic_delivery",
+          "line": 159,
+          "end_line": 175,
+          "body_sha256": "1371e0b4cb039744114c425d5a11351713e66a7dd78412d70caca64b9f77732a",
+          "tokens_sha256": "ddb5029acd73414ef8faf7e7225128181080d62347345726298a00710e01506d",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "create_electronic_delivery",
+            "line": 56,
+            "end_line": 72,
+            "body_sha256": "535b91c3d5eeffe7f190116563cb81f9cda13a452546f82311642af1d9f85ee2",
+            "tokens_sha256": "5113e4034b86181b0a6c866ed22e9351314a8346c424f26ce83351202dc5ce83",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f046afa101ad2a37c21464406cfea220fa2d7615c049e833cfce12784cf7814c",
+          "line": 159
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f4305025edea1fb0b3f7af49af92e301f1c4955e6aed3845ff57e69e9621c39f",
+          "line": 56
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_receipt_stock_delivery",
+      "raw_before": [],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "symbol": "fn::create_receipt_stock_delivery",
+          "token_sha256": "6ad0d4376c8b15a31f7f8a20d5536d3c92e844749163457c6939bd6a78d6fbd6",
+          "line": 79
+        }
+      ],
+      "actual_before_selected": [],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::create_receipt_stock_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 79,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        }
+      ],
+      "disposition": "extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R3",
+      "review": "原ensure_receipt_stock_delivery的新建分支抽出；保持header ID→NoTransaction业务单号→header构造→逐行ID→header/line写入，随后wrapper创建任务。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "symbol": "fn::create_receipt_stock_delivery",
+          "token_sha256": "6ad0d4376c8b15a31f7f8a20d5536d3c92e844749163457c6939bd6a78d6fbd6",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_service_fulfillment",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "5365ba17ff2e7a424f90eb141e9ba94a5e7f4598e61341b2c4057404f0bce944",
+          "line": 157
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "c2d58c71846e142a1d9add9d7b637ab77bebb6bbd588cfdfa454ac4eb398038b",
+          "line": 53
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_service_fulfillment",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "line": 157,
+          "source_sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_service_fulfillment",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "line": 53,
+          "source_sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "factory actor.id projection only; same validation/construction/persist order；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "create_service_fulfillment",
+          "line": 157,
+          "end_line": 173,
+          "body_sha256": "4f87fe4bed668c6d0d96a6904bd4fd835701a9018e01adf4a57c6aec34156612",
+          "tokens_sha256": "0047330fa3f8063123f6b464f2a87f7bb5b1c94309e9b8548c34bb75021ce6c6",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+        },
+        "after": [
+          {
+            "name": "create_service_fulfillment",
+            "line": 53,
+            "end_line": 69,
+            "body_sha256": "6f35ddf82d0eee05050ee5568d9e8bf3c6660c04304f073e5ed48a9c2fc846cb",
+            "tokens_sha256": "d2967322fd3d7661b2addf2cd98dffb77fc82b8cd36eabb91aeae16db14780bc",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "5365ba17ff2e7a424f90eb141e9ba94a5e7f4598e61341b2c4057404f0bce944",
+          "line": 157
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "c2d58c71846e142a1d9add9d7b637ab77bebb6bbd588cfdfa454ac4eb398038b",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::electronic_delivery_draft_from_request",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+          "symbol": "fn::electronic_delivery_draft_from_request",
+          "token_sha256": "91586208b7326796ac28e3f14c32b6626a4b3a2a200fc04c14572de9913aabe5",
+          "line": 50
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+          "symbol": "fn::electronic_delivery_draft_from_request",
+          "token_sha256": "2b7dbfff1fedab4f8f6a46f9ce25e3317ef8252d66b328cbb055a49dce323b2d",
+          "line": 49
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::electronic_delivery_crypto::electronic_delivery_draft_from_request",
+          "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+          "line": 50,
+          "source_sha256": "3501ec7565001d533088f9da10d70834e9c5d0a93fff93f558ca0a7f2c8e0bb9"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::electronic_delivery_crypto::electronic_delivery_draft_from_request",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+          "line": 49,
+          "source_sha256": "1b69894895a597f78b99bbce0d214779ea8322503f0f06da0500691b5c66d3a7"
+        }
+      ],
+      "disposition": "relocated_or_extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "electronic_delivery_draft_from_request",
+          "line": 50,
+          "end_line": 79,
+          "body_sha256": "68cdef11d2c9b310ac5dd34e8795dc54d1727558096c7fab23ce2d89a7ef3f28",
+          "tokens_sha256": "ddb90d45dcc0efb65764ba7d95336610d5f7cfc4acdbe421a4148b3c809aa91e",
+          "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs"
+        },
+        "after": [
+          {
+            "name": "electronic_delivery_draft_from_request",
+            "line": 49,
+            "end_line": 78,
+            "body_sha256": "c6bcdca08f06d0c6b2cb9057dd68c666f2418fde056416a921a2fdce7649d637",
+            "tokens_sha256": "475cdc6ca6fc3f5fd7d2ca1aca9b5fd9227648c27e4ef0df20f47986f8ed18a8",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+          "symbol": "fn::electronic_delivery_draft_from_request",
+          "token_sha256": "91586208b7326796ac28e3f14c32b6626a4b3a2a200fc04c14572de9913aabe5",
+          "line": 50
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+          "symbol": "fn::electronic_delivery_draft_from_request",
+          "token_sha256": "2b7dbfff1fedab4f8f6a46f9ce25e3317ef8252d66b328cbb055a49dce323b2d",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::ensure_receipt_stock_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::ensure_receipt_stock_delivery",
+          "token_sha256": "818dccb62137695cd2e246a3722c4f3db198d3b192dd36e77c39cbaf04a20cac",
+          "line": 502
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::purchase_receipt_posting::ensure_receipt_stock_delivery",
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "line": 502,
+          "source_sha256": "36236a635d20085d7891fe1b01451cf4af6ce34616a6c9c89e2ded7863b28b72"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::ensure_receipt_stock_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 480,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::create_receipt_stock_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 79,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::append_receipt_stock_delivery_lines",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 115,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R3",
+      "review": "原wrapper仍存在；现有同仓草稿补行与新建分支拆入本域，task仍在组合层，扫描器漏选不得判删除。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::ensure_receipt_stock_delivery",
+          "token_sha256": "818dccb62137695cd2e246a3722c4f3db198d3b192dd36e77c39cbaf04a20cac",
+          "line": 502
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_created_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "7f7ec227fccd539c91bf1b30faacc8c67ee987c616c21a4041fc01936bc6a588",
+          "line": 423
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::delivery::persist_created_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 423,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::delivery::persist_created_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 244,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 172,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "组合free function保留根事务；领域同名关联方法仅写表头/行。必须按qualified owner区分，不按terminal name认定重复事务。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "7f7ec227fccd539c91bf1b30faacc8c67ee987c616c21a4041fc01936bc6a588",
+          "line": 423
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_created_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "764809e9bdd9f98f2e6990cb2d705a90b5bc1e1730b0e6c97f38fe33504d1302",
+          "line": 429
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "9298ff165978c51dbf4ba8f41516f16dea81a6c3763c5141a45bc156366d2b21",
+          "line": 303
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::electronic_delivery::persist_created_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 429,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::electronic_delivery::persist_created_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 303,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_electronic_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 134,
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "persist_created_electronic_delivery",
+          "line": 429,
+          "end_line": 469,
+          "body_sha256": "17fe1f304b4e6aff789c216ebfd44fb3cb92edaf6a0d4e541ff77b1bc0b8c9c1",
+          "tokens_sha256": "ed193b8366bc03ef96926aa1d335bba9cc413bb911fbc2eafcbcf3a46381f4b0",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "persist_created_electronic_delivery",
+            "line": 303,
+            "end_line": 345,
+            "body_sha256": "ac5e424b8d7668e5c24d5f0ed84a23288fcf57ebfc66276a5cf883ee367d8d11",
+            "tokens_sha256": "e72508ca4de721bbfef2c9910dfa282ee9732df65c5a3e7c6b50c2c1e4679acb",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          },
+          {
+            "name": "persist_created_electronic_delivery",
+            "line": 134,
+            "end_line": 141,
+            "body_sha256": "2462c18adc70437c6b8c33b683e79d646e1832df0d37eaeef3274ac51c7027e6",
+            "tokens_sha256": "7947fd739d81d4275b958c0abeca9eed34da7f6c22a25c46155e474e39c2506a",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "764809e9bdd9f98f2e6990cb2d705a90b5bc1e1730b0e6c97f38fe33504d1302",
+          "line": 429
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "9298ff165978c51dbf4ba8f41516f16dea81a6c3763c5141a45bc156366d2b21",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_created_service_fulfillment",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "c91ee78de7c327bf6c18c82982a3faa70c336a0c2b8cac51e08c2a3d48db8e25",
+          "line": 336
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "94163c6a17ac4f8fb59d4ce037f6dd029d899bb522b8c1da19774e41700abe62",
+          "line": 213
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::service_fulfillment::persist_created_service_fulfillment",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "line": 336,
+          "source_sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::service_fulfillment::persist_created_service_fulfillment",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "line": 213,
+          "source_sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_service_fulfillment",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs",
+          "line": 134,
+          "source_sha256": "d075f44821c3ee03775dd3caa839c4a8d500f16b8f4641e265165647b8ab1e82"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "persist_created_service_fulfillment",
+          "line": 336,
+          "end_line": 376,
+          "body_sha256": "e22a23702b539b571a11aae69a8fbe3b5453ef56f311505009c9aaedf170b992",
+          "tokens_sha256": "f54f4c74fbc0a3fc99f13998ad254dff4df3c0a627d02d33c2275dd4c04e6a66",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+        },
+        "after": [
+          {
+            "name": "persist_created_service_fulfillment",
+            "line": 213,
+            "end_line": 255,
+            "body_sha256": "0bd69082c26282c23eb6cfb4b767c3b2cc37c8e952542e856d219fb889a68bf6",
+            "tokens_sha256": "d064e79026e7ab2e606393a805d12f7e50bd7853b4e35d0b15cd96336e9a262f",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+          },
+          {
+            "name": "persist_created_service_fulfillment",
+            "line": 134,
+            "end_line": 141,
+            "body_sha256": "1c087f042c2c2698043ff3147a589fce0c55ab8f1f7d3dc5b2549d707d975eda",
+            "tokens_sha256": "70eb48f37f6f04273ac03ffb8ce606baf17ca26aac59e4f63bbf2f819bb3983d",
+            "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "c91ee78de7c327bf6c18c82982a3faa70c336a0c2b8cac51e08c2a3d48db8e25",
+          "line": 336
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "94163c6a17ac4f8fb59d4ce037f6dd029d899bb522b8c1da19774e41700abe62",
+          "line": 213
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::post_purchase_receipt",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "454cf065a3832233db7eae0b8d7a4549766420dd23ba2a5ce07c06f67674a18a",
+          "line": 67
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::post_purchase_receipt",
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "line": 67,
+          "source_sha256": "36236a635d20085d7891fe1b01451cf4af6ce34616a6c9c89e2ded7863b28b72"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::post_purchase_receipt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 56,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_purchase_receipt_posting",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 16,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::post_receipt_line",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 280,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::post_receipt_stock",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 182,
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::establish_receipt_reservation",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 327,
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R1",
+      "review": "原外层仍在；准备、本域状态、库存余额/流水/预占下沉到各领域的事务内接口，按原逐行顺序调用同一个Executor。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "454cf065a3832233db7eae0b8d7a4549766420dd23ba2a5ce07c06f67674a18a",
+          "line": 67
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::prepare_delivery",
+      "raw_before": [],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "symbol": "fn::prepare_delivery",
+          "token_sha256": "b232b66f7aa43a29897c7626438a56e0e960e6358bf8ae420a2186521d4390a3",
+          "line": 117
+        }
+      ],
+      "actual_before_selected": [],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 117,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        }
+      ],
+      "disposition": "extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "新增方法是原create_delivery的纯准备段；没有新增业务动作或幂等规则。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "symbol": "fn::prepare_delivery",
+          "token_sha256": "b232b66f7aa43a29897c7626438a56e0e960e6358bf8ae420a2186521d4390a3",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::service_confirmation_from_request",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "f033c898d674dbd2aa0540680d015756e480793ca224f55208182e96e5cfedd1",
+          "line": 125
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "fe96366e61064feef4377e7e037bb98613a5cfbce49c189210e7a183cdecc851",
+          "line": 32
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::service_fulfillment_confirm::service_confirmation_from_request",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "line": 125,
+          "source_sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+          "line": 32,
+          "source_sha256": "73eca6d500dd81e0cb330151c2f94d050099f4b2f2757ff3450ed6c5cb9ffce1"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::service_crypto::ServiceCryptoAdapter::encrypt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs",
+          "line": 13,
+          "body_sha256": "231f234a0ba25a8b95837e038e743f79a6cd124b2ee6ab4603daac39e3381c22",
+          "source_sha256": "19b70f2b674899818910cfbf95a67a1fa115f106c4961d3b501ff20687c9ee82"
+        }
+      ],
+      "disposition": "relocated_or_extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "same normalized location and original codec via ServiceLocationCryptoPort; associated provider error preserves original error category；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "service_confirmation_from_request",
+          "line": 125,
+          "end_line": 148,
+          "body_sha256": "f97d9c78b5726107e32ae5d1e3bfa13103174cc03e08733aaeea33669177ddcb",
+          "tokens_sha256": "e211bc22da1a4dc58833213927a42936f19111ae2bdde709a76d9b08d6d03130",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+        },
+        "after": [
+          {
+            "name": "service_confirmation_from_request",
+            "line": 32,
+            "end_line": 56,
+            "body_sha256": "a27a876dc513afbf8b43c8331eef1aa0fd29a98b470dcf16db491200ea10af74",
+            "tokens_sha256": "fe7035a37e54b9755eaa590a7d7f8e0c61c96d0702365c35a601f54cee5c6ee1",
+            "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs"
+          },
+          {
+            "name": "encrypt",
+            "line": 13,
+            "end_line": 15,
+            "body_sha256": "231f234a0ba25a8b95837e038e743f79a6cd124b2ee6ab4603daac39e3381c22",
+            "tokens_sha256": "427b7e22d5930c21d2f3a2d4eb48e60fd4da33cf6bd35d418f91b7feff3cca4f",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "same normalized location and original codec via ServiceLocationCryptoPort; associated provider error preserves original error category"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "f033c898d674dbd2aa0540680d015756e480793ca224f55208182e96e5cfedd1",
+          "line": 125
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "fe96366e61064feef4377e7e037bb98613a5cfbce49c189210e7a183cdecc851",
+          "line": 32
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::service_fulfillment_draft_from_request",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+          "symbol": "fn::service_fulfillment_draft_from_request",
+          "token_sha256": "881a4aacd0555cf3a14a809c90f04d51bc59fc8240af0494c5637e6f231c8708",
+          "line": 70
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+          "symbol": "fn::service_fulfillment_draft_from_request",
+          "token_sha256": "aa90cdfbee7949d001f669991c0500abb281090a0bdb640fc84b88c579674b07",
+          "line": 69
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::service_fulfillment_crypto::service_fulfillment_draft_from_request",
+          "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+          "line": 70,
+          "source_sha256": "251aa7e366a47470e3cd0e7793174ef5eb8243058d4b4de7ec0057a9d207dc17"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::service_fulfillment_crypto::service_fulfillment_draft_from_request",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+          "line": 69,
+          "source_sha256": "05d49be711e27a1ad384477e5be1900897962d110c064503b6f0e7f2410d8edb"
+        }
+      ],
+      "disposition": "relocated_or_extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "service_fulfillment_draft_from_request",
+          "line": 70,
+          "end_line": 107,
+          "body_sha256": "7ada0c2c73345ed08ad21e47fb15f816cc6f8adaa17e45ef5ac056e602739c65",
+          "tokens_sha256": "afe0416c1824047d51b6e8d7c99bdc24fe464e016513461c2410a1ea285fbed9",
+          "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs"
+        },
+        "after": [
+          {
+            "name": "service_fulfillment_draft_from_request",
+            "line": 69,
+            "end_line": 106,
+            "body_sha256": "d6896972c19bea5501589998bae015da92669750fd244243107da9234495dfcb",
+            "tokens_sha256": "a304d224e9b7ff0bca7759b0381997c3abab3c59d4c16394681ac254034b32b7",
+            "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "AuditActor projected to actor.id() by process; factory accepts actor_id; evaluation/ID/clock/fingerprint order retained"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+          "symbol": "fn::service_fulfillment_draft_from_request",
+          "token_sha256": "881a4aacd0555cf3a14a809c90f04d51bc59fc8240af0494c5637e6f231c8708",
+          "line": 70
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+          "symbol": "fn::service_fulfillment_draft_from_request",
+          "token_sha256": "aa90cdfbee7949d001f669991c0500abb281090a0bdb640fc84b88c579674b07",
+          "line": 69
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::update_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "9d70eea0c9eda5c236e2bdfbadf56be799331d06460caf6925f2d6de22ab3886",
+          "line": 208
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::update_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 208,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::update_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 80,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery_update",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 148,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 189,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "外层仍在：NoTransaction读取/版本/字段校验及audit构造均在根事务外；事务内update→activity→audit。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "9d70eea0c9eda5c236e2bdfbadf56be799331d06460caf6925f2d6de22ab3886",
+          "line": 208
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "struct::FulfillmentProcess",
+      "raw_before": [],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+          "symbol": "struct::FulfillmentProcess",
+          "token_sha256": "2998e05c33cdf73c37a78c0cdb230816f77c1d5c1b8a52d8b2411f8f921dcc5a",
+          "line": 23
+        }
+      ],
+      "actual_before_selected": [],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+          "line": 23,
+          "source_sha256": "c3a937ca9942ace08035a8ab6c1600cd7f260f1287d6f62ca4880f9cfb1538ab"
+        }
+      ],
+      "disposition": "ownership_split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R8",
+      "review": "新增process承接原服务db/key/codec/rbac/object_read；FailClosed默认与真实入口配置保持。不是新增幂等过程。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+          "symbol": "struct::FulfillmentProcess",
+          "token_sha256": "2998e05c33cdf73c37a78c0cdb230816f77c1d5c1b8a52d8b2411f8f921dcc5a",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "struct::FulfillmentService",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/mod.rs",
+          "symbol": "struct::FulfillmentService",
+          "token_sha256": "308a9dea84cf09965961b5c3d7e6fcd458f0a87d7c66fb230fa08c51aa163827",
+          "line": 71
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService",
+          "path": "backend/services/src/fulfillment/mod.rs",
+          "line": 71,
+          "source_sha256": "8dec1394ce4fd844ebfb31d1c072ea356169406ae6d8d2c78d1a41e8bc0d7cf5"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService",
+          "path": "backend/crates/erp-fulfillment/src/service/mod.rs",
+          "line": 23,
+          "source_sha256": "66740b770594440c7a27448284ee1734fe337570ffd511b97b10df2e17097242"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+          "line": 23,
+          "source_sha256": "c3a937ca9942ace08035a8ab6c1600cd7f260f1287d6f62ca4880f9cfb1538ab"
+        }
+      ],
+      "disposition": "ownership_split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R8",
+      "review": "旧services类型已迁出；本域FulfillmentService仍存在，仅持db；跨域状态移给FulfillmentProcess。scanner未选本域类型不表示服务删除。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/mod.rs",
+          "symbol": "struct::FulfillmentService",
+          "token_sha256": "308a9dea84cf09965961b5c3d7e6fcd458f0a87d7c66fb230fa08c51aa163827",
+          "line": 71
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::confirm_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "6fc0f0b81497f540e621a1a7bc541be1da558054dc5ba1f5749affd4b5f25b5a",
+          "line": 204
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "187ef7f61cfc9229ad19edfc29782a78dfed9c796ae76ebd09ca2ce28dc9153e",
+          "line": 101
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::confirm_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 204,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::confirm_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 101,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_electronic_confirmation",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 146,
+          "body_sha256": "a8c6bf53e27a9ffa7af409f39a8d974afefc70ef99c8c161ea48fc1bda508edd",
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_electronic_confirmation",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 164,
+          "body_sha256": "448101e2c61c2f8b150d118f84682b02e8dbbe0943e1ce6b003abebfa914cf2d",
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original load/state guard and state mutation/write delegated to domain at unchanged process positions; procurement gates/task/acceptance/audit retained；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "confirm_electronic_delivery",
+          "line": 204,
+          "end_line": 266,
+          "body_sha256": "e9c61fdc3ada45acfc35bc6d56e18e38339bfaf96ae78be522ff5128f984730f",
+          "tokens_sha256": "8788d66d59cd296f2445b2857faa84bacec53643a23dc96f7136dc28ec5dcf4d",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "confirm_electronic_delivery",
+            "line": 101,
+            "end_line": 159,
+            "body_sha256": "1a63c66af00f5cd66fa6dc7412f53c6895a13c55d1536ce07e685e0f675f0004",
+            "tokens_sha256": "dfd6ece49727fff1d43dbd7fc3e1dc0caee62184e2c490cdb9cf31b92b6abab4",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          },
+          {
+            "name": "prepare_electronic_confirmation",
+            "line": 146,
+            "end_line": 161,
+            "body_sha256": "a8c6bf53e27a9ffa7af409f39a8d974afefc70ef99c8c161ea48fc1bda508edd",
+            "tokens_sha256": "992470db1211364a6d332907aef10b366664c019e41e55d77d4f99d3efe99fc8",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          },
+          {
+            "name": "persist_electronic_confirmation",
+            "line": 164,
+            "end_line": 172,
+            "body_sha256": "448101e2c61c2f8b150d118f84682b02e8dbbe0943e1ce6b003abebfa914cf2d",
+            "tokens_sha256": "9f5d22ba2165abb2aaf480d64dc88b04a9190509af85d0d28718842abc3252e1",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original load/state guard and state mutation/write delegated to domain at unchanged process positions; procurement gates/task/acceptance/audit retained"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "6fc0f0b81497f540e621a1a7bc541be1da558054dc5ba1f5749affd4b5f25b5a",
+          "line": 204
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::confirm_electronic_delivery",
+          "token_sha256": "187ef7f61cfc9229ad19edfc29782a78dfed9c796ae76ebd09ca2ce28dc9153e",
+          "line": 101
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::confirm_service_fulfillment_with_assets",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "78da9c4831d0f5eaf04d0a6f723f4a7ce9b72b5842629c92ac077f4a8e055d42",
+          "line": 82
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "9fed33c482f78bf1d65f51c55b5367cb6dfee8135757ecbad2773a855b2043ae",
+          "line": 83
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::confirm_service_fulfillment_with_assets",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "line": 82,
+          "source_sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::confirm_service_fulfillment_with_assets",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "line": 83,
+          "source_sha256": "e6a59d6ff1ad9e5ff6767b6bd5e371c8bd7dba4450bf8323d51102b6412e2bfb"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "same request validation, pending resolve/all-used, confirmation factory before root; inject original codec adapter；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "confirm_service_fulfillment_with_assets",
+          "line": 82,
+          "end_line": 106,
+          "body_sha256": "353e2338e9d0dd7a864ce82e7bf4429bd1b92909adda945f98933784debcaa6f",
+          "tokens_sha256": "f42cdea88439a07aba83128d76b8a2404691c2bdf99a012c9d376c9668d68b0d",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+        },
+        "after": [
+          {
+            "name": "confirm_service_fulfillment_with_assets",
+            "line": 83,
+            "end_line": 107,
+            "body_sha256": "729d92f0fb63115524b02f8dc2bd89617a9b28e9570c61e335b5203f97b6eead",
+            "tokens_sha256": "5e523627a1f9338ec7d8930faef6a1a7d4cf90941c748c6fa1344e1974cc26bd",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "same request validation, pending resolve/all-used, confirmation factory before root; inject original codec adapter"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "78da9c4831d0f5eaf04d0a6f723f4a7ce9b72b5842629c92ac077f4a8e055d42",
+          "line": 82
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+          "symbol": "fn::confirm_service_fulfillment_with_assets",
+          "token_sha256": "9fed33c482f78bf1d65f51c55b5367cb6dfee8135757ecbad2773a855b2043ae",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::create_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::create_delivery",
+          "token_sha256": "3b3fab3557eb9bdca0b3b63af9dea796c9848424607fd4f12dfe97c527d740fd",
+          "line": 150
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 150,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 44,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 117,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::delivery::persist_created_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 244,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "原外层仍存在；请求校验→表头ID→Delivery构造→逐行ID→行批工厂前移到本域prepare，仍在根事务之前。扫描器未选wrapper不表示删除。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::create_delivery",
+          "token_sha256": "3b3fab3557eb9bdca0b3b63af9dea796c9848424607fd4f12dfe97c527d740fd",
+          "line": 150
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::create_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f046afa101ad2a37c21464406cfea220fa2d7615c049e833cfce12784cf7814c",
+          "line": 159
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f4305025edea1fb0b3f7af49af92e301f1c4955e6aed3845ff57e69e9621c39f",
+          "line": 56
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 159,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 56,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "factory actor.id projection only; same validation/construction/persist order；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "create_electronic_delivery",
+          "line": 159,
+          "end_line": 175,
+          "body_sha256": "1371e0b4cb039744114c425d5a11351713e66a7dd78412d70caca64b9f77732a",
+          "tokens_sha256": "ddb5029acd73414ef8faf7e7225128181080d62347345726298a00710e01506d",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "create_electronic_delivery",
+            "line": 56,
+            "end_line": 72,
+            "body_sha256": "535b91c3d5eeffe7f190116563cb81f9cda13a452546f82311642af1d9f85ee2",
+            "tokens_sha256": "5113e4034b86181b0a6c866ed22e9351314a8346c424f26ce83351202dc5ce83",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f046afa101ad2a37c21464406cfea220fa2d7615c049e833cfce12784cf7814c",
+          "line": 159
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::create_electronic_delivery",
+          "token_sha256": "f4305025edea1fb0b3f7af49af92e301f1c4955e6aed3845ff57e69e9621c39f",
+          "line": 56
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::create_service_fulfillment",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "5365ba17ff2e7a424f90eb141e9ba94a5e7f4598e61341b2c4057404f0bce944",
+          "line": 157
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "c2d58c71846e142a1d9add9d7b637ab77bebb6bbd588cfdfa454ac4eb398038b",
+          "line": 53
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::create_service_fulfillment",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "line": 157,
+          "source_sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::create_service_fulfillment",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "line": 53,
+          "source_sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "factory actor.id projection only; same validation/construction/persist order；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "create_service_fulfillment",
+          "line": 157,
+          "end_line": 173,
+          "body_sha256": "4f87fe4bed668c6d0d96a6904bd4fd835701a9018e01adf4a57c6aec34156612",
+          "tokens_sha256": "0047330fa3f8063123f6b464f2a87f7bb5b1c94309e9b8548c34bb75021ce6c6",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+        },
+        "after": [
+          {
+            "name": "create_service_fulfillment",
+            "line": 53,
+            "end_line": 69,
+            "body_sha256": "6f35ddf82d0eee05050ee5568d9e8bf3c6660c04304f073e5ed48a9c2fc846cb",
+            "tokens_sha256": "d2967322fd3d7661b2addf2cd98dffb77fc82b8cd36eabb91aeae16db14780bc",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "factory actor.id projection only; same validation/construction/persist order"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "5365ba17ff2e7a424f90eb141e9ba94a5e7f4598e61341b2c4057404f0bce944",
+          "line": 157
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::create_service_fulfillment",
+          "token_sha256": "c2d58c71846e142a1d9add9d7b637ab77bebb6bbd588cfdfa454ac4eb398038b",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::ensure_receipt_stock_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::ensure_receipt_stock_delivery",
+          "token_sha256": "818dccb62137695cd2e246a3722c4f3db198d3b192dd36e77c39cbaf04a20cac",
+          "line": 502
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::purchase_receipt_posting::ensure_receipt_stock_delivery",
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "line": 502,
+          "source_sha256": "36236a635d20085d7891fe1b01451cf4af6ce34616a6c9c89e2ded7863b28b72"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::ensure_receipt_stock_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 480,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::create_receipt_stock_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 79,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::append_receipt_stock_delivery_lines",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 115,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R3",
+      "review": "原wrapper仍存在；现有同仓草稿补行与新建分支拆入本域，task仍在组合层，扫描器漏选不得判删除。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::ensure_receipt_stock_delivery",
+          "token_sha256": "818dccb62137695cd2e246a3722c4f3db198d3b192dd36e77c39cbaf04a20cac",
+          "line": 502
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_created_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "7f7ec227fccd539c91bf1b30faacc8c67ee987c616c21a4041fc01936bc6a588",
+          "line": 423
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "42e460da7d225e804b92770db22b2bf8f627795331b08058af3bc33d63a7358c",
+          "line": 244
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::delivery::persist_created_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 423,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::delivery::persist_created_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 244,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 172,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "组合free function保留根事务；领域同名关联方法仅写表头/行。必须按qualified owner区分，不按terminal name认定重复事务。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "7f7ec227fccd539c91bf1b30faacc8c67ee987c616c21a4041fc01936bc6a588",
+          "line": 423
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "symbol": "fn::persist_created_delivery",
+          "token_sha256": "42e460da7d225e804b92770db22b2bf8f627795331b08058af3bc33d63a7358c",
+          "line": 244
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_created_electronic_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "764809e9bdd9f98f2e6990cb2d705a90b5bc1e1730b0e6c97f38fe33504d1302",
+          "line": 429
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "9298ff165978c51dbf4ba8f41516f16dea81a6c3763c5141a45bc156366d2b21",
+          "line": 303
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::electronic_delivery::persist_created_electronic_delivery",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "line": 429,
+          "source_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::electronic_delivery::persist_created_electronic_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "line": 303,
+          "source_sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_electronic_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+          "line": 134,
+          "source_sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "persist_created_electronic_delivery",
+          "line": 429,
+          "end_line": 469,
+          "body_sha256": "17fe1f304b4e6aff789c216ebfd44fb3cb92edaf6a0d4e541ff77b1bc0b8c9c1",
+          "tokens_sha256": "ed193b8366bc03ef96926aa1d335bba9cc413bb911fbc2eafcbcf3a46381f4b0",
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs"
+        },
+        "after": [
+          {
+            "name": "persist_created_electronic_delivery",
+            "line": 303,
+            "end_line": 345,
+            "body_sha256": "ac5e424b8d7668e5c24d5f0ed84a23288fcf57ebfc66276a5cf883ee367d8d11",
+            "tokens_sha256": "e72508ca4de721bbfef2c9910dfa282ee9732df65c5a3e7c6b50c2c1e4679acb",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs"
+          },
+          {
+            "name": "persist_created_electronic_delivery",
+            "line": 134,
+            "end_line": 141,
+            "body_sha256": "2462c18adc70437c6b8c33b683e79d646e1832df0d37eaeef3274ac51c7027e6",
+            "tokens_sha256": "7947fd739d81d4275b958c0abeca9eed34da7f6c22a25c46155e474e39c2506a",
+            "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "764809e9bdd9f98f2e6990cb2d705a90b5bc1e1730b0e6c97f38fe33504d1302",
+          "line": 429
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+          "symbol": "fn::persist_created_electronic_delivery",
+          "token_sha256": "9298ff165978c51dbf4ba8f41516f16dea81a6c3763c5141a45bc156366d2b21",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_created_purchase_receipt",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "symbol": "fn::persist_created_purchase_receipt",
+          "token_sha256": "cd67061d5b82212e15f42f64448745d20df8f30c07a05d39cea922f4ba3a73b2",
+          "line": 479
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "symbol": "fn::persist_created_purchase_receipt",
+          "token_sha256": "5cdb624d3bba11e060951361af28f9b8dccfcc6866fad74cdd9fc9306a55341d",
+          "line": 301
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::purchase_receipt::persist_created_purchase_receipt",
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "line": 479,
+          "source_sha256": "7cb8352f088625aa7375a0ba1ce2ebea2816fccafe311682f63914d8143fc351"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt::persist_created_purchase_receipt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "line": 301,
+          "source_sha256": "76ba4da93f4ff90839f643d5cb1f33e66e359ddf3eeb99e0d05990ff8099f152"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_purchase_receipt",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt.rs",
+          "line": 168,
+          "source_sha256": "9c318c3d67c28637d980dec73f36511f9ffceac7ee1cc79f02b7b77e57ea7bc1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R5",
+      "review": "根事务仍只由process free function持有，本域同名方法只写头行；NO_APPROVAL注册→头行→执行任务→审计保持。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "symbol": "fn::persist_created_purchase_receipt",
+          "token_sha256": "cd67061d5b82212e15f42f64448745d20df8f30c07a05d39cea922f4ba3a73b2",
+          "line": 479
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "symbol": "fn::persist_created_purchase_receipt",
+          "token_sha256": "5cdb624d3bba11e060951361af28f9b8dccfcc6866fad74cdd9fc9306a55341d",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_created_service_fulfillment",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "c91ee78de7c327bf6c18c82982a3faa70c336a0c2b8cac51e08c2a3d48db8e25",
+          "line": 336
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "94163c6a17ac4f8fb59d4ce037f6dd029d899bb522b8c1da19774e41700abe62",
+          "line": 213
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::service_fulfillment::persist_created_service_fulfillment",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "line": 336,
+          "source_sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::service_fulfillment::persist_created_service_fulfillment",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "line": 213,
+          "source_sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_created_service_fulfillment",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs",
+          "line": 134,
+          "source_sha256": "d075f44821c3ee03775dd3caa839c4a8d500f16b8f4641e265165647b8ab1e82"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "external_symbol_record": {
+        "before": {
+          "name": "persist_created_service_fulfillment",
+          "line": 336,
+          "end_line": 376,
+          "body_sha256": "e22a23702b539b571a11aae69a8fbe3b5453ef56f311505009c9aaedf170b992",
+          "tokens_sha256": "f54f4c74fbc0a3fc99f13998ad254dff4df3c0a627d02d33c2275dd4c04e6a66",
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs"
+        },
+        "after": [
+          {
+            "name": "persist_created_service_fulfillment",
+            "line": 213,
+            "end_line": 255,
+            "body_sha256": "0bd69082c26282c23eb6cfb4b767c3b2cc37c8e952542e856d219fb889a68bf6",
+            "tokens_sha256": "d064e79026e7ab2e606393a805d12f7e50bd7853b4e35d0b15cd96336e9a262f",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs"
+          },
+          {
+            "name": "persist_created_service_fulfillment",
+            "line": 134,
+            "end_line": 141,
+            "body_sha256": "1c087f042c2c2698043ff3147a589fce0c55ab8f1f7d3dc5b2549d707d975eda",
+            "tokens_sha256": "70eb48f37f6f04273ac03ffb8ce606baf17ca26aac59e4f63bbf2f819bb3983d",
+            "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "original single repository create delegated to domain service, at same position after no-approval registration and before task/audit"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "c91ee78de7c327bf6c18c82982a3faa70c336a0c2b8cac51e08c2a3d48db8e25",
+          "line": 336
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+          "symbol": "fn::persist_created_service_fulfillment",
+          "token_sha256": "94163c6a17ac4f8fb59d4ce037f6dd029d899bb522b8c1da19774e41700abe62",
+          "line": 213
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::post_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery_posting.rs",
+          "symbol": "fn::post_delivery",
+          "token_sha256": "5b8925bea0a097fb4a8564f854d422da05896fb49045e6ea40b594663cb9d377",
+          "line": 51
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
+          "symbol": "fn::post_delivery",
+          "token_sha256": "a1097a21526d7b8d1b54ad136ab6928b5890039797482bae6a4e980a5e697771",
+          "line": 45
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::post_delivery",
+          "path": "backend/services/src/fulfillment/delivery_posting.rs",
+          "line": 51,
+          "source_sha256": "dc8884d9a55e97f698768cb2b43fc0e09f4f65042a90eee96c95fdb15f308c97"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::post_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
+          "line": 45,
+          "source_sha256": "a70303db50397ea847affcff834c0d604ab5d09e1b753893b39a3c3e6f42ff0a"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery_posting",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery_posting.rs",
+          "line": 18,
+          "source_sha256": "f201c74f808bc7bce779d54b199ce3d898fa978eef47bfab3170a0e1db6f7770"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::delivery::post_with_store",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+          "line": 209,
+          "source_sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_posted_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery_posting.rs",
+          "line": 53,
+          "source_sha256": "f201c74f808bc7bce779d54b199ce3d898fa978eef47bfab3170a0e1db6f7770"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R2",
+      "review": "真实MongoShipmentStore逐项访问原owned仓储；WarehouseShip原库存写序和SupplierDirect采购/PREPAY分支保留。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery_posting.rs",
+          "symbol": "fn::post_delivery",
+          "token_sha256": "5b8925bea0a097fb4a8564f854d422da05896fb49045e6ea40b594663cb9d377",
+          "line": 51
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
+          "symbol": "fn::post_delivery",
+          "token_sha256": "f46bf71383476beff78c668868345b38c0794a4b2842d5c36ea203a639f3cae3",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::post_purchase_receipt",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "454cf065a3832233db7eae0b8d7a4549766420dd23ba2a5ce07c06f67674a18a",
+          "line": 67
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "a50c0fb62d0cee7c09b3f7d55add65215a90498209daa5fefb63f04f42f0f30d",
+          "line": 56
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::post_purchase_receipt",
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "line": 67,
+          "source_sha256": "36236a635d20085d7891fe1b01451cf4af6ce34616a6c9c89e2ded7863b28b72"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::post_purchase_receipt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 56,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_purchase_receipt_posting",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+          "line": 16,
+          "source_sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::purchase_receipt_posting::post_receipt_line",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "line": 280,
+          "source_sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::post_receipt_stock",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 182,
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        },
+        {
+          "qualified_symbol": "erp_inventory::service::fulfillment::establish_receipt_reservation",
+          "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+          "line": 327,
+          "source_sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R1",
+      "review": "原外层仍在；准备、本域状态、库存余额/流水/预占下沉到各领域的事务内接口，按原逐行顺序调用同一个Executor。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "454cf065a3832233db7eae0b8d7a4549766420dd23ba2a5ce07c06f67674a18a",
+          "line": 67
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+          "symbol": "fn::post_purchase_receipt",
+          "token_sha256": "a50c0fb62d0cee7c09b3f7d55add65215a90498209daa5fefb63f04f42f0f30d",
+          "line": 56
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::reverse_customer_acceptance",
+      "raw_before": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "symbol": "fn::reverse_customer_acceptance",
+          "token_sha256": "8677e86009cba52b2fc51cc688dee8bd6f2cd204c513204b18128ae3b23ff63f",
+          "line": 46
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "symbol": "fn::reverse_customer_acceptance",
+          "token_sha256": "5b1f212309c23f47147a0fd3ba346c2a7cd946fb21a0b41f874381871500819c",
+          "line": 46
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess::reverse_customer_acceptance",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "line": 46,
+          "source_sha256": "41bf70409360f9552ccd64e9b0bbfc43bc9ec78ce32ee78636da57b4273f0404"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess::reverse_customer_acceptance",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "line": 46,
+          "source_sha256": "789f92729b2953bff7a3dfe69bb568e35b8d5e36653f47fa67976030da9fec7d"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_customer_acceptance_reverse",
+          "path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+          "line": 209,
+          "source_sha256": "534ce8effe9b37baf0f49f50f8aa0465fabbe87593894629ab73eb3713df2619"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::customer_acceptance::completion::complete_acceptance",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+          "line": 48,
+          "source_sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5"
+        },
+        {
+          "qualified_symbol": "erp_read_models::fulfillment_center::repository::load_customer_acceptance_progress",
+          "path": "backend/crates/erp-read-models/src/fulfillment_center/repository.rs",
+          "line": 24,
+          "source_sha256": "d3568391843fc79659fa222fd720c30c45b22df8066b42c60c02c080ebb95382"
+        }
+      ],
+      "disposition": "relocated_dependencies_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R6",
+      "review": "命令回执前后查询、反向事实写序、完成副作用与条件reopen不变；查询服务域归属改变，未删除wrapper或增加回执。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "symbol": "fn::reverse_customer_acceptance",
+          "token_sha256": "8677e86009cba52b2fc51cc688dee8bd6f2cd204c513204b18128ae3b23ff63f",
+          "line": 46
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+          "symbol": "fn::reverse_customer_acceptance",
+          "token_sha256": "5b1f212309c23f47147a0fd3ba346c2a7cd946fb21a0b41f874381871500819c",
+          "line": 46
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::service_confirmation_from_request",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "f033c898d674dbd2aa0540680d015756e480793ca224f55208182e96e5cfedd1",
+          "line": 125
+        }
+      ],
+      "raw_after": [],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::service_fulfillment_confirm::service_confirmation_from_request",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "line": 125,
+          "source_sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request",
+          "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+          "line": 32,
+          "source_sha256": "73eca6d500dd81e0cb330151c2f94d050099f4b2f2757ff3450ed6c5cb9ffce1"
+        },
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::service_crypto::ServiceCryptoAdapter::encrypt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs",
+          "line": 13,
+          "body_sha256": "231f234a0ba25a8b95837e038e743f79a6cd124b2ee6ab4603daac39e3381c22",
+          "source_sha256": "19b70f2b674899818910cfbf95a67a1fa115f106c4961d3b501ff20687c9ee82"
+        }
+      ],
+      "disposition": "relocated_or_extracted_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "D",
+      "review": "same normalized location and original codec via ServiceLocationCryptoPort; associated provider error preserves original error category；静态核销依据 D 报告对应生产链，任务内部额外使用本报告 R7 独立核对。",
+      "external_evidence": [
+        "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+        "/private/tmp/fulfillment12-electronic-service-source-map.json"
+      ],
+      "scanner_after_omission_is_not_symbol_deletion": true,
+      "external_symbol_record": {
+        "before": {
+          "name": "service_confirmation_from_request",
+          "line": 125,
+          "end_line": 148,
+          "body_sha256": "f97d9c78b5726107e32ae5d1e3bfa13103174cc03e08733aaeea33669177ddcb",
+          "tokens_sha256": "e211bc22da1a4dc58833213927a42936f19111ae2bdde709a76d9b08d6d03130",
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs"
+        },
+        "after": [
+          {
+            "name": "service_confirmation_from_request",
+            "line": 32,
+            "end_line": 56,
+            "body_sha256": "a27a876dc513afbf8b43c8331eef1aa0fd29a98b470dcf16db491200ea10af74",
+            "tokens_sha256": "fe7035a37e54b9755eaa590a7d7f8e0c61c96d0702365c35a601f54cee5c6ee1",
+            "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs"
+          },
+          {
+            "name": "encrypt",
+            "line": 13,
+            "end_line": 15,
+            "body_sha256": "231f234a0ba25a8b95837e038e743f79a6cd124b2ee6ab4603daac39e3381c22",
+            "tokens_sha256": "427b7e22d5930c21d2f3a2d4eb48e60fd4da33cf6bd35d418f91b7feff3cca4f",
+            "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs"
+          }
+        ],
+        "primary_tokens_equal": false,
+        "review_disposition": "preserved_static_review",
+        "adaptation": "same normalized location and original codec via ServiceLocationCryptoPort; associated provider error preserves original error category"
+      },
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "symbol": "fn::service_confirmation_from_request",
+          "token_sha256": "f033c898d674dbd2aa0540680d015756e480793ca224f55208182e96e5cfedd1",
+          "line": 125
+        }
+      ],
+      "initial_raw_after": []
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::update_delivery",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "9d70eea0c9eda5c236e2bdfbadf56be799331d06460caf6925f2d6de22ab3886",
+          "line": 208
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "141ffa02f6bbb0e1a12c7c7870a2df10b9318a03193ca3ab49f1d0f29aa4e4e8",
+          "line": 80
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::update_delivery",
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "line": 208,
+          "source_sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::update_delivery",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "line": 80,
+          "source_sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_delivery_update",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 148,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_delivery",
+          "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+          "line": 189,
+          "source_sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R4",
+      "review": "外层仍在：NoTransaction读取/版本/字段校验及audit构造均在根事务外；事务内update→activity→audit。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "9d70eea0c9eda5c236e2bdfbadf56be799331d06460caf6925f2d6de22ab3886",
+          "line": 208
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+          "symbol": "fn::update_delivery",
+          "token_sha256": "141ffa02f6bbb0e1a12c7c7870a2df10b9318a03193ca3ab49f1d0f29aa4e4e8",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::update_purchase_receipt",
+      "raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "symbol": "fn::update_purchase_receipt",
+          "token_sha256": "d2ff0f21c173a4e7a3629a5bfbd36a96ec88766683f9fef23b84265582e8b4d9",
+          "line": 213
+        }
+      ],
+      "raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "symbol": "fn::update_purchase_receipt",
+          "token_sha256": "cd44548ad61138029436fd7d221cf162938c071b00d8789430c750c86a2138c6",
+          "line": 88
+        }
+      ],
+      "actual_before_selected": [
+        {
+          "qualified_symbol": "services::fulfillment::FulfillmentService::update_purchase_receipt",
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "line": 213,
+          "source_sha256": "7cb8352f088625aa7375a0ba1ce2ebea2816fccafe311682f63914d8143fc351"
+        }
+      ],
+      "actual_after": [
+        {
+          "qualified_symbol": "erp_processes::fulfillment_execution::FulfillmentProcess::update_purchase_receipt",
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "line": 88,
+          "source_sha256": "76ba4da93f4ff90839f643d5cb1f33e66e359ddf3eeb99e0d05990ff8099f152"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::prepare_purchase_receipt_update",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt.rs",
+          "line": 136,
+          "source_sha256": "9c318c3d67c28637d980dec73f36511f9ffceac7ee1cc79f02b7b77e57ea7bc1"
+        },
+        {
+          "qualified_symbol": "erp_fulfillment::service::FulfillmentService::persist_purchase_receipt",
+          "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt.rs",
+          "line": 181,
+          "source_sha256": "9c318c3d67c28637d980dec73f36511f9ffceac7ee1cc79f02b7b77e57ea7bc1"
+        }
+      ],
+      "disposition": "split_preserved",
+      "semantic_result": "preserved",
+      "evidence_group": "R5",
+      "review": "原版本/目标仓冻结/实体update/audit构造保留事务外位置；事务内update→任务activity→audit保持。",
+      "external_evidence": [],
+      "scanner_after_omission_is_not_symbol_deletion": false,
+      "initial_raw_before": [
+        {
+          "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+          "symbol": "fn::update_purchase_receipt",
+          "token_sha256": "d2ff0f21c173a4e7a3629a5bfbd36a96ec88766683f9fef23b84265582e8b4d9",
+          "line": 213
+        }
+      ],
+      "initial_raw_after": [
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+          "symbol": "fn::update_purchase_receipt",
+          "token_sha256": "cd44548ad61138029436fd7d221cf162938c071b00d8789430c750c86a2138c6",
+          "line": 90
+        }
+      ]
+    }
+  ],
+  "after_source_snapshots": [
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/acceptance_eligibility.rs",
+      "sha256": "d7e83c5db1875050ea7ba4b7703cdbe2825dd17a47bc3314cedac96529cc8541",
+      "production_token_sha256": "f7a98ee813fbecafabbd0cae55ac935cd0be4fc44275e22de6c4320a00bda441",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+      "sha256": "534ce8effe9b37baf0f49f50f8aa0465fabbe87593894629ab73eb3713df2619",
+      "production_token_sha256": "8c99ce24c0b21e9892a0135851709284d08f463ec4f9af3e42ebe7a67ccac328",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/delivery.rs",
+      "sha256": "00aeb1f5413f02c4a7bc46dd2ae512d0d18220afcd39de757cb1292a6324901b",
+      "production_token_sha256": "d49755e5083afc30f51a6173cbdcdcf3e8478610ecf686fba181d2f558a93a1b",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/delivery_lines.rs",
+      "sha256": "b664384fdc14b98efa8580074c9752482e6b278f34aa459457e8a997cc3ce3ff",
+      "production_token_sha256": "691dfed4c58d6fc6e004fe1839847d19eb7c049b799fd002817a63f0ef922341",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/delivery_posting.rs",
+      "sha256": "f201c74f808bc7bce779d54b199ce3d898fa978eef47bfab3170a0e1db6f7770",
+      "production_token_sha256": "e4df64a3c339e36b1d4fa10496aa6d43399f30d83cff2551bd1a9a8fc777e4de",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "sha256": "e6be719ee5af769c4d6f6350e3c73564bdead31145a3ff85adc1d7fb75ff9fe1",
+      "production_token_sha256": "9e459cec97205e5ca084b509d53ec3bdd47c641ff8cfee900d315486404512d8",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery.rs",
+      "sha256": "bf8d87d8945565cd08febea25c0358ce98f0a13f240d4eb278d818f6715230f1",
+      "production_token_sha256": "7afad4eaa6c64200ff0900a2bcd86a5400eddc8bbc4090903ba825a4fd824025",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs",
+      "sha256": "1b69894895a597f78b99bbce0d214779ea8322503f0f06da0500691b5c66d3a7",
+      "production_token_sha256": "9bb2ee03d8f5e9c292c07c3d03a507fa2be8e073e4c34cac31c36f56ee9dd3ea",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/mod.rs",
+      "sha256": "66740b770594440c7a27448284ee1734fe337570ffd511b97b10df2e17097242",
+      "production_token_sha256": "8d020ce5373264d1b31742283b3839aaec79f2410268fce0d156808473d9cb1d",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt.rs",
+      "sha256": "9c318c3d67c28637d980dec73f36511f9ffceac7ee1cc79f02b7b77e57ea7bc1",
+      "production_token_sha256": "47132f72730ec06a2c81309090bfa77f6d2fee7ec8db0daff90c1359a2edc494",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs",
+      "sha256": "880f029f16a21f30aeb6b3733df86dc9d7e30323a262dc234270ff9e4f6ee336",
+      "production_token_sha256": "feabcc451fff60018ca4f030b74ca41695c7cd91ebc297bf754b67ee6682ef9e",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment.rs",
+      "sha256": "d075f44821c3ee03775dd3caa839c4a8d500f16b8f4641e265165647b8ab1e82",
+      "production_token_sha256": "5e7e7b5a0c8277a2224ef31c3cf95006e83a81d6b2498d2f8a248648f77d4030",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs",
+      "sha256": "73eca6d500dd81e0cb330151c2f94d050099f4b2f2757ff3450ed6c5cb9ffce1",
+      "production_token_sha256": "c28913323f979c434b2c6f2bdd6bc200c00dbd8fd18875cd2fc66a8af8943f3c",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs",
+      "sha256": "05d49be711e27a1ad384477e5be1900897962d110c064503b6f0e7f2410d8edb",
+      "production_token_sha256": "cb8d03b044b914bb2619e2aa520f9123db75de6c5582f2201af857a0ee1bd4f2",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/balance.rs",
+      "sha256": "692830ae72326ec593ad0bf6cca8aca0b64d8d379b9f8320d2374dd9cd63e25c",
+      "production_token_sha256": "cf77b2bc1ce0042781df6354ad7e97ad8cceb037570707c6dd0598991f573c12",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/movement.rs",
+      "sha256": "8a7c6dcd07d260c0141b4715ed624831d281b637ee6b00e8d64e7c8d80a6b110",
+      "production_token_sha256": "f4abfad00c4b5b32bedc69ec77d81b26a3d2b6ee274bd92326f37ecfcacf5d1f",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/reservation.rs",
+      "sha256": "33079336d857c6cf8022c3021e4adfe395bdf7bf491d47e31c0adcb99e7c36ff",
+      "production_token_sha256": "8328bff64aab57c0594912d13ad89bd2d1054bb72f45ac075773a507e0da7c05",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/shared.rs",
+      "sha256": "7de1372e9e16015956306d233dadbdef6fec4913f9e7a416703a76ebccb85e8e",
+      "production_token_sha256": "acd4256d24f88e349a9b2ead13c0a12d0d90f9410a6f56175ebe208737cd6c18",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_balance.rs",
+      "sha256": "558b57e54764a9c55991a1758e4e5cbaf24c3f2e607361db30c09af7e42508e4",
+      "production_token_sha256": "d2d2386ddcc649a9377ef29ec34a005cd8aff57e2e71997f72b3ba28616c90c2",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_movement.rs",
+      "sha256": "faeeae53ccd5f324f94e65e022b9fa599d99ca3b109331ed711a390acbd26382",
+      "production_token_sha256": "9036cbbdf6b4b1fc785be74ef8e38f730a446b34c53e778f91efb7ceb134db5c",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_reservation.rs",
+      "sha256": "91df0886cdfc149bc68db5acf96e6abf81379facb6e0c6eb9925fe31631ae71d",
+      "production_token_sha256": "7529e4c00a075a1713fd6c7ead50089646c06c0ee2fe42a660663b24a4f72c04",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/service/fulfillment.rs",
+      "sha256": "ea4356f3e6d6c40f0ac6cc6127cc6c4b98608dda9f7d624bbc784d82599d0f50",
+      "production_token_sha256": "262214155bbcae89610491abd332e0fcd754671cfd6eaf8431ee302b19a96f39",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/service/fulfillment/delivery.rs",
+      "sha256": "e77bebc6f3f7764a9896fd014d9f75378eb7d5b915d32d78dd220a7dc4d7e118",
+      "production_token_sha256": "436a4024389a3d5ab835893c8801c9df78f216ba847b05f64cf932f3f064bdae",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+      "sha256": "4a5cc35455cce005d4f4ae40d837aa650258f8ba36037f5b34c0e172ea84c6c5",
+      "production_token_sha256": "b28c22e4d1a1f9cbbd9459b3440c7cf7787b2e13dcc88ff7cac5b0a6890a0d18",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+      "sha256": "789f92729b2953bff7a3dfe69bb568e35b8d5e36653f47fa67976030da9fec7d",
+      "production_token_sha256": "ee70e4a358ab4a905ed901a183780058f03b9ac67f33942c80a45f2b5dfc86df",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "sha256": "8eca450070a8c2d603609bbf7510a5a55e86722acc0f4652b731549671b83fc2",
+      "production_token_sha256": "6493059f4021013636d632a3ce27bed010dbb2e98a1bbb9c261ceb73d2660107",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery.rs",
+      "sha256": "4e9fb80f25df2f902b9c6f4b43e38b241417e4b9fe234eef97f4e9a61ad4083c",
+      "production_token_sha256": "06f5c093aa2b98e78c63049034b7b5d9a9624a833e92bea06f3aa0e6142ccd13",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
+      "sha256": "a70303db50397ea847affcff834c0d604ab5d09e1b753893b39a3c3e6f42ff0a",
+      "production_token_sha256": "f5c9ad27b07bcb80d04c8523cd806bb84a1cf03f1e6625766790e805373b9419",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs",
+      "sha256": "ac76e4e347ba833141601b083afbb3adc91458be9de5334d34907c01c516cd5a",
+      "production_token_sha256": "a7aa376b39b46af84358139e5e6ceefe25f65434e013bb1c33f5d12a2af1eb20",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+      "sha256": "c3a937ca9942ace08035a8ab6c1600cd7f260f1287d6f62ca4880f9cfb1538ab",
+      "production_token_sha256": "067eced7fa775328d5f5559b1c2c6c515a98b23b7b4fffe02cd5f7c7f82016d1",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_context.rs",
+      "sha256": "05f17f3694b50b6965410d14267907220fe7426e89548e360bc1e39481b5f54c",
+      "production_token_sha256": "c4811adac3608e6912ecbc0fc04cd344c0b700700d2b0766b7cce40b03d99672",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs",
+      "sha256": "76ba4da93f4ff90839f643d5cb1f33e66e359ddf3eeb99e0d05990ff8099f152",
+      "production_token_sha256": "52b4e24ba719a12623d00d3e90e9bd5c1d29d416476daaef0ddb2ce1759a55e3",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs",
+      "sha256": "ac934fd8ef8ced06db019f671128b96a58e114ee892bbd041daf167858dfca58",
+      "production_token_sha256": "ca11c4a845eeda9eaa14d2070cdd7df2d9dfc7b6cf1cdf6edfcdfa99eef40dd3",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs",
+      "sha256": "e6a59d6ff1ad9e5ff6767b6bd5e371c8bd7dba4450bf8323d51102b6412e2bfb",
+      "production_token_sha256": "37ae6ad397f2cc627ea4b2604bb9675d6bb010e7b1c642c8f6f090b1c062c6bf",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs",
+      "sha256": "19b70f2b674899818910cfbf95a67a1fa115f106c4961d3b501ff20687c9ee82",
+      "production_token_sha256": "3194b29da50fb68d7a9c2df17e2ffbf0a6627b07677dc938fd4efad9bd5b35ab",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs",
+      "sha256": "5935529170d06d1f624984982b72dfd1def11adef07b8a23643d461fe7157b17",
+      "production_token_sha256": "ed09d17e2cb06dbd7a3397a261c34bca068f9358a9fb2fe4044c83cc14d5b92e",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "sha256": "98eb722997dc67c2ea3d58ba9c8ffc4bb3db515ad523af57a4e0891bef12e625",
+      "production_token_sha256": "828c29f541b6b7a223b4b631e0bd8d9834fd3d1108fda1a005f77d8ee9f9df36",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+      "sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4",
+      "production_token_sha256": "63d4cac0e1c352e3564fc52544ed8240107bfdd523dca9c40002221d150015e0",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs",
+      "sha256": "ff9aef95ed3faa303222806acd5d208c1ff30c279ffe6f717421e90bc0c1155f",
+      "production_token_sha256": "2581a3b500f7615a269fb5ba9a2b8e0ea3c33891be850bd91dbb97dc46d28468",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/repository.rs",
+      "sha256": "d3568391843fc79659fa222fd720c30c45b22df8066b42c60c02c080ebb95382",
+      "production_token_sha256": "9485a72fd6527cec9219ac9661b407ca5b31df61dc80218f843632c4467d82d0",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/executor.rs",
+      "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+      "production_token_sha256": "ce87ac47f9a3a941ee3208f3f0dccb85f66b62ef17ae47734beac8bc23064d05",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+      "production_token_sha256": "e857ddca46d6e8124163e80846d36579f770bb1d3bf49afa64fd2923917513bb",
+      "fixed_after_commit_verified": true
+    },
+    {
+      "path": "backend/services/src/errors.rs",
+      "sha256": "5dbebfb7a2f912cd266aa01b02f41e9f7e156c14e80742ef84f7067f369d8372",
+      "production_token_sha256": "fcd576f62191ef26e5c6c5483d79904192e0393bf63baf0c630de58cb5d0d5da",
+      "fixed_after_commit_verified": true
+    }
+  ],
+  "external_reviews": [
+    {
+      "scope": "D electronic/service actual production chains",
+      "reviewer": "/root/procurement_basis",
+      "report": "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+      "source_map": "/private/tmp/fulfillment12-electronic-service-source-map.json",
+      "symbol_count": 35,
+      "primary_token_equal_count": 20,
+      "supporting_entity_function_count": 64,
+      "requested_before_equivalence": [
+        {
+          "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+          "requested_before_sha256": "5878651364cf2bc241a3cd6082eef6e51370b442cdc059d524b3bd913aa571d0",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/apps/web-api/src/core/handler/fulfillment/mod.rs",
+          "requested_before_sha256": "9d0a7ddd934598875da6ef5eb9b33da69f3112f848386f0d13f2c5b1d4b47c3e",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/erp-party/src/service/party/sensitive.rs",
+          "requested_before_sha256": "794a4c6689dd05d2a1eb997004006984085f74b25102d4789787a49708cbda7c",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/erp-processes/src/attachments/fulfillment.rs",
+          "requested_before_sha256": "0f7d4a814a033f85cf18418d5a39b97d3edc0b5e315210a6ee251aecbb2d164d",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/erp-processes/src/attachments/pending.rs",
+          "requested_before_sha256": "d06282722acc45280631b301a208ca7d2a18e3ae7cefb5105ce1b1fdb43198b8",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/erp-processes/src/fulfillment_execution/mod.rs",
+          "requested_before_sha256": "2f6babb56223e2497886f30ff881e1e8be615c284f1c9300ac2c909a6d23dab0",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+          "requested_before_sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/persistence-core/src/repository/base.rs",
+          "requested_before_sha256": "466d0bb968a321422e288e5355ca4814b5fe6e1e801409ea3408824db64b715c",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/database/src/repository/fulfillment/mod.rs",
+          "requested_before_sha256": "9ca17b61c3f0fcf23703384f0f0bc706c78e5261117d701a09e0102bad3e1b5b",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/electronic_delivery.rs",
+          "requested_before_sha256": "975530318b785d2c3a10511da5b23b4a4ea32a046df1e228f8f02fd19a2b4057",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+          "requested_before_sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/fingerprint.rs",
+          "requested_before_sha256": "ce1ef6f861b62c6e4ccc9b159e1bf5902b48f0d9afc67c0cd11034a0ea277dc4",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/service_evidence.rs",
+          "requested_before_sha256": "3c6dc8eac248822140e4759b6b5ded4bc9a2a1f6d4f0f5e31678c44bcdd4fc7a",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/service_fulfillment.rs",
+          "requested_before_sha256": "f67bb603d39bcd7ff515dd54d150e596cbd231c9015822aa39e8ec88624f557e",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+          "requested_before_sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/errors.rs",
+          "requested_before_sha256": "f5fa4957c5907321e0b6fec2b1584b15da11a17e739a6e204b6c3f157a2ab97f",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+          "requested_before_sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+          "requested_before_sha256": "3501ec7565001d533088f9da10d70834e9c5d0a93fff93f558ca0a7f2c8e0bb9",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/mod.rs",
+          "requested_before_sha256": "8dec1394ce4fd844ebfb31d1c072ea356169406ae6d8d2c78d1a41e8bc0d7cf5",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/purchase_context.rs",
+          "requested_before_sha256": "5402363327deaad4214eff256376474475377c97107ba369261affbd29b86e7d",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+          "requested_before_sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+          "requested_before_sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+          "requested_before_sha256": "251aa7e366a47470e3cd0e7793174ef5eb8243058d4b4de7ec0057a9d207dc17",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/persistence-core/src/transaction.rs",
+          "requested_before_sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/crates/persistence-core/src/executor.rs",
+          "requested_before_sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+          "external_input_same": true
+        },
+        {
+          "path": "backend/services/src/fulfillment/dto.rs",
+          "requested_before_sha256": "e711624cca9a6c7aa112c8078a44d265309af3a18cdceff62d98cc15980a734c",
+          "external_input_same": true
+        }
+      ],
+      "after_files_rechecked": 36,
+      "unresolved_semantic_drift": []
+    }
+  ],
+  "direct_comparisons": {
+    "acceptance_reverse_exact_bodies": [
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_posting.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+        "symbol": "persist_customer_acceptance_reverse",
+        "before_line": 213,
+        "after_line": 209,
+        "before_body_sha256": "b9500aabad29f6e1cd80ca5fca2be4e58e42de783592600303c65a7f2a5d4b06",
+        "after_body_sha256": "b9500aabad29f6e1cd80ca5fca2be4e58e42de783592600303c65a7f2a5d4b06",
+        "exact_body_equal": true
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_posting.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+        "symbol": "write_acceptance_allocation",
+        "before_line": 531,
+        "after_line": 391,
+        "before_body_sha256": "c5aa7c4287f3eefb6a6d645d78548b73a4a47c01e8274de078f6632de1793d2d",
+        "after_body_sha256": "c5aa7c4287f3eefb6a6d645d78548b73a4a47c01e8274de078f6632de1793d2d",
+        "exact_body_equal": true
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_posting.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+        "symbol": "load_fulfillment_fact",
+        "before_line": 595,
+        "after_line": 455,
+        "before_body_sha256": "7e9820cc20186fb91b99f10b568309cb2c1037290b0376cf2ba2ff004743941c",
+        "after_body_sha256": "7e9820cc20186fb91b99f10b568309cb2c1037290b0376cf2ba2ff004743941c",
+        "exact_body_equal": true
+      }
+    ],
+    "task_and_numbering_independent_checks": [
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "business_object_type",
+        "before_line": 42,
+        "after_line": 44,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "business_object_id",
+        "before_line": 51,
+        "after_line": 53,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "subject_version",
+        "before_line": 60,
+        "after_line": 62,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "reason_code",
+        "before_line": 69,
+        "after_line": 71,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "impact_summary",
+        "before_line": 81,
+        "after_line": 83,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "frozen_identity",
+        "before_line": 91,
+        "after_line": 93,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "ensure_fulfillment_task",
+        "before_line": 159,
+        "after_line": 161,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "record_fulfillment_activity",
+        "before_line": 230,
+        "after_line": 232,
+        "equal_after_explicit_import_path_and_lexical_normalization": false,
+        "disposition": "R7 actual MongoTaskCommand implementation independently expanded"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "complete_fulfillment_task",
+        "before_line": 263,
+        "after_line": 254,
+        "equal_after_explicit_import_path_and_lexical_normalization": false,
+        "disposition": "R7 actual MongoTaskCommand implementation independently expanded"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "ensure_task_matches_frozen_identity",
+        "before_line": 284,
+        "after_line": 264,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "ensure_frozen_identity_fields",
+        "before_line": 297,
+        "after_line": 277,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "load_single_open_task",
+        "before_line": 319,
+        "after_line": 299,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "open_fulfillment_tasks",
+        "before_line": 337,
+        "after_line": 317,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "resolve_task_owner",
+        "before_line": 352,
+        "after_line": 332,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "warehouse_owner",
+        "before_line": 408,
+        "after_line": 388,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "purchase_order_owner",
+        "before_line": 432,
+        "after_line": 412,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "ensure_fulfillment_owner_eligible",
+        "before_line": 472,
+        "after_line": 452,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+        "symbol": "ensure_current_owner_execution_access",
+        "before_line": 507,
+        "after_line": 487,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "code",
+        "before_line": 35,
+        "after_line": 35,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "ensure_customer_acceptance_task",
+        "before_line": 44,
+        "after_line": 44,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "prepare_customer_acceptance_task_command",
+        "before_line": 69,
+        "after_line": 69,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "persist_customer_acceptance_task_after_posting",
+        "before_line": 91,
+        "after_line": 91,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "create_customer_acceptance_task",
+        "before_line": 105,
+        "after_line": 105,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "load_goods_service_order",
+        "before_line": 136,
+        "after_line": 136,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "open_customer_acceptance_tasks",
+        "before_line": 154,
+        "after_line": 154,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "ensure_task_identity",
+        "before_line": 168,
+        "after_line": 168,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "ensure_command_identity",
+        "before_line": 182,
+        "after_line": 182,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "responsibility_key",
+        "before_line": 205,
+        "after_line": 205,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "ensure_customer_acceptance_owner_eligible",
+        "before_line": 209,
+        "after_line": 209,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+        "after_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+        "symbol": "ensure_current_owner_execution_access",
+        "before_line": 239,
+        "after_line": 239,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/document_number.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+        "symbol": "next_delivery_no",
+        "before_line": 26,
+        "after_line": 26,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/document_number.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+        "symbol": "next_purchase_receipt_no",
+        "before_line": 43,
+        "after_line": 43,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/document_number.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+        "symbol": "next_customer_acceptance_no",
+        "before_line": 60,
+        "after_line": 60,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/document_number.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+        "symbol": "next_kind_no",
+        "before_line": 78,
+        "after_line": 78,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      },
+      {
+        "before_path": "backend/services/src/fulfillment/document_number.rs",
+        "after_path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+        "symbol": "shanghai_today",
+        "before_line": 99,
+        "after_line": 99,
+        "equal_after_explicit_import_path_and_lexical_normalization": true,
+        "disposition": "body_preserved"
+      }
+    ],
+    "normalization": "Discard comments/whitespace while retaining literals; only explicit crate::identity_compose, crate::workflow_compose, entities::fulfillment path relocation substitutions. Equality is corroborating evidence, not semantic proof."
+  },
+  "unchanged_repository_and_transaction_files": [
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/balance.rs",
+      "sha256": "692830ae72326ec593ad0bf6cca8aca0b64d8d379b9f8320d2374dd9cd63e25c",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/reservation.rs",
+      "sha256": "33079336d857c6cf8022c3021e4adfe395bdf7bf491d47e31c0adcb99e7c36ff",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/movement.rs",
+      "sha256": "8a7c6dcd07d260c0141b4715ed624831d281b637ee6b00e8d64e7c8d80a6b110",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/inventory/shared.rs",
+      "sha256": "7de1372e9e16015956306d233dadbdef6fec4913f9e7a416703a76ebccb85e8e",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_balance.rs",
+      "sha256": "558b57e54764a9c55991a1758e4e5cbaf24c3f2e607361db30c09af7e42508e4",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_reservation.rs",
+      "sha256": "91df0886cdfc149bc68db5acf96e6abf81379facb6e0c6eb9925fe31631ae71d",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/owned/stock_movement.rs",
+      "sha256": "faeeae53ccd5f324f94e65e022b9fa599d99ca3b109331ed711a390acbd26382",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+      "byte_equal_to_before": true
+    },
+    {
+      "path": "backend/crates/persistence-core/src/executor.rs",
+      "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
+      "byte_equal_to_before": true
+    }
+  ],
+  "before_source_snapshots": [
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+      "sha256": "41bf70409360f9552ccd64e9b0bbfc43bc9ec78ce32ee78636da57b4273f0404",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/customer_acceptance_posting.rs",
+      "sha256": "05810fe441facecb26e2325bab10a96dd914773400615f828a9678cfb90bcd69",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "sha256": "86031b1d4c330e807c0360e228af96a101fdb5e8dfe5e2bcd02241d478218f80",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/delivery.rs",
+      "sha256": "c4ff933478e60f7c84e7d294566489fcac22a608142a98bf2990213eabc2d6ac",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/delivery_posting.rs",
+      "sha256": "dc8884d9a55e97f698768cb2b43fc0e09f4f65042a90eee96c95fdb15f308c97",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/document_number.rs",
+      "sha256": "6140a3bb3a4542182f5a5570a9347debedce798c7a098c1ee7eaa3f17756dc5b",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/electronic_delivery.rs",
+      "sha256": "fb9775af1f2a3506184334daafb03f9f8445e695ab472471e175295e62a941b4",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/electronic_delivery_crypto.rs",
+      "sha256": "3501ec7565001d533088f9da10d70834e9c5d0a93fff93f558ca0a7f2c8e0bb9",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/mod.rs",
+      "sha256": "8dec1394ce4fd844ebfb31d1c072ea356169406ae6d8d2c78d1a41e8bc0d7cf5",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/purchase_receipt.rs",
+      "sha256": "7cb8352f088625aa7375a0ba1ce2ebea2816fccafe311682f63914d8143fc351",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/purchase_receipt_posting.rs",
+      "sha256": "36236a635d20085d7891fe1b01451cf4af6ce34616a6c9c89e2ded7863b28b72",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/service_fulfillment.rs",
+      "sha256": "b684f92bf1bd785eef49da7ff82e7070187d05a4047b7eb9a07f569fd2603ca0",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/service_fulfillment_confirm.rs",
+      "sha256": "377368d5448d6506c8e1e87e47f467c0e74b3ecc6366af3fdc198965a28a3c96",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/service_fulfillment_crypto.rs",
+      "sha256": "251aa7e366a47470e3cd0e7793174ef5eb8243058d4b4de7ec0057a9d207dc17",
+      "reference_tree_equal_to_fixed_commit": true
+    },
+    {
+      "path": "backend/services/src/fulfillment/task.rs",
+      "sha256": "a3050041574965ea301fcd4f2a6fe5b00db39ff79abd8dcdc662ee01d90cadc8",
+      "reference_tree_equal_to_fixed_commit": true
+    }
+  ],
+  "external_artifacts": [
+    {
+      "path": "/private/tmp/fulfillment12-electronic-service-semantic-review.md",
+      "sha256": "bed4ae5db8cffd2e96c70caa296e7790f5eeabff05170ec345846954e07b38e0"
+    },
+    {
+      "path": "/private/tmp/fulfillment12-electronic-service-source-map.json",
+      "sha256": "2e342635b9470dd2ea442d52f3d8eb7e99ba5359414b6bf0b22265fd05de8cc3"
+    },
+    {
+      "path": "/private/tmp/fulfillment12-electronic-service-body-diffs.txt",
+      "sha256": "c106f73127f3c23844afb89c011a4cde467f84de3d240cff8e24a9e1d79c8b36"
+    },
+    {
+      "path": "/private/tmp/fulfillment12-electronic-service-supporting-diffs.txt",
+      "sha256": "9fae06be940453258705a3ecdd5b5c412be97659cbca7edbeac3be143e251b94"
+    },
+    {
+      "path": "/private/tmp/fulfillment12-task-evidence.json",
+      "sha256": "b4177c918afb869abc2ef4c79c7aa73fdb9df23ad85a871a2dd035e96aba6c41"
+    }
+  ],
+  "source_hashes_stable_at_final_capture": true,
+  "initial_raw_dir": "/private/tmp/erp-fulfillment12-contract-initial",
+  "initial_raw_immutable_artifacts": [
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-initial/contract-comparison.json",
+      "sha256": "7646493a6fc05ed4a7fb4172db8565380079319c5b970195ae92b5adc6201126"
+    },
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-initial/missing-drift-report.json",
+      "sha256": "bfd269167237e46021e6ec4cda8a1d382234458dc96137e95f69ce33e26caf70"
+    },
+    {
+      "path": "/private/tmp/erp-fulfillment12-contract-initial/transaction-contract.json",
+      "sha256": "8b4a103d1169f33feb459456d47f866d102309ab1bb898f69b33dc8eb7159796"
+    }
+  ],
+  "after_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "after_source_basis": "fixed git commit verified byte-for-byte against all owned review and D external source snapshots",
+  "sealed_raw_changed_symbols_match_initial": true
+}

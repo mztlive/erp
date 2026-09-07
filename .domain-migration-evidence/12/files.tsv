@@ -1,0 +1,128 @@
+M	backend/Cargo.lock
+M	backend/Cargo.toml
+M	backend/apps/web-api/Cargo.toml
+M	backend/apps/web-api/src/core/errors.rs
+M	backend/apps/web-api/src/core/handler/fulfillment/mod.rs
+A	backend/crates/erp-finance/src/repository/fulfillment_facts.rs
+M	backend/crates/erp-finance/src/repository/mod.rs
+A	backend/crates/erp-fulfillment/Cargo.toml
+A	backend/crates/erp-fulfillment/src/dto/customer_acceptance.rs
+A	backend/crates/erp-fulfillment/src/dto/delivery.rs
+A	backend/crates/erp-fulfillment/src/dto/electronic_delivery.rs
+A	backend/crates/erp-fulfillment/src/dto/mod.rs
+A	backend/crates/erp-fulfillment/src/dto/purchase_receipt.rs
+A	backend/crates/erp-fulfillment/src/dto/service_fulfillment.rs
+A	backend/crates/erp-fulfillment/src/entity/facts.rs
+R099	backend/entities/src/fulfillment/acceptance_eligibility.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/acceptance_eligibility.rs
+R095	backend/entities/src/fulfillment/acceptance_fulfillment_allocation.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/acceptance_fulfillment_allocation.rs
+R096	backend/entities/src/fulfillment/customer_acceptance.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/customer_acceptance.rs
+R098	backend/entities/src/fulfillment/customer_acceptance_line_batch.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/customer_acceptance_line_batch.rs
+R097	backend/entities/src/fulfillment/delivery.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/delivery.rs
+R098	backend/entities/src/fulfillment/delivery_line_batch.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/delivery_line_batch.rs
+R096	backend/entities/src/fulfillment/electronic_delivery.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery.rs
+R100	backend/entities/src/fulfillment/electronic_delivery_draft.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs
+R100	backend/entities/src/fulfillment/fingerprint.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/fingerprint.rs
+R100	backend/entities/src/fulfillment/mod.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/mod.rs
+R088	backend/entities/src/fulfillment/purchase_receipt.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/purchase_receipt.rs
+R098	backend/entities/src/fulfillment/purchase_receipt_line_batch.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/purchase_receipt_line_batch.rs
+R091	backend/entities/src/fulfillment/service_evidence.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/service_evidence.rs
+R098	backend/entities/src/fulfillment/service_fulfillment.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment.rs
+R100	backend/entities/src/fulfillment/service_fulfillment_draft.rs	backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs
+A	backend/crates/erp-fulfillment/src/entity/mod.rs
+A	backend/crates/erp-fulfillment/src/error.rs
+R100	backend/database/src/indexes/fulfillment.rs	backend/crates/erp-fulfillment/src/indexes/fulfillment.rs
+A	backend/crates/erp-fulfillment/src/indexes/mod.rs
+A	backend/crates/erp-fulfillment/src/lib.rs
+A	backend/crates/erp-fulfillment/src/ports/mod.rs
+A	backend/crates/erp-fulfillment/src/ports/service_crypto.rs
+R093	backend/database/src/repository/extensions/fulfillment.rs	backend/crates/erp-fulfillment/src/repository/extensions/fulfillment.rs
+A	backend/crates/erp-fulfillment/src/repository/extensions/mod.rs
+R098	backend/database/src/repository/fulfillment/customer_acceptance.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/customer_acceptance.rs
+R099	backend/database/src/repository/fulfillment/delivery.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/delivery.rs
+R098	backend/database/src/repository/fulfillment/electronic_delivery.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/electronic_delivery.rs
+R085	backend/database/src/repository/fulfillment/mod.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/mod.rs
+R098	backend/database/src/repository/fulfillment/purchase_receipt.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/purchase_receipt.rs
+R099	backend/database/src/repository/fulfillment/purchase_receipt_totals.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/purchase_receipt_totals.rs
+R099	backend/database/src/repository/fulfillment/service_fulfillment.rs	backend/crates/erp-fulfillment/src/repository/fulfillment/service_fulfillment.rs
+A	backend/crates/erp-fulfillment/src/repository/mod.rs
+R082	backend/database/src/repository/owned/customer_acceptance.rs	backend/crates/erp-fulfillment/src/repository/owned/customer_acceptance.rs
+R084	backend/database/src/repository/owned/delivery.rs	backend/crates/erp-fulfillment/src/repository/owned/delivery.rs
+R082	backend/database/src/repository/owned/electronic_delivery.rs	backend/crates/erp-fulfillment/src/repository/owned/electronic_delivery.rs
+A	backend/crates/erp-fulfillment/src/repository/owned/mod.rs
+R083	backend/database/src/repository/owned/purchase_receipt.rs	backend/crates/erp-fulfillment/src/repository/owned/purchase_receipt.rs
+R082	backend/database/src/repository/owned/service_fulfillment.rs	backend/crates/erp-fulfillment/src/repository/owned/service_fulfillment.rs
+A	backend/crates/erp-fulfillment/src/repository/serialization_contract.rs
+A	backend/crates/erp-fulfillment/src/service/acceptance_eligibility.rs
+A	backend/crates/erp-fulfillment/src/service/customer_acceptance.rs
+R082	backend/services/src/fulfillment/customer_acceptance_lines.rs	backend/crates/erp-fulfillment/src/service/customer_acceptance_lines.rs
+R078	backend/services/src/fulfillment/customer_acceptance_posting.rs	backend/crates/erp-fulfillment/src/service/customer_acceptance_posting.rs
+A	backend/crates/erp-fulfillment/src/service/delivery.rs
+R080	backend/services/src/fulfillment/delivery_lines.rs	backend/crates/erp-fulfillment/src/service/delivery_lines.rs
+A	backend/crates/erp-fulfillment/src/service/delivery_posting.rs
+R098	backend/services/src/fulfillment/document_number.rs	backend/crates/erp-fulfillment/src/service/document_number.rs
+A	backend/crates/erp-fulfillment/src/service/electronic_delivery.rs
+R091	backend/services/src/fulfillment/electronic_delivery_crypto.rs	backend/crates/erp-fulfillment/src/service/electronic_delivery_crypto.rs
+A	backend/crates/erp-fulfillment/src/service/mod.rs
+A	backend/crates/erp-fulfillment/src/service/purchase_receipt.rs
+R081	backend/services/src/fulfillment/purchase_receipt_lines.rs	backend/crates/erp-fulfillment/src/service/purchase_receipt_lines.rs
+A	backend/crates/erp-fulfillment/src/service/purchase_receipt_posting.rs
+A	backend/crates/erp-fulfillment/src/service/service_fulfillment.rs
+A	backend/crates/erp-fulfillment/src/service/service_fulfillment_confirm.rs
+R094	backend/services/src/fulfillment/service_fulfillment_crypto.rs	backend/crates/erp-fulfillment/src/service/service_fulfillment_crypto.rs
+A	backend/crates/erp-inventory/src/repository/fulfillment_facts.rs
+M	backend/crates/erp-inventory/src/repository/mod.rs
+A	backend/crates/erp-inventory/src/service/fulfillment.rs
+A	backend/crates/erp-inventory/src/service/fulfillment/delivery.rs
+M	backend/crates/erp-inventory/src/service/mod.rs
+M	backend/crates/erp-processes/Cargo.toml
+M	backend/crates/erp-processes/src/adapters/inventory.rs
+M	backend/crates/erp-processes/src/attachments/fulfillment.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/commit.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/create.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/mod.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/post.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs
+R097	backend/services/src/fulfillment/customer_acceptance_task.rs	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs
+R059	backend/services/src/fulfillment/delivery.rs	backend/crates/erp-processes/src/fulfillment_execution/delivery.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/delivery_posting.rs
+R075	backend/services/src/fulfillment/electronic_delivery.rs	backend/crates/erp-processes/src/fulfillment_execution/electronic_delivery.rs
+M	backend/crates/erp-processes/src/fulfillment_execution/mod.rs
+R081	backend/services/src/fulfillment/purchase_context.rs	backend/crates/erp-processes/src/fulfillment_execution/purchase_context.rs
+R058	backend/services/src/fulfillment/purchase_receipt.rs	backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt.rs
+R054	backend/services/src/fulfillment/purchase_receipt_posting.rs	backend/crates/erp-processes/src/fulfillment_execution/purchase_receipt_posting.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/service_confirm.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/service_crypto.rs
+R075	backend/services/src/fulfillment/service_fulfillment.rs	backend/crates/erp-processes/src/fulfillment_execution/service_fulfillment.rs
+R094	backend/services/src/fulfillment/task.rs	backend/crates/erp-processes/src/fulfillment_execution/task.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/task/command.rs
+M	backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs
+M	backend/crates/erp-processes/src/procure_to_pay/review.rs
+M	backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs
+M	backend/crates/erp-read-models/Cargo.toml
+R089	backend/services/src/fulfillment/acceptance_eligibility.rs	backend/crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs
+A	backend/crates/erp-read-models/src/fulfillment_center/dto.rs
+A	backend/crates/erp-read-models/src/fulfillment_center/mod.rs
+A	backend/crates/erp-read-models/src/fulfillment_center/repository.rs
+M	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs
+M	backend/crates/erp-read-models/src/lib.rs
+M	backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs
+A	backend/crates/erp-sales/src/repository/fulfillment_facts.rs
+M	backend/crates/erp-sales/src/repository/mod.rs
+M	backend/database/Cargo.toml
+M	backend/database/src/indexes/mod.rs
+M	backend/database/src/repository/extensions/mod.rs
+M	backend/database/src/repository/mod.rs
+M	backend/database/src/repository/owned/mod.rs
+M	backend/entities/Cargo.toml
+M	backend/entities/src/lib.rs
+M	backend/services/Cargo.toml
+M	backend/services/src/errors.rs
+D	backend/services/src/fulfillment/customer_acceptance.rs
+D	backend/services/src/fulfillment/delivery_posting.rs
+D	backend/services/src/fulfillment/dto.rs
+D	backend/services/src/fulfillment/mod.rs
+D	backend/services/src/fulfillment/service_fulfillment_confirm.rs
+M	backend/services/src/lib.rs
+M	backend/services/src/work_item/fulfillment_operation_brief.rs

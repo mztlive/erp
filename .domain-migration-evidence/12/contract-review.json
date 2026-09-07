@@ -1,0 +1,27 @@
+{
+  "phase": "12",
+  "code_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 48,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "evidence": "parser-limitations-review.json",
+      "result": "9对源码逐字节相同；履约fingerprint实体按真实迁移路径核对，动态索引注册展开一致"
+    },
+    {
+      "raw_items": 2,
+      "idempotency_symbols": 18,
+      "transaction_symbols": 16,
+      "evidence": "idempotency-transaction-review.json",
+      "result": "逐实际生产qualified符号复核原取时、ID、查询、错误、Executor及写入顺序"
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

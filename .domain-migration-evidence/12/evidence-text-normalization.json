@@ -1,0 +1,23 @@
+{
+  "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
+  "files": [
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "d73266848b7cfc85bd7e3b5c220cdfe8047d1e60ce1589e56ff56872fd4b664c",
+      "normalized_sha256": "e7dfa46792f3c5cafe84db2e8f5ff35273cb0bf9831eb57291b4c8ddfae93fab"
+    },
+    {
+      "path": "persistence-before.json",
+      "raw_attachment": "persistence-before.json.raw.gz",
+      "raw_sha256": "569e61421ad7b632043e3edf02fdb6fd75a3a7a773d64106807daa9aec578f90",
+      "normalized_sha256": "1965ee25abe03da8121e5b390b05d3f9ed866f7b90ef61b01dd9f70e0adb5774"
+    },
+    {
+      "path": "persistence-map.json",
+      "raw_attachment": "persistence-map.json.raw.gz",
+      "raw_sha256": "333d28c21fecc68517fec62e9fab6f18f12dfa15395da098617b6c9d292079a7",
+      "normalized_sha256": "e81cf028d86b22b64c8efcc4dcfeb871608fd49e20bef4017e3a6482bfa82dea"
+    }
+  ]
+}

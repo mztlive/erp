@@ -690,7 +690,7 @@
     {
       "id": "12",
       "file": "12-fulfillment.md",
-      "status": "未开始",
+      "status": "本地门禁通过",
       "crates": [
         "erp-fulfillment"
       ],

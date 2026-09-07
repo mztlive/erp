@@ -1,0 +1,448 @@
+{
+  "input_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "source_files": [
+    {
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "source_deleted": true,
+      "input_sha256": "a3050041574965ea301fcd4f2a6fe5b00db39ff79abd8dcdc662ee01d90cadc8",
+      "original_test_entries": 1,
+      "preserved_original_test_entries": 1
+    },
+    {
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "source_deleted": true,
+      "input_sha256": "86031b1d4c330e807c0360e228af96a101fdb5e8dfe5e2bcd02241d478218f80",
+      "original_test_entries": 1,
+      "preserved_original_test_entries": 1
+    },
+    {
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "source_deleted": true,
+      "input_sha256": "6140a3bb3a4542182f5a5570a9347debedce798c7a098c1ee7eaa3f17756dc5b",
+      "original_test_entries": 0,
+      "preserved_original_test_entries": 0
+    }
+  ],
+  "production_functions": 35,
+  "body_equal_count": 33,
+  "checks": [
+    {
+      "symbol": "business_object_type",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "business_object_id",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "subject_version",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "reason_code",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "impact_summary",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "frozen_identity",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_fulfillment_task",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "record_fulfillment_activity",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": false,
+      "review": "生产TaskCommandPort共同入口保持 load -> frozen identity -> WorkItem mutation -> authorization -> update；参见4项非ZST替身测试"
+    },
+    {
+      "symbol": "complete_fulfillment_task",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": false,
+      "review": "生产TaskCommandPort共同入口保持 load -> frozen identity -> WorkItem mutation -> authorization -> update；参见4项非ZST替身测试"
+    },
+    {
+      "symbol": "ensure_task_matches_frozen_identity",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_frozen_identity_fields",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "load_single_open_task",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "open_fulfillment_tasks",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "resolve_task_owner",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "warehouse_owner",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "purchase_order_owner",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_fulfillment_owner_eligible",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_current_owner_execution_access",
+      "source": "backend/services/src/fulfillment/task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "code",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_customer_acceptance_task",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "prepare_customer_acceptance_task_command",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "persist_customer_acceptance_task_after_posting",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "create_customer_acceptance_task",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "load_goods_service_order",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "open_customer_acceptance_tasks",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_task_identity",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_command_identity",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "responsibility_key",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_customer_acceptance_owner_eligible",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "ensure_current_owner_execution_access",
+      "source": "backend/services/src/fulfillment/customer_acceptance_task.rs",
+      "target": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "next_delivery_no",
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "next_purchase_receipt_no",
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "next_customer_acceptance_no",
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "next_kind_no",
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    },
+    {
+      "symbol": "shanghai_today",
+      "source": "backend/services/src/fulfillment/document_number.rs",
+      "target": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "body_equal_after_path_whitespace_normalization": true,
+      "review": "原读取/规则/错误/时钟/写入顺序保持"
+    }
+  ],
+  "consumers": [
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/review.rs",
+      "remaining_old_fulfillment_references": []
+    },
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "remaining_old_fulfillment_references": []
+    },
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+      "remaining_old_fulfillment_references": []
+    }
+  ],
+  "new_pure_tests": {
+    "file": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+    "count": 4,
+    "semantics": [
+      "同一非零大小Executor；活动/完成的任务状态在授权前形成，授权成功后写回",
+      "load/authorize/update分别失败均停止后续调用并保留错误",
+      "冻结责任键/角色/原因不匹配先于权限源失败",
+      "非当前责任人在WorkItem规则阶段失败，不继续权限源或写入"
+    ]
+  },
+  "numbering_contract": {
+    "uses_NoTransaction": true,
+    "timezone_offset_seconds": 28800,
+    "all_5_function_bodies_unchanged": true
+  },
+  "validation": {
+    "rustfmt": "已定向执行",
+    "cargo": "Reviewer did not run Cargo; root completed full lib run, independently checked by reading the recorded log.",
+    "database": "真实数据库运行未验证",
+    "historical_tests": "未修改或运行"
+  },
+  "test_expectation_correction": {
+    "observed_log": "/private/tmp/erp-fulfillment12-lib-tests-1.log",
+    "affected_tests": [
+      "task_command_preserves_executor_and_original_mutate_authorize_write_order",
+      "task_command_stops_at_every_provider_failure"
+    ],
+    "cause": "RecordingPort incorrectly required last_activity_at after Complete; real WorkItem::complete_open only sets started_at, status, completed_at and completed_by.",
+    "scope": "Only task/command.rs #[cfg(test)] RecordingPort assertions; production behavior unchanged.",
+    "correct_expectations": {
+      "Activity": "last_activity_at is Some; completion fields remain unchanged",
+      "Complete": "completed_at is Some; completed_by is actor; last_activity_at remains unchanged"
+    },
+    "validation": "Targeted rustfmt and diff check exit 0; root second full lib test log verifies all four task command tests passed."
+  },
+  "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "sealed_at": "2026-09-07T04:09:26.353734+00:00",
+  "source_files_sealed": [
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/task.rs",
+      "sha256": "98eb722997dc67c2ea3d58ba9c8ffc4bb3db515ad523af57a4e0891bef12e625",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/task.rs",
+      "sha256": "8eca450070a8c2d603609bbf7510a5a55e86722acc0f4652b731549671b83fc2",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/service/document_number.rs",
+      "sha256": "e6be719ee5af769c4d6f6350e3c73564bdead31145a3ff85adc1d7fb75ff9fe1",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/fulfillment_execution/task/command.rs",
+      "sha256": "d238af50ba22170d5bb47af28676d52dff9b47a454881d0fea82d9fb3a418dd4",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/review.rs",
+      "sha256": "5e6b6c1b0ed8ee4cd57dfad3d32fe3b433450d428bd36a0d60679c160117582b",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "sha256": "b142497c2d847b6d20ca8e51f50fab7cf4ad31723123f1475a5619f3a274d3e5",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+      "sha256": "97e39ee21839e0d30858d658885d43982095bc0fdc50688378a4d9059e124f3b",
+      "working_tree_matches_source_commit": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/entity/work_item/entity/status.rs",
+      "sha256": "b47bc4b37cfa54c0ae039b54de225a3cc19739448b3e2edfbe29acb894dd36d4",
+      "working_tree_matches_source_commit": true
+    }
+  ],
+  "sealed_production_recheck": {
+    "old_production_symbol_comparison_reexecuted": true,
+    "checks_unchanged_from_initial_evidence": true,
+    "production_functions": 35,
+    "body_equal_count": 33,
+    "command_creation_script": "/private/tmp/fulfillment12-task-command.py",
+    "command_creation_script_sha256": "49bbeef718c6d0b638f27a666c14334ccb665d5ed2e4af0d10fc5407d43099e8",
+    "command_production_functions": [
+      {
+        "symbol": "load_open",
+        "final_line": 34,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "529cdb459941367631adf693330a1b80e736133e71bb92ab3afdaf7b4ef31fee",
+        "final_body_sha256": "529cdb459941367631adf693330a1b80e736133e71bb92ab3afdaf7b4ef31fee"
+      },
+      {
+        "symbol": "authorize",
+        "final_line": 42,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "5995d8a712d58d158d3063e3e3c48b7c83b7c82ec6210178f61ee13ecba01482",
+        "final_body_sha256": "5995d8a712d58d158d3063e3e3c48b7c83b7c82ec6210178f61ee13ecba01482"
+      },
+      {
+        "symbol": "update",
+        "final_line": 45,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "41718b0a2580bf8fed2b0a21dc9979f204c3301cec5016a5b43d3de6c3f6ed4b",
+        "final_body_sha256": "41718b0a2580bf8fed2b0a21dc9979f204c3301cec5016a5b43d3de6c3f6ed4b"
+      },
+      {
+        "symbol": "execute",
+        "final_line": 50,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "be3c7f96893ad44354859ab8d1ea5cfd1f07ee4737305703f5a386e4ebabf478",
+        "final_body_sha256": "be3c7f96893ad44354859ab8d1ea5cfd1f07ee4737305703f5a386e4ebabf478"
+      },
+      {
+        "symbol": "record",
+        "final_line": 75,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "cb1cd10a0826cef7abb822ac75678612c58458bbc3610de060f3aadc69106a6d",
+        "final_body_sha256": "cb1cd10a0826cef7abb822ac75678612c58458bbc3610de060f3aadc69106a6d"
+      },
+      {
+        "symbol": "complete",
+        "final_line": 90,
+        "body_preserved_after_whitespace_comments_and_trailing_comma_normalization": true,
+        "original_body_sha256": "b226bff0518ab77d50daba1fe09e6a124153ea2bb6753a21c52d030b687dbd84",
+        "final_body_sha256": "b226bff0518ab77d50daba1fe09e6a124153ea2bb6753a21c52d030b687dbd84"
+      }
+    ],
+    "command_import_set_unchanged": true,
+    "final_test_expectations_checked_against_real_WorkItem_methods": true,
+    "mutation_scope": "Final task/command.rs changes are test expectation correction and import/format ordering; command production bodies and import set match the original generated source.",
+    "original_command_formatting": {
+      "artifact": "/private/tmp/fulfillment12-task-command-original-production.rs",
+      "configuration": "/private/tmp/erp-domain-crate-12-fulfillment/backend/rustfmt.toml",
+      "configuration_sha256": "dd70402f4c840303db9ec2afce7480a63198f972d1ae7b4cb07327511b4da4fa",
+      "method": "Extracted original Rust string from creation-script AST without executing source mutations; formatted only the /tmp artifact using the repository rustfmt configuration before function comparisons."
+    }
+  },
+  "integration_lib_log_verified": {
+    "executor": "root integration; this reviewer read the completed log only",
+    "log": "/private/tmp/erp-fulfillment12-lib-tests-2.log",
+    "sha256": "d73266848b7cfc85bd7e3b5c220cdfe8047d1e60ce1589e56ff56872fd4b664c",
+    "test_groups": 33,
+    "passed": 3440,
+    "failed": 0,
+    "ignored": 68,
+    "task_test_results": [
+      "test fulfillment_execution::task::command::tests::frozen_responsibility_mismatch_stops_before_authorization ... ok",
+      "test fulfillment_execution::task::command::tests::wrong_actor_stops_before_permission_revalidation ... ok",
+      "test fulfillment_execution::task::command::tests::task_command_preserves_executor_and_original_mutate_authorize_write_order ... ok",
+      "test fulfillment_execution::task::command::tests::task_command_stops_at_every_provider_failure ... ok"
+    ],
+    "real_database_execution": "not verified"
+  }
+}

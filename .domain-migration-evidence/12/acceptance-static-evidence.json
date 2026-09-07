@@ -1,0 +1,1269 @@
+{
+  "input": "0a297ab0",
+  "dto": [
+    {
+      "symbol": "PageParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/mod.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptLineInput",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CreatePurchaseReceiptRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "UpdatePurchaseReceiptRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PostPurchaseReceiptRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptLineView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptDetailView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptListParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PurchaseReceiptListQuery",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/purchase_receipt.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryLineInput",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CreateDeliveryRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "UpdateDeliveryRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PostDeliveryRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryLineView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryDetailView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryListParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "DeliveryListQuery",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CreateElectronicDeliveryRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ElectronicDeliveryView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ElectronicDeliveryListParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ElectronicDeliveryListQuery",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/electronic_delivery.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CreateServiceFulfillmentRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ConfirmServiceFulfillmentRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ServiceFulfillmentView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ServiceFulfillmentListParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ServiceFulfillmentListQuery",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/service_fulfillment.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "AcceptanceAllocationInput",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "AcceptanceLineInput",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CreateCustomerAcceptanceRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PostCustomerAcceptanceRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CommitCustomerAcceptanceRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CommitCustomerAcceptanceView",
+      "definitions": 1,
+      "destination": "crates/erp-read-models/src/fulfillment_center/dto.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "PostAcceptanceLineInput",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "ReverseCustomerAcceptanceRequest",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CustomerAcceptanceView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CustomerAcceptanceLineView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "AcceptanceAllocationView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CustomerAcceptanceDetailView",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CustomerAcceptanceListParams",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "CustomerAcceptanceListQuery",
+      "definitions": 1,
+      "destination": "crates/erp-fulfillment/src/dto/customer_acceptance.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "EligibleFulfillmentFactView",
+      "definitions": 1,
+      "destination": "crates/erp-read-models/src/fulfillment_center/dto.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "AcceptanceSalesLineGroupView",
+      "definitions": 1,
+      "destination": "crates/erp-read-models/src/fulfillment_center/dto.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    },
+    {
+      "symbol": "AcceptanceEligibilityView",
+      "definitions": 1,
+      "destination": "crates/erp-read-models/src/fulfillment_center/dto.rs",
+      "fields_identical": true,
+      "attrs_identical": true
+    }
+  ],
+  "tests": [
+    {
+      "symbol": "sort_whitelist_rejects_unknown_fields_and_directions",
+      "before": "dto.rs",
+      "after": [
+        "crates/erp-fulfillment/src/dto/mod.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "list_params_normalize_paging_and_reject_unbounded_page_size",
+      "before": "dto.rs",
+      "after": [
+        "crates/erp-fulfillment/src/dto/mod.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "purchase_receipt_create_and_view_have_no_approval_surface",
+      "before": "dto.rs",
+      "after": [
+        "crates/erp-fulfillment/src/dto/mod.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "delivery_create_and_view_have_no_approval_surface",
+      "before": "dto.rs",
+      "after": [
+        "crates/erp-fulfillment/src/dto/mod.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "acceptance_lines_are_built_and_validated",
+      "before": "customer_acceptance.rs",
+      "after": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "acceptance_create_uses_entity_batch_factory",
+      "before": "customer_acceptance.rs",
+      "after": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "customer_acceptance_policy_is_no_approval_identity_only",
+      "before": "customer_acceptance.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "create_registers_document_and_returns_empty_binding",
+      "before": "customer_acceptance.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "create_does_not_query_definition_or_start_instance",
+      "before": "customer_acceptance.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "existing_acceptance_draft_guard_accepts_only_current_draft",
+      "before": "customer_acceptance_posting.rs",
+      "after": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "existing_acceptance_draft_guard_rejects_reversed_record",
+      "before": "customer_acceptance_posting.rs",
+      "after": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "post_does_not_start_approval",
+      "before": "customer_acceptance_posting.rs",
+      "after": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "eligibility_does_not_start_approval_or_create_tasks",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "three_fact_types_group_per_stable_line_with_stable_sort_and_display_fields",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "confirmed_failed_service_fact_has_no_effect_on_derived_progress",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "net_over_acceptance_error_propagates_from_rule_source",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "has_remaining_eligible_drives_acceptance_task_completion",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "workbench_and_posting_feed_identical_service_fact_sets",
+      "before": "acceptance_eligibility.rs",
+      "after": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "three_commands_keep_original_audit_order_and_one_executor",
+      "before": "process/completion.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "each_failure_stops_remaining_task_and_audit_operations",
+      "before": "process/completion.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "preserved_once": true
+    },
+    {
+      "symbol": "absent_projection_skips_sales_and_present_projection_keeps_remaining_fact",
+      "before": "process/completion.rs",
+      "after": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "preserved_once": true
+    }
+  ],
+  "functions": [
+    {
+      "symbol": "customer_acceptance_list",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ]
+    },
+    {
+      "symbol": "customer_acceptance_detail",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ]
+    },
+    {
+      "symbol": "create_customer_acceptance",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/create.rs"
+      ],
+      "identical_at": []
+    },
+    {
+      "symbol": "from",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ]
+    },
+    {
+      "symbol": "from",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ]
+    },
+    {
+      "symbol": "from",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs",
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance.rs"
+      ]
+    },
+    {
+      "symbol": "customer_acceptance_create_binding_decision",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "ensure_customer_acceptance_skips_approval_binding",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "ensure_customer_acceptance_has_no_adapter",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "customer_acceptance_binding_organization_id",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "customer_acceptance_bind_command",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "apply_customer_acceptance_create_binding",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "persist_unbound_customer_acceptance_document",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "register_created_customer_acceptance_document",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "persist_created_customer_acceptance",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/create.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/create.rs"
+      ]
+    },
+    {
+      "symbol": "draft_acceptance",
+      "source": "customer_acceptance.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ]
+    },
+    {
+      "symbol": "acceptance_line_specs",
+      "source": "customer_acceptance_lines.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_lines.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_lines.rs"
+      ]
+    },
+    {
+      "symbol": "validate_customer_acceptance_task_context",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "build_customer_acceptance_lines",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "load_customer_acceptance_commit_draft",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "prepare_customer_acceptance_commit",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "persist_customer_acceptance_commit",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "load_customer_acceptance_for_post",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "persist_customer_acceptance_post",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "persist_customer_acceptance_reverse",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "committed_customer_acceptance_view",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/mod.rs"
+      ],
+      "identical_at": []
+    },
+    {
+      "symbol": "load_customer_acceptance_progress",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/repository.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/repository.rs"
+      ]
+    },
+    {
+      "symbol": "ensure_existing_acceptance_draft",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "ensure_task_context_pair",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "ensure_post_lines_match",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "write_acceptance_allocation",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "load_fulfillment_fact",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "draft_acceptance",
+      "source": "customer_acceptance_posting.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/registration.rs"
+      ],
+      "identical_at": [
+        "crates/erp-fulfillment/src/service/customer_acceptance_posting.rs"
+      ]
+    },
+    {
+      "symbol": "acceptance_eligibility",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "so_line_ids",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "build_line_eligibilities",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-fulfillment/src/service/acceptance_eligibility.rs",
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": []
+    },
+    {
+      "symbol": "build_eligibility_views",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "revision_line",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "goods_line",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "delivery",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "delivery_line",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "electronic_delivery",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "service_fulfillment",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "apply_allocation",
+      "source": "acceptance_eligibility.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ],
+      "identical_at": [
+        "crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs"
+      ]
+    },
+    {
+      "symbol": "commit_customer_acceptance",
+      "source": "process/commit.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/commit.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/commit.rs"
+      ]
+    },
+    {
+      "symbol": "reverse_customer_acceptance",
+      "source": "process/reverse.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs"
+      ],
+      "identical_at": []
+    },
+    {
+      "symbol": "mode",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "complete_acceptance",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "finish",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "refresh_sales",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "persist_task",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "business_audit",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "command_receipt",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "apply_projection",
+      "source": "process/completion.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": []
+    },
+    {
+      "symbol": "write",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "session",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "record",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "refresh_sales",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "persist_task",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "business_audit",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "command_receipt",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "cases",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "write",
+      "source": "process/completion.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs"
+      ]
+    },
+    {
+      "symbol": "post_customer_acceptance",
+      "source": "process/post.rs",
+      "identical_normalized_body": true,
+      "candidates": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/post.rs"
+      ],
+      "identical_at": [
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/post.rs"
+      ]
+    },
+    {
+      "symbol": "new",
+      "source": "process/mod.rs",
+      "identical_normalized_body": false,
+      "candidates": [
+        "crates/erp-read-models/src/fulfillment_center/mod.rs",
+        "crates/erp-processes/src/fulfillment_execution/customer_acceptance/mod.rs"
+      ],
+      "identical_at": []
+    }
+  ],
+  "missing_include_sources": [],
+  "verification": "static_only; no Cargo; real_database_unverified",
+  "snapshot_inputs": [
+    {
+      "input_path": "backend/services/src/fulfillment/dto.rs",
+      "snapshot_matches_input": true,
+      "sha256": "e711624cca9a6c7aa112c8078a44d265309af3a18cdceff62d98cc15980a734c"
+    },
+    {
+      "input_path": "backend/services/src/fulfillment/acceptance_eligibility.rs",
+      "snapshot_matches_input": true,
+      "sha256": "328ab36be28bad4ba3707b51a494eae3c0f475ac7a7649620c97ba7cf1a5a726"
+    },
+    {
+      "input_path": "backend/services/src/fulfillment/customer_acceptance.rs",
+      "snapshot_matches_input": true,
+      "sha256": "79c802b9d15625af86104e9a0b2417b388180ec1cc3b545429eaa3ae915d4cb5"
+    },
+    {
+      "input_path": "backend/services/src/fulfillment/customer_acceptance_lines.rs",
+      "snapshot_matches_input": true,
+      "sha256": "3e062a34cc19a12adf943fe54e946d47b9101dd372d0709c13e13f4a98ee3927"
+    },
+    {
+      "input_path": "backend/services/src/fulfillment/customer_acceptance_posting.rs",
+      "snapshot_matches_input": true,
+      "sha256": "05810fe441facecb26e2325bab10a96dd914773400615f828a9678cfb90bcd69"
+    },
+    {
+      "input_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/commit.rs",
+      "snapshot_matches_input": true,
+      "sha256": "62823b811c537fc3a0ecdbb8e4e8789a681b93ad7142f9acfe8c6b2eba228fe6"
+    },
+    {
+      "input_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs",
+      "snapshot_matches_input": true,
+      "sha256": "41bf70409360f9552ccd64e9b0bbfc43bc9ec78ce32ee78636da57b4273f0404"
+    },
+    {
+      "input_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
+      "snapshot_matches_input": true,
+      "sha256": "0cfb3b2f408f2bacb963bbaff02905e3a0b264cec15b03ae65e5568f7a37e6f3"
+    },
+    {
+      "input_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/post.rs",
+      "snapshot_matches_input": true,
+      "sha256": "3ed794cf1888071a9792b21fafe870c5f1c0447298525e195b6b5d22ddb548ff"
+    },
+    {
+      "input_path": "backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/mod.rs",
+      "snapshot_matches_input": true,
+      "sha256": "0da168f4b2d13cfe30a60355b6df549bfc63673fe2be2227ff15c36e958df464"
+    }
+  ]
+}
