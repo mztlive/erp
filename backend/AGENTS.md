@@ -18,7 +18,7 @@
 - `services`：领域服务编排层，按域分目录（如 `iam`、`consumer`、`audit`）。`services::approval` 只做政策/授权/事务/副作用适配，不得实现流程状态机。新增领域需提供 `dto.rs`；如果只有一个 service 文件，代码直接写在 `mod.rs` 中；如果有多个 service 文件，再创建独立 `service.rs` 文件。业务规则优先放在实体/值对象中。
 - `entities`：ERP 业务实体、值对象及 BPM 集成引用（如 `account_core`、`consumer`、`role`、`rbac`、`auth`、`approval_integration`）。目标审批领域模型不在本 crate。
 - `database`：MongoDB 仓储层与 `DatabaseExt` 访问器（如 `account_core`、`role`、`consumer`），同时承担 BPM 模型与 ERP 集成模型的持久化适配。
-- `crates`：共享工具与基础设施（`bpm` 纯流程领域与状态引擎、`id-generator` ID、`storage` 上传、`entity-core`/`entity-macros`、`permission-macros`），以及已迁领域 crate（`erp-core` / `application-core` / `persistence-core` / `erp-identity` / `erp-audit` / `erp-workflow` / `erp-support` / `erp-party` / `erp-customer` / `erp-supplier` / `erp-catalog` / `erp-warehouse` / `erp-contract` / `erp-import` 与组合层 `erp-processes` / `erp-read-models`）。
+- `crates`：共享工具与基础设施（`bpm` 纯流程领域与状态引擎、`id-generator` ID、`storage` 上传、`entity-core`/`entity-macros`、`permission-macros`），以及已迁领域 crate（`erp-core` / `application-core` / `persistence-core` / `erp-identity` / `erp-audit` / `erp-workflow` / `erp-support` / `erp-party` / `erp-customer` / `erp-supplier` / `erp-catalog` / `erp-warehouse` / `erp-contract` / `erp-import` / `erp-inventory` 与组合层 `erp-processes` / `erp-read-models`）。
 - `config`：配置加载与 Nacos 热更新（`SafeConfig`）。
 - `docs`：专项说明（Casbin RBAC、权限生成等）。
 - `scripts`：脚本与自动化工具。

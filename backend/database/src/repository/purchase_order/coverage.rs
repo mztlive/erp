@@ -17,8 +17,9 @@ use erp_core::ids::{
 };
 use mongodb::Database;
 
-use crate::repository::extensions::{InventoryExt, PurchaseOrderExt, SalesOrderExt};
+use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
 use erp_catalog::CatalogExt;
+use erp_inventory::InventoryExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -212,9 +213,6 @@ fn current_revision_pointer_ids(
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::inventory::stock_reservation::{
-        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
-    };
     use entities::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderData,
         PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
@@ -239,11 +237,15 @@ mod isolation_tests {
         SupplierAccountId, SupplierCommercialProfileRevisionId, UnitOfMeasureId, WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate};
+    use erp_inventory::{
+        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
+    };
     use test_support::{require_mongo, TestDb};
 
     use crate::ensure_indexes;
-    use crate::repository::extensions::{InventoryExt, PurchaseOrderExt, SalesOrderExt};
+    use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
     use erp_catalog::CatalogExt;
+    use erp_inventory::InventoryExt;
     use persistence_core::{NoTransaction, Transactional};
 
     use super::load_procurement_coverage_facts;

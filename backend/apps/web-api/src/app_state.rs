@@ -386,6 +386,17 @@ impl AppState {
         erp_processes::adapters::import_apply_service(self.db())
     }
 
+    /// Inventory query service with authorization and foreign-fact adapters.
+    pub fn inventory_service(&self) -> erp_inventory::InventoryService {
+        erp_processes::adapters::inventory_service(self.db(), self.rbac())
+    }
+
+    /// Inventory-adjustment process that owns approval submit/cancel/post.
+    pub fn inventory_adjustment_service(&self) -> erp_processes::InventoryAdjustmentService {
+        erp_processes::adapters::inventory_adjustment_service(self.db(), self.rbac())
+            .with_object_read(self.approval_object_read())
+    }
+
     /// 使 JWT 引擎缓存失效。
     ///
     /// # 返回

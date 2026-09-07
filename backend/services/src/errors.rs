@@ -213,6 +213,26 @@ impl From<erp_contract::Error> for Error {
     }
 }
 
+impl From<erp_inventory::Error> for Error {
+    /// 将库存领域错误映射为服务错误。
+    fn from(error: erp_inventory::Error) -> Self {
+        match error {
+            erp_inventory::Error::Internal(message) => Self::Internal(message),
+            erp_inventory::Error::NotFound(message) => Self::NotFound(message),
+            erp_inventory::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_inventory::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_inventory::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_inventory::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_inventory::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_inventory::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_inventory::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_inventory::Error::Logic(error) => Self::Logic(error),
+            erp_inventory::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_inventory::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_import::Error> for Error {
     /// 将导入领域错误映射为服务错误。
     fn from(error: erp_import::Error) -> Self {

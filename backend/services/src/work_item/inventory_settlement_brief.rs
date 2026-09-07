@@ -2,9 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{InventoryExt, SupplierSettlementExt};
+use database::SupplierSettlementExt;
 use entities::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
 use erp_core::ids::SupplierSettlementItemId;
+use erp_inventory::InventoryExt;
 use persistence_core::Executor;
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};

@@ -1429,6 +1429,7 @@ dependencies = [
  "erp-customer",
  "erp-identity",
  "erp-import",
+ "erp-inventory",
  "erp-party",
  "erp-supplier",
  "erp-support",
@@ -1629,6 +1630,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-identity",
+ "erp-inventory",
  "erp-party",
  "erp-supplier",
  "erp-support",
@@ -1815,6 +1817,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-inventory"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-party"
 version = "0.1.0"
 dependencies = [
@@ -1856,6 +1881,7 @@ dependencies = [
  "erp-customer",
  "erp-identity",
  "erp-import",
+ "erp-inventory",
  "erp-party",
  "erp-supplier",
  "erp-support",
@@ -1892,6 +1918,7 @@ dependencies = [
  "erp-customer",
  "erp-identity",
  "erp-import",
+ "erp-inventory",
  "erp-party",
  "erp-supplier",
  "erp-warehouse",
@@ -4405,6 +4432,7 @@ dependencies = [
  "erp-customer",
  "erp-identity",
  "erp-import",
+ "erp-inventory",
  "erp-party",
  "erp-supplier",
  "erp-support",
@@ -5579,6 +5607,7 @@ dependencies = [
  "erp-customer",
  "erp-identity",
  "erp-import",
+ "erp-inventory",
  "erp-party",
  "erp-processes",
  "erp-read-models",

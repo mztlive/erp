@@ -27,6 +27,7 @@ erp-catalog = { workspace = true }
 erp-warehouse = { workspace = true }
 erp-contract = { workspace = true }
 erp-import = { workspace = true }
+erp-inventory = { workspace = true }
 entities = { workspace = true }
 application-core = { workspace = true }
 regex = { workspace = true }

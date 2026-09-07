@@ -2,14 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{FulfillmentExt, InventoryExt, PurchaseOrderExt};
+use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
-};
-use entities::inventory::{
-    MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
-    StockMovement, StockMovementData, StockReservation, StockReservationData, StockReservationEntry,
-    StockReservationEntryData, StockReservationSourceType,
 };
 use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
@@ -20,6 +15,12 @@ use erp_core::ids::{
     WarehouseId,
 };
 use erp_core::money::Quantity;
+use erp_inventory::InventoryExt;
+use erp_inventory::{
+    MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
+    StockMovement, StockMovementData, StockReservation, StockReservationData, StockReservationEntry,
+    StockReservationEntryData, StockReservationSourceType,
+};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;

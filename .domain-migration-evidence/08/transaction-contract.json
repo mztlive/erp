@@ -1,0 +1,41 @@
+{
+  "phase": "08",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "mongodb_started": false,
+  "erp_test_mongo_uri": "unset",
+  "executor": {
+    "file": "crates/persistence-core/src/executor.rs",
+    "no_transaction_session": "None",
+    "client_session_session": "Some(self)",
+    "nested_transactions": "forbidden",
+    "external_io_holds_session": false
+  },
+  "inventory": {
+    "stock_writes": "crates/erp-inventory/src/service/inventory/stock_write.rs apply_posted_adjustment_in_transaction",
+    "in_txn": true,
+    "opens_nested_transaction": false,
+    "holds_session_across_external_io": false
+  },
+  "inventory_adjustment": {
+    "process": "crates/erp-processes/src/inventory_adjustment",
+    "modules": [
+      "post.rs",
+      "approval_prepare.rs",
+      "cancel_approval.rs",
+      "submit.rs",
+      "create.rs"
+    ],
+    "root_transaction": "caller Executor for approval-runtime post/cancel; Client::with_transaction for submit/create",
+    "same_executor": true,
+    "no_nested_transactions": true,
+    "approval_action_registry": {
+      "StockAdjustmentPost": "InventoryAdjustmentService::post_stock_adjustment(context, actor, executor)",
+      "StockAdjustmentCancelApproval": "cancel_stock_adjustment_approval_in_transaction(..., executor)",
+      "second_txn": false
+    }
+  },
+  "note": "跨域原子流程复用同一个 Executor；库存写入留在 erp-inventory 事务内方法。真实数据库运行未验证"
+}

@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use crate::inventory::{StockBalance, StockBalanceData};
 use crate::sales_order::revision::{
     SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
     SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
@@ -18,6 +17,7 @@ use erp_core::ids::{
     SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId, WarehouseId,
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_inventory::{StockBalance, StockBalanceData};
 
 use super::{
     stock_basis_id_for, SourcingAssignment, SourcingAssignmentSet, SourcingPlan, SourcingPlanError,

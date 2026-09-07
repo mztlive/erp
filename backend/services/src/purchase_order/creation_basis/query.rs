@@ -1,12 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{InventoryExt, PurchaseOrderExt, SalesOrderExt};
+use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     BasisGroup, CreationBasisFacts, SalesProcurementCoverage, StockBasisGroup, StockBasisLine,
 };
 use entities::sales_order::{CommercialStatus, SalesOrder};
 use erp_catalog::ProductKind;
 use erp_core::ids::{SalesOrderId, SkuId};
+use erp_inventory::InventoryExt;
+use erp_warehouse::WarehouseExt;
 use erp_workflow::WorkItemExt;
 use persistence_core::{Executor, NoTransaction};
 
@@ -336,7 +338,10 @@ pub async fn stock_basis_groups_for_order(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let warehouses = db.inventory().warehouses_by_ids(&warehouse_ids, executor).await?;
+    let warehouses = db
+        .warehouses()
+        .list_active_by_ids(&warehouse_ids, executor)
+        .await?;
     let active_warehouses = warehouses
         .into_iter()
         .filter(|warehouse| warehouse.is_active())
@@ -350,8 +355,8 @@ pub async fn stock_basis_groups_for_order(
         .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
         .collect::<Vec<_>>();
     let revisions = db
-        .inventory()
-        .warehouse_revisions_by_ids(&revision_ids, executor)
+        .warehouse_revisions()
+        .list_active_by_ids(&revision_ids, executor)
         .await?;
     let names = active_warehouses
         .into_iter()

@@ -1,13 +1,14 @@
-use database::{FulfillmentExt, InventoryExt, PurchaseOrderExt};
+use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{Delivery, DeliveryLine, DeliveryState, DeliveryType};
-use entities::inventory::{
-    MovementDirection, MovementType, ReservationEntryType, StockMovement, StockMovementData,
-    StockReservationEntry, StockReservationEntryData,
-};
 use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{DeliveryId, StockMovementId, StockReservationEntryId};
+use erp_inventory::InventoryExt;
+use erp_inventory::{
+    MovementDirection, MovementType, ReservationEntryType, StockMovement, StockMovementData,
+    StockReservationEntry, StockReservationEntryData,
+};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;

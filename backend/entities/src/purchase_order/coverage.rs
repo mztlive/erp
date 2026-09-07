@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 
 use rust_decimal::Decimal;
 
-use crate::inventory::StockReservation;
 use crate::sales_order::{
     LineType, ProcurementCoverageSummary, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
@@ -22,6 +21,7 @@ use erp_catalog::{Product, ProductKind, Sku};
 use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use erp_inventory::StockReservation;
 
 use super::allocation::PurchaseLineSalesAllocation;
 use super::order::{PurchaseOrder, PurchaseOrderStatus};
@@ -590,9 +590,6 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use crate::inventory::stock_reservation::{
-        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
-    };
     use crate::sales_order::revision::{
         SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
     };
@@ -609,6 +606,9 @@ mod tests {
         SupplierAccountId, UnitOfMeasureId, WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate};
+    use erp_inventory::{
+        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
+    };
 
     use super::{
         add_covered, build_procurement_coverage, coverage_summary, current_revision_ids,

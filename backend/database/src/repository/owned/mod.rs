@@ -55,11 +55,7 @@ mod sales_order_working_copy_line;
 mod sales_return_case;
 mod sales_return_line;
 mod service_fulfillment;
-mod stock_adjustment;
-mod stock_adjustment_line;
-mod stock_balance;
-mod stock_movement;
-mod stock_reservation;
+
 mod supplier_api_capability;
 mod supplier_api_connection;
 mod supplier_connection_command_receipt;
@@ -137,11 +133,7 @@ pub use sales_order_working_copy_line::SalesOrderWorkingCopyLineRepository;
 pub use sales_return_case::SalesReturnCaseRepository;
 pub use sales_return_line::SalesReturnLineRepository;
 pub use service_fulfillment::ServiceFulfillmentRepository;
-pub use stock_adjustment::StockAdjustmentRepository;
-pub use stock_adjustment_line::StockAdjustmentLineRepository;
-pub use stock_balance::StockBalanceRepository;
-pub use stock_movement::StockMovementRepository;
-pub use stock_reservation::StockReservationRepository;
+
 pub use supplier_api_capability::SupplierApiCapabilityRepository;
 pub use supplier_api_connection::SupplierApiConnectionRepository;
 pub use supplier_connection_command_receipt::SupplierConnectionCommandReceiptRepository;

@@ -1,0 +1,35 @@
+{
+  "phase": "08",
+  "status": "本地门禁通过",
+  "never_mark": "已验收",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "versus_phase_07": {
+    "baseline": ".domain-migration-evidence/07/contract-comparison.json",
+    "permissions_generated_sha256_equal": true,
+    "admin_route_count_equal": true,
+    "admin_route_count_phase_07": 369,
+    "admin_route_count": 369,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "phase_07_permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "index_name_key_unique_equal": true,
+    "error_code_variants_equal": true,
+    "error_code_count": 21,
+    "note": "权限生成物与阶段 07 哈希相等；HTTP 路径/方法/RBAC 未改。库存索引声明迁入 erp-inventory，名称/键/唯一性不变。ErrorCode 21 个变体不变。真实数据库运行未验证。"
+  },
+  "http": {
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "admin_route_count": 369,
+    "note": "权限生成物哈希与阶段 07 比较；HTTP 路径/方法/RBAC 未改"
+  },
+  "errors": {
+    "error_code_count": 21,
+    "services_errors_sha256": "33a7eab7318bd8709412506d551d583dd9064b8747c841871bc833c7546d354c",
+    "http_errors_sha256": "dacd1832b66dfedaa3e4dfddcd18586aeeb0f145d90aa48d4315dc0cb3daa01f",
+    "inventory_errors_sha256": "ab3a8058f4887af7d66bd3941d2000eaa0af039bac997e989a4c1e169e05de4e",
+    "note": "ErrorCode 变体与阶段 07 相等；erp-inventory 错误经 From 映射到原 services/web-api 错误类。真实数据库运行未验证"
+  },
+  "indexes": {
+    "note": "stock_* 索引从 database/src/indexes/inventory.rs 迁入 crates/erp-inventory/src/indexes/inventory.rs；集合名仍取 InventoryExt 关联常量。真实数据库运行未验证"
+  }
+}

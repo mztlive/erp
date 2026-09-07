@@ -6,7 +6,7 @@ mod cost;
 pub mod extensions;
 mod fulfillment;
 mod integration_ops;
-mod inventory;
+
 pub mod owned;
 mod payable;
 mod procurement_responsibility;

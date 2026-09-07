@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 08 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-inventory` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | chore/domain-crate-08-inventory integrator |
+| 输入/输出提交 | 前序 `bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca` / 实现提交见 `.domain-migration-evidence/08/metadata.json` |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -74,15 +74,15 @@ inventory 仅依赖基础；审批/审计/责任人能力由 Port/组合层提�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结库存精度、负库存/超量规则、流水与余额一致、预留释放、盘点版本与重复过账测试。
+1. [x] 冻结库存精度、负库存/超量规则、流水与余额一致、预留释放、盘点版本与重复过账测试。
 
-2. [ ] 迁入 inventory 实体、DTO、拥有仓储与索引。将跨域来源验证转换为消费方事实 Port；库存原始查询只在本域仓储。
+2. [x] 迁入 inventory 实体、DTO、拥有仓储与索引。将跨域来源验证转换为消费方事实 Port；库存原始查询只在本域仓储。
 
-3. [ ] 拆 adjustment_submit/start_approval/cancel_approval/adjustment_post：库存状态计算与事务内命令归 inventory，审批绑定、动作调用、WorkItem/审计推进归 processes::inventory_adjustment。
+3. [x] 拆 adjustment_submit/start_approval/cancel_approval/adjustment_post：库存状态计算与事务内命令归 inventory，审批绑定、动作调用、WorkItem/审计推进归 processes::inventory_adjustment。
 
-4. [ ] 在 ApprovalActionRegistry 中接新库存事务内命令，保持提交/取消/受阻流程与现有错误码；不自行开始第二个事务。
+4. [x] 在 ApprovalActionRegistry 中接新库存事务内命令，保持提交/取消/受阻流程与现有错误码；不自行开始第二个事务。
 
-5. [ ] 更新 inventory Handler、履约调用方、read-models 的库存/盘点摘要，清理旧引用并执行门禁。
+5. [x] 更新 inventory Handler、履约调用方、read-models 的库存/盘点摘要，清理旧引用并执行门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -151,13 +151,13 @@ git diff --check
 
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序本地门禁通过 `bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca`；分支 `chore/domain-crate-08-inventory`；source-map phase=08 行 33；owned types 5 | 已采集 `.domain-migration-evidence/08/input.json` |
+| 文件与符号 | 见 `.domain-migration-evidence/08/files.tsv`；5 owned EntityRepository 迁入 erp-inventory；post/prepare/cancel/submit 根用例迁入 erp-processes/inventory_adjustment；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/08/files.tsv` |
+| 依赖 | erp-inventory 仅依赖基础；无旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/08/boundary.log` |
+| 旧实现清零 | 源目录、根导出、调用方搜索：`services::inventory`/`entities::inventory` 生产清零 | 已采集 `.domain-migration-evidence/08/boundary.log` |
+| 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3315 passed / 0 failed / 68 ignored；exit 0 | 已执行 `.domain-migration-evidence/08/unit-tests.log` |
+| 协议与数据 | 权限生成物与阶段 07 哈希相等；索引迁入 erp-inventory 声明不变 | 已采集 `.domain-migration-evidence/08/contract-comparison.json` |
+| 事务合同 | 同一 Executor、inventory 事务内写入、processes 根编排；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/08/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/lib tests/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `.domain-migration-evidence/08/quality-gates.log` |
+| 编译收益 | 阶段 08 不执行编译收益复测；阈值在阶段 17 判定 | 不适用 |
+| 阶段提交 | 见 metadata.json；不得标记已验收 | 实现提交待 git |

@@ -47,7 +47,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | 05 | [主体、客户与供应商](05-party-customer-supplier.md) | erp-party, erp-customer, erp-supplier | 本地门禁通过 |
 | 06 | [商品、仓库与合同](06-catalog-warehouse-contract.md) | erp-catalog, erp-warehouse, erp-contract | 本地门禁通过 |
 | 07 | [导入任务](07-import.md) | erp-import | 本地门禁通过 |
-| 08 | [库存](08-inventory.md) | erp-inventory | 未开始 |
+| 08 | [库存](08-inventory.md) | erp-inventory | 本地门禁通过 |
 | 09 | [财务](09-finance.md) | erp-finance | 未开始 |
 | 10 | [销售](10-sales.md) | erp-sales | 未开始 |
 | 11 | [采购](11-procurement.md) | erp-procurement | 未开始 |

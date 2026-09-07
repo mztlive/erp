@@ -6,14 +6,13 @@
 //! 同一外层事务中先加载事实并完成授权、查询收据；只有无收据的 Fresh 分支才
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
-use database::{
-    InventoryExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt, SalesReviewExt,
-};
+use database::{PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt, SalesOrderExt, SalesReviewExt};
 use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use entities::sales_review::SalesChangeOrderStatus;
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use erp_customer::CustomerExt;
+use erp_inventory::InventoryExt;
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -916,8 +915,8 @@ mod tests {
 
     #[test]
     fn submitted_entity_still_builds_authorization_facts_but_fresh_guard_rejects() {
-        use entities::inventory::{AdjustmentReasonType, StockAdjustment, StockAdjustmentData};
         use erp_core::ids::{StockAdjustmentId, WarehouseId};
+        use erp_inventory::{AdjustmentReasonType, StockAdjustment, StockAdjustmentData};
 
         let mut adjustment = StockAdjustment::new(
             StockAdjustmentId::new("adjustment-1"),

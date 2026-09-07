@@ -78,10 +78,13 @@ async fn dispatch_action(
                 .await
         }
         ApprovalDomainAction::StockAdjustmentPost => {
-            services::inventory::InventoryService::new(registry.db.clone(), registry.rbac.clone())
-                .post_stock_adjustment(context, actor, executor)
-                .await
-                .map(|_| ())
+            crate::inventory_adjustment::InventoryAdjustmentService::new(
+                registry.db.clone(),
+                registry.rbac.clone(),
+            )
+            .post_stock_adjustment(context, actor, executor)
+            .await
+            .map(|_| ())
         }
         ApprovalDomainAction::CustomerReceiptPost => {
             let session = require_transaction(executor)?;
@@ -149,7 +152,7 @@ async fn dispatch_action(
             .await
         }
         ApprovalDomainAction::StockAdjustmentCancelApproval => {
-            services::inventory::cancel_stock_adjustment_approval_in_transaction(
+            crate::inventory_adjustment::cancel_approval::cancel_stock_adjustment_approval_in_transaction(
                 &registry.db,
                 context,
                 action,

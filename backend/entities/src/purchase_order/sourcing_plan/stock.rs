@@ -1,6 +1,6 @@
-use crate::inventory::StockBalance;
 use crate::sales_order::{SalesOrder, SalesOrderRevision};
 use erp_core::money::Quantity;
+use erp_inventory::StockBalance;
 
 use super::super::command_receipt::digest_parts;
 use super::super::coverage::SalesProcurementCoverageLine;

@@ -7,12 +7,8 @@
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
-use database::{FulfillmentExt, InventoryExt, SalesOrderExt};
+use database::{FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
-use entities::inventory::{
-    ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
-    StockReservationEntryData, StockReservationSourceType,
-};
 use entities::purchase_order::{
     payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
 };
@@ -22,6 +18,11 @@ use erp_core::ids::{
     WarehouseId,
 };
 use erp_core::money::Quantity;
+use erp_inventory::InventoryExt;
+use erp_inventory::{
+    ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
+    StockReservationEntryData, StockReservationSourceType,
+};
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;

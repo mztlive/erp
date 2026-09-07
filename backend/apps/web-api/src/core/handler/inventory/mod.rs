@@ -1,7 +1,7 @@
 //! 域 D17 `inventory` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：HTTP 十进制字符串版本在边界解析为 Service 数值类型，
-//! 其余字段复用 `services::inventory` 类型；禁止在 Handler 承载业务规则或直连数据库。
+//! 其余字段复用 `erp_inventory` 类型；禁止在 Handler 承载业务规则或直连数据库。
 
 use application_core::AuditActor;
 use axum::{
@@ -9,17 +9,16 @@ use axum::{
     http::HeaderMap,
     Extension, Json,
 };
-use entities::inventory::AdjustmentReasonType;
 use erp_core::ids::WarehouseId;
-use serde::Deserialize;
-use services::inventory::{
-    CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, ExpectedStockBalanceVersion,
-    InventoryService, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
+use erp_inventory::{
+    AdjustmentReasonType, CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest,
+    ExpectedStockBalanceVersion, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
     StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentSubmitResultQuery,
     StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
     StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
     SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
 };
+use serde::Deserialize;
 
 use crate::{
     app_state::AppState,
@@ -29,17 +28,6 @@ use crate::{
         response::ApiResponse,
     },
 };
-
-/// 构造库存服务。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
-/// 返回绑定数据库与 RBAC 的服务实例。
-fn inventory_service(state: &AppState) -> InventoryService {
-    InventoryService::new(state.db(), state.rbac()).with_object_read(state.approval_object_read())
-}
 
 /// 创建库存调整单的 HTTP wire。余额版本必须是十进制字符串。
 #[derive(Debug, Clone, Deserialize)]
@@ -196,7 +184,8 @@ pub async fn stock_balance_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockBalanceListParams>,
 ) -> Result<PageView<StockBalanceView>> {
-    let page = inventory_service(&state)
+    let page = state
+        .inventory_service()
         .stock_balance_list(&params, &actor)
         .await?;
 
@@ -224,7 +213,8 @@ pub async fn stock_balance_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockBalanceDetailView> {
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_service()
         .stock_balance_detail(&id, &actor)
         .await?;
 
@@ -252,7 +242,8 @@ pub async fn stock_movement_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockMovementListParams>,
 ) -> Result<PageView<StockMovementView>> {
-    let page = inventory_service(&state)
+    let page = state
+        .inventory_service()
         .stock_movement_list(&params, &actor)
         .await?;
 
@@ -280,7 +271,8 @@ pub async fn stock_reservation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockReservationListParams>,
 ) -> Result<PageView<StockReservationView>> {
-    let page = inventory_service(&state)
+    let page = state
+        .inventory_service()
         .stock_reservation_list(&params, &actor)
         .await?;
 
@@ -308,7 +300,8 @@ pub async fn stock_adjustment_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockAdjustmentListParams>,
 ) -> Result<PageView<StockAdjustmentView>> {
-    let page = inventory_service(&state)
+    let page = state
+        .inventory_service()
         .stock_adjustment_list(&params, &actor)
         .await?;
 
@@ -336,7 +329,8 @@ pub async fn stock_adjustment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockAdjustmentDetailView> {
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_adjustment_service()
         .stock_adjustment_detail(&id, &actor)
         .await?;
 
@@ -366,7 +360,8 @@ pub async fn stock_adjustment_create(
     Json(req): Json<CreateStockAdjustmentHttpRequest>,
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let req = req.into_service(&headers)?;
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_adjustment_service()
         .create_stock_adjustment(req, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -399,7 +394,8 @@ pub async fn stock_adjustment_update(
     Json(req): Json<UpdateStockAdjustmentHttpRequest>,
 ) -> std::result::Result<ApiResponse<StockAdjustmentView>, ApprovalHttpError> {
     let req = req.into_service(&headers)?;
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_service()
         .update_stock_adjustment(&id, req, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -432,7 +428,8 @@ pub async fn stock_adjustment_submit(
     Json(req): Json<SubmitStockAdjustmentHttpRequest>,
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let req = req.into_service(&headers)?;
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_adjustment_service()
         .submit_stock_adjustment(&id, req, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -458,7 +455,8 @@ pub async fn stock_adjustment_submit_result(
     Query(query): Query<StockAdjustmentSubmitResultHttpQuery>,
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let query = query.into_service(&headers)?;
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_adjustment_service()
         .stock_adjustment_submit_result(&id, query, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -493,7 +491,8 @@ pub async fn stock_adjustment_cancel_approval(
     Json(req): Json<CancelStockAdjustmentApprovalHttpRequest>,
 ) -> std::result::Result<ApiResponse<StockAdjustmentView>, ApprovalHttpError> {
     let command = req.into_service(&headers)?;
-    let view = inventory_service(&state)
+    let view = state
+        .inventory_adjustment_service()
         .cancel_stock_adjustment_approval(&id, command, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -582,7 +581,7 @@ mod tests {
         UpdateStockAdjustmentHttpRequest,
     };
     use axum::http::HeaderMap;
-    use services::inventory::SubmitStockAdjustmentRequest;
+    use erp_inventory::SubmitStockAdjustmentRequest;
 
     /// 人工复核端点已删除，提交请求拒绝客户端选择审批人。
     #[test]
