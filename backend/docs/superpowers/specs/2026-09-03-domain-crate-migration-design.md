@@ -31,7 +31,7 @@
 2. 领域事实、业务规则和持久化能力具有唯一归属。
 3. 跨领域写入由显式流程组合层持有事务并编排。
 4. 跨领域查询由显式读模型组合层组装。
-5. `entities`、`database`、`services` 三个旧业务 crate 从 workspace 移除，删除其生产源码和 manifest；既有 `tests/` 档案按仓库禁改规则留在原路径，不再作为 Cargo target。
+5. `entities`、`database`、`services` 三个旧业务 crate 从 workspace 移除，删除其根目录、生产源码和 manifest；既有 `tests/` 档案及旧文档保持原始字节，统一迁入 `docs/archive/legacy-crates/<旧crate>/`，不再作为 Cargo target。
 6. HTTP、DTO、错误、MongoDB、权限、幂等、事务和业务结果与迁移前保持一致。
 
 ## 3. 不在本次迁移范围内的事项
@@ -633,7 +633,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib
 只有同时满足以下条件，本次迁移才允许标记完成：
 
 1. 当前源码对应的 19 个目标领域 crate、3 个基础 crate、2 个组合 crate 均按合同存在；阶段 15 的无实现范围核验通过。
-2. `entities`、`database`、`services` 已从 workspace 移除，其生产源码和 manifest 已删除；既有历史测试档案留在原路径，不是 Cargo target。
+2. `entities`、`database`、`services` 已从 workspace 移除，其根目录、生产源码和 manifest 已删除；旧三层历史测试和旧文档已原样迁入 `docs/archive/legacy-crates/<旧crate>/`，不是 Cargo target。
 3. Cargo metadata、生产源码、活动脚本、CI 和有效运行说明中不存在旧 crate 依赖；迁移清单、历史测试档案与历史设计中的源路径不作为活动依赖。
 4. 普通业务领域 crate 之间不存在直接依赖。
 5. 跨领域命令全部由 `erp-processes` 编排。

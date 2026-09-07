@@ -122,22 +122,33 @@ class CutoverTests(unittest.TestCase):
         metadata["packages"][-1] = {"id": "legacy", "name": "entities", "dependencies": []}
         self.assertTrue(workspace.legacy_graph_errors(metadata))
 
-    def test_old_src_and_manifest_fail_but_historical_archive_is_untouched(self):
-        archive = self.root / "services/tests/history.rs"
+    def test_relocated_archive_is_untouched_and_not_active(self):
+        archive = self.root / "docs/archive/legacy-crates/services/tests/history.rs"
         archive.parent.mkdir(parents=True)
         original = b"use services::HistoricalType;\n"
         archive.write_bytes(original)
         self.assertEqual(workspace.legacy_tree_errors(self.root), [])
         self.assertNotIn(archive, workspace.active_source_paths(self.fixture.metadata))
-        for relative in ("services/src", "database/Cargo.toml"):
-            path = self.root / relative
-            if path.suffix:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("[package]\n")
-            else:
-                path.mkdir(parents=True)
-            self.assertTrue(workspace.legacy_tree_errors(self.root))
+        self.assertEqual(domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors, [])
         self.assertEqual(archive.read_bytes(), original)
+
+    def test_every_retired_root_fails_even_for_only_archives_empty_roots_or_symlinks(self):
+        for name in sorted(workspace.LEGACY):
+            for residual in ("src/lib.rs", "Cargo.toml", "tests/history.rs", "README.md", "empty", "symlink"):
+                with self.subTest(name=name, residual=residual), tempfile.TemporaryDirectory(prefix="retired-root-fixture-") as directory:
+                    backend = Path(directory)
+                    root = backend / name
+                    if residual == "symlink":
+                        root.symlink_to(backend / "missing-target", target_is_directory=True)
+                    elif residual == "empty":
+                        root.mkdir()
+                    else:
+                        path = root / residual
+                        path.parent.mkdir(parents=True)
+                        path.write_text("historical fixture\n")
+                    errors = workspace.legacy_tree_errors(backend)
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn(str(root), errors[0])
 
     def test_legacy_source_all_members_inline_tests_and_explicit_target(self):
         cases = ["use services::{Error as Failure, Result};", "use ::services::Error;", "pub type Failure = services::Error;",

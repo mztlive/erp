@@ -92,9 +92,9 @@ def legacy_graph_errors(metadata: Mapping[str, Any]) -> list[str]:
 
 
 def legacy_tree_errors(backend: Path) -> list[str]:
-    """Historical tests may remain; legacy production src/manifests may not."""
-    return [f"最终仍有旧生产路径: {path}" for name in sorted(LEGACY)
-            for path in (backend / name / "src", backend / name / "Cargo.toml") if path.exists()]
+    """Require retired roots to be absent; historical files live in docs/archive."""
+    return [f"最终仍有旧目录或路径: {path}" for name in sorted(LEGACY)
+            for path in (backend / name,) if path.exists() or path.is_symlink()]
 
 
 def active_source_paths(metadata: Mapping[str, Any]) -> list[Path]:

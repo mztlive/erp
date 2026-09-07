@@ -104,7 +104,7 @@ Port 的实现位于拥有消费方与提供方依赖的上层。接口中如需
 
 当前规则仅运行纯内联单元测试，不新增、修改或运行集成测试，不启动真实 MongoDB。阶段 00 必须在成员 manifest 设置 `autotests = false`，并移除显式集成 `[[test]]` 注册；该配置不会关闭库内单元测试。[Cargo target 自动发现](https://doc.rust-lang.org/cargo/reference/cargo-targets.html#target-auto-discovery)
 
-- 所有 `tests/` 源码保持原样。旧业务 crate 最终移除后，旧目录可仅保留这些历史档案，不再作为 workspace 成员。
+- 所有历史 `tests/` 源码保持原始字节。按用户允许迁走历史测试的指令，旧三层档案统一迁入 `docs/archive/legacy-crates/<旧crate>/tests/`，旧三层根目录必须删除；其他历史测试保持原路径。归档不得作为 workspace 成员或 Cargo target。
 - 新领域也显式关闭集成 target 自动发现；不得创建新的集成 target。
 - `cargo clippy --all-targets` 仍检查所有活动 target；不能依赖已禁用的历史集成代码来证明当前编译通过。
 - 运行 `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`，保留当前纯测试和原有环境门控；不得以设置该变量、运行 ignored 或建立真实服务补充验收。
@@ -140,6 +140,6 @@ Port 的实现位于拥有消费方与提供方依赖的上层。接口中如需
 
 当前生产源码对应 19 个业务领域。商城历史 ID、错误兼容文案和注释不作为创建 `erp-commerce` 的理由；阶段 15 按活动类型、集合与路由核验，结果为无实现时保存证据即可。
 
-阶段 17 清除旧三层生产 src、manifest、workspace 注册、活动代码/CI/Docker/开发脚本依赖。权限生成物必须与输入基线内容一致，不能仅依赖暂存后的空 git diff 判断兼容。历史 tests/ 档案和迁移清单允许保留原路径文本。
+阶段 17 清除旧三层根目录、生产 src、manifest、workspace 注册、活动代码/CI/Docker/开发脚本依赖。历史测试与旧文档须按第 9 节原样迁入统一归档，并记录原路径、归档路径和 SHA-256。权限生成物必须与输入基线内容一致，不能仅依赖暂存后的空 git diff 判断兼容。归档内容及历史迁移清单允许保留原路径文本，不恢复对应旧目录。
 
 本次执行不包含部署、推送、数据库变更或恢复。完整阶段回退必须连同所有注册和调用方提交一起处理，不在共享脏工作区执行破坏性清理。

@@ -1,0 +1,33 @@
+{
+  "input_commit": "4eef9510678053663d6d7530a58abb68dd079b34",
+  "manifest": "backend/docs/archive/legacy-crates/manifest.json",
+  "archived_files": 30,
+  "all_archived_bytes_identical": true,
+  "old_roots_absent": [
+    "backend/entities",
+    "backend/database",
+    "backend/services"
+  ],
+  "production_rust_and_cargo_unchanged": true,
+  "unchanged_source_and_cargo_paths": 1886,
+  "active_legacy_archive_references": 0,
+  "cargo_integration_test_targets": 0,
+  "quality_checks": [
+    {
+      "command": "./scripts/check-domain-boundaries.sh --cutover",
+      "exit_code": 0,
+      "selftests": 18
+    },
+    {
+      "command": "python3 backend/docs/superpowers/plans/domain-crate-migration/tools/verify_plan.py --execution",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "historical_tests_executed": false,
+  "performance_measured": false,
+  "real_database_verified": false
+}

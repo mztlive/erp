@@ -10,6 +10,7 @@
 - 执行入口：[00 基线与执行治理](00-baseline.md)；开始前必须阅读[公共执行合同](execution-contract.md)。
 - 后续编译复测：[测量执行合同](compile-measurement.md)及[三场景补丁](compile-probes.json)；本轮不执行。
 - 全量映射：[source-map.tsv](source-map.tsv)，共 922 个旧三层 src 下 Rust 文件；类型/函数索引：[source-symbols.tsv](source-symbols.tsv)。
+- 历史档案：[旧三层归档合同](../../../archive/legacy-crates/README.md)；测试和旧文档保留原字节，三个旧根目录必须删除。
 - 仓储拥有类型：[repository-types.tsv](repository-types.tsv)，共 141 类专用 Repository 固有实现。
 - 机器可读阶段清单：[plan-manifest.json](plan-manifest.json)；文档校验：[tools/verify_plan.py](tools/verify_plan.py)。
 

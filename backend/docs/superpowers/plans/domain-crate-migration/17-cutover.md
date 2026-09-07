@@ -77,7 +77,7 @@
 - 原 `services/work_item` 与工作台的共享权威事实合并到 `workbench::authority::WorkItemFactsReader`。命令最小事实与显示详情分别保持原查询次数、读取顺序和缺字段行为；不得以完整显示查询替换权限事实查询。
 - Process 与 ReadModel 各自拥有真实 Error/Result，直接消费19领域错误，Process可接收ReadModel错误。审批码只使用 workflow 的唯一定义，禁止旧错误别名或读模型反向依赖Process。
 - 活动唯一键提示由七个拥有领域提供窄函数；三个历史索引提示只由HTTP保留。应用边界仅对这三项保留typed DuplicateKey，HTTP仅对这三项重新分类，其余RepositoryError维持Internal。
-- Web、CLI及两个组合crate的原ignore库测试分别登记阶段00原逐集合索引顺序。只复用领域公开索引，不移动或运行历史tests。
+- Web、CLI及两个组合crate的原ignore库测试分别登记阶段00原逐集合索引顺序。只复用领域公开索引，历史tests不运行；旧三层档案按第16节原样归档。
 - 索引组合根使用27个调用保留19领域的原30组索引操作；身份账号/角色、审计日志、身份授权索引按原交错位置执行，workflow/support/finance子组不得以领域聚合入口重排。单个集合内的索引键、选项与创建调用不变。
 - 导入确认的三个复合响应归Process，直接使用workflow唯一定义的任务类型与状态；投影必须保留实际关联任务值，禁止将所有类型固定成IMPORT_BUSINESS_CONFIRMATION。
 - 已有测量工具及探针修正保留；不继续采样或判定性能阈值。原00固定生成的事务字段保留历史原件并另附真实性勘误。
@@ -92,7 +92,7 @@
 
 1. [x] 从 metadata 检查 19 个有实现业务域、3 个基础、2 个组合及保留技术 crate。processes/read-models 中对旧三层的临时依赖已替换为目标 API。
 
-2. [x] 按 source-map.tsv、阶段 01 的仓储类型清单与各阶段符号拆分表核销生产实现。旧 entities/database/services 的 src 和 Cargo.toml 已删除；原 tests/ 档案保留，不改写、不移动、不运行历史集成测试。
+2. [x] 按 source-map.tsv、阶段 01 的仓储类型清单与各阶段符号拆分表核销生产实现。旧 entities/database/services 的根目录、src 和 Cargo.toml 已删除；历史测试及旧文档按第16节保留原字节并迁入统一归档，不运行历史集成测试。
 
 3. [x] 更新 Cargo.lock、AppState、CLI、全局错误映射、索引初始化与后台 worker 装配；活动源码不再引用旧crate。历史迁移记录的源路径保留，不计入活动依赖。
 
@@ -188,3 +188,10 @@ git diff --check
 表内证据文件均位于仓库根 `.domain-migration-evidence/17/`。只读扫描存在解析范围限制，必须结合 `contract-review.json` 的逐项处置与独立源码复核使用；原始比较产物不改写。真实数据库运行未验证，性能验收后置，状态最高登记「本地门禁通过」。
 
 18阶段执行证据的只读核验结果归档于 `.domain-migration-evidence/final-execution.json`；该结果绑定已落库的阶段代码与证据，不表示人工验收。
+
+## 16. 旧目录归档与删除合同
+
+1. 旧三层剩余的26个历史测试源码、1份测试说明和3份旧文档统一迁入 `docs/archive/legacy-crates/<旧crate>/`，保持相对结构及全部原始字节；不得为归档改写测试或启用集成测试。
+2. `backend/entities/`、`backend/database/`、`backend/services/` 三个根路径必须不存在；边界门禁必须拒绝残留测试、README、空目录以及符号链接。
+3. 归档 manifest 必须逐文件记录原路径、目标路径和SHA-256。历史阶段证据保留原提交与路径，当前位置以归档 manifest 为准，不改写已冻结的历史证据。
+4. 本轮原样归档不改变生产Rust、Cargo成员或依赖。验证包括逐字节一致性、无活动引用及Cargo target、完整领域边界检查和文档执行证据校验；不重新计量性能，不运行历史测试。

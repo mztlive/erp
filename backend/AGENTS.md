@@ -22,6 +22,7 @@
 - `crates/erp-read-models`：混合查询、工作台、中心页和展示数据；事实权限政策仍由拥有领域执行。
 - `crates/{erp-core,application-core,persistence-core}`：通用值对象、应用和持久化合同；其余技术 crate 保持既有职责。
 - `config`、`docs`、`scripts`：配置、执行合同与门禁工具。历史 tests 档案不属于活动 Cargo target。
+- 旧三层历史测试与旧文档统一保存在 `docs/archive/legacy-crates/`，只保留原始字节供追溯；禁止恢复顶层 `entities/`、`database/`、`services/`，禁止将归档接入活动 Cargo target。
 
 ## 新功能开发流程（后端）
 
@@ -1202,5 +1203,5 @@ erp-client/lib/query-client.ts
 - 分支命名：`chore/domain-crate-<阶段>-<主题>`，例如 `chore/domain-crate-00-baseline`、`chore/domain-crate-01-foundations`。不得伪装成 `feat/erp-<letter>-<batch>-<slug>` 等旧业务阶段分支。
 - 00 基线与执行治理；01 `erp-core` / `application-core` / `persistence-core`；02 身份与审计；03 工作流与 `erp-processes` / `erp-read-models`；04 通用支撑；05 主体/客户/供应商；06 商品/仓库/合同；07 导入；08 库存；09 财务；10 销售；11 采购；12 履约；13 退货；14 外部集成；15 商城范围核验；16 供应链；17 最终切换。
 - 状态只允许：未开始 → 执行中 → 本地门禁通过 → 已验收。执行者最高登记「本地门禁通过」，不得自行标记「已验收」。
-- 新基础/领域 crate 设置 `autotests = false`，不新增 `[[test]]`。历史 `tests/` 档案保持字节不变，不是 Cargo target。回归：`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`。
+- 新基础/领域 crate 设置 `autotests = false`，不新增 `[[test]]`。旧三层历史 `tests/` 档案原样迁入 `docs/archive/legacy-crates/<旧crate>/tests/`；其他历史测试保持原路径，均不是 Cargo target。迁移前的路径记录仅用于追溯，不要求恢复旧目录。回归：`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`。
 - 迁出代码保留原注释；新写的拥有仓储、Port、Process 模块与脚本需要 rustdoc。不把 AccountCore / Role / AuditLog / WorkItem / SalesOrder 放入基础 crate。
