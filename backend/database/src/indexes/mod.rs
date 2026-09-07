@@ -3,11 +3,6 @@
 //!
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
-mod supplier_api;
-mod supplier_fulfillment;
-mod supplier_offering;
-mod supplier_settlement;
-
 /// 创建全部域依赖的幂等命名索引。
 ///
 /// # 参数
@@ -33,10 +28,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     erp_returns::indexes::ensure(db).await?;
     erp_sales::indexes::ensure(db).await?;
     erp_supplier::indexes::ensure(db).await?;
-    supplier_api::ensure(db).await?;
-    supplier_offering::ensure(db).await?;
-    supplier_fulfillment::ensure(db).await?;
-    supplier_settlement::ensure(db).await?;
+    erp_supply::indexes::ensure(db).await?;
     erp_warehouse::indexes::ensure(db).await?;
     Ok(())
 }

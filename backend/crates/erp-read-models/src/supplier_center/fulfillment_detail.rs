@@ -1,26 +1,23 @@
 //! 供应商履约详情的跨域只读装配，包括主体名称与 W26 正式任务授权。
 
+use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
 use application_core::AuditActor;
-use database::{SupplierApiExt, SupplierFulfillmentExt};
-use entities::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
-use entities::supplier_fulfillment::{
+use erp_supply::dto::supplier_fulfillment::{
+    SupplierFulfillmentItemView, SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView,
+    SupplierOrderAddressView, SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView,
+    SupplierOrderInvestigationOutcome, SupplierRefundFactView,
+};
+use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
+use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionType,
 };
-use erp_identity::SharedRbacService;
+use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
-use services::supplier_fulfillment::{
-    capability_for_action, ensure_capability, ensure_replay_safe, ensure_task_actor_eligible,
-    parse_investigation_evidence, refund_fact_view, verified_terminal_evidence, InvestigationEvidenceRecord,
-    SupplierFulfillmentItemView, SupplierFulfillmentOrderDetailParams, SupplierFulfillmentOrderDetailView,
-    SupplierFulfillmentService, SupplierOrderActionBlockerView, SupplierOrderAddressView,
-    SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView, SupplierOrderInvestigationOutcome,
-    SupplierRefundFactView, W26_BUSINESS_OBJECT_TYPE,
-};
-use services::workflow_compose::work_item_service;
+
 use services::{Error, Result};
 
 /// 组合履约订单、主体名称、调查证据和正式任务授权的详情读取器。
@@ -53,7 +50,7 @@ impl SupplierFulfillmentDetailReadService {
         id: &str,
         params: &SupplierFulfillmentOrderDetailParams,
         actor: &AuditActor,
-        rbac: SharedRbacService,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
     ) -> Result<SupplierFulfillmentOrderDetailView> {
         let order = self.fulfillment.load_order(id).await?;
         let order_id = SupplierFulfillmentOrderId::new(id);
@@ -117,15 +114,13 @@ impl SupplierFulfillmentDetailReadService {
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let formal = if let Some(work_item_id) = work_item_id {
-            let view = work_item_service(self.db.clone(), rbac)
-                .authorize_work_item(work_item_id, actor)
-                .await?;
+            let view = task_auth.authorize(work_item_id, actor).await?;
             if !matches!(
-                view.item.work_item_type,
+                view.work_item_type,
                 WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
-            ) || view.item.business_object_type != W26_BUSINESS_OBJECT_TYPE
-                || view.item.business_object_id != order.base.id
-                || view.item.subject_version != order.base.version.to_string()
+            ) || view.business_object_type != W26_BUSINESS_OBJECT_TYPE
+                || view.business_object_id != order.base.id
+                || view.subject_version != order.base.version.to_string()
                 || false
             {
                 return Err(Error::BusinessLogicError(
@@ -411,3 +406,13 @@ fn item_view(item: SupplierFulfillmentItem) -> SupplierFulfillmentItemView {
         input_tax_rate: item.input_tax_rate,
     }
 }
+
+use super::fulfillment_access::ensure_task_actor_eligible;
+use super::fulfillment_dto::SupplierFulfillmentOrderDetailView;
+use erp_supply::service::supplier_fulfillment::investigate::{
+    capability_for_action, ensure_replay_safe, parse_investigation_evidence, verified_terminal_evidence,
+    InvestigationEvidenceRecord,
+};
+use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
+use erp_supply::service::supplier_fulfillment::place::ensure_capability;
+use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};

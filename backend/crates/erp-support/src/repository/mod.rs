@@ -21,3 +21,5 @@ pub use source_registry::{
     external_id_key_bson, ExpireTargetsOutcome, ExternalIdentityMapFilter, ExternalIdentityMapRow,
     SourceRegistryRepository, SourceSystemFilter, SourceSystemRow,
 };
+
+pub mod supplier_connection_job;

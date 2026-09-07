@@ -5,14 +5,17 @@ use super::{
     SupplierConnectionExecutionProcess,
 };
 use application_core::AuditActor;
-use database::SupplierApiExt;
-use entities::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-use erp_integration::entity::integration_ops::ErrorClass;
+use erp_supply::entity::failure::SupplierFailureClass;
+use erp_supply::entity::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
+use erp_supply::repository::SupplierApiExt;
+use erp_supply::{
+    ports::supplier_api_gateway::ClassifiedError,
+    service::supplier_api::{context::digest, SupplierApiService},
+};
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use persistence_core::Transactional;
-use services::supplier_api::{digest, ClassifiedError};
 use services::{Error, Result};
 use std::time::Instant as MonotonicInstant;
 
@@ -31,8 +34,8 @@ impl SupplierConnectionExecutionProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .supplier_api()
-                        .governance_job(&job.base.id, session)
+                        .background_jobs()
+                        .find_by_id(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     if job.status != JobStatus::Pending {
@@ -52,8 +55,8 @@ impl SupplierConnectionExecutionProcess {
                     job.start(at)?;
                     run.start(at)?;
                     db.background_jobs().update(&mut job, session).await?;
-                    db.supplier_api_health_check_runs()
-                        .update(&mut run, session)
+                    SupplierApiService::new(db.clone())
+                        .persist_health_run(&mut run, session)
                         .await?;
                     Ok((connection, job, run))
                 })
@@ -76,8 +79,8 @@ impl SupplierConnectionExecutionProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .supplier_api()
-                        .governance_job(&job.base.id, session)
+                        .background_jobs()
+                        .find_by_id(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     let mut run = db
@@ -94,7 +97,7 @@ impl SupplierConnectionExecutionProcess {
                     let config_changed = connection.technical_config_version != run.technical_config_version;
                     if config_changed {
                         let error = ClassifiedError {
-                            class: ErrorClass::ResultUnknown,
+                            class: SupplierFailureClass::ResultUnknown,
                             code: "TECHNICAL_CONFIG_CHANGED".to_string(),
                             summary: "检查期间技术配置已变化，本次结果不能作为启用依据".to_string(),
                         };
@@ -104,8 +107,8 @@ impl SupplierConnectionExecutionProcess {
                         settle_health_failure(&mut job, &mut run, at, latency_ms, error)?;
                         connection.record_health(HealthCheckResult::Failed, at);
                         connection.stable.touch(actor.id());
-                        db.supplier_api_connections()
-                            .update(&mut connection, session)
+                        SupplierApiService::new(db.clone())
+                            .persist_connection(&mut connection, session)
                             .await?;
                         persist_health_failure_task(&db, &connection, &job, error, &actor, session).await?;
                     } else {
@@ -114,13 +117,13 @@ impl SupplierConnectionExecutionProcess {
                         run.succeed(at, latency_ms)?;
                         connection.record_health(HealthCheckResult::Healthy, at);
                         connection.stable.touch(actor.id());
-                        db.supplier_api_connections()
-                            .update(&mut connection, session)
+                        SupplierApiService::new(db.clone())
+                            .persist_connection(&mut connection, session)
                             .await?;
                     }
                     db.background_jobs().update(&mut job, session).await?;
-                    db.supplier_api_health_check_runs()
-                        .update(&mut run, session)
+                    SupplierApiService::new(db.clone())
+                        .persist_health_run(&mut run, session)
                         .await?;
                     let audit = actor.clone().resource_log_with_id(
                         format!("w20-health-audit-{}", digest(&[&job.base.id])),

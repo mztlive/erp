@@ -91,7 +91,13 @@ pub async fn receivable_account_detail(
     Query(params): Query<CardFundsReviewDetailParams>,
 ) -> Result<ReceivableAccountView> {
     let view = ReceivableReadService::new(state.db())
-        .receivable_account_detail_with_actions(&id, &params, &actor, state.rbac())
+        .receivable_account_detail_with_actions(
+            &id,
+            &params,
+            &actor,
+            state.rbac(),
+            &state.work_item_authorization(),
+        )
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

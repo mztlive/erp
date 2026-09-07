@@ -5,9 +5,10 @@ pub mod extensions;
 pub mod owned;
 
 pub use catalog::{
-    CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductCategoryAttributeFilter,
-    ProductCategoryFilter, ProductFilter, ProductListingSummary, ProductRevisionFilter, SellableSkuFilter,
-    SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRow, UnitOfMeasureFilter,
+    sku_is_listed_expr, CatalogRepository, CategoryParentChainFact, ProductBrandFilter,
+    ProductCategoryAttributeFilter, ProductCategoryFilter, ProductFilter, ProductListingSummary,
+    ProductRevisionFilter, ProductRow, SellableSkuFilter, SellableSkuRow, SkuAttributeFilter,
+    SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRow, UnitOfMeasureFilter,
     VoucherCategoryProfileRevisionFilter,
 };
 pub use extensions::CatalogExt;

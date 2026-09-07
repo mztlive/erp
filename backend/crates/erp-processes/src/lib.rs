@@ -47,3 +47,7 @@ pub mod fulfillment_execution;
 
 pub mod integration_resolution;
 pub mod supplier_connection_execution;
+
+pub mod supply_execution;
+pub mod supply_governance;
+pub mod supply_settlement;

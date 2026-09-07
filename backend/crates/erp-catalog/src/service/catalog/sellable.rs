@@ -8,11 +8,10 @@ use crate::entity::catalog::ProductKind;
 use crate::repository::CatalogExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
-use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{CatalogService, PageView};
+use super::PageView;
 use crate::error::{Error, Result};
 
 use crate::dto::validate_sales_price_range;
@@ -155,82 +154,6 @@ fn normalized_text(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-impl CatalogService {
-    /// 分页查询符合销售资格的公司 SKU。
-    ///
-    /// # 参数
-    /// * `params` - 搜索、类型、分类、品牌、供应商、区域、供应保障、销售价、资格日期与分页
-    ///
-    /// # 返回
-    /// 返回只读公司商品池分页视图；不包含任何采购成本或供应商身份。
-    ///
-    /// # 错误
-    /// 参数非法时返回 `ValidationError`；聚合查询失败时返回数据库错误。
-    pub async fn sellable_sku_list(
-        &self,
-        params: &SellableSkuListParams,
-    ) -> Result<PageView<SellableSkuView>> {
-        params.validate()?;
-        validate_sales_price_range(params.sales_price_min, params.sales_price_max)?;
-        let page = params.page.unwrap_or(1);
-        let page_size = params.page_size.unwrap_or(20);
-        let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
-        let filter = SellableSkuFilter {
-            keyword: normalized_text(params.q.as_deref()),
-            product_kind: params.product_kind,
-            category_id: normalized_text(params.category_id.as_deref()),
-            brand_id: normalized_text(params.brand_id.as_deref()),
-            supplier_id: normalized_text(params.supplier_id.as_deref()),
-            supply_region: normalized_text(params.supply_region.as_deref()),
-            max_supplier_count: params.max_supplier_count,
-            sales_price_min: params.sales_price_min,
-            sales_price_max: params.sales_price_max,
-            eligibility_as_of,
-            page,
-            page_size,
-        };
-        let rows = self
-            .db
-            .catalog()
-            .search_sellable_skus(&filter, &mut NoTransaction)
-            .await?;
-        let mut items = Vec::with_capacity(rows.items.len());
-        for row in rows.items {
-            items.push(SellableSkuView {
-                sku_id: row.sku_id,
-                sku_version: row.sku_version,
-                sku_revision_id: row.sku_revision_id,
-                sku_revision_no: row.sku_revision_no,
-                sku_no: row.sku_no,
-                product_id: row.product_id,
-                product_no: row.product_no,
-                product_kind: row.product_kind,
-                name: row.name,
-                specification_attributes: specification_attribute_views(&row.specification_signature),
-                specification: row.specification,
-                barcode: row.barcode,
-                base_unit_id: row.base_unit_id,
-                base_unit_code: row.base_unit_code,
-                base_unit_name: row.base_unit_name,
-                sales_visible_price_gross: row.sales_visible_price_gross,
-                market_price: row.market_price,
-                main_image_asset_id: row.main_image_asset_id,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
-                supplier_count: row.supplier_count,
-                supply_regions: row.supply_regions,
-                eligibility_as_of,
-            });
-        }
-        Ok(PageView {
-            items,
-            total: rows.total,
-            page,
-            page_size,
-        })
-    }
-}
-
 /// 构造销售资格失效错误。
 ///
 /// # 参数
@@ -243,6 +166,73 @@ pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
         "销售商品已失效或修订已变化，请刷新公司商品池后重试: {}",
         sku_ids.join(", ")
     ))
+}
+
+/// 校验分页、价格并在原时点解释资格日期。
+pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<SellableSkuFilter> {
+    params.validate()?;
+    validate_sales_price_range(params.sales_price_min, params.sales_price_max)?;
+    let page = params.page.unwrap_or(1);
+    let page_size = params.page_size.unwrap_or(20);
+    let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
+    Ok(SellableSkuFilter {
+        keyword: normalized_text(params.q.as_deref()),
+        product_kind: params.product_kind,
+        category_id: normalized_text(params.category_id.as_deref()),
+        brand_id: normalized_text(params.brand_id.as_deref()),
+        supplier_id: normalized_text(params.supplier_id.as_deref()),
+        supply_region: normalized_text(params.supply_region.as_deref()),
+        max_supplier_count: params.max_supplier_count,
+        sales_price_min: params.sales_price_min,
+        sales_price_max: params.sales_price_max,
+        eligibility_as_of,
+        page,
+        page_size,
+    })
+}
+
+/// 投影可售行，保留历史非法规格签名为空属性的合同。
+pub fn sellable_sku_page_view(
+    rows: persistence_core::PageResult<crate::repository::SellableSkuRow>,
+    filter: &SellableSkuFilter,
+) -> Result<PageView<SellableSkuView>> {
+    let page = filter.page;
+    let page_size = filter.page_size;
+    let eligibility_as_of = filter.eligibility_as_of;
+    let mut items = Vec::with_capacity(rows.items.len());
+    for row in rows.items {
+        items.push(SellableSkuView {
+            sku_id: row.sku_id,
+            sku_version: row.sku_version,
+            sku_revision_id: row.sku_revision_id,
+            sku_revision_no: row.sku_revision_no,
+            sku_no: row.sku_no,
+            product_id: row.product_id,
+            product_no: row.product_no,
+            product_kind: row.product_kind,
+            name: row.name,
+            specification_attributes: specification_attribute_views(&row.specification_signature),
+            specification: row.specification,
+            barcode: row.barcode,
+            base_unit_id: row.base_unit_id,
+            base_unit_code: row.base_unit_code,
+            base_unit_name: row.base_unit_name,
+            sales_visible_price_gross: row.sales_visible_price_gross,
+            market_price: row.market_price,
+            main_image_asset_id: row.main_image_asset_id,
+            effective_from: row.effective_from,
+            effective_to: row.effective_to,
+            supplier_count: row.supplier_count,
+            supply_regions: row.supply_regions,
+            eligibility_as_of,
+        });
+    }
+    Ok(PageView {
+        items,
+        total: rows.total,
+        page,
+        page_size,
+    })
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
 erp-returns = { workspace = true }
 erp-integration = { workspace = true }
+erp-supply = { workspace = true }
 erp-finance = { workspace = true }
 bpm = { workspace = true }
 entities = { workspace = true }

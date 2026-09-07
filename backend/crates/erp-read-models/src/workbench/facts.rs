@@ -3,11 +3,11 @@
 use erp_integration::repository::IntegrationOpsExt;
 use std::collections::{HashMap, HashSet};
 
-use database::{SupplierFulfillmentExt, SupplierOfferingExt};
-use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_core::common::time::Instant;
 use erp_import::LegacyImportExt;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
+use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
+use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use erp_workflow::entity::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };

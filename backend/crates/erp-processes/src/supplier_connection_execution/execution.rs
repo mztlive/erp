@@ -37,8 +37,8 @@ mod tests {
     use std::sync::Mutex;
 
     use erp_core::AccountKind;
-    use erp_integration::entity::integration_ops::ErrorClass;
-    use services::supplier_api::ClassifiedError;
+    use erp_supply::entity::failure::SupplierFailureClass;
+    use erp_supply::ports::supplier_api_gateway::ClassifiedError;
     use services::Error;
 
     use super::*;
@@ -147,7 +147,7 @@ mod tests {
     #[tokio::test]
     async fn classified_gateway_failure_still_reaches_result_transaction_unchanged() {
         let failure = ClassifiedError {
-            class: ErrorClass::ResultUnknown,
+            class: SupplierFailureClass::ResultUnknown,
             code: "OUTCOME_UNKNOWN".into(),
             summary: "结果未知".into(),
         };

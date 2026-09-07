@@ -2,10 +2,6 @@ mod errors;
 pub mod identity_audit;
 pub mod identity_compose;
 
-pub mod supplier_api;
-pub mod supplier_fulfillment;
-pub mod supplier_offering;
-pub mod supplier_settlement;
 pub mod support_audit;
 pub mod support_documents;
 pub mod work_item;

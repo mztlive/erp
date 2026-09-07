@@ -2,10 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::SupplierSettlementExt;
-use entities::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
 use erp_core::ids::SupplierSettlementItemId;
 use erp_inventory::InventoryExt;
+use erp_supply::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
+use erp_supply::repository::SupplierSettlementExt;
 use persistence_core::Executor;
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
@@ -103,7 +103,7 @@ impl crate::work_item::ProcessObjectFacts {
 
     async fn supplier_settlement_fact_context(
         &self,
-        statements: &[entities::supplier_settlement::SupplierSettlementStatement],
+        statements: &[erp_supply::entity::supplier_settlement::SupplierSettlementStatement],
         executor: &mut dyn Executor,
     ) -> Result<SettlementFactContext> {
         let statement_ids = statements

@@ -29,3 +29,5 @@ pub mod supplier_refund;
 pub mod payment_reversal;
 
 pub mod offset_batch;
+
+pub mod supplier_settlement;

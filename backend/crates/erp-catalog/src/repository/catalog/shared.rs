@@ -10,8 +10,6 @@ pub(super) const PRODUCT_REVISIONS: &str = <mongodb::Database as CatalogExt>::PR
 pub(super) const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
 /// `sku_revision` 集合名（单一来源：`CatalogExt` 关联常量）。
 pub(super) const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_REVISIONS;
-/// `supplier_offering` 集合名（公司商品池资格依赖的供给稳定身份）。
-pub(super) const SUPPLIER_OFFERINGS: &str = crate::ports::supply::SUPPLIER_OFFERINGS;
 
 /// 构造 ID 集合批量匹配条件。
 ///

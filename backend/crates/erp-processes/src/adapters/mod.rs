@@ -114,3 +114,9 @@ pub fn supplier_service_with_sensitive(
         MongoSupplierSensitiveTokens::shared(sensitive_data),
     )
 }
+
+pub mod catalog_supply_query;
+pub mod supplier_api;
+pub mod supplier_failure;
+pub mod supplier_fulfillment_gateway;
+pub mod workflow;

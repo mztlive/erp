@@ -4,7 +4,6 @@ use crate::repository::owned::{
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
@@ -17,7 +16,6 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, ProductRevisionId};
 use erp_core::money::Amount;
 
-use super::product_pipeline::product_list_pipeline;
 use super::shared::{in_filter, sort_doc, PRODUCT_REVISIONS};
 use super::CatalogRepository;
 use crate::repository::CatalogExt;
@@ -62,22 +60,6 @@ pub struct ProductRow {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
-}
-
-/// 商品列表聚合分页结果。
-#[derive(Debug, Deserialize)]
-struct ProductFacet {
-    /// 当前页数据。
-    items: Vec<ProductRow>,
-    /// 总数聚合行。
-    total: Vec<ProductTotal>,
-}
-
-/// 商品列表总数聚合行。
-#[derive(Debug, Deserialize)]
-struct ProductTotal {
-    /// 符合筛选的商品数量。
-    count: i64,
 }
 
 /// 商品列表筛选条件。
@@ -376,53 +358,6 @@ impl<'a> ProductRevisionMediaRepository<'a> {
 }
 
 impl<'a> CatalogRepository<'a> {
-    /// 分页查询商品及当前启用 SKU 的聚合筛选结果。
-    ///
-    /// 统一关键字覆盖商品编号/名称与 SKU 编号/名称/规格/条码；上架状态、
-    /// 供给覆盖和销售价区间均按当前启用 SKU 实时派生，不在商品主表冗余落库。
-    ///
-    /// # 参数
-    /// * `filter` - 商品、当前修订与 SKU 聚合筛选条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页商品投影与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
-    pub async fn search_products(
-        &self,
-        filter: &ProductFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
-        let facet = self
-            .aggregate_products(product_list_pipeline(filter), executor)
-            .await?;
-        Ok(PageResult {
-            items: facet.items,
-            total: facet.total.first().map_or(0, |row| row.count),
-        })
-    }
-
-    /// 按语义化筛选条件分页查询商品聚合结果。
-    ///
-    /// # 参数
-    /// * `filter` - 商品、当前 SKU 关系、价格、分页与排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回商品聚合投影分页结果。
-    ///
-    /// # 错误
-    /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
-    pub async fn product_page(
-        &self,
-        filter: &ProductFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
-        self.search_products(filter, executor).await
-    }
-
     /// 分页查询商品修订并批量装配关联媒体。
     ///
     /// # 参数
@@ -620,41 +555,6 @@ impl<'a> CatalogRepository<'a> {
             .product_revision_medias()
             .find_media_by_revision_ids(&[ProductRevisionId::new(revision.base.id.clone())], executor)
             .await
-    }
-
-    /// 执行商品列表类型化聚合并收集唯一的 facet 结果。
-    async fn aggregate_products(
-        &self,
-        pipeline: Vec<Document>,
-        executor: &mut dyn Executor,
-    ) -> Result<ProductFacet> {
-        let collection = self
-            .db
-            .collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
-        let rows = match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductFacet>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            }
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductFacet>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            }
-        };
-        Ok(rows.into_iter().next().unwrap_or(ProductFacet {
-            items: Vec::new(),
-            total: Vec::new(),
-        }))
     }
 
     /// 建立「商品修订 + SPU 级媒体行」（跨集合多步骤写入）。

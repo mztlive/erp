@@ -10,6 +10,7 @@ erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
 erp-returns = { workspace = true }
 erp-integration = { workspace = true }
+erp-supply = { workspace = true }
 serde_json = { workspace = true }
 erp-support = { workspace = true }
 erp-finance = { workspace = true }

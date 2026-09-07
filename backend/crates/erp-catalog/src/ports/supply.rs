@@ -1,62 +1,29 @@
-//! Foreign supply-collection names and BSON status codes used by sellable queries.
-//!
-//! Catalog repositories must not name other domains' collections as string
-//! literals. These constants are the original `SupplierOfferingExt` values and
-//! live outside `repository/` so boundary scans do not treat them as catalog-owned
-//! collections. BSON status codes keep the original uppercase wire values.
+//! 商品消费的跨域列表与精确可售资格查询合同。
+use crate::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
+use async_trait::async_trait;
+use erp_core::common::time::BusinessDate;
+use persistence_core::{Executor, PageResult, Result};
 
-/// `supplier_offering` collection name (company-pool eligibility).
-pub const SUPPLIER_OFFERINGS: &str = "supplier_offerings";
-/// `supplier_offering_revision` collection name (current offering revision).
-pub const SUPPLIER_OFFERING_REVISIONS: &str = "supplier_offering_revisions";
-/// `supplier_offering_availability` collection name (live availability projection).
-pub const SUPPLIER_OFFERING_AVAILABILITIES: &str = "supplier_offering_availabilities";
-
-/// Offering status codes consumed by sellable and listing pipelines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OfferingStatus {
-    /// Offering may participate in sourcing.
-    Active,
-}
-
-impl OfferingStatus {
-    /// Return the persisted uppercase status code.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Active => "ACTIVE",
-        }
-    }
-}
-
-/// Live availability status codes consumed by the sellable pipeline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AvailabilityStatus {
-    /// Offering is currently available.
-    Available,
-}
-
-impl AvailabilityStatus {
-    /// Return the persisted uppercase availability code.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Available => "AVAILABLE",
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{AvailabilityStatus, OfferingStatus};
-
-    #[test]
-    fn supply_status_wire_values_stay_uppercase() {
-        assert_eq!(OfferingStatus::Active.as_str(), "ACTIVE");
-        assert_eq!(AvailabilityStatus::Available.as_str(), "AVAILABLE");
-        assert_eq!(super::SUPPLIER_OFFERINGS, "supplier_offerings");
-        assert_eq!(super::SUPPLIER_OFFERING_REVISIONS, "supplier_offering_revisions");
-        assert_eq!(
-            super::SUPPLIER_OFFERING_AVAILABILITIES,
-            "supplier_offering_availabilities"
-        );
-    }
+/// 保持原查询形状、仓储错误与调用方 Executor；实现由组合层注入。
+#[async_trait]
+pub trait CatalogSupplyQueryPort: Send + Sync {
+    /// 分页读取商品和当前 SKU 供给覆盖。
+    async fn product_page(
+        &self,
+        filter: &ProductFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductRow>>;
+    /// 分页读取符合原资格条件的可售 SKU。
+    async fn search_sellable_skus(
+        &self,
+        filter: &SellableSkuFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SellableSkuRow>>;
+    /// 原样复验精确 SKU 与修订引用，不扩大为完整列表查询。
+    async fn find_sellable_sku_refs(
+        &self,
+        refs: &[(String, String)],
+        date: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SellableSkuRow>>;
 }

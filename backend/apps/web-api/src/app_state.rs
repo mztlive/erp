@@ -2,24 +2,26 @@ use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
+use erp_processes::adapters::supplier_api::{
+    UnavailableSupplierApiGateway, UnavailableSupplierReferenceRegistry,
+};
+use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::integration_resolution::{
     evidence_adapter::MongoIntegrationEvidenceAuthority, IntegrationResolutionProcess,
 };
 use erp_processes::ApprovalActionRegistry;
 use erp_read_models::integration_center::IntegrationCenterReadService;
+use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
+use erp_supply::ports::supplier_gateway::SupplierGateway;
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
 use erp_support::{BulkJobService, FileAssetService, SourceRegistryService};
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
 use mongodb::Database;
 use serde::Serialize;
-use services::supplier_api::{
-    SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
-    UnavailableSupplierReferenceRegistry,
-};
-use services::supplier_fulfillment::{
-    SupplierFulfillmentService, SupplierGateway, UnavailableSupplierGateway,
-};
 use services::workflow_compose::{workflow_audit, workflow_auth, workflow_object_facts, WorkflowAuth};
 use std::sync::Arc;
 use std::time::Duration;
@@ -135,6 +137,7 @@ pub struct AppState {
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
     external_connectors: ExternalConnectorPorts,
     integration_evidence: Arc<dyn IntegrationEvidenceAuthority>,
+    catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort>,
 }
 
 impl AppState {
@@ -175,6 +178,8 @@ impl AppState {
         let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
         let integration_evidence: Arc<dyn IntegrationEvidenceAuthority> =
             Arc::new(MongoIntegrationEvidenceAuthority::new(db.clone()));
+        let catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort> =
+            Arc::new(erp_processes::adapters::catalog_supply_query::MongoCatalogSupplyQuery::new(db.clone()));
         Self {
             db,
             config,
@@ -186,6 +191,7 @@ impl AppState {
             approval_outbox,
             external_connectors,
             integration_evidence,
+            catalog_supply_query,
         }
     }
 
@@ -280,11 +286,42 @@ impl AppState {
         IntegrationCenterReadService::new(self.db(), Arc::clone(&self.integration_evidence))
     }
 
-    /// 返回已注入网关、引用注册表与 RBAC 的供应商 API 应用服务。
+    /// 返回仅处理本域事实的供应商 API 服务。
     pub fn supplier_api_service(&self) -> SupplierApiService {
         SupplierApiService::new(self.db())
+    }
+
+    /// 注入原引用注册表和 RBAC，执行连接治理命令。
+    pub fn supplier_api_governance_process(
+        &self,
+    ) -> erp_processes::supply_governance::SupplierApiGovernanceProcess {
+        erp_processes::supply_governance::SupplierApiGovernanceProcess::new(self.db())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
             .with_rbac(self.rbac())
+    }
+
+    /// 读取按原权限与引用配置投影的供应商连接详情。
+    pub fn supplier_api_read_service(
+        &self,
+    ) -> erp_read_models::supplier_center::supplier_api::SupplierApiReadService {
+        erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db())
+            .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
+            .with_rbac(self.rbac())
+    }
+
+    /// 注入实际任务授权读取，构造不执行授权或查询。
+    pub fn work_item_authorization(
+        &self,
+    ) -> erp_processes::adapters::workflow::work_item_authorization::WorkItemAuthorizationAdapter {
+        erp_processes::adapters::workflow::work_item_authorization::WorkItemAuthorizationAdapter::new(
+            self.db(),
+            self.rbac(),
+        )
+    }
+
+    /// 商品列表和销售资格共用同一查询提供方实现。
+    pub fn catalog_center(&self) -> erp_read_models::catalog_center::CatalogCenterReadService {
+        erp_read_models::catalog_center::CatalogCenterReadService::new(Arc::clone(&self.catalog_supply_query))
     }
 
     /// 返回保留意图提交与外部调用分离的供应商连接执行入口。
@@ -297,9 +334,16 @@ impl AppState {
         )
     }
 
-    /// 返回已注入网关的供应商履约应用服务。
+    /// 返回供应商履约的本域查询与持久化服务。
     pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
-        SupplierFulfillmentService::new(
+        SupplierFulfillmentService::new(self.db())
+    }
+
+    /// 返回已注入原网关的供应商履约跨域执行入口。
+    pub fn supplier_fulfillment_process(
+        &self,
+    ) -> erp_processes::supply_execution::SupplierFulfillmentProcess {
+        erp_processes::supply_execution::SupplierFulfillmentProcess::new(
             self.db(),
             Arc::clone(&self.external_connectors.supplier_fulfillment),
         )

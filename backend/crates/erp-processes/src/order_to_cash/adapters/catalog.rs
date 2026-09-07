@@ -1,18 +1,21 @@
 //! Adapt current catalog qualification without importing catalog into sales.
+use crate::adapters::catalog_supply_query::MongoCatalogSupplyQuery;
 use async_trait::async_trait;
-use erp_catalog::CatalogExt;
+use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_sales::ports::sales_order::SellableSkuPort;
 use persistence_core::Executor;
 
 /// Catalog provider for exact SKU revision qualification.
 pub struct CatalogQualificationAdapter {
-    db: mongodb::Database,
+    query: std::sync::Arc<dyn CatalogSupplyQueryPort>,
 }
 impl CatalogQualificationAdapter {
     /// Bind the repository without loading any current catalog facts.
     pub fn new(db: mongodb::Database) -> Self {
-        Self { db }
+        Self {
+            query: std::sync::Arc::new(MongoCatalogSupplyQuery::new(db)),
+        }
     }
 }
 #[async_trait]
@@ -24,8 +27,7 @@ impl SellableSkuPort for CatalogQualificationAdapter {
         executor: &mut dyn Executor,
     ) -> erp_sales::Result<Vec<(String, String)>> {
         Ok(self
-            .db
-            .catalog()
+            .query
             .find_sellable_sku_refs(refs, date, executor)
             .await?
             .into_iter()
@@ -33,3 +35,6 @@ impl SellableSkuPort for CatalogQualificationAdapter {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests;

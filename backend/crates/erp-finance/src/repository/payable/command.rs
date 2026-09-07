@@ -1,7 +1,8 @@
+mod initial;
 use crate::entity::payable::{PayableAccount, PayableEntry, PaymentAllocation, PurchaseInvoiceAllocation};
 
 use super::super::extensions::PayableExt;
-use super::{PayableRepository, PAYABLE_ENTRIES};
+use super::PayableRepository;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
@@ -29,21 +30,7 @@ impl<'a> PayableRepository<'a> {
         entry: &PayableEntry,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<PayableAccount>(<mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS),
-            account,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<PayableEntry>(PAYABLE_ENTRIES),
-            entry,
-            executor,
-        )
-        .await?;
-        Ok(())
+        initial::create(self.db, account, entry, executor).await
     }
 
     /// 批量写入付款核销分配（`insert_many`，禁止逐笔插入）。

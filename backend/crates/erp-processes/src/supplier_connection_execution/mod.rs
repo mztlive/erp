@@ -1,11 +1,11 @@
 //! 供应商连接后台任务执行：启动事务、事务外网关调用和结果事务。
 
 use application_core::AuditActor;
-use database::SupplierApiExt;
+use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
+use erp_support::BulkJobExt;
 use erp_support::{SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use services::supplier_api::SupplierApiGateway;
 use services::{Error, Result};
 use std::sync::Arc;
 
@@ -36,8 +36,8 @@ impl SupplierConnectionExecutionProcess {
     pub async fn process_connection_job(&self, job_id: &str, actor: &AuditActor) -> Result<()> {
         let job = self
             .db
-            .supplier_api()
-            .governance_job(job_id, &mut NoTransaction)
+            .background_jobs()
+            .find_by_id(job_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("连接后台任务不存在".to_string()))?;
         if job.is_terminal() {

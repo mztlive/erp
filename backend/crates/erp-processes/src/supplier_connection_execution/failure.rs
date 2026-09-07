@@ -1,17 +1,19 @@
 //! 在原结果事务中登记连接失败的 W29 事实、工作项和审计。
+use crate::adapters::supplier_failure::integration_class;
 use crate::integration_resolution::producer::error_work_item;
 use application_core::AuditActor;
-use entities::supplier_api::{SupplierApiConnection, SupplierHealthCheckRun};
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::IntegrationErrorTaskId;
 use erp_integration::{
-    entity::integration_ops::{error_owner_role, ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData},
+    entity::integration_ops::{error_owner_role, IntegrationErrorTask, IntegrationErrorTaskData},
     repository::IntegrationOpsExt,
 };
+use erp_supply::entity::failure::SupplierFailureClass;
+use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckRun};
+use erp_supply::{ports::supplier_api_gateway::ClassifiedError, service::supplier_api::context::digest};
 use erp_support::BackgroundJob;
 use erp_workflow::WorkItemExt;
-use services::supplier_api::{digest, ClassifiedError};
 use services::Result;
 
 pub(super) fn settle_health_failure(
@@ -23,7 +25,7 @@ pub(super) fn settle_health_failure(
 ) -> Result<()> {
     job.record_progress(0, 0, 1, at)?;
     job.mark_failed(Some(format!("{}: {}", error.code, error.summary)), at)?;
-    if error.class == ErrorClass::ResultUnknown {
+    if error.class == SupplierFailureClass::ResultUnknown {
         run.mark_unknown(at, latency_ms, error.code.clone(), error.summary.clone())?;
     } else {
         run.fail(at, latency_ms, error.code.clone(), error.summary.clone())?;
@@ -44,8 +46,8 @@ pub(super) async fn persist_health_failure_task(
         IntegrationErrorTaskData {
             message_id: None,
             business_object_id: Some(connection.base.id.clone()),
-            error_class: error.class,
-            owner_role: Some(error_owner_role(error.class).to_string()),
+            error_class: integration_class(error.class),
+            owner_role: Some(error_owner_role(integration_class(error.class)).to_string()),
             owner_user_id: Some(actor.id().to_string()),
         },
     )?;

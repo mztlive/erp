@@ -130,7 +130,7 @@ pub fn stock_balance_fact(value: erp_inventory::StockBalance) -> StockBalanceFac
     }
 }
 /// 投影已筛选 ACTIVE 供给身份和当前条款指针。
-pub(crate) fn offering_fact(value: entities::supplier_offering::SupplierOffering) -> OfferingFact {
+pub(crate) fn offering_fact(value: erp_supply::entity::supplier_offering::SupplierOffering) -> OfferingFact {
     OfferingFact {
         base: FactIdentity {
             id: value.base.id.clone(),
@@ -144,7 +144,7 @@ pub(crate) fn offering_fact(value: entities::supplier_offering::SupplierOffering
 }
 /// 原条款有效期与价格直接映射，由采购规则在原位置判断。
 pub(crate) fn offering_revision_fact(
-    value: entities::supplier_offering::SupplierOfferingRevision,
+    value: erp_supply::entity::supplier_offering::SupplierOfferingRevision,
 ) -> OfferingRevisionFact {
     OfferingRevisionFact {
         base: FactIdentity {
@@ -159,7 +159,7 @@ pub(crate) fn offering_revision_fact(
 }
 /// 可供状态显式映射；所有不可供状态保持采购原拒绝分支。
 pub(crate) fn availability_fact(
-    value: entities::supplier_offering::SupplierOfferingAvailability,
+    value: erp_supply::entity::supplier_offering::SupplierOfferingAvailability,
 ) -> AvailabilityFact {
     AvailabilityFact {
         base: VersionedFactIdentity {
@@ -168,10 +168,14 @@ pub(crate) fn availability_fact(
         },
         supplier_offering_id: value.supplier_offering_id.clone(),
         availability_status: match value.availability_status {
-            entities::supplier_offering::AvailabilityStatus::Available => AvailabilityStatus::Available,
-            entities::supplier_offering::AvailabilityStatus::Unavailable
-            | entities::supplier_offering::AvailabilityStatus::Stopped
-            | entities::supplier_offering::AvailabilityStatus::Stale => AvailabilityStatus::Unavailable,
+            erp_supply::entity::supplier_offering::AvailabilityStatus::Available => {
+                AvailabilityStatus::Available
+            }
+            erp_supply::entity::supplier_offering::AvailabilityStatus::Unavailable
+            | erp_supply::entity::supplier_offering::AvailabilityStatus::Stopped
+            | erp_supply::entity::supplier_offering::AvailabilityStatus::Stale => {
+                AvailabilityStatus::Unavailable
+            }
         },
         available_quantity: value.available_quantity,
         source_revision_token: value.source_revision_token.clone(),

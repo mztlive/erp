@@ -1,4 +1,4 @@
-//! Consumer ports for audit persistence, attachment facts and sellable supply names.
+//! Consumer ports for audit persistence, attachment facts and sellable supply queries.
 
 mod audit;
 mod file_asset;

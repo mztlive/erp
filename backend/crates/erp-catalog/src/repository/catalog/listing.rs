@@ -112,7 +112,7 @@ impl<'a> CatalogRepository<'a> {
 ///
 /// # 错误
 /// 无。
-pub(super) fn sku_is_listed_expr() -> Document {
+pub fn sku_is_listed_expr() -> Document {
     doc! {
         "$eq": [
             { "$ifNull": ["$listing_status", ListingStatus::Listed.as_str()] },

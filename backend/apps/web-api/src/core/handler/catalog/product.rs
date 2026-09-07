@@ -49,7 +49,7 @@ pub async fn sellable_sku_list(
     State(state): State<AppState>,
     Query(params): Query<SellableSkuListParams>,
 ) -> Result<PageView<SellableSkuView>> {
-    let view = state.catalog_service().sellable_sku_list(&params).await?;
+    let view = state.catalog_center().sellable_sku_list(&params).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -72,7 +72,7 @@ pub async fn product_list(
     State(state): State<AppState>,
     Query(params): Query<ProductListParams>,
 ) -> Result<PageView<ProductView>> {
-    let page = state.catalog_service().product_list(&params).await?;
+    let page = state.catalog_center().product_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

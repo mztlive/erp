@@ -13,8 +13,8 @@ use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use {
-    database::SupplierSettlementExt, erp_procurement::repository::PurchaseOrderExt,
-    erp_returns::repository::ReturnsExt,
+    erp_procurement::repository::PurchaseOrderExt, erp_returns::repository::ReturnsExt,
+    erp_supply::repository::SupplierSettlementExt,
 };
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};

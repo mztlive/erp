@@ -3,16 +3,6 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod supplier_api;
-mod supplier_fulfillment;
-mod supplier_offering;
-mod supplier_settlement;
-
-pub use supplier_api::SupplierApiExt;
-pub use supplier_fulfillment::SupplierFulfillmentExt;
-pub use supplier_offering::SupplierOfferingExt;
-pub use supplier_settlement::SupplierSettlementExt;
-
 /// Database 的统一仓储访问入口：聚合全部 34 个域的访问器 trait。
 ///
 /// 各域在 `extensions/<domain>.rs` 中扩展自己的访问器方法；调用点（`db.accounts()` 等）
@@ -43,10 +33,10 @@ pub trait DatabaseExt:
     + erp_sales::repository::SalesReviewExt
     + erp_support::SourceRegistryExt
     + erp_supplier::SupplierExt
-    + SupplierApiExt
-    + SupplierOfferingExt
-    + SupplierFulfillmentExt
-    + SupplierSettlementExt
+    + erp_supply::repository::SupplierApiExt
+    + erp_supply::repository::SupplierOfferingExt
+    + erp_supply::repository::SupplierFulfillmentExt
+    + erp_supply::repository::SupplierSettlementExt
     + erp_warehouse::WarehouseExt
     + erp_workflow::WorkItemExt
 {
@@ -78,10 +68,10 @@ impl<
             + erp_sales::repository::SalesReviewExt
             + erp_support::SourceRegistryExt
             + erp_supplier::SupplierExt
-            + SupplierApiExt
-            + SupplierOfferingExt
-            + SupplierFulfillmentExt
-            + SupplierSettlementExt
+            + erp_supply::repository::SupplierApiExt
+            + erp_supply::repository::SupplierOfferingExt
+            + erp_supply::repository::SupplierFulfillmentExt
+            + erp_supply::repository::SupplierSettlementExt
             + erp_warehouse::WarehouseExt
             + erp_workflow::WorkItemExt,
     > DatabaseExt for T

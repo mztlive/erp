@@ -8,11 +8,17 @@ use axum::{
     Extension, Json,
 };
 use erp_identity::Permission;
-use services::supplier_offering::{
+use erp_supply::dto::supplier_offering::{
     CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
     CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
-    ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingService, SupplierOfferingView,
-    UpdateSupplierOfferingAvailabilityRequest, UpdateSupplierOfferingAvailabilityResult,
+    ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityRequest,
+    UpdateSupplierOfferingAvailabilityResult,
+};
+
+use erp_processes::supply_governance::SupplierOfferingProcess;
+use erp_read_models::supplier_center::{
+    offering::dto::{SupplierOfferingListParams, SupplierOfferingView},
+    SupplierOfferingReadService,
 };
 
 use crate::{
@@ -45,7 +51,7 @@ pub async fn list(
     Extension(subject): Extension<RbacSubject>,
     Query(params): Query<SupplierOfferingListParams>,
 ) -> Result<PageView<SupplierOfferingView>> {
-    let mut page = SupplierOfferingService::new(state.db()).list(&params).await?;
+    let mut page = SupplierOfferingReadService::new(state.db()).list(&params).await?;
     if !can_view_costs(&state, &subject).await? {
         for item in &mut page.items {
             item.redact_costs();
@@ -75,7 +81,7 @@ pub async fn create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierOfferingRequest>,
 ) -> Result<CreateSupplierOfferingResult> {
-    let result = SupplierOfferingService::new(state.db())
+    let result = SupplierOfferingProcess::new(state.db())
         .create(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -104,7 +110,7 @@ pub async fn revise(
     Path(id): Path<String>,
     Json(req): Json<ReviseSupplierOfferingRequest>,
 ) -> Result<ReviseSupplierOfferingResult> {
-    let result = SupplierOfferingService::new(state.db())
+    let result = SupplierOfferingProcess::new(state.db())
         .revise(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -133,7 +139,7 @@ pub async fn update_availability(
     Path(id): Path<String>,
     Json(req): Json<UpdateSupplierOfferingAvailabilityRequest>,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-    let result = SupplierOfferingService::new(state.db())
+    let result = SupplierOfferingProcess::new(state.db())
         .update_availability(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -155,7 +161,7 @@ pub async fn complete_supply_exception_task(
     Path(id): Path<String>,
     Json(req): Json<CompleteSupplierSupplyExceptionTaskRequest>,
 ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-    let result = SupplierOfferingService::new(state.db())
+    let result = SupplierOfferingProcess::new(state.db())
         .complete_supply_exception_task(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))

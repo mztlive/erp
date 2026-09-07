@@ -5,13 +5,15 @@ use super::{
     SupplierConnectionExecutionProcess,
 };
 use application_core::AuditActor;
-use database::SupplierApiExt;
-use entities::supplier_api::SupplierApiConnection;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
+use erp_supply::entity::supplier_api::SupplierApiConnection;
+use erp_supply::{
+    ports::supplier_api_gateway::ClassifiedError,
+    service::supplier_api::{context::digest, SupplierApiService},
+};
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use persistence_core::{NoTransaction, Transactional};
-use services::supplier_api::{digest, ClassifiedError, SupplierApiService};
 use services::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
@@ -26,8 +28,8 @@ impl SupplierConnectionExecutionProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .supplier_api()
-                        .governance_job(&job.base.id, session)
+                        .background_jobs()
+                        .find_by_id(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
                     if job.status != JobStatus::Pending {
@@ -55,8 +57,8 @@ impl SupplierConnectionExecutionProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .supplier_api()
-                        .governance_job(&job.base.id, session)
+                        .background_jobs()
+                        .find_by_id(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("目录同步任务不存在".to_string()))?;
                     let at = Instant::now();

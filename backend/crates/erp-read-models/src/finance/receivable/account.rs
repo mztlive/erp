@@ -21,6 +21,7 @@ use super::snapshot::{
 };
 use super::ReceivableReadService;
 use crate::finance::dto::ReceivableAccountView;
+use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
 use application_core::AuditActor;
 use erp_finance::dto::receivable::{
     CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewDetailParams,
@@ -28,9 +29,10 @@ use erp_finance::dto::receivable::{
 };
 use erp_finance::repository::ReceivableAccountFilter;
 use erp_identity::SharedRbacService;
+use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
-use services::workflow_compose::work_item_service;
 use services::{Error, Result};
+use std::future::Future;
 
 impl ReceivableReadService {
     /// 分页查询应收往来子账列表。
@@ -237,62 +239,30 @@ impl ReceivableReadService {
         params: &CardFundsReviewDetailParams,
         actor: &AuditActor,
         rbac: SharedRbacService,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
     ) -> Result<ReceivableAccountView> {
-        let mut view = self.receivable_account_view(id.to_string()).await?;
-        let Some(work_item_id) = params
-            .work_item_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+        let (mut view, task) = load_review_task(
+            self.receivable_account_view(id.to_string()),
+            |work_item_id| async move {
+                self.db
+                    .work_items()
+                    .find_by_id(&work_item_id, &mut NoTransaction)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("卡券票款复核任务不存在".to_string()))
+            },
+            id,
+            params.work_item_id.as_deref(),
+            actor,
+            task_auth,
+        )
+        .await?;
+        let Some(ReviewTask {
+            work_item,
+            review_type,
+        }) = task
         else {
             return Ok(view);
         };
-        let formal = work_item_service(self.db.clone(), rbac.clone())
-            .authorize_work_item(work_item_id, actor)
-            .await?;
-        let review_type = match formal.item.work_item_type {
-            WorkItemType::CardFundsReview => CardFundsReviewType::Opening,
-            WorkItemType::CardFundsDeltaReview => CardFundsReviewType::SyncDelta,
-            _ => {
-                return Err(Error::BusinessLogicError(
-                    "正式任务不是 W13 卡券票款复核".to_string(),
-                ));
-            }
-        };
-        if formal.item.business_object_type != "receivable_account"
-            || formal.item.business_object_id != id
-            || formal.item.subject_version != view.current_sales_order_revision_id
-            || false
-        {
-            return Err(Error::BusinessLogicError(
-                "正式任务与当前应收账户或销售版本不匹配".to_string(),
-            ));
-        }
-        view.work_item = None;
-        view.active_review_type = Some(review_type);
-        if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
-            block_card_funds_actions(
-                &mut view,
-                "CURRENT_RESPONSIBILITY_REQUIRED",
-                "当前账号不是开放任务的当前责任人",
-            );
-            return Ok(view);
-        }
-
-        let work_item = self
-            .db
-            .work_items()
-            .find_by_id(work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("卡券票款复核任务不存在".to_string()))?;
-        if work_item.status != WorkItemStatus::Open || !work_item.is_owned_by(actor.id()) {
-            block_card_funds_actions(
-                &mut view,
-                "CURRENT_RESPONSIBILITY_REQUIRED",
-                "当前账号不是开放任务的当前责任人",
-            );
-            return Ok(view);
-        }
         let account = self
             .db
             .receivable_accounts()
@@ -568,5 +538,364 @@ fn project_registration_action(
         );
     } else {
         view.allowed_actions.push(action);
+    }
+}
+
+/// 详情已授权且仍开放归属于当前处理人的原始任务。
+struct ReviewTask {
+    work_item: WorkItem,
+    review_type: CardFundsReviewType,
+}
+
+/// 按原顺序读取详情、授权和重读任务；不合并两个任务快照。
+async fn load_review_task<V, F, T>(
+    detail: V,
+    load_task: F,
+    id: &str,
+    requested_task_id: Option<&str>,
+    actor: &AuditActor,
+    task_auth: &dyn WorkItemAuthorizationReadPort,
+) -> Result<(ReceivableAccountView, Option<ReviewTask>)>
+where
+    V: Future<Output = Result<ReceivableAccountView>>,
+    F: FnOnce(String) -> T,
+    T: Future<Output = Result<WorkItem>>,
+{
+    let mut view = detail.await?;
+    let Some(work_item_id) = requested_task_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok((view, None));
+    };
+    let formal = task_auth.authorize(work_item_id, actor).await?;
+    let review_type = match formal.work_item_type {
+        WorkItemType::CardFundsReview => CardFundsReviewType::Opening,
+        WorkItemType::CardFundsDeltaReview => CardFundsReviewType::SyncDelta,
+        _ => {
+            return Err(Error::BusinessLogicError(
+                "正式任务不是 W13 卡券票款复核".to_string(),
+            ));
+        }
+    };
+    if formal.business_object_type != "receivable_account"
+        || formal.business_object_id != id
+        || formal.subject_version != view.current_sales_order_revision_id
+        || false
+    {
+        return Err(Error::BusinessLogicError(
+            "正式任务与当前应收账户或销售版本不匹配".to_string(),
+        ));
+    }
+    view.work_item = None;
+    view.active_review_type = Some(review_type);
+    if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
+        block_card_funds_actions(
+            &mut view,
+            "CURRENT_RESPONSIBILITY_REQUIRED",
+            "当前账号不是开放任务的当前责任人",
+        );
+        return Ok((view, None));
+    }
+
+    let work_item = load_task(work_item_id.to_string()).await?;
+    if work_item.status != WorkItemStatus::Open || !work_item.is_owned_by(actor.id()) {
+        block_card_funds_actions(
+            &mut view,
+            "CURRENT_RESPONSIBILITY_REQUIRED",
+            "当前账号不是开放任务的当前责任人",
+        );
+        return Ok((view, None));
+    }
+    Ok((
+        view,
+        Some(ReviewTask {
+            work_item,
+            review_type,
+        }),
+    ))
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use super::*;
+    use crate::ports::work_item_authorization::AuthorizedTaskFact;
+    use async_trait::async_trait;
+    use erp_core::{common::time::Instant, ids::WorkItemId, AccountKind};
+    use erp_finance::entity::receivable::{AccountReviewStatus, ReceivableAccountStatus};
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
+    use std::sync::{Arc, Mutex};
+
+    struct RecordingAuthority {
+        trace: Arc<Mutex<Vec<String>>>,
+        fact: AuthorizedTaskFact,
+        denied: bool,
+    }
+
+    #[async_trait]
+    impl WorkItemAuthorizationReadPort for RecordingAuthority {
+        async fn authorize(&self, id: &str, actor: &AuditActor) -> erp_workflow::Result<AuthorizedTaskFact> {
+            self.trace
+                .lock()
+                .unwrap()
+                .push(format!("authorize:{id}:{}", actor.id()));
+            if self.denied {
+                return Err(erp_workflow::Error::Forbidden("authority-denied".into()));
+            }
+            Ok(self.fact.clone())
+        }
+    }
+
+    fn authority(trace: Arc<Mutex<Vec<String>>>) -> RecordingAuthority {
+        RecordingAuthority {
+            trace,
+            fact: AuthorizedTaskFact {
+                work_item_type: WorkItemType::CardFundsReview,
+                business_object_type: "receivable_account".into(),
+                business_object_id: "account-1".into(),
+                subject_version: "revision-1".into(),
+                allowed_actions: vec![WorkItemAllowedAction::Process],
+            },
+            denied: false,
+        }
+    }
+
+    fn view() -> ReceivableAccountView {
+        ReceivableAccountView {
+            id: "account-1".into(),
+            sales_order_id: "sales-1".into(),
+            sales_order_no: "SO-1".into(),
+            sales_order_revision_no: 1,
+            sales_order_snapshot_at: 1,
+            account_seq: 1,
+            source_sales_order_revision_id: "revision-1".into(),
+            current_sales_order_revision_id: "revision-1".into(),
+            customer_id: "customer-1".into(),
+            customer_name: "客户".into(),
+            counterparty_party_id: "party-1".into(),
+            counterparty_party_name: Some("往来主体".into()),
+            review_status: AccountReviewStatus::OpeningPending,
+            gross_total: zero_amount(),
+            settled_total: zero_amount(),
+            open_total: zero_amount(),
+            invoiceable_total: zero_amount(),
+            invoiced_total: zero_amount(),
+            open_invoiceable_total: zero_amount(),
+            status: ReceivableAccountStatus::Open,
+            version: 1,
+            account_domain_version: "1".into(),
+            review_chain_tail_id: None,
+            review_chain_version: "0".into(),
+            next_review_no: 1,
+            funds_fact_version: "facts-1".into(),
+            receipt_facts: Vec::new(),
+            invoice_facts: Vec::new(),
+            created_at: 1,
+            entries: Vec::new(),
+            reviews: Vec::new(),
+            work_item: None,
+            active_review_type: None,
+            allowed_actions: Vec::new(),
+            action_blockers: Vec::new(),
+        }
+    }
+
+    fn task() -> WorkItem {
+        WorkItem::new_at(
+            WorkItemId::new("task-1"),
+            WorkItemData {
+                work_item_type: WorkItemType::CardFundsReview,
+                business_object_type: "receivable_account".into(),
+                business_object_id: "account-1".into(),
+                subject_version: "revision-1".into(),
+                owner_role: "role-finance".into(),
+                owner_organization_id: "organization-1".into(),
+                owner_user_id: "actor-1".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::High,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            Instant::from_unix_secs(1_700_000_000),
+        )
+        .unwrap()
+    }
+
+    /// 驱动生产 helper；两次仓储读取由实际参数位置记录，测试不复制业务判断。
+    async fn run(
+        authority: &RecordingAuthority,
+        requested: Option<&str>,
+        detail: Result<ReceivableAccountView>,
+        raw_task: Result<WorkItem>,
+    ) -> Result<(ReceivableAccountView, Option<ReviewTask>)> {
+        let detail_trace = Arc::clone(&authority.trace);
+        let raw_trace = Arc::clone(&authority.trace);
+        let actor = AuditActor::new("actor-1".into(), "处理人".into(), AccountKind::Admin);
+        load_review_task(
+            async move {
+                detail_trace.lock().unwrap().push("detail".into());
+                detail
+            },
+            move |id| async move {
+                raw_trace.lock().unwrap().push(format!("raw:{id}"));
+                raw_task
+            },
+            "account-1",
+            requested,
+            &actor,
+            authority,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn empty_task_id_keeps_detail_and_skips_authority_and_raw_reload() {
+        for requested in [None, Some(""), Some("  ")] {
+            let trace = Arc::new(Mutex::new(Vec::new()));
+            let authority = authority(Arc::clone(&trace));
+            let expected = view();
+            let (actual, task) = run(&authority, requested, Ok(expected.clone()), Ok(task()))
+                .await
+                .unwrap();
+            assert_eq!(actual, expected);
+            assert!(task.is_none());
+            assert_eq!(*trace.lock().unwrap(), ["detail"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn detail_failure_precedes_authority() {
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let authority = authority(Arc::clone(&trace));
+        let result = run(
+            &authority,
+            Some("task-1"),
+            Err(Error::NotFound("detail".into())),
+            Ok(task()),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::NotFound(message)) if message == "detail"));
+        assert_eq!(*trace.lock().unwrap(), ["detail"]);
+    }
+
+    #[tokio::test]
+    async fn authority_error_precedes_formal_binding_checks_and_preserves_type() {
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let mut authority = authority(Arc::clone(&trace));
+        authority.denied = true;
+        authority.fact.work_item_type = WorkItemType::BusinessException;
+        let result = run(&authority, Some(" task-1 "), Ok(view()), Ok(task())).await;
+        assert!(matches!(result, Err(Error::Forbidden(message)) if message == "authority-denied"));
+        assert_eq!(*trace.lock().unwrap(), ["detail", "authorize:task-1:actor-1"]);
+    }
+
+    #[tokio::test]
+    async fn formal_type_object_identity_and_subject_checks_precede_raw_reload() {
+        for mismatch in 0..4 {
+            let trace = Arc::new(Mutex::new(Vec::new()));
+            let mut authority = authority(Arc::clone(&trace));
+            match mismatch {
+                0 => authority.fact.work_item_type = WorkItemType::BusinessException,
+                1 => authority.fact.business_object_type = "sales_order".into(),
+                2 => authority.fact.business_object_id = "account-2".into(),
+                _ => authority.fact.subject_version = "revision-2".into(),
+            }
+            let expected = if mismatch == 0 {
+                "正式任务不是 W13 卡券票款复核"
+            } else {
+                "正式任务与当前应收账户或销售版本不匹配"
+            };
+            let result = run(&authority, Some("task-1"), Ok(view()), Ok(task())).await;
+            assert!(matches!(result, Err(Error::BusinessLogicError(message)) if message == expected));
+            assert_eq!(*trace.lock().unwrap(), ["detail", "authorize:task-1:actor-1"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_process_action_blocks_all_five_actions_without_raw_reload() {
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let mut authority = authority(Arc::clone(&trace));
+        authority.fact.allowed_actions = vec![WorkItemAllowedAction::View];
+        let (view, task) = run(&authority, Some("task-1"), Ok(view()), Ok(task()))
+            .await
+            .unwrap();
+        assert!(task.is_none());
+        assert_eq!(view.active_review_type, Some(CardFundsReviewType::Opening));
+        assert!(view.allowed_actions.is_empty());
+        assert_eq!(view.action_blockers.len(), 5);
+        assert!(view
+            .action_blockers
+            .iter()
+            .all(|blocker| blocker.code == "CURRENT_RESPONSIBILITY_REQUIRED"));
+        assert_eq!(*trace.lock().unwrap(), ["detail", "authorize:task-1:actor-1"]);
+    }
+
+    #[tokio::test]
+    async fn raw_reload_failure_is_preserved_after_authorization() {
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let authority = authority(Arc::clone(&trace));
+        let result = run(
+            &authority,
+            Some("task-1"),
+            Ok(view()),
+            Err(Error::NotFound("raw-task".into())),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::NotFound(message)) if message == "raw-task"));
+        assert_eq!(
+            *trace.lock().unwrap(),
+            ["detail", "authorize:task-1:actor-1", "raw:task-1"]
+        );
+    }
+
+    #[tokio::test]
+    async fn raw_reload_rechecks_open_status_and_current_owner() {
+        for closed in [true, false] {
+            let trace = Arc::new(Mutex::new(Vec::new()));
+            let authority = authority(Arc::clone(&trace));
+            let mut raw = task();
+            if closed {
+                raw.status = WorkItemStatus::Closed;
+            } else {
+                raw.owner_user_id = Some("other-actor".into());
+            }
+            let (view, task) = run(&authority, Some("task-1"), Ok(view()), Ok(raw))
+                .await
+                .unwrap();
+            assert!(task.is_none());
+            assert_eq!(view.action_blockers.len(), 5);
+            assert!(view
+                .action_blockers
+                .iter()
+                .all(|blocker| blocker.code == "CURRENT_RESPONSIBILITY_REQUIRED"));
+            assert_eq!(
+                *trace.lock().unwrap(),
+                ["detail", "authorize:task-1:actor-1", "raw:task-1"]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn authorized_review_preserves_opening_and_delta_type_and_raw_task() {
+        for (kind, review_type) in [
+            (WorkItemType::CardFundsReview, CardFundsReviewType::Opening),
+            (WorkItemType::CardFundsDeltaReview, CardFundsReviewType::SyncDelta),
+        ] {
+            let trace = Arc::new(Mutex::new(Vec::new()));
+            let mut authority = authority(Arc::clone(&trace));
+            authority.fact.work_item_type = kind;
+            let mut raw = task();
+            raw.base.version = 7;
+            let (view, authorized) = run(&authority, Some(" task-1 "), Ok(view()), Ok(raw))
+                .await
+                .unwrap();
+            let authorized = authorized.unwrap();
+            assert_eq!(authorized.review_type, review_type);
+            assert_eq!(authorized.work_item.base.version, 7);
+            assert_eq!(view.active_review_type, Some(review_type));
+            assert!(view.action_blockers.is_empty());
+            assert_eq!(
+                *trace.lock().unwrap(),
+                ["detail", "authorize:task-1:actor-1", "raw:task-1"]
+            );
+        }
     }
 }

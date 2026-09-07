@@ -549,3 +549,5 @@ mod tests {
         assert!(super::missing_order_id(&[], &[SalesOrderId::new("so-1")]).is_none());
     }
 }
+
+pub mod supplier_settlement;

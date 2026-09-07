@@ -5,12 +5,15 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+futures-util = { workspace = true }
+regex = { workspace = true }
 rust_decimal = { workspace = true }
 erp-sales = { workspace = true }
 erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
 erp-returns = { workspace = true }
 erp-integration = { workspace = true }
+erp-supply = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 erp-read-models = { workspace = true }

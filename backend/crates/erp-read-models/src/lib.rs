@@ -36,3 +36,6 @@ pub mod fulfillment_center;
 pub mod returns_center;
 
 pub mod integration_center;
+
+pub mod catalog_center;
+pub mod ports;

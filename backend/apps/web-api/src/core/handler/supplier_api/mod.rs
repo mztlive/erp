@@ -8,23 +8,20 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::supplier_api::{
+use erp_supply::dto::supplier_api::{
     ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
     CreateSupplierApiConnectionRequest, PageView, SupplierApiCapabilityListParams, SupplierApiCapabilityView,
     SupplierApiConnectionDetailView, SupplierApiConnectionListItemView, SupplierApiConnectionListParams,
-    SupplierApiConnectionView, SupplierApiService, SupplierConnectionCommand,
-    SupplierConnectionCommandResult, SupplierConnectionJobView, UpdateSupplierCapabilitiesCommand,
-    UpdateSupplierCapabilitiesResult,
+    SupplierApiConnectionView, SupplierConnectionCommand, SupplierConnectionCommandResult,
+    UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
+
+use erp_read_models::supplier_center::supplier_api::dto::SupplierConnectionJobView;
 
 use crate::{
     app_state::AppState,
     core::{errors::Result, response::ApiResponse},
 };
-
-fn service(state: &AppState) -> SupplierApiService {
-    state.supplier_api_service()
-}
 
 #[permission_macros::permission(
     group = "API 供应商连接",
@@ -39,7 +36,10 @@ pub async fn supplier_api_connection_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierApiConnectionListParams>,
 ) -> Result<PageView<SupplierApiConnectionListItemView>> {
-    let page = service(&state).connection_list_for_actor(&params, &actor).await?;
+    let page = state
+        .supplier_api_read_service()
+        .connection_list_for_actor(&params, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -56,7 +56,10 @@ pub async fn supplier_api_connection_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierApiConnectionDetailView> {
-    let view = service(&state).connection_detail_for_actor(&id, &actor).await?;
+    let view = state
+        .supplier_api_read_service()
+        .connection_detail_for_actor(&id, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -73,7 +76,10 @@ pub async fn supplier_api_connection_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierApiConnectionRequest>,
 ) -> Result<SupplierApiConnectionView> {
-    let view = service(&state).create_connection(req, &actor).await?;
+    let view = state
+        .supplier_api_governance_process()
+        .create_connection(req, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -91,7 +97,8 @@ pub async fn supplier_api_connection_command(
     Path(id): Path<String>,
     Json(command): Json<SupplierConnectionCommand>,
 ) -> Result<SupplierConnectionCommandResult> {
-    let result = service(&state)
+    let result = state
+        .supplier_api_governance_process()
         .execute_connection_command(&id, command, &actor)
         .await?;
     if let Some(job_id) = result.job_id.clone() {
@@ -130,7 +137,8 @@ pub async fn supplier_api_business_capability_confirm(
     Path(id): Path<String>,
     Json(command): Json<ConfirmBusinessCapabilityRequirementCommand>,
 ) -> Result<ConfirmBusinessCapabilityRequirementResult> {
-    let result = service(&state)
+    let result = state
+        .supplier_api_governance_process()
         .confirm_business_capability_requirement(&id, command, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -150,7 +158,10 @@ pub async fn supplier_api_capabilities_update(
     Path(id): Path<String>,
     Json(command): Json<UpdateSupplierCapabilitiesCommand>,
 ) -> Result<UpdateSupplierCapabilitiesResult> {
-    let result = service(&state).update_capabilities(&id, command, &actor).await?;
+    let result = state
+        .supplier_api_governance_process()
+        .update_capabilities(&id, command, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -166,7 +177,10 @@ pub async fn supplier_api_connection_job_detail(
     State(state): State<AppState>,
     Path((id, job_id)): Path<(String, String)>,
 ) -> Result<SupplierConnectionJobView> {
-    let result = service(&state).connection_job(&id, &job_id).await?;
+    let result = state
+        .supplier_api_read_service()
+        .connection_job(&id, &job_id)
+        .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -182,6 +196,6 @@ pub async fn supplier_api_capability_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierApiCapabilityListParams>,
 ) -> Result<PageView<SupplierApiCapabilityView>> {
-    let page = service(&state).capability_list(&params).await?;
+    let page = state.supplier_api_service().capability_list(&params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }

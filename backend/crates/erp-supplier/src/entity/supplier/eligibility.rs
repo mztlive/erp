@@ -111,6 +111,25 @@ pub fn ensure_capability_qualified(
     Ok(())
 }
 
+/// 供应商供给消费的公司商品类型事实；不依赖catalog实体。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OfferingProductKind {
+    Physical,
+    Virtual,
+    OfflineService,
+    Voucher,
+}
+/// 供给所需能力的唯一供应商政策。
+/// 卡券与虚拟商品共用Virtual能力，其余逐类对应。
+pub fn required_offering_capability(kind: OfferingProductKind) -> crate::entity::supplier::CapabilityCode {
+    use crate::entity::supplier::CapabilityCode;
+    match kind {
+        OfferingProductKind::Physical => CapabilityCode::Physical,
+        OfferingProductKind::Virtual | OfferingProductKind::Voucher => CapabilityCode::Virtual,
+        OfferingProductKind::OfflineService => CapabilityCode::OfflineService,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ensure_capability_qualified, CapabilityEligibilityViolation};
@@ -442,5 +461,25 @@ mod tests {
                 .unwrap_err(),
             CapabilityEligibilityViolation::Expired
         );
+    }
+}
+
+#[cfg(test)]
+mod offering_kind_tests {
+    use super::{required_offering_capability, OfferingProductKind};
+    use crate::entity::supplier::CapabilityCode;
+    #[test]
+    fn offering_kind_preserves_all_four_mappings() {
+        for (kind, code) in [
+            (OfferingProductKind::Physical, CapabilityCode::Physical),
+            (OfferingProductKind::Virtual, CapabilityCode::Virtual),
+            (
+                OfferingProductKind::OfflineService,
+                CapabilityCode::OfflineService,
+            ),
+            (OfferingProductKind::Voucher, CapabilityCode::Virtual),
+        ] {
+            assert_eq!(required_offering_capability(kind), code);
+        }
     }
 }

@@ -6,18 +6,18 @@
 //! Service 基于本事实解释执行；本模块只做持久化读取，查询次数与任务数、销售
 //! 行数及供给数无关，不得出现逐行 N+1。
 
-use entities::supplier_offering::OfferingStatus;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_procurement::entity::purchase_order::CreationBasisFacts;
+use erp_supply::entity::supplier_offering::OfferingStatus;
 use mongodb::bson::doc;
 use mongodb::Database;
 
 use super::mapping::{
     availability_fact, offering_fact, offering_revision_fact, supplier_commercial_fact, supplier_role_fact,
 };
-use database::SupplierOfferingExt;
 use erp_supplier::SupplierExt;
+use erp_supply::repository::SupplierOfferingExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 
@@ -157,7 +157,7 @@ fn unique_sku_ids(sku_ids: &[SkuId]) -> Vec<SkuId> {
 /// # 约束
 /// 供应商集合只用于批量读取结算事实，不承担任何业务过滤。
 fn unique_supplier_ids(
-    offerings: &[entities::supplier_offering::SupplierOffering],
+    offerings: &[erp_supply::entity::supplier_offering::SupplierOffering],
 ) -> Vec<SupplierAccountId> {
     let mut seen = std::collections::HashSet::new();
     offerings
@@ -171,11 +171,6 @@ fn unique_supplier_ids(
 mod isolation_tests {
     use std::str::FromStr;
 
-    use entities::supplier_offering::{
-        AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
-        SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
-        SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         PartyId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
@@ -187,12 +182,17 @@ mod isolation_tests {
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData,
         SupplierAccountStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
     };
+    use erp_supply::entity::supplier_offering::{
+        AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
+        SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
+        SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
+    };
     use test_support::{require_mongo, TestDb};
 
     use database::ensure_indexes;
-    use database::SupplierOfferingExt;
     use erp_party::PartyExt;
     use erp_supplier::SupplierExt;
+    use erp_supply::repository::SupplierOfferingExt;
     use persistence_core::{NoTransaction, Transactional};
 
     use super::load_creation_basis_facts;

@@ -19,70 +19,6 @@ type SkuFilter = <mongodb::Database as CatalogExt>::SkuFilter;
 type SkuRevisionFilter = <mongodb::Database as CatalogExt>::SkuRevisionFilter;
 
 impl CatalogService {
-    /// 分页查询商品列表。
-    ///
-    /// # 参数
-    /// * `params` - 商品、当前修订与当前启用 SKU 的扁平筛选参数
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 分页、价格区间或排序参数非法，以及仓储查询失败时返回错误。
-    pub async fn product_list(&self, params: &ProductListParams) -> Result<PageView<ProductView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let filter = ProductFilter {
-            product_no: query.product_no,
-            keyword: query.keyword,
-            product_kind: query.product_kind,
-            category_id: query.category_id,
-            brand_id: query.brand_id,
-            supplier_id: query.supplier_id,
-            status: query.status,
-            listing_status: query.listing_status,
-            supply_coverage: query.supply_coverage,
-            sales_price_min: query.sales_price_min,
-            sales_price_max: query.sales_price_max,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .catalog()
-            .product_page(&filter, &mut NoTransaction)
-            .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ProductView {
-                id: row.id,
-                product_no: row.product_no,
-                product_kind: row.product_kind,
-                name: row.name,
-                category_id: row.category_id,
-                brand_id: row.brand_id,
-                status: row.status,
-                listing_status: row.listing_status,
-                listed_sku_count: row.listed_sku_count,
-                sku_count: row.sku_count,
-                supplied_sku_count: row.supplied_sku_count,
-                priced_sku_count: row.priced_sku_count,
-                current_revision_id: row.current_revision_id,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-        })
-    }
-
     /// 分页查询商品修订列表。
     ///
     /// # 参数
@@ -266,4 +202,61 @@ impl CatalogService {
             page_size: query.paging.page_size,
         })
     }
+}
+
+/// 校验并规范化商品列表请求；保持原首错顺序。
+pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter> {
+    params.validate()?;
+    let query = params.normalized()?;
+    Ok(ProductFilter {
+        product_no: query.product_no,
+        keyword: query.keyword,
+        product_kind: query.product_kind,
+        category_id: query.category_id,
+        brand_id: query.brand_id,
+        supplier_id: query.supplier_id,
+        status: query.status,
+        listing_status: query.listing_status,
+        supply_coverage: query.supply_coverage,
+        sales_price_min: query.sales_price_min,
+        sales_price_max: query.sales_price_max,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    })
+}
+
+/// 将已读取的商品行投影为原列表响应，不读取额外事实。
+pub fn product_page_view(
+    page: persistence_core::PageResult<crate::repository::ProductRow>,
+    filter: &ProductFilter,
+) -> Result<PageView<ProductView>> {
+    let items = page
+        .items
+        .into_iter()
+        .map(|row| ProductView {
+            id: row.id,
+            product_no: row.product_no,
+            product_kind: row.product_kind,
+            name: row.name,
+            category_id: row.category_id,
+            brand_id: row.brand_id,
+            status: row.status,
+            listing_status: row.listing_status,
+            listed_sku_count: row.listed_sku_count,
+            sku_count: row.sku_count,
+            supplied_sku_count: row.supplied_sku_count,
+            priced_sku_count: row.priced_sku_count,
+            current_revision_id: row.current_revision_id,
+            created_at: row.created_at,
+            version: row.version,
+        })
+        .collect();
+    Ok(PageView {
+        items,
+        total: page.total,
+        page: filter.page,
+        page_size: filter.page_size,
+    })
 }

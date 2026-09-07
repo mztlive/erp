@@ -1,7 +1,7 @@
 //! 域 D32 `supplier_fulfillment` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::supplier_fulfillment` 的 DTO，禁止重复定义同构类型、
+//! 直接复用 供应链领域及组合层的 DTO，禁止重复定义同构类型、
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
 use application_core::AuditActor;
@@ -9,14 +9,18 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::supplier_fulfillment::{
+use erp_supply::dto::supplier_fulfillment::{
     PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
     SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
-    SupplierFulfillmentOrderDetailView, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
-    SupplierOrderInvestigationResultView, SupplierOrderObjectInvestigationCommand,
-    SupplierOrderStatusHistoryView, SupplierOrderTaskCompletionCommand,
-    SupplierOrderTaskCompletionResultView, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
+    SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
+    SupplierOrderObjectInvestigationCommand, SupplierOrderStatusHistoryView,
+    SupplierOrderTaskCompletionCommand, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
 };
+
+use erp_processes::supply_execution::dto::{
+    SupplierOrderInvestigationResultView, SupplierOrderTaskCompletionResultView,
+};
+use erp_read_models::supplier_center::fulfillment_dto::SupplierFulfillmentOrderDetailView;
 
 use crate::{
     app_state::AppState,
@@ -77,7 +81,7 @@ pub async fn supplier_fulfillment_order_detail(
         state.db(),
         state.supplier_fulfillment_service(),
     )
-    .supplier_fulfillment_order_detail(&id, &params, &actor, state.rbac())
+    .supplier_fulfillment_order_detail(&id, &params, &actor, &state.work_item_authorization())
     .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -97,7 +101,7 @@ pub async fn supplier_fulfillment_order_investigation(
     Json(command): Json<SupplierOrderObjectInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .investigate_order(command, &actor)
         .await?;
 
@@ -118,7 +122,7 @@ pub async fn supplier_fulfillment_order_task_investigation(
     Json(command): Json<SupplierOrderTaskInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .investigate_order_task(command, &actor)
         .await?;
 
@@ -139,7 +143,7 @@ pub async fn supplier_fulfillment_order_task_completion(
     Json(command): Json<SupplierOrderTaskCompletionCommand>,
 ) -> Result<SupplierOrderTaskCompletionResultView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .complete_order_task(command, &actor)
         .await?;
 
@@ -168,7 +172,7 @@ pub async fn supplier_fulfillment_order_submit(
     Json(req): Json<PlaceFulfillmentOrderRequest>,
 ) -> Result<SupplierFulfillmentOrderView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .submit_place(req, &actor)
         .await?;
 
@@ -199,7 +203,7 @@ pub async fn supplier_fulfillment_order_cancel(
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .submit_cancel(&id, req, &actor)
         .await?;
 
@@ -230,7 +234,7 @@ pub async fn supplier_fulfillment_order_refund(
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .submit_refund(&id, req, &actor)
         .await?;
 
@@ -261,7 +265,7 @@ pub async fn supplier_fulfillment_order_reject(
     Json(req): Json<RecordSupplierRejectRequest>,
 ) -> Result<SupplierOrderStatusHistoryView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .record_reject(&id, req, &actor)
         .await?;
 
@@ -293,7 +297,7 @@ pub async fn supplier_refund_fact_post(
     Json(req): Json<RecordRefundResultRequest>,
 ) -> Result<SupplierRefundFactView> {
     let view = state
-        .supplier_fulfillment_service()
+        .supplier_fulfillment_process()
         .record_refund_result(&id, req, &actor)
         .await?;
 
