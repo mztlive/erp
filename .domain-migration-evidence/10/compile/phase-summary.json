@@ -1,0 +1,87 @@
+{
+  "phase": "10",
+  "code_commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+  "storage_for_both_revisions": "/Volumes/Kingston",
+  "scenarios": {
+    "sales": {
+      "check": {
+        "baseline_seconds": 4.2179288329789415,
+        "candidate_seconds": 5.07699741597753,
+        "improvement_percent": -20.36707154188435,
+        "sample_count_per_revision": 5,
+        "baseline_evidence": ".domain-migration-evidence/10/compile/baseline-sales-check",
+        "candidate_evidence": ".domain-migration-evidence/10/compile/final-sales-check",
+        "candidate_dirty_packages": [
+          "database",
+          "entities",
+          "erp-processes",
+          "erp-read-models",
+          "erp-sales",
+          "services",
+          "web-api"
+        ],
+        "opposite_domain": "erp-finance",
+        "opposite_domain_fresh_in_all_samples": true
+      },
+      "build": {
+        "baseline_seconds": 9.913364458014257,
+        "candidate_seconds": 12.373870457988232,
+        "improvement_percent": -24.820090196369506,
+        "sample_count_per_revision": 5,
+        "baseline_evidence": ".domain-migration-evidence/10/compile/baseline-sales-build",
+        "candidate_evidence": ".domain-migration-evidence/10/compile/final-sales-build",
+        "candidate_dirty_packages": [
+          "database",
+          "entities",
+          "erp-processes",
+          "erp-read-models",
+          "erp-sales",
+          "services",
+          "web-api"
+        ],
+        "opposite_domain": "erp-finance",
+        "opposite_domain_fresh_in_all_samples": true
+      }
+    },
+    "finance": {
+      "check": {
+        "baseline_seconds": 4.199479833943769,
+        "candidate_seconds": 4.254901500069536,
+        "improvement_percent": -1.3197269261255196,
+        "sample_count_per_revision": 5,
+        "baseline_evidence": ".domain-migration-evidence/09/compile/baseline-finance-check",
+        "candidate_evidence": ".domain-migration-evidence/10/compile/final-finance-check",
+        "candidate_dirty_packages": [
+          "database",
+          "erp-finance",
+          "erp-processes",
+          "erp-read-models",
+          "services",
+          "web-api"
+        ],
+        "opposite_domain": "erp-sales",
+        "opposite_domain_fresh_in_all_samples": true
+      },
+      "build": {
+        "baseline_seconds": 9.882491917000152,
+        "candidate_seconds": 21.51740533299744,
+        "improvement_percent": -117.73258722309268,
+        "sample_count_per_revision": 5,
+        "baseline_evidence": ".domain-migration-evidence/09/compile/baseline-finance-build",
+        "candidate_evidence": ".domain-migration-evidence/10/compile/final-finance-build",
+        "candidate_dirty_packages": [
+          "database",
+          "erp-finance",
+          "erp-processes",
+          "erp-read-models",
+          "services",
+          "web-api"
+        ],
+        "opposite_domain": "erp-sales",
+        "opposite_domain_fresh_in_all_samples": true
+      }
+    }
+  },
+  "real_database_verified": false,
+  "interpretation": "阶段10销售与财务互相保持Fresh；旧database/services仍在增量闭包中。本阶段数据只记录迁移中间态，最终收益与回退阈值必须在阶段17全部切换后判定。"
+}

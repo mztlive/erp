@@ -1,0 +1,7 @@
+{
+  "phase": "10",
+  "external_package_versions_sources_checksums_identical": true,
+  "new_local_packages": [
+    "erp-sales"
+  ]
+}

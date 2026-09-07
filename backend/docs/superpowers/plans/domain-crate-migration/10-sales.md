@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 10 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-sales` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；唯一共享注册集成负责人 |
+| 输入/输出提交 | 输入 `abf36f41`；实现 `07da7863ec0fb975d2093e4e97a43c7e0813e607`；编译/证据以本文件所属证据提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -77,17 +77,17 @@ sales 与 finance 无任何 normal/build/dev 直接依赖；processes 可组合�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结草稿/working copy/提交快照/正式修订、审批资格、价格精度和商品规格事实测试；保持历史引用不被当前主数据覆盖。
+1. [x] 冻结草稿/working copy/提交快照/正式修订、审批资格、价格精度和商品规格事实测试；保持历史引用不被当前主数据覆盖。
 
-2. [ ] 迁入 sales_order/sales_review 的实体、DTO、拥有仓储、索引；消除对 finance/procurement/catalog 的实体或服务导入，改为消费方窄事实及快照转换。
+2. [x] 迁入 sales_order/sales_review 的实体、DTO、拥有仓储、索引；消除对 finance/procurement/catalog 的实体或服务导入，改为消费方窄事实及快照转换。
 
-3. [ ] 在 processes::order_to_cash 迁入正式化、应收初建/差额与资金/开票任务的根编排。write_receivable_delta 拆为 finance 差额接口与 workflow 任务接口；根回执及原 Executor 仍由组合层持有。
+3. [x] 在 processes::order_to_cash 迁入正式化、应收初建/差额与资金/开票任务的根编排。write_receivable_delta 拆为 finance 差额接口与 workflow 任务接口；根回执及原 Executor 仍由组合层持有。
 
-4. [ ] 将销售资金进度更新中的跨财务读取由 finance 公开事实接口适配提供；销售纯进度规则和写入留 sales。替换阶段 09 中暂时指向旧销售的 adapter，清除旧销售业务依赖。
+4. [x] 将销售资金进度更新中的跨财务读取由 finance 公开事实接口适配提供；销售纯进度规则和写入留 sales。替换阶段 09 中暂时指向旧销售的 adapter，清除旧销售业务依赖。
 
-5. [ ] 将采购覆盖、客户/合同中心摘要移入 read-models::sales_center；当前仍存在的销售对采购协作由明确组合用例接入旧采购事务内接口。sourcing.rs 只有删除说明，直接删除其占位，不创建对应流程或恢复旧推荐功能。
+5. [x] 将采购覆盖、客户/合同中心摘要移入 read-models::sales_center；当前仍存在的销售对采购协作由明确组合用例接入旧采购事务内接口。sourcing.rs 只有删除说明，直接删除其占位，不创建对应流程或恢复旧推荐功能。
 
-6. [ ] 切换 sales_order/sales_review Handler、审批分发、履约和退货的调用方；删除旧目录、导出、#[path] 和测试源路径。执行完整门禁与 Sales/Finance 两组增量复测。
+6. [x] 切换 sales_order/sales_review Handler、审批分发、履约和退货的调用方；删除旧目录、导出、#[path] 和测试源路径。执行完整门禁与 Sales/Finance 两组增量复测。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -155,15 +155,26 @@ Sales/Finance 出现直接或通过旧 crate 的回边；重放指纹变化；�
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 abf36f41；chore/domain-crate-10-sales 专用分支 | .domain-migration-evidence/10/input.json |
+| 文件与符号 | source-map 69 个旧路径全部清零；13 个 owned 仓储完成迁移；销售/销售变更实体与持久化归销售，跨域命令归 processes | source-clearance.json、files.tsv、persistence-file-map.json、semantic-review.md |
+| 依赖 | normal/build/dev 全依赖闭包中，业务包仅 erp-sales 与基础 erp-core；无其他领域或旧三层依赖 | metadata.json、sales-dependencies.json、boundary.log |
+| 旧实现清零 | 旧销售两模块、仓储/索引注册、生产消费者与 include 路径切换 | source-clearance.json、files.tsv、boundary.log |
+| 测试 | 3351 passed、0 failed、68 ignored；31 个历史 tests 档案逐字节不变 | unit-tests.log、historical-tests.json |
+| 协议与数据 | 捕获合同 changed/missing/added 均为0；48条原始 needs_review 经字节及逐符号复核核销；DTO/金额/BSON/索引与权限生成物不变 | contract-comparison.json、missing-drift-report.json、contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 正式化、资金进度、验收、回款冲正的实际生产Port/helper验证同一非零执行器、原步骤与逐步失败停止；真实数据库运行未验证 | semantic-review.md、transaction-contract.json、unit-tests.log |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；第三方依赖版本未变 | quality-gates.log、dependency-lock.json |
+| 编译收益 | Sales/Finance各check/build、每组5样本、同Kingston介质、恢复与noop证明齐全；逐项中位数和Fresh闭包见原始报告 | compile/phase-summary.json及各组目录 |
+| 阶段提交 | 实现07da7863；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/10/`。原始静态扫描退出码为2，必须与复核证据共同使用，不得记为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- `erp-sales` 拥有销售/销售变更实体、仓储、索引、纯规则和单域写入；财务余额由财务事实接口按原逐账户方式提供，销售不引用财务类型。
+- `order_to_cash`、`sales_change`、`fulfillment_execution::customer_acceptance`、`reverse_flow::ReceiptReversalProcess` 持有跨域根编排；HTTP及审批回调全部接入同一真实实现。
+- 首次正式化保持采购复验、工作项、业务单据、销售版本、任务同步、提交、应收、资金/开票任务、审计的原10步顺序。发生错误时停止后继步骤。
+- 客户验收投影为空时不读取财务余额；回款冲正在审计成功后仍重新读取核销分配，再逐单刷新销售进度。客户端直接冲正过账的拒绝入口保持。
+- 真实数据库运行未验证；纯测试与静态复核不构成实际MongoDB回滚、并发或未知提交恢复证明。
+- 编译报告为阶段中间态；最终至少两个场景改善30%、任何场景回退不超过10%的阈值统一在阶段17判定。

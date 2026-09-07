@@ -1,0 +1,4 @@
+      Timing report saved to /Volumes/Kingston/erp-domain-crate-10-final-sales-check/cargo-timings/cargo-timing-20260907T025333115Z-eecd458fd5fdd7ab.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
