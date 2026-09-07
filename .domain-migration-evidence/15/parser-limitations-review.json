@@ -1,0 +1,449 @@
+{
+  "phase": "15",
+  "raw_report_sha256": "1a529d0232930d87be2093ee367e51591eebef1b1b63f23b0e5e32d1b08377b6",
+  "raw_exit_code": 2,
+  "raw_needs_review_count": 46,
+  "raw_items": [
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct UserID needs review",
+      "source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 7
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct Account needs review",
+      "source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 11
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandFingerprint needs review",
+      "source": {
+        "path": "backend/crates/application-core/src/command.rs",
+        "line": 13
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct IdempotencyKey needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 21
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandScope needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 143
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandDigest needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 185
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ParticipantId needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "line": 228
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ElectronicRecipientFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+        "line": 21
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ServiceRecipientFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+        "line": 30
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ServiceLocationFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+        "line": 64
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_list",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_owner",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_procurement_responsibility_active_selector",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ContentHmac needs review",
+      "source": {
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "line": 56
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_page",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_type_page",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_fulfillment_queue",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_sales_invoice_execution_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_object_type",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_fulfillment_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_customer_acceptance_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_payment_execution_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "before",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_approval_execution",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct UserID needs review",
+      "source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 7
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct Account needs review",
+      "source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 11
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandFingerprint needs review",
+      "source": {
+        "path": "backend/crates/application-core/src/command.rs",
+        "line": 13
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct IdempotencyKey needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 21
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandScope needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 143
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct CommandDigest needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 185
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ParticipantId needs review",
+      "source": {
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "line": 228
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ElectronicRecipientFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/electronic_delivery_draft.rs",
+        "line": 21
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ServiceRecipientFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+        "line": 30
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ServiceLocationFingerprint needs review",
+      "source": {
+        "path": "backend/crates/erp-fulfillment/src/entity/fulfillment/service_fulfillment_draft.rs",
+        "line": 64
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_list",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_owner",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_procurement_responsibility_active_selector",
+      "source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "dto",
+      "message": "Tuple/unit serialized struct ContentHmac needs review",
+      "source": {
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "line": 56
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_page",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_type_page",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index idx_work_items_fulfillment_queue",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_sales_invoice_execution_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_object_type",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_fulfillment_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_customer_acceptance_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_open_payment_execution_object",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    },
+    {
+      "side": "after",
+      "status": "needs_review",
+      "category": "indexes",
+      "message": "Unresolved collection for direct index uk_work_items_approval_execution",
+      "source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      }
+    }
+  ],
+  "disposition": "All source bytes remain identical to phase14; each parser item is retained. The same source-defined DTO/index contracts and phase14 reviewed interpretations apply.",
+  "source_identity": "production-byte-identity.json",
+  "prior_review": ".domain-migration-evidence/14/parser-limitations-review.json",
+  "prior_review_sha256": "fd70c845e6e82e6e8ca95115132a9a0e45c70cf182fe134ef78ecf93e982e698",
+  "real_database_verified": false
+}

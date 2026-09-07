@@ -1,0 +1,12 @@
+{
+  "phase": "15",
+  "code_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+  "kinds": [
+    "normal",
+    "build",
+    "dev"
+  ],
+  "business_closures": {},
+  "forbidden_business_dependencies": [],
+  "evidence": "metadata.json"
+}

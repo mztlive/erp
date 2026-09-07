@@ -1,0 +1,9 @@
+{
+  "phase": "15",
+  "code_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+  "isolated_domain": "no erp-commerce; existing business scope only",
+  "normal_build_dev_proof": "domain-dependencies.json",
+  "timed_probe": "not separately required in this phase",
+  "reason": "本阶段无生产实现变更、不新增crate；完整workspace公共门禁重跑。最终19个业务领域目标数及Customer/Sales/Finance性能统一在17验核。",
+  "final_performance_gate_phase": "17"
+}

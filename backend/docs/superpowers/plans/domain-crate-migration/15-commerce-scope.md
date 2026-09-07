@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 15 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | 治理/范围核验/最终验收，不创建空业务 crate |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；唯一共享注册集成负责人 |
+| 输入/输出提交 | 输入 `f5269ee9`；实现 `f5269ee9ab2277c87cb435cd1bf89adfc7483d64`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -43,22 +43,20 @@
 
 ## 6. 源路径、符号、目标与调用方
 
-| 当前源文件（相对 backend） | 主要符号/选择范围 | 目标文件 | 执行动作 |
-| --- | --- | --- | --- |
-| `entities/src/ids.rs` | `id_type!` | `crates/erp-core/src/ids.rs` | 核验阶段 01 已迁稳定 ID，不据此创建新聚合 |
-| `services/src/errors.rs` | `uk_product_publication_revisions_publication_revision` | `apps/web-api/src/core/errors.rs` | 历史错误兼容映射按原语义保留，不生成发布功能 |
-| `entities/src/sales_order/entity/order.rs` | `SalesOrder` | `crates/erp-sales/src/entity/sales_order/entity/order.rs` | 既有卡券销售事实仍归销售，不凭业务名称改归商城 |
+| 实际核验对象 | 固定结果与归属 | 执行动作 |
+| --- | --- | --- |
+| CardInstance / MallOrder / MallAfterSales / MallBackfill / ProductPublication | 00与15输入均无生产聚合、ID newtype、专用仓储/Service、活动集合或HTTP路由 | 不创建erp-commerce；精确命令、分类和哈希保存在scope-audit.json |
+| erp-core稳定枚举与标识 | 仅保留现有来源、消息和单据分类，不含上述五类ID；DocumentType中的VoucherSalesOrder归销售 | 保持原符号、序列化及调用方 |
+| services/src/errors.rs的历史publication/采购确认索引提示 | 现有兼容提示，不代表活动聚合 | 保持原行为，17由HTTP边界接续 |
+| erp-sales卡券销售与erp-finance资金/成本规则 | 现有生产行为归原领域 | 不按商城文本改归属 |
+| supplier_offering三处publication查询与catalog一处修订查询 | 实际只读本域集合 | 保留当前公开合同，16按供给和catalog原归属接线 |
 
 
 全量文件以 source-map.tsv 为默认目标；混合文件必须按上表及第 8 节拆符号。source-symbols.tsv 列出各源文件的类型、Trait、函数和声明行；未另行规定的符号名称与行为保持原样。禁止将该清单作为直接批量 mv 脚本。
 
 本阶段还必须迁移 repository-types.tsv 中 owner_phase=15 的全部拥有仓储类型：其 prepare_at 文件由阶段 01 创建，迁到 final_type_definition，并同步 impl_sources 中的所有专用方法。本阶段开始时这些准备文件属于前序输出，不因编制时尚不存在而遗漏。
 
-本阶段必须更新的入口调用方：
-
-- `apps/web-api/src/app_state.rs`。
-- `apps/web-api/src/lib.rs`。
-- `apps/web-api/src/main.rs`。
+本阶段必须核验AppState、lib/main、路由与Handler的实际注册链；范围核验确认没有商城入口，不为满足清单形式修改这些文件。全部生产目标和调用方路径以scope-audit.json所列真实metadata及源码结果为准。
 
 此外必须按 source-symbols.tsv 的选定符号用 rg 检索全部生产消费者，并复核 grouped use、类型别名、pub use、impl、宏与 cfg(test) 调用。具体跨域消费者按第 7、8 节处理；每个旧引用必须改为直接目标合同或组合入口，不能新增旧路径转发。
 
@@ -70,15 +68,15 @@
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 读取阶段 00 基线和 source-map.tsv，枚举生产 Cargo targets、实体定义、仓储工厂、路由注册及其调用方。
+1. [x] 读取阶段 00 基线和 source-map.tsv，枚举生产 Cargo targets、实体定义、仓储工厂、路由注册及其调用方。
 
-2. [ ] 对 CardInstance/MallOrder/MallAfterSales/MallBackfill/ProductPublication 的真实类型定义和活动集合访问进行核验；区分注释、历史测试、ID newtype 与生产实现。
+2. [x] 对 CardInstance/MallOrder/MallAfterSales/MallBackfill/ProductPublication 的真实类型定义和活动集合访问进行核验；区分注释、历史测试、ID newtype 与生产实现。
 
-3. [ ] 当前基线没有对应聚合、Service、Repository 或 HTTP 实现时，填写“无既有实现；不创建 crate”，保存精确搜索范围、命令、输出及目标 crate 清单。
+3. [x] 当前基线没有对应聚合、Service、Repository 或 HTTP 实现时，填写“无既有实现；不创建 crate”，保存精确搜索范围、命令、输出及目标 crate 清单。
 
-4. [ ] 如在执行基线中实际出现此前未纳入的生产实现，先更新本阶段文件/符号/调用方映射及设计的有实现 crate 清单，再按既有业务行为迁移；不把新增功能作为本次重构任务。
+4. [x] 如在执行基线中实际出现此前未纳入的生产实现，先更新本阶段文件/符号/调用方映射及设计的有实现 crate 清单，再按既有业务行为迁移；不把新增功能作为本次重构任务。
 
-5. [ ] 验证此前已迁的卡券销售、资金登记与供应链事实仍在原所属领域；执行公共门禁，范围证据完整后本阶段可验收。
+5. [x] 验证此前已迁的卡券销售、资金登记与供应链事实仍在原所属领域；执行公共门禁，范围证据完整后本阶段可验收。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -145,15 +143,26 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 f5269ee9；专用阶段 worktree | .domain-migration-evidence/15/input.json |
+| 文件与符号 | 0 个清单源、0 个 owned 准备文件；五类商城对象无生产实现 | source-clearance.json、scope-audit.json、scope-contract.md |
+| 依赖 | 无新增依赖；真实metadata与静态目标一致，范围不新增erp-commerce | domain-dependencies.json、metadata.json、boundary.log |
+| 测试 | 3510 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | changed/missing/added 均为0；原始46条needs_review逐项复核；权限生成物无漂移 | contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 生产源逐字不变，沿用14已核验合同；本阶段没有事务实现变更；真实数据库运行未验证 | production-byte-identity.json、前序14事务合同 |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；516个第三方包版本和校验和不变 | quality-gates.log、dependency-lock.json |
+| 编译证据 | 范围阶段全部公共门禁重跑通过；性能统一在17判定 | compile-applicability.json、domain-dependencies.json |
+| 阶段提交 | 实现f5269ee9；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/15/`。原始扫描保留exit2与needs_review；必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- CardInstance、MallOrder、MallAfterSales、MallBackfill、ProductPublication在00基线与实际15输入均无生产聚合、ID newtype、专用Service/Repository、活动集合调用或HTTP路由。结论为无既有实现；不创建erp-commerce。
+- source-map的phase=15与repository-types的owner_phase=15均为0行；不改清单生成不存在的迁移任务。原计划示例ID不得作为当前存在的事实。
+- 卡券销售、资金登记、来源枚举和商城消费成本禁写规则仍归原领域；W29商城缺失类别保持正式差异代码。四个publication查询保留supplier_offering与catalog归属，不据命名新建发布聚合。
+- 历史publication和采购确认索引提示维持原兼容行为，最终仅在17拆解错误出口，不在15新增商城业务。
+- 实际00 Cargo metadata中的历史test targets如实保留在基线证据；当前metadata无kind=test集成目标。本阶段没有运行任何tests目录或真实MongoDB。
+- 生产源、历史tests、脚本、Cargo配置及权限生成物与14输入逐字一致；协议原始扫描changed/missing/added均为0，46条needs_review保留并以同源证明和14源码复核覆盖。
+- 纯内联与静态门禁不构成真实数据库证明；真实数据库运行未验证。

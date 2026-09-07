@@ -1,0 +1,20 @@
+{
+  "phase": "15",
+  "code_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 46,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "evidence": "parser-limitations-review.json",
+      "result": "22 DTO与24索引解析限制原项保留；全部生产源与14逐字不变，14逐项源码解释仍适用。"
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}
