@@ -1,12 +1,13 @@
 //! 责任队列业务对象事实装载与展示映射。
 
+use erp_integration::repository::IntegrationOpsExt;
 use std::collections::{HashMap, HashSet};
 
-use database::{IntegrationOpsExt, SupplierFulfillmentExt, SupplierOfferingExt};
-use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
+use database::{SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_core::common::time::Instant;
 use erp_import::LegacyImportExt;
+use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use erp_workflow::entity::work_item::{
     WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
 };
@@ -637,12 +638,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 
 #[cfg(test)]
 mod integration_brief_tests {
-    use entities::integration_ops::{
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
+    use erp_integration::entity::integration_ops::{
         ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     use super::{integration_error_brief_source, reconciliation_difference_brief_source};
 

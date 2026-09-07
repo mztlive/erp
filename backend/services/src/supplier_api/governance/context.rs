@@ -77,7 +77,11 @@ impl SupplierApiService {
             .await?)
     }
 
-    pub(super) async fn load_connection(
+    /// 使用调用方事务读取连接；不存在时保留连接命令的固定错误。
+    ///
+    /// # Errors
+    /// 连接不存在返回 NotFound，仓储失败原样透传。
+    pub async fn load_connection(
         &self,
         id: &str,
         executor: &mut dyn persistence_core::Executor,
@@ -165,7 +169,8 @@ pub(super) fn ensure_version(actual: u64, expected: u64) -> Result<()> {
     ))
 }
 
-pub(super) fn digest(parts: &[&str]) -> String {
+/// 对每段字节使用 u64 大端长度前缀后计算 SHA-256，供命令与任务共用身份。
+pub fn digest(parts: &[&str]) -> String {
     let mut digest = Sha256::new();
     for part in parts {
         digest.update((part.len() as u64).to_be_bytes());

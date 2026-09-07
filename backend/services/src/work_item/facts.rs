@@ -1,11 +1,12 @@
 //! Remaining-domain object facts for work-item authorization.
 
+use erp_integration::repository::IntegrationOpsExt;
 use std::collections::{HashMap, HashSet};
 
-use database::{IntegrationOpsExt, SupplierFulfillmentExt, SupplierOfferingExt};
-use entities::integration_ops::{ErrorClass, IntegrationErrorTask};
+use database::{SupplierFulfillmentExt, SupplierOfferingExt};
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_import::LegacyImportExt;
+use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask};
 use erp_workflow::entity::work_item::{WorkItemBriefObjectKind, WorkItemSubjectVersions};
 use persistence_core::Executor;
 

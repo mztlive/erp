@@ -1,8 +1,13 @@
 use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
+use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
+use erp_processes::integration_resolution::{
+    evidence_adapter::MongoIntegrationEvidenceAuthority, IntegrationResolutionProcess,
+};
 use erp_processes::ApprovalActionRegistry;
+use erp_read_models::integration_center::IntegrationCenterReadService;
 use erp_support::{BulkJobService, FileAssetService, SourceRegistryService};
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
@@ -129,6 +134,7 @@ pub struct AppState {
     approval_runtime_service: Arc<ApprovalRuntimeService<WorkflowAuth>>,
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
     external_connectors: ExternalConnectorPorts,
+    integration_evidence: Arc<dyn IntegrationEvidenceAuthority>,
 }
 
 impl AppState {
@@ -167,6 +173,8 @@ impl AppState {
             workflow_object_facts(db.clone()),
         ));
         let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
+        let integration_evidence: Arc<dyn IntegrationEvidenceAuthority> =
+            Arc::new(MongoIntegrationEvidenceAuthority::new(db.clone()));
         Self {
             db,
             config,
@@ -177,6 +185,7 @@ impl AppState {
             approval_runtime_service,
             approval_outbox,
             external_connectors,
+            integration_evidence,
         }
     }
 
@@ -261,11 +270,31 @@ impl AppState {
         Arc::clone(&self.approval_outbox)
     }
 
+    /// 返回使用统一权威证据提供方的集成治理命令入口。
+    pub fn integration_resolution(&self) -> IntegrationResolutionProcess {
+        IntegrationResolutionProcess::new(self.db(), Arc::clone(&self.integration_evidence))
+    }
+
+    /// 返回使用同一权威证据提供方的集成详情读取入口。
+    pub fn integration_center(&self) -> IntegrationCenterReadService {
+        IntegrationCenterReadService::new(self.db(), Arc::clone(&self.integration_evidence))
+    }
+
     /// 返回已注入网关、引用注册表与 RBAC 的供应商 API 应用服务。
     pub fn supplier_api_service(&self) -> SupplierApiService {
-        SupplierApiService::new(self.db(), Arc::clone(&self.external_connectors.supplier_api))
+        SupplierApiService::new(self.db())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
             .with_rbac(self.rbac())
+    }
+
+    /// 返回保留意图提交与外部调用分离的供应商连接执行入口。
+    pub fn supplier_connection_execution_process(
+        &self,
+    ) -> erp_processes::supplier_connection_execution::SupplierConnectionExecutionProcess {
+        erp_processes::supplier_connection_execution::SupplierConnectionExecutionProcess::new(
+            self.db(),
+            Arc::clone(&self.external_connectors.supplier_api),
+        )
     }
 
     /// 返回已注入网关的供应商履约应用服务。

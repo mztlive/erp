@@ -1,7 +1,6 @@
 mod errors;
 pub mod identity_audit;
 pub mod identity_compose;
-pub mod integration_ops;
 
 pub mod supplier_api;
 pub mod supplier_fulfillment;

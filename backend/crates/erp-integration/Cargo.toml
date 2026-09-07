@@ -1,0 +1,27 @@
+[package]
+name = "erp-integration"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[dependencies]
+bson = { workspace = true }
+sha2 = { workspace = true }
+application-core = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+entity-core = { workspace = true }
+entity-macros = { workspace = true }
+erp-core = { workspace = true }
+futures-util = { workspace = true }
+hex = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+tracing = { workspace = true }
+validator = { workspace = true }

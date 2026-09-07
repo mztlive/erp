@@ -1,5 +1,4 @@
-use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
-use entities::integration_ops::InboxMessageStatus;
+use database::{SupplierApiExt, SupplierFulfillmentExt};
 use entities::supplier_api::SupplierApiCapabilityCode;
 use entities::supplier_fulfillment::{
     CancelStatus, RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
@@ -7,6 +6,8 @@ use entities::supplier_fulfillment::{
 };
 use erp_audit::AuditExt;
 use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
+use erp_integration::entity::integration_ops::InboxMessageStatus;
+use erp_integration::repository::IntegrationOpsExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

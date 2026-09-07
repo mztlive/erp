@@ -1,10 +1,7 @@
+use erp_integration::repository::IntegrationOpsExt;
 use std::collections::HashMap;
 
-use database::{IntegrationOpsExt, SupplierApiExt, SupplierFulfillmentExt};
-use entities::integration_ops::{
-    ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
-    IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
-};
+use database::{SupplierApiExt, SupplierFulfillmentExt};
 use entities::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     FulfillmentStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData, SupplierFulfillmentItemId,
@@ -15,6 +12,10 @@ use entities::supplier_fulfillment::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, WorkItemId};
+use erp_integration::entity::integration_ops::{
+    ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
+    IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
+};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };

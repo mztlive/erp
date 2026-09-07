@@ -7,9 +7,9 @@
 //! 生产默认使用失败关闭网关；[`SimulatedSupplierGateway`] 只允许明确
 //! `sim://` 地址在测试中产生模拟结果。任何普通 URL 都不得被伪造为供应商成功。
 
-use entities::integration_ops::ErrorClass;
 use entities::supplier_api::SupplierApiConnection;
 use entities::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
+use erp_integration::entity::integration_ops::ErrorClass;
 use serde::{Deserialize, Serialize};
 
 /// 网关对一次供应商动作请求的处理结果分类（错误分类对齐 §6.21）。
@@ -315,7 +315,7 @@ mod tests {
         assert!(matches!(
             outcome,
             DispatchOutcome::Failed {
-                error_class: entities::integration_ops::ErrorClass::CapabilityGap,
+                error_class: erp_integration::entity::integration_ops::ErrorClass::CapabilityGap,
                 ..
             }
         ));
@@ -336,7 +336,7 @@ mod tests {
         assert!(matches!(
             simulate_outcome(&action, &order, &sample_connection("sim://temporary-failure")),
             DispatchOutcome::Failed {
-                error_class: entities::integration_ops::ErrorClass::TransientFailure,
+                error_class: erp_integration::entity::integration_ops::ErrorClass::TransientFailure,
                 ..
             }
         ));

@@ -99,7 +99,11 @@ pub async fn supplier_api_connection_command(
         let actor = actor.clone();
         let connection_id = id.clone();
         tokio::spawn(async move {
-            if let Err(error) = service(&state).process_connection_job(&job_id, &actor).await {
+            if let Err(error) = state
+                .supplier_connection_execution_process()
+                .process_connection_job(&job_id, &actor)
+                .await
+            {
                 tracing::error!(
                     connection_id,
                     job_id,

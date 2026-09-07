@@ -1,10 +1,6 @@
 //! Domain-owned MongoDB repositories composed from persistence-core.
 
 mod business_capability_confirmation;
-mod inbox_message;
-mod integration_error_task;
-mod reconciliation_difference;
-mod reconciliation_difference_resolution;
 
 mod supplier_api_capability;
 mod supplier_api_connection;
@@ -27,10 +23,6 @@ mod supplier_settlement_item;
 mod supplier_settlement_source_evidence;
 mod supplier_settlement_statement;
 pub use business_capability_confirmation::BusinessCapabilityConfirmationRepository;
-pub use inbox_message::InboxMessageRepository;
-pub use integration_error_task::IntegrationErrorTaskRepository;
-pub use reconciliation_difference::ReconciliationDifferenceRepository;
-pub use reconciliation_difference_resolution::ReconciliationDifferenceResolutionRepository;
 
 pub use supplier_api_capability::SupplierApiCapabilityRepository;
 pub use supplier_api_connection::SupplierApiConnectionRepository;

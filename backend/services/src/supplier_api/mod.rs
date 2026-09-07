@@ -16,11 +16,11 @@
 use std::sync::Arc;
 
 use database::SupplierApiExt;
-use entities::integration_ops::ErrorClass;
 use entities::supplier_api::{
     PreparedSupplierConnectionCreate, SupplierApiConnection, SupplierApiConnectionData,
 };
 use erp_audit::AuditExt;
+use erp_integration::entity::integration_ops::ErrorClass;
 use erp_supplier::SupplierExt;
 use id_generator::next_id;
 use mongodb::Database;
@@ -35,6 +35,9 @@ use erp_identity::SharedRbacService;
 
 mod dto;
 mod governance;
+
+/// 连接命令和后台任务确定性身份共用的长度前缀摘要。
+pub use governance::digest;
 
 pub use self::dto::{
     CapabilityItemRequest, ConfirmBusinessCapabilityRequirementCommand,
@@ -202,7 +205,6 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
 /// 供应商 API 服务。
 pub struct SupplierApiService {
     db: Database,
-    gateway: Arc<dyn SupplierApiGateway>,
     reference_registry: Arc<dyn SupplierReferenceRegistry>,
     rbac: Option<SharedRbacService>,
 }
@@ -212,14 +214,12 @@ impl SupplierApiService {
     ///
     /// # 参数
     /// * `db` - 数据库实例
-    /// * `gateway` - 外部调用网关
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>) -> Self {
+    pub fn new(db: Database) -> Self {
         Self {
             db,
-            gateway,
             reference_registry: Arc::new(UnavailableSupplierReferenceRegistry),
             rbac: None,
         }
@@ -461,11 +461,11 @@ impl SupplierApiService {
 #[cfg(test)]
 mod tests {
 
-    use entities::integration_ops::ErrorClass;
     use entities::supplier_api::{
         ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+    use erp_integration::entity::integration_ops::ErrorClass;
 
     use super::{ClassifiedError, SupplierApiGateway, UnavailableSupplierApiGateway};
 

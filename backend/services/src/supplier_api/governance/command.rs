@@ -30,7 +30,7 @@ impl SupplierApiService {
     /// 执行固定连接治理命令并返回可幂等重放的正式回执。
     ///
     /// HTTP 请求只登记健康检查或目录同步任务；外部调用由
-    /// [`Self::process_connection_job`] 在后台执行。
+    /// 流程层 `SupplierConnectionExecutionProcess::process_connection_job` 在后台执行。
     ///
     /// # Errors
     /// 权限不足、版本冲突、引用无法解析或业务前置不满足时返回稳定错误。

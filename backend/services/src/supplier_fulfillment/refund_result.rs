@@ -1,5 +1,4 @@
-use database::{IntegrationOpsExt, SupplierFulfillmentExt};
-use entities::integration_ops::{InboxMessage, InboxMessageData, InboxMessageStatus, MessageType};
+use database::SupplierFulfillmentExt;
 use entities::supplier_fulfillment::{
     RefundStatus, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierRefundAllocation,
     SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
@@ -7,6 +6,10 @@ use entities::supplier_fulfillment::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierRefundAllocationId, SupplierRefundFactId};
+use erp_integration::entity::integration_ops::{
+    InboxMessage, InboxMessageData, InboxMessageStatus, MessageType,
+};
+use erp_integration::repository::IntegrationOpsExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

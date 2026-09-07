@@ -1431,6 +1431,7 @@ dependencies = [
  "erp-fulfillment",
  "erp-identity",
  "erp-import",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-procurement",
@@ -1636,6 +1637,7 @@ dependencies = [
  "erp-customer",
  "erp-fulfillment",
  "erp-identity",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-procurement",
@@ -1879,6 +1881,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-integration"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bson",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "hex",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-inventory"
 version = "0.1.0"
 dependencies = [
@@ -1945,6 +1973,7 @@ dependencies = [
  "erp-fulfillment",
  "erp-identity",
  "erp-import",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-procurement",
@@ -2017,6 +2046,7 @@ dependencies = [
  "erp-fulfillment",
  "erp-identity",
  "erp-import",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-procurement",
@@ -4591,6 +4621,7 @@ dependencies = [
  "erp-fulfillment",
  "erp-identity",
  "erp-import",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-procurement",
@@ -5771,6 +5802,7 @@ dependencies = [
  "erp-fulfillment",
  "erp-identity",
  "erp-import",
+ "erp-integration",
  "erp-inventory",
  "erp-party",
  "erp-processes",

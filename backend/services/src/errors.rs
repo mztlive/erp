@@ -273,6 +273,26 @@ impl From<erp_sales::Error> for Error {
     }
 }
 
+impl From<erp_integration::Error> for Error {
+    /// 将集成领域错误映射为服务错误。
+    fn from(error: erp_integration::Error) -> Self {
+        match error {
+            erp_integration::Error::Internal(message) => Self::Internal(message),
+            erp_integration::Error::NotFound(message) => Self::NotFound(message),
+            erp_integration::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_integration::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_integration::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_integration::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_integration::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_integration::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_integration::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_integration::Error::Logic(error) => Self::Logic(error),
+            erp_integration::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_integration::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_returns::Error> for Error {
     /// 将退货逆向领域错误映射为服务错误。
     fn from(error: erp_returns::Error) -> Self {

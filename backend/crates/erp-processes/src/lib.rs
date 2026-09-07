@@ -44,3 +44,6 @@ pub mod reverse_flow;
 pub mod sales_change;
 
 pub mod fulfillment_execution;
+
+pub mod integration_resolution;
+pub mod supplier_connection_execution;

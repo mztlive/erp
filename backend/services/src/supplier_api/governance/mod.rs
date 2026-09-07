@@ -9,3 +9,6 @@ mod query;
 mod tests;
 
 pub(crate) use context::map_command_shape_rejection;
+
+/// 连接命令与任务身份共用的原摘要算法。
+pub use context::digest;

@@ -9,6 +9,7 @@ erp-sales = { workspace = true }
 erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
 erp-returns = { workspace = true }
+erp-integration = { workspace = true }
 erp-finance = { workspace = true }
 mongodb = { workspace = true }
 casbin = { workspace = true }

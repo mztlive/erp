@@ -34,3 +34,5 @@ pub mod supplier_center;
 pub mod fulfillment_center;
 
 pub mod returns_center;
+
+pub mod integration_center;

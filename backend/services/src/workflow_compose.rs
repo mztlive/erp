@@ -31,11 +31,11 @@ use crate::errors::{Error, Result};
 use crate::work_item::ProcessObjectFacts;
 use application_core::CommandFingerprint;
 use application_core::CommandReceiptFact;
-use entities::integration_ops::{
+use erp_core::ids::PurchaseOrderId;
+use erp_integration::entity::integration_ops::{
     ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
     ReconciliationDifferenceResolutionId, ResolutionType, W29CloseDecision,
 };
-use erp_core::ids::PurchaseOrderId;
 use erp_procurement::entity::purchase_order::PurchaseOrderStatus;
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
@@ -934,7 +934,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         closed_at: Instant,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        use database::IntegrationOpsExt;
+        use erp_integration::repository::IntegrationOpsExt;
         use erp_workflow::WorkItemExt;
         if let Some(replacement_work_item_id) = decision.replacement_work_item_id.as_deref() {
             let replacement = self
@@ -1018,11 +1018,11 @@ impl ObjectFactPort for WorkflowObjectFacts {
                     difference_id,
                     resolution_no,
                     if decision.replacement_work_item_id.is_some() {
-                        entities::integration_ops::ResolutionAction::CloseDuplicate
+                        erp_integration::entity::integration_ops::ResolutionAction::CloseDuplicate
                     } else {
-                        entities::integration_ops::ResolutionAction::CloseMisrouted
+                        erp_integration::entity::integration_ops::ResolutionAction::CloseMisrouted
                     },
-                    entities::integration_ops::W29EvidenceReference::parse(evidence_reference)
+                    erp_integration::entity::integration_ops::W29EvidenceReference::parse(evidence_reference)
                         .map_err(|error| map_service(Error::from(error)))?,
                     actor_id.to_string(),
                     closed_at,

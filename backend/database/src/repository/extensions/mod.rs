@@ -3,14 +3,10 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod integration_ops;
-
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_settlement;
-
-pub use integration_ops::IntegrationOpsExt;
 
 pub use supplier_api::SupplierApiExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
@@ -34,7 +30,7 @@ pub trait DatabaseExt:
     + erp_workflow::DocumentRegistryExt
     + erp_support::FileAssetExt
     + erp_fulfillment::repository::FulfillmentExt
-    + IntegrationOpsExt
+    + erp_integration::repository::IntegrationOpsExt
     + erp_inventory::InventoryExt
     + erp_import::LegacyImportExt
     + erp_party::PartyExt
@@ -69,7 +65,7 @@ impl<
             + erp_workflow::DocumentRegistryExt
             + erp_support::FileAssetExt
             + erp_fulfillment::repository::FulfillmentExt
-            + IntegrationOpsExt
+            + erp_integration::repository::IntegrationOpsExt
             + erp_inventory::InventoryExt
             + erp_import::LegacyImportExt
             + erp_party::PartyExt
