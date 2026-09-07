@@ -9,3 +9,5 @@ pub use extensions::{SalesOrderExt, SalesReviewExt};
 
 #[cfg(test)]
 mod serialization_contract;
+
+mod fulfillment_facts;

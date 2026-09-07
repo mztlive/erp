@@ -1428,6 +1428,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-finance",
+ "erp-fulfillment",
  "erp-identity",
  "erp-import",
  "erp-inventory",
@@ -1632,6 +1633,7 @@ dependencies = [
  "erp-contract",
  "erp-core",
  "erp-customer",
+ "erp-fulfillment",
  "erp-identity",
  "erp-inventory",
  "erp-party",
@@ -1801,6 +1803,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-fulfillment"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bson",
+ "chrono",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "futures-util",
+ "hex",
+ "hmac 0.13.0",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-identity"
 version = "0.1.0"
 dependencies = [
@@ -1911,6 +1940,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-finance",
+ "erp-fulfillment",
  "erp-identity",
  "erp-import",
  "erp-inventory",
@@ -1981,6 +2011,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-finance",
+ "erp-fulfillment",
  "erp-identity",
  "erp-import",
  "erp-inventory",
@@ -4527,6 +4558,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-finance",
+ "erp-fulfillment",
  "erp-identity",
  "erp-import",
  "erp-inventory",
@@ -5705,6 +5737,7 @@ dependencies = [
  "erp-core",
  "erp-customer",
  "erp-finance",
+ "erp-fulfillment",
  "erp-identity",
  "erp-import",
  "erp-inventory",

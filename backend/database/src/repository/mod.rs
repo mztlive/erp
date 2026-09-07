@@ -3,7 +3,6 @@
 //! 提供基于MongoDB的数据访问层实现
 
 pub mod extensions;
-mod fulfillment;
 mod integration_ops;
 
 pub mod owned;

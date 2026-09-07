@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use persistence_core::Executor;
 use {
-    database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
+    erp_fulfillment::repository::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
     erp_sales::repository::SalesOrderExt,
 };
 

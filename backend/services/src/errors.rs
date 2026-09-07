@@ -273,6 +273,26 @@ impl From<erp_sales::Error> for Error {
     }
 }
 
+impl From<erp_fulfillment::Error> for Error {
+    /// 将履约领域错误映射为服务错误。
+    fn from(error: erp_fulfillment::Error) -> Self {
+        match error {
+            erp_fulfillment::Error::Internal(message) => Self::Internal(message),
+            erp_fulfillment::Error::NotFound(message) => Self::NotFound(message),
+            erp_fulfillment::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_fulfillment::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_fulfillment::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_fulfillment::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_fulfillment::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_fulfillment::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_fulfillment::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_fulfillment::Error::Logic(error) => Self::Logic(error),
+            erp_fulfillment::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_fulfillment::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_procurement::Error> for Error {
     /// 将采购领域错误映射为服务错误。
     fn from(error: erp_procurement::Error) -> Self {

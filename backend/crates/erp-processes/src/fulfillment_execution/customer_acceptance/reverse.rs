@@ -4,12 +4,12 @@ use super::{
     CustomerAcceptanceProcess,
 };
 use application_core::{AuditActor, CommandReceipt};
-use entities::fulfillment::CustomerAcceptance;
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
+use erp_fulfillment::dto::{CustomerAcceptanceView, ReverseCustomerAcceptanceRequest};
+use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
-use services::fulfillment::FulfillmentService;
-use services::fulfillment::{CustomerAcceptanceView, ReverseCustomerAcceptanceRequest};
 use services::Result;
 use validator::Validate;
 impl CustomerAcceptanceProcess {
@@ -61,7 +61,7 @@ impl CustomerAcceptanceProcess {
         )?;
         if let Some(reverse_acceptance_id) = command_receipt.committed_resource_id(&self.db).await? {
             return Ok(self
-                .read
+                .domain
                 .customer_acceptance_detail(&reverse_acceptance_id)
                 .await?
                 .acceptance);
@@ -101,7 +101,7 @@ impl CustomerAcceptanceProcess {
             Ok(reversed) => Ok(reversed.into()),
             Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
                 Some(reverse_acceptance_id) => Ok(self
-                    .read
+                    .domain
                     .customer_acceptance_detail(&reverse_acceptance_id)
                     .await?
                     .acceptance),

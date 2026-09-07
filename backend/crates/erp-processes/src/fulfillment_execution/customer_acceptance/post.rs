@@ -1,16 +1,15 @@
 //! 客户验收草稿过账根事务；原状态机冲突语义不转换为收据回放。
+use super::task::prepare_customer_acceptance_task_command;
 use super::{
     completion::{complete_acceptance, CompletionKind},
     CustomerAcceptanceProcess,
 };
 use application_core::AuditActor;
-use entities::fulfillment::CustomerAcceptance;
 use erp_core::ids::CustomerAcceptanceId;
+use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
+use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
-use services::fulfillment::FulfillmentService;
-use services::fulfillment::{
-    prepare_customer_acceptance_task_command, CustomerAcceptanceView, PostCustomerAcceptanceRequest,
-};
 use services::Result;
 use validator::Validate;
 impl CustomerAcceptanceProcess {

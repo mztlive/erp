@@ -29,3 +29,5 @@ mod test_fixture;
 
 #[cfg(test)]
 mod serialization_contract;
+
+mod fulfillment_facts;

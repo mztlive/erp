@@ -519,7 +519,7 @@ async fn ensure_initial_purchase_order_owner(
     let Some(business_object_type) = responsibility.owner_fulfillment_object_type() else {
         return Ok(());
     };
-    services::fulfillment::ensure_fulfillment_owner_eligible(
+    crate::fulfillment_execution::task::ensure_fulfillment_owner_eligible(
         db,
         rbac,
         owner_user_id,
@@ -578,7 +578,7 @@ async fn resolve_target_warehouse(
                 .map_err(|_| {
                     Error::ValidationError("目标仓库未配置合格入库经办人，请先完成仓库责任配置".to_string())
                 })?;
-            services::fulfillment::ensure_fulfillment_owner_eligible(
+            crate::fulfillment_execution::task::ensure_fulfillment_owner_eligible(
                 db,
                 rbac,
                 handler_user_id,

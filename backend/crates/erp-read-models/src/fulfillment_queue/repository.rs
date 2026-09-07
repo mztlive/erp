@@ -16,7 +16,7 @@ use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
 use {
-    database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
+    erp_fulfillment::repository::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
     erp_sales::repository::SalesOrderExt,
 };
 

@@ -1,7 +1,7 @@
 //! 域 D16 `fulfillment` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::fulfillment` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 领域与读模型的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 履约对象快照查询指纹密钥取 `app.secret` 字节（Service 构造参数）。
 
 use application_core::AuditActor;
@@ -9,18 +9,20 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
-use erp_support::SensitivityClass;
-use services::fulfillment::{
-    AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
-    ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
-    CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
-    CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView,
-    DeliveryListParams, DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView,
-    FulfillmentService, PageView, PostCustomerAcceptanceRequest, PostDeliveryRequest,
-    PostPurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptListParams, PurchaseReceiptView,
-    ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
-    UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
+use erp_fulfillment::dto::{
+    CommitCustomerAcceptanceRequest, ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest,
+    CreateDeliveryRequest, CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest,
+    CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView, CustomerAcceptanceListParams,
+    CustomerAcceptanceView, DeliveryDetailView, DeliveryListParams, DeliveryView,
+    ElectronicDeliveryListParams, ElectronicDeliveryView, PageView, PostCustomerAcceptanceRequest,
+    PostDeliveryRequest, PostPurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptListParams,
+    PurchaseReceiptView, ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams,
+    ServiceFulfillmentView, UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
 };
+use erp_fulfillment::service::FulfillmentService;
+use erp_processes::fulfillment_execution::FulfillmentProcess;
+use erp_read_models::fulfillment_center::dto::{AcceptanceEligibilityView, CommitCustomerAcceptanceView};
+use erp_support::SensitivityClass;
 
 use crate::{
     app_state::AppState,
@@ -34,7 +36,7 @@ use crate::{
     },
 };
 
-/// 构造履约服务实例（指纹密钥 = `app.secret` 字节）。
+/// 构造本域履约查询服务。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -42,7 +44,12 @@ use crate::{
 /// # 返回
 /// 返回履约服务实例。
 fn service(state: &AppState) -> FulfillmentService {
-    FulfillmentService::new(
+    FulfillmentService::new(state.db())
+}
+
+/// 构造跨域履约过程并保留实际配置和对象读取授权注入。
+fn process(state: &AppState) -> FulfillmentProcess {
+    FulfillmentProcess::new(
         state.db(),
         state.config_snapshot().app.secret.as_bytes().to_vec(),
         state.sensitive_data(),
@@ -130,7 +137,7 @@ pub async fn purchase_receipt_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseReceiptRequest>,
 ) -> Result<PurchaseReceiptView> {
-    let view = service(&state).create_purchase_receipt(req, &actor).await?;
+    let view = process(&state).create_purchase_receipt(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -158,7 +165,7 @@ pub async fn purchase_receipt_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePurchaseReceiptRequest>,
 ) -> Result<PurchaseReceiptView> {
-    let view = service(&state).update_purchase_receipt(&id, req, &actor).await?;
+    let view = process(&state).update_purchase_receipt(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -185,7 +192,7 @@ pub async fn purchase_receipt_post(
     Path(id): Path<String>,
     Json(req): Json<PostPurchaseReceiptRequest>,
 ) -> Result<PurchaseReceiptView> {
-    let view = service(&state).post_purchase_receipt(&id, req, &actor).await?;
+    let view = process(&state).post_purchase_receipt(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -261,7 +268,7 @@ pub async fn delivery_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateDeliveryRequest>,
 ) -> Result<DeliveryView> {
-    let view = service(&state).create_delivery(req, &actor).await?;
+    let view = process(&state).create_delivery(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -289,7 +296,7 @@ pub async fn delivery_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateDeliveryRequest>,
 ) -> Result<DeliveryView> {
-    let view = service(&state).update_delivery(&id, req, &actor).await?;
+    let view = process(&state).update_delivery(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -316,7 +323,7 @@ pub async fn delivery_post(
     Path(id): Path<String>,
     Json(req): Json<PostDeliveryRequest>,
 ) -> Result<DeliveryView> {
-    let view = service(&state).post_delivery(&id, req, &actor).await?;
+    let view = process(&state).post_delivery(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -390,7 +397,7 @@ pub async fn electronic_delivery_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateElectronicDeliveryRequest>,
 ) -> Result<ElectronicDeliveryView> {
-    let view = service(&state).create_electronic_delivery(req, &actor).await?;
+    let view = process(&state).create_electronic_delivery(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -416,7 +423,7 @@ pub async fn electronic_delivery_confirm(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ElectronicDeliveryView> {
-    let view = service(&state).confirm_electronic_delivery(&id, &actor).await?;
+    let view = process(&state).confirm_electronic_delivery(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -490,7 +497,7 @@ pub async fn service_fulfillment_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateServiceFulfillmentRequest>,
 ) -> Result<ServiceFulfillmentView> {
-    let view = service(&state).create_service_fulfillment(req, &actor).await?;
+    let view = process(&state).create_service_fulfillment(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -526,7 +533,7 @@ pub async fn service_fulfillment_confirm(
     validate_service_evidence_upload(&req, &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = erp_processes::confirm_service_fulfillment_with_assets(
-        service(&state),
+        process(&state),
         id,
         req,
         pending.clone(),
@@ -658,7 +665,9 @@ pub async fn customer_acceptance_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = service(&state).create_customer_acceptance(req, &actor).await?;
+    let view = acceptance_process(&state)
+        .create_customer_acceptance(req, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -774,7 +783,7 @@ pub async fn customer_acceptance_eligible(
         .sales_order_id
         .clone()
         .ok_or_else(|| services::Error::ValidationError("sales_order_id 不能为空".to_string()))?;
-    let view = service(&state)
+    let view = erp_read_models::fulfillment_center::FulfillmentReadService::new(state.db())
         .acceptance_eligibility(sales_order_id.as_ref())
         .await?;
 
@@ -784,7 +793,7 @@ pub async fn customer_acceptance_eligible(
 #[cfg(test)]
 mod tests {
     use super::{validate_service_evidence_upload, PendingAssetFile};
-    use services::fulfillment::{
+    use erp_fulfillment::dto::{
         ConfirmServiceFulfillmentRequest, CreateDeliveryRequest, CreatePurchaseReceiptRequest,
     };
 

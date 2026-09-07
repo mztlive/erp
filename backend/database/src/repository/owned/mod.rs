@@ -1,10 +1,7 @@
 //! Domain-owned MongoDB repositories composed from persistence-core.
 
 mod business_capability_confirmation;
-mod customer_acceptance;
 mod customer_refund;
-mod delivery;
-mod electronic_delivery;
 mod inbox_message;
 mod integration_error_task;
 mod payment_reversal;
@@ -13,7 +10,6 @@ mod reconciliation_difference;
 mod reconciliation_difference_resolution;
 mod sales_return_case;
 mod sales_return_line;
-mod service_fulfillment;
 
 mod supplier_api_capability;
 mod supplier_api_connection;
@@ -37,10 +33,7 @@ mod supplier_settlement_item;
 mod supplier_settlement_source_evidence;
 mod supplier_settlement_statement;
 pub use business_capability_confirmation::BusinessCapabilityConfirmationRepository;
-pub use customer_acceptance::CustomerAcceptanceRepository;
 pub use customer_refund::CustomerRefundRepository;
-pub use delivery::DeliveryRepository;
-pub use electronic_delivery::ElectronicDeliveryRepository;
 pub use inbox_message::InboxMessageRepository;
 pub use integration_error_task::IntegrationErrorTaskRepository;
 pub use payment_reversal::PaymentReversalRepository;
@@ -49,7 +42,6 @@ pub use reconciliation_difference::ReconciliationDifferenceRepository;
 pub use reconciliation_difference_resolution::ReconciliationDifferenceResolutionRepository;
 pub use sales_return_case::SalesReturnCaseRepository;
 pub use sales_return_line::SalesReturnLineRepository;
-pub use service_fulfillment::ServiceFulfillmentRepository;
 
 pub use supplier_api_capability::SupplierApiCapabilityRepository;
 pub use supplier_api_connection::SupplierApiConnectionRepository;
@@ -72,9 +64,6 @@ pub use supplier_settlement_difference_evidence::SupplierSettlementDifferenceEvi
 pub use supplier_settlement_item::SupplierSettlementItemRepository;
 pub use supplier_settlement_source_evidence::SupplierSettlementSourceEvidenceRepository;
 pub use supplier_settlement_statement::SupplierSettlementStatementRepository;
-
-mod purchase_receipt;
-pub use purchase_receipt::PurchaseReceiptRepository;
 
 mod purchase_return_line;
 pub use purchase_return_line::PurchaseReturnLineRepository;

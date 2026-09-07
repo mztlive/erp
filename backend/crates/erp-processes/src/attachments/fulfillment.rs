@@ -1,9 +1,11 @@
 //! Fulfillment commands that register on-site evidence files in the same transaction.
 
+use crate::fulfillment_execution::service_crypto::evidence_metadata;
+use crate::fulfillment_execution::FulfillmentProcess;
 use application_core::AuditActor;
-use entities::fulfillment::ServiceEvidencePolicy;
+use erp_fulfillment::dto::{ConfirmServiceFulfillmentRequest, ServiceFulfillmentView};
+use erp_fulfillment::entity::fulfillment::ServiceEvidencePolicy;
 use erp_support::PendingFileAssetRequest;
-use services::fulfillment::{ConfirmServiceFulfillmentRequest, FulfillmentService, ServiceFulfillmentView};
 use services::Result;
 
 use super::pending::PendingFileAssets;
@@ -20,20 +22,19 @@ use super::pending::PendingFileAssets;
 /// # Errors
 /// Evidence policy, reference, business-rule or transaction failures.
 pub async fn confirm_service_fulfillment_with_assets(
-    service: FulfillmentService,
+    service: FulfillmentProcess,
     id: String,
     req: ConfirmServiceFulfillmentRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ServiceFulfillmentView> {
     for request in &asset_requests {
-        ServiceEvidencePolicy::validate(
-            &request.registration.content_type,
+        let (sensitivity, retention) = evidence_metadata(
             request.registration.sensitivity_class,
             request.registration.retention_class,
-            false,
-        )
-        .map_err(|error| services::Error::ValidationError(error.to_string()))?;
+        );
+        ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
+            .map_err(|error| services::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
     service

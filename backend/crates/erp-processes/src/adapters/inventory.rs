@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use database::FulfillmentExt;
 use entity_core::BaseModel;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_catalog::CatalogExt;
 use erp_core::ids::SkuId;
+use erp_fulfillment::repository::FulfillmentExt;
 use erp_identity::access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage};
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_inventory::{

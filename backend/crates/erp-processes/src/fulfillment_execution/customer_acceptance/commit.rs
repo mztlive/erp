@@ -1,21 +1,21 @@
 //! 幂等登记根事务：草稿/正式事实、销售进度、任务和命令收据按原顺序组合。
+use super::registration::register_created_customer_acceptance_document;
+use super::task::prepare_customer_acceptance_task_command;
 use super::{
     completion::{complete_acceptance, CompletionKind},
     CustomerAcceptanceProcess,
 };
 use application_core::{AuditActor, CommandReceipt};
-use entities::fulfillment::CustomerAcceptance;
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
+use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
+use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::service::document_number::next_customer_acceptance_no;
+use erp_fulfillment::service::FulfillmentService;
+use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::Transactional;
-use services::fulfillment::FulfillmentService;
-use services::fulfillment::{
-    next_customer_acceptance_no, prepare_customer_acceptance_task_command,
-    register_created_customer_acceptance_document, CommitCustomerAcceptanceRequest,
-    CommitCustomerAcceptanceView,
-};
 use services::{Error, Result};
 use validator::Validate;
 impl CustomerAcceptanceProcess {

@@ -7,6 +7,7 @@ autotests = false
 [dependencies]
 erp-sales = { workspace = true }
 erp-procurement = { workspace = true }
+erp-fulfillment = { workspace = true }
 erp-finance = { workspace = true }
 mongodb = { workspace = true }
 casbin = { workspace = true }

@@ -3,7 +3,6 @@
 //!
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
-mod fulfillment;
 mod integration_ops;
 
 mod returns;
@@ -29,7 +28,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     erp_contract::indexes::ensure(db).await?;
     erp_finance::indexes::ensure(db).await?;
     erp_customer::indexes::ensure(db).await?;
-    fulfillment::ensure(db).await?;
+    erp_fulfillment::indexes::ensure(db).await?;
     integration_ops::ensure(db).await?;
     erp_inventory::indexes::ensure(db).await?;
     erp_import::indexes::ensure(db).await?;

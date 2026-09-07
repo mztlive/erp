@@ -6,9 +6,11 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use erp_audit::AuditExt;
 use erp_core::ids::{DeliveryId, DeliveryLineId, SalesOrderId, WarehouseId};
+use erp_fulfillment::entity::fulfillment::{
+    Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType,
+};
 use erp_inventory::StockReservation;
 use erp_procurement::entity::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -20,7 +22,7 @@ use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use {database::FulfillmentExt, erp_sales::repository::SalesOrderExt};
+use {erp_fulfillment::repository::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::creation_basis::{
@@ -458,9 +460,9 @@ async fn ensure_stock_delivery_for_warehouse(
         .await?;
     if let Some(delivery) = existing {
         append_stock_delivery_lines(db, &delivery, reservations, session).await?;
-        services::fulfillment::ensure_fulfillment_task(
+        crate::fulfillment_execution::task::ensure_fulfillment_task(
             db,
-            services::fulfillment::FulfillmentTaskObject::Delivery(&delivery),
+            crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
             session,
         )
         .await?;
@@ -470,7 +472,7 @@ async fn ensure_stock_delivery_for_warehouse(
     let delivery = Delivery::new(
         delivery_id.clone(),
         DeliveryData {
-            delivery_no: services::fulfillment::next_delivery_no(db).await?,
+            delivery_no: erp_fulfillment::service::document_number::next_delivery_no(db).await?,
             delivery_type: DeliveryType::WarehouseShip,
             sales_order_id: sales_order_id.clone(),
             purchase_order_id: None,
@@ -485,9 +487,9 @@ async fn ensure_stock_delivery_for_warehouse(
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, session)
         .await?;
-    services::fulfillment::ensure_fulfillment_task(
+    crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
-        services::fulfillment::FulfillmentTaskObject::Delivery(&delivery),
+        crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
         session,
     )
     .await

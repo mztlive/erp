@@ -1,5 +1,4 @@
 mod errors;
-pub mod fulfillment;
 pub mod identity_audit;
 pub mod identity_compose;
 pub mod integration_ops;

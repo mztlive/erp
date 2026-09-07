@@ -1,17 +1,17 @@
 //! 验收事实写入后的销售进度、责任任务与审计顺序；三条入口共用生产编排。
 
+use super::task::{
+    ensure_customer_acceptance_task, persist_customer_acceptance_task_after_posting,
+    CustomerAcceptanceTaskReason,
+};
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
-use entities::fulfillment::{AcceptanceProgress, CustomerAcceptance};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
+use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, CustomerAcceptance};
 use erp_sales::entity::sales_order::FulfillmentProgress;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::fulfillment::{
-    ensure_customer_acceptance_task, persist_customer_acceptance_task_after_posting,
-    CustomerAcceptanceTaskReason, FulfillmentService,
-};
 use services::Result;
 
 /// 用例确定任务来源和审计种类，避免给普通 post 新增幂等回放。
@@ -96,7 +96,7 @@ struct DatabaseCompletion<'a> {
 #[async_trait]
 impl AcceptanceCompletion for DatabaseCompletion<'_> {
     async fn refresh_sales(&mut self, executor: &mut dyn Executor) -> Result<bool> {
-        let progress = FulfillmentService::load_customer_acceptance_progress(
+        let progress = erp_read_models::fulfillment_center::repository::load_customer_acceptance_progress(
             self.db,
             executor,
             &self.acceptance.sales_order_id,
@@ -178,7 +178,18 @@ async fn apply_projection(
     let Some(progress) = progress else {
         return Ok(false);
     };
-    writer.write(progress.progress, executor).await?;
+    let fulfillment = match progress.progress {
+        erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::NotStarted => {
+            FulfillmentProgress::NotStarted
+        }
+        erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::PartiallyFulfilled => {
+            FulfillmentProgress::PartiallyFulfilled
+        }
+        erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::Completed => {
+            FulfillmentProgress::Completed
+        }
+    };
+    writer.write(fulfillment, executor).await?;
     Ok(progress.has_remaining_eligible)
 }
 struct SalesProgressWriter<'a> {
@@ -204,7 +215,7 @@ impl AcceptanceSalesProgress for SalesProgressWriter<'_> {
 mod tests {
     use super::{apply_projection, finish, AcceptanceCompletion, AcceptanceSalesProgress, CompletionMode};
     use async_trait::async_trait;
-    use entities::fulfillment::AcceptanceProgress;
+    use erp_fulfillment::entity::fulfillment::AcceptanceProgress;
     use erp_sales::entity::sales_order::FulfillmentProgress;
     use persistence_core::Executor;
     use services::{Error, Result};
@@ -324,7 +335,7 @@ mod tests {
         assert!(sales.progress.is_empty());
         for remaining in [false, true] {
             let progress = AcceptanceProgress {
-                progress: FulfillmentProgress::PartiallyFulfilled,
+                progress: erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::PartiallyFulfilled,
                 has_remaining_eligible: remaining,
             };
             assert_eq!(
@@ -336,5 +347,29 @@ mod tests {
         }
         assert_eq!(sales.progress, vec![FulfillmentProgress::PartiallyFulfilled; 2]);
         assert_eq!(sales.executors, vec![expected; 2]);
+    }
+    /// 跨域枚举映射只改类型归属，三种销售进度与调用方执行器逐项保持。
+    #[tokio::test]
+    async fn fulfillment_progress_mapping_preserves_each_sales_variant_and_executor() {
+        use erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress as Local;
+        let mut sales = RecordingSales::default();
+        let mut executor = TestExecutor { _identity: 2 };
+        let expected = &mut executor as *mut TestExecutor as usize;
+        let cases = [
+            (Local::NotStarted, FulfillmentProgress::NotStarted),
+            (Local::PartiallyFulfilled, FulfillmentProgress::PartiallyFulfilled),
+            (Local::Completed, FulfillmentProgress::Completed),
+        ];
+        for (local, sale) in cases {
+            let projection = AcceptanceProgress {
+                progress: local,
+                has_remaining_eligible: true,
+            };
+            assert!(apply_projection(&mut sales, Some(projection), &mut executor)
+                .await
+                .unwrap());
+            assert_eq!(sales.progress.last(), Some(&sale));
+        }
+        assert_eq!(sales.executors, vec![expected; 3]);
     }
 }

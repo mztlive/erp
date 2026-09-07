@@ -3,16 +3,16 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::FulfillmentExt;
-use entities::fulfillment::{
-    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
-    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
-    PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
-};
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId};
 use erp_core::money::Quantity;
+use erp_fulfillment::entity::fulfillment::{
+    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
+    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
+    PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
+};
+use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::entity::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
@@ -231,7 +231,7 @@ async fn create_receipt_draft_for_order(
     let receipt = PurchaseReceipt::new(
         receipt_id.clone(),
         PurchaseReceiptData {
-            receipt_no: services::fulfillment::next_purchase_receipt_no(db).await?,
+            receipt_no: erp_fulfillment::service::document_number::next_purchase_receipt_no(db).await?,
             purchase_order_id: erp_core::ids::PurchaseOrderId::new(order.base.id.clone()),
             warehouse_id,
         },
@@ -264,9 +264,9 @@ async fn create_receipt_draft_for_order(
     db.fulfillment()
         .create_purchase_receipt_with_lines(&receipt, &lines, executor)
         .await?;
-    services::fulfillment::ensure_fulfillment_task(
+    crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
-        services::fulfillment::FulfillmentTaskObject::PurchaseReceipt(&receipt),
+        crate::fulfillment_execution::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
         executor,
     )
     .await?;
@@ -289,8 +289,8 @@ async fn create_delivery_draft_for_order(
     let delivery = Delivery::new(
         delivery_id.clone(),
         DeliveryData {
-            delivery_no: services::fulfillment::next_delivery_no(db).await?,
-            delivery_type: entities::fulfillment::DeliveryType::SupplierDirect,
+            delivery_no: erp_fulfillment::service::document_number::next_delivery_no(db).await?,
+            delivery_type: erp_fulfillment::entity::fulfillment::DeliveryType::SupplierDirect,
             sales_order_id: order.sales_order_id.clone(),
             purchase_order_id: Some(PurchaseOrderId::new(order.base.id.clone())),
             warehouse_id: None,
@@ -327,7 +327,7 @@ async fn create_delivery_draft_for_order(
                     stock_reservation_id: None,
                     purchase_line_sales_allocation_id: Some(allocation_id.clone()),
                 },
-                entities::fulfillment::DeliveryType::SupplierDirect,
+                erp_fulfillment::entity::fulfillment::DeliveryType::SupplierDirect,
             )
             .map_err(Error::Logic)?,
         );
@@ -338,9 +338,9 @@ async fn create_delivery_draft_for_order(
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, executor)
         .await?;
-    services::fulfillment::ensure_fulfillment_task(
+    crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
-        services::fulfillment::FulfillmentTaskObject::Delivery(&delivery),
+        crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
         executor,
     )
     .await?;
@@ -417,9 +417,9 @@ async fn create_service_fulfillment_draft_for_order(
         )
         .map_err(Error::Logic)?;
         db.service_fulfillments().create(&record, executor).await?;
-        services::fulfillment::ensure_fulfillment_task(
+        crate::fulfillment_execution::task::ensure_fulfillment_task(
             db,
-            services::fulfillment::FulfillmentTaskObject::ServiceFulfillment(&record),
+            crate::fulfillment_execution::task::FulfillmentTaskObject::ServiceFulfillment(&record),
             executor,
         )
         .await?;
