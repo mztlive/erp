@@ -4,13 +4,15 @@ use std::collections::{HashMap, HashSet};
 
 use persistence_core::Executor;
 use {
-    database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt, erp_sales::repository::SalesReviewExt,
+    erp_procurement::entity::purchase_order::PurchaseChangeOrder,
+    erp_procurement::entity::purchase_order::PurchaseChangeSubmission,
+    erp_procurement::entity::purchase_order::PurchaseOrderRevision,
+    erp_sales::entity::sales_order::SalesOrderRevision, erp_sales::entity::sales_review::SalesChangeOrder,
+    erp_sales::entity::sales_review::SalesChangeSubmission,
 };
 use {
-    entities::purchase_order::PurchaseChangeOrder, entities::purchase_order::PurchaseChangeSubmission,
-    entities::purchase_order::PurchaseOrderRevision, erp_sales::entity::sales_order::SalesOrderRevision,
-    erp_sales::entity::sales_review::SalesChangeOrder,
-    erp_sales::entity::sales_review::SalesChangeSubmission,
+    erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt,
+    erp_sales::repository::SalesReviewExt,
 };
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};

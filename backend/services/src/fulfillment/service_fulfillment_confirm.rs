@@ -4,7 +4,6 @@ use std::collections::HashSet;
 
 use std::sync::Arc;
 
-use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     ActualServiceLocation, ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
     ServiceFulfillmentConfirmationParams,
@@ -16,6 +15,7 @@ use erp_support::{EmptyPendingAttachments, FileAssetExt, PendingAttachmentBatch}
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 use validator::Validate;
+use {database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt};
 
 use crate::errors::{Error, Result};
 use application_core::AuditActor;

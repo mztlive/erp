@@ -114,3 +114,7 @@ pub use customer_acceptance_task::{
     prepare_customer_acceptance_task_command, CustomerAcceptanceTaskReason,
 };
 pub use document_number::next_customer_acceptance_no;
+
+pub use document_number::{next_delivery_no, next_purchase_receipt_no};
+/// 采购根流程复用的履约任务与单号合同。
+pub use task::{ensure_fulfillment_owner_eligible, ensure_fulfillment_task, FulfillmentTaskObject};

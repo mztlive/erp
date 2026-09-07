@@ -21,12 +21,12 @@ use persistence_core::Executor;
 use super::adapter::sales_order_responsible_org_id;
 use super::procurement::submission_procurement_inputs;
 use super::SalesOrderCommandProcess;
+use crate::procure_to_pay::responsibility::{
+    AuthorizedResolutionPlan, ProcurementResponsibilityProcess, ResolutionInput,
+};
 use application_core::AuditActor;
 use erp_sales::service::sales_order::formalize::{build_revision_for_order, load_latest_submission};
 use erp_sales::service::sales_order::lifecycle::ensure_final_approve_formalize;
-use services::procurement_responsibility::{
-    AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
-};
 use services::{Error, Result};
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
@@ -103,7 +103,7 @@ impl SalesOrderCommandProcess {
             return Ok(None);
         }
         let inputs = submission_procurement_inputs(lines)?;
-        let resolution = ProcurementResponsibilityService::new(self.db.clone(), self.require_rbac()?.clone())
+        let resolution = ProcurementResponsibilityProcess::new(self.db.clone(), self.require_rbac()?.clone())
             .resolve_strict(&inputs)
             .await?;
         Ok(Some(ProcurementFormalizationPlan { inputs, resolution }))

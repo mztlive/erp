@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::PurchaseOrderExt;
 use erp_audit::AuditExt;
 use erp_customer::CustomerExt;
 use erp_finance::entity::payable::PayableAccount;
@@ -11,6 +10,7 @@ use erp_finance::repository::PayableExt;
 use erp_finance::repository::ReceivableExt;
 use erp_party::Party;
 use erp_party::PartyExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_supplier::SupplierExt;
 use persistence_core::Executor;

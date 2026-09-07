@@ -3,11 +3,11 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::PurchaseOrderExt;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_finance::repository::ReceivableExt;
 use erp_identity::AccessControlExt;
 use erp_identity::Permission;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrderSubmissionLine, WorkingPurpose};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::SalesReviewExt;
@@ -509,15 +509,15 @@ impl SalesOrderReadService {
         let Some(revision_id) = order.current_revision_id() else {
             return Ok(empty_sales_procurement_coverage());
         };
-        let facts = self
-            .db
-            .load_procurement_coverage_facts(
-                &SalesOrderRevisionId::new(revision_id),
-                &SalesOrderId::new(order.base.id.clone()),
-                &mut NoTransaction,
-            )
-            .await?;
-        let coverage = entities::purchase_order::build_procurement_coverage(facts).map_err(Error::Logic)?;
+        let facts = crate::purchase_center::repository::load_procurement_coverage_facts(
+            &self.db,
+            &SalesOrderRevisionId::new(revision_id),
+            &SalesOrderId::new(order.base.id.clone()),
+            &mut NoTransaction,
+        )
+        .await?;
+        let coverage = erp_procurement::entity::purchase_order::build_procurement_coverage(facts)
+            .map_err(Error::Logic)?;
         Ok(SalesProcurementCoverageView {
             total_quantity: coverage.summary.total_quantity,
             covered_quantity: coverage.summary.covered_quantity,

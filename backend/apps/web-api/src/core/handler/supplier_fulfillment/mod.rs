@@ -73,10 +73,12 @@ pub async fn supplier_fulfillment_order_detail(
     Path(id): Path<String>,
     Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
-    let view = state
-        .supplier_fulfillment_service()
-        .supplier_fulfillment_order_detail(&id, &params, &actor, state.rbac())
-        .await?;
+    let view = erp_read_models::supplier_center::SupplierFulfillmentDetailReadService::new(
+        state.db(),
+        state.supplier_fulfillment_service(),
+    )
+    .supplier_fulfillment_order_detail(&id, &params, &actor, state.rbac())
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

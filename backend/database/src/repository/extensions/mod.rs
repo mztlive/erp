@@ -6,8 +6,6 @@
 mod fulfillment;
 mod integration_ops;
 
-mod procurement_responsibility;
-mod purchase_order;
 mod returns;
 
 mod supplier_api;
@@ -18,8 +16,6 @@ mod supplier_settlement;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 
-pub use procurement_responsibility::ProcurementResponsibilityExt;
-pub use purchase_order::PurchaseOrderExt;
 pub use returns::ReturnsExt;
 pub use supplier_api::SupplierApiExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
@@ -48,8 +44,8 @@ pub trait DatabaseExt:
     + erp_import::LegacyImportExt
     + erp_party::PartyExt
     + erp_finance::repository::PayableExt
-    + ProcurementResponsibilityExt
-    + PurchaseOrderExt
+    + erp_procurement::repository::ProcurementResponsibilityExt
+    + erp_procurement::repository::PurchaseOrderExt
     + erp_finance::repository::ReceivableExt
     + ReturnsExt
     + erp_sales::repository::SalesOrderExt
@@ -83,8 +79,8 @@ impl<
             + erp_import::LegacyImportExt
             + erp_party::PartyExt
             + erp_finance::repository::PayableExt
-            + ProcurementResponsibilityExt
-            + PurchaseOrderExt
+            + erp_procurement::repository::ProcurementResponsibilityExt
+            + erp_procurement::repository::PurchaseOrderExt
             + erp_finance::repository::ReceivableExt
             + ReturnsExt
             + erp_sales::repository::SalesOrderExt

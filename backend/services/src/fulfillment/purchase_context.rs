@@ -1,14 +1,17 @@
 use std::str::FromStr;
 
 use database::FulfillmentExt;
-use database::PurchaseOrderExt;
 use entities::fulfillment::PurchaseFulfillmentEligibility;
-use entities::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use erp_core::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId};
 use erp_core::money::Amount;
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::repository::PayableExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
+use {
+    erp_procurement::entity::purchase_order::PurchaseOrder,
+    erp_procurement::entity::purchase_order::PurchaseOrderRevision,
+};
 
 use crate::errors::{Error, Result};
 
@@ -203,11 +206,26 @@ pub(super) async fn ensure_allocation_valid(
 
 #[cfg(test)]
 mod tests {
+    /// 将供应商受控付款规则映射为采购测试使用的消费事实。
+    fn resolve_procurement_payment_term(
+        code: &str,
+    ) -> erp_core::Result<erp_procurement::entity::facts::PaymentTermFact> {
+        let term = erp_supplier::SupplierPaymentTerm::parse(code)?;
+        Ok(erp_procurement::entity::facts::PaymentTermFact {
+            canonical_code: term.code().to_string(),
+            prepay_gate: term.prepay_gate(),
+            days_after_delivery: term.days_after_delivery(),
+        })
+    }
+
     use super::ensure_po_fulfillable;
-    use entities::purchase_order::{
-        FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseType,
-    };
     use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
+    use {
+        erp_procurement::entity::purchase_order::FulfillmentResponsibility,
+        erp_procurement::entity::purchase_order::PurchaseOrder,
+        erp_procurement::entity::purchase_order::PurchaseOrderData,
+        erp_procurement::entity::purchase_order::PurchaseType,
+    };
 
     #[test]
     fn po_fulfillable_guards_status() {
@@ -226,6 +244,7 @@ mod tests {
                 target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
             },
             "admin-1",
+            resolve_procurement_payment_term,
         )
         .unwrap();
         assert!(ensure_po_fulfillable(&po).is_err(), "草稿不可履约");

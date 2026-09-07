@@ -1,23 +1,29 @@
 //! 域 D15 `purchase_order` 的 HTTP handler。
 //!
-//! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::purchase_order` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! Handler 只做协议适配：校验请求、调用采购命令流程或读模型、返回 `ApiResponse`。
+//! DTO 使用采购领域与读模型的唯一定义，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::purchase_order::{
+use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
-    CreatePurchaseOrdersFromSourcingResult, CreationBasisListParams, CreationBasisView,
-    EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
-    PurchaseChangeOrderView, PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams,
-    PurchaseOrderService, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
-    SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest, PageView,
+    PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseOrderListParams,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, StartPurchaseChangeRequest,
+    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
+    SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
+use erp_procurement::service::purchase_order::PurchaseOrderService;
+use erp_read_models::purchase_center::dto::{
+    CreationBasisListParams, CreationBasisView, PurchaseChangeOrderView, PurchaseOrderCenterView,
+    PurchaseOrderListItemView,
+};
+use erp_read_models::purchase_center::PurchaseOrderReadService;
 
 use crate::{
     app_state::AppState,
@@ -43,8 +49,7 @@ pub async fn purchase_order_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseOrderListParams>,
 ) -> Result<PageView<PurchaseOrderListItemView>> {
-    let page = PurchaseOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = PurchaseOrderReadService::new(state.db())
         .purchase_order_list(&params)
         .await?;
 
@@ -71,8 +76,7 @@ pub async fn purchase_order_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
-    let view = PurchaseOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = PurchaseOrderReadService::new(state.db())
         .purchase_order_detail(&id)
         .await?;
 
@@ -100,7 +104,7 @@ pub async fn purchase_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrderFromBasisRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .create_from_basis(req, &actor)
         .await?;
 
@@ -128,7 +132,7 @@ pub async fn purchase_order_create_from_sourcing(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrdersFromSourcingRequest>,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .create_from_sourcing(req, &actor)
         .await?;
 
@@ -158,7 +162,7 @@ pub async fn purchase_order_save_draft(
     Path(id): Path<String>,
     Json(req): Json<SavePurchaseOrderDraftRequest>,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .save_draft(&id, req, &actor)
         .await?;
 
@@ -188,7 +192,7 @@ pub async fn purchase_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidPurchaseOrderRequest>,
 ) -> Result<VoidPurchaseOrderResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .void_draft(&id, req, &actor)
         .await?;
 
@@ -218,7 +222,7 @@ pub async fn purchase_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseOrderRequest>,
 ) -> Result<SubmitPurchaseOrderResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .submit(&id, req, &actor)
         .await?;
 
@@ -248,7 +252,7 @@ pub async fn purchase_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseOrderApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .cancel_approval(&id, req, &actor)
         .await?;
 
@@ -276,8 +280,7 @@ pub async fn purchase_creation_basis_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CreationBasisListParams>,
 ) -> Result<Vec<CreationBasisView>> {
-    let views = PurchaseOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let views = PurchaseOrderReadService::new(state.db())
         .creation_basis_list(&params, &actor)
         .await?;
 
@@ -307,7 +310,7 @@ pub async fn purchase_change_create(
     Path(id): Path<String>,
     Json(req): Json<StartPurchaseChangeRequest>,
 ) -> Result<StartPurchaseChangeResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .start_change(&id, req, &actor)
         .await?;
 
@@ -337,7 +340,7 @@ pub async fn purchase_change_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .submit_change_view(&id, req, &actor)
         .await?;
 
@@ -396,7 +399,7 @@ pub async fn purchase_change_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseChangeApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderService::with_rbac(state.db(), state.rbac())
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
         .cancel_change_approval(&id, req, &actor)
         .await?;
 
@@ -422,8 +425,7 @@ pub async fn purchase_change_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseChangeOrderListParams>,
 ) -> Result<PageView<PurchaseChangeOrderView>> {
-    let page = PurchaseOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = PurchaseOrderReadService::new(state.db())
         .change_order_list(&params)
         .await?;
 
@@ -449,8 +451,7 @@ pub async fn purchase_change_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = PurchaseOrderReadService::new(state.db())
         .change_order_detail(&id)
         .await?;
 

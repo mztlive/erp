@@ -65,7 +65,7 @@ impl PostingSteps for MongoPosting<'_> {
         match step {
             RevalidateProcurement => {
                 if let Some(plan) = write.procurement.as_ref() {
-                    services::procurement_responsibility::ProcurementResponsibilityService::new(
+                    crate::procure_to_pay::responsibility::ProcurementResponsibilityProcess::new(
                         write.db.clone(),
                         write.rbac.clone(),
                     )
@@ -104,7 +104,7 @@ impl PostingSteps for MongoPosting<'_> {
             }
             SynchronizeProcurement => {
                 if write.procurement.is_some() {
-                    services::purchase_order::sync_procurement_tasks_for_sales_order(
+                    crate::procure_to_pay::sync_procurement_tasks_for_sales_order(
                         &write.db,
                         &SalesOrderId::new(write.order_id.clone()),
                         executor,

@@ -44,7 +44,7 @@ mod reject;
 pub use self::dto::{
     AfterSalesActionLineRequest, PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest,
     RecordSupplierRejectRequest, SubmitActionResultView, SubmitAfterSalesActionRequest,
-    SupplierFulfillmentOrderDetailParams, SupplierFulfillmentOrderDetailView,
+    SupplierFulfillmentItemView, SupplierFulfillmentOrderDetailParams, SupplierFulfillmentOrderDetailView,
     SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView, SupplierOrderActionBlockerView,
     SupplierOrderActionLineView, SupplierOrderActionView, SupplierOrderAddressView,
     SupplierOrderAllowedAction, SupplierOrderInvestigationAction, SupplierOrderInvestigationEvidenceView,
@@ -59,7 +59,15 @@ pub use self::gateway::{
     UnavailableSupplierGateway,
 };
 
-const W26_BUSINESS_OBJECT_TYPE: &str = "SUPPLIER_FULFILLMENT_ORDER";
+pub use self::investigate::{
+    capability_for_action, ensure_replay_safe, ensure_task_actor_eligible, parse_investigation_evidence,
+    verified_terminal_evidence, InvestigationEvidenceRecord,
+};
+pub use self::mapping::refund_fact_view;
+pub use self::place::ensure_capability;
+
+/// W26 正式待办绑定的供应商履约订单业务对象类型。
+pub const W26_BUSINESS_OBJECT_TYPE: &str = "SUPPLIER_FULFILLMENT_ORDER";
 
 /// 供应商履约服务。
 ///

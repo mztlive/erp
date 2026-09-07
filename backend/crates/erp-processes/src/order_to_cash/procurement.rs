@@ -5,7 +5,7 @@ use erp_sales::entity::sales_order::{
 };
 
 use super::SalesOrderCommandProcess;
-use services::procurement_responsibility::{ProcurementResponsibilityService, ResolutionInput};
+use crate::procure_to_pay::responsibility::{ProcurementResponsibilityProcess, ResolutionInput};
 use services::Result;
 
 impl SalesOrderCommandProcess {
@@ -32,7 +32,7 @@ impl SalesOrderCommandProcess {
             .into_iter()
             .map(resolution_input)
             .collect::<Vec<_>>();
-        ProcurementResponsibilityService::new(self.db.clone(), self.require_rbac()?.clone())
+        ProcurementResponsibilityProcess::new(self.db.clone(), self.require_rbac()?.clone())
             .resolve_strict(&inputs)
             .await?;
         Ok(())

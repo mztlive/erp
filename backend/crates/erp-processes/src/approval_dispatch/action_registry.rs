@@ -79,7 +79,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             let session = require_transaction(executor)?;
-            services::purchase_order::PurchaseOrderService::new(registry.db.clone())
+            crate::procure_to_pay::PurchaseOrderProcess::new(registry.db.clone())
                 .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                 .await
         }
@@ -147,7 +147,7 @@ async fn dispatch_action(
             .await
         }
         ApprovalDomainAction::PurchaseOrderCancelApproval => {
-            services::purchase_order::cancel_order_approval_in_transaction(
+            crate::procure_to_pay::cancel_order_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 action,
@@ -157,7 +157,7 @@ async fn dispatch_action(
             .await
         }
         ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
-            services::purchase_order::cancel_change_approval_in_transaction(
+            crate::procure_to_pay::cancel_change_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 action,

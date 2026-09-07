@@ -2,7 +2,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
 };
@@ -25,6 +24,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
+use {database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt};
 
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
@@ -218,7 +218,7 @@ async fn post_receipt_line(
     session: &mut mongodb::ClientSession,
     receipt: &PurchaseReceipt,
     line: &PurchaseReceiptLine,
-    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
+    revision_lines: &[erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
     occurred_at: &Instant,
     actor: &AuditActor,
 ) -> Result<()> {
@@ -350,7 +350,7 @@ async fn establish_reservations(
     session: &mut mongodb::ClientSession,
     receipt: &PurchaseReceipt,
     line: &PurchaseReceiptLine,
-    revision_line: &entities::purchase_order::PurchaseOrderRevisionLine,
+    revision_line: &erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
     sku_id: &erp_core::ids::SkuId,
     balance_id: &str,
 ) -> Result<()> {

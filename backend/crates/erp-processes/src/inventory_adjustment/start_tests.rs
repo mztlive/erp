@@ -129,12 +129,12 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
         ".mark_approval_started(",
     );
     assert_start_write_order(
-        include_str!("../../../../services/src/purchase_order/start_approval.rs"),
+        include_str!("../procure_to_pay/start_approval.rs"),
         1,
         ".mark_loaded_approval_started(",
     );
     assert_start_write_order(
-        include_str!("../../../../services/src/purchase_order/change_start.rs"),
+        include_str!("../procure_to_pay/change_start.rs"),
         1,
         ".mark_approval_started(",
     );
@@ -156,14 +156,13 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
     assert_start_write_order(include_str!("persist.rs"), 1, ".mark_approval_started(");
 }
 
-/// 通用 Start Replay 必须在开启事务前返回，禁止重复写业务事实。
+/// 通用 Start Replay 必须在业务写入前返回，禁止重复写业务事实。
 #[test]
 fn generic_start_replay_paths_return_before_transaction_writes() {
     for source in [
         include_str!("../order_to_cash/start_approval.rs"),
         include_str!("../sales_change/start_approval.rs"),
-        include_str!("../../../../services/src/purchase_order/start_approval.rs"),
-        include_str!("../../../../services/src/purchase_order/change_start.rs"),
+        include_str!("../procure_to_pay/change_start.rs"),
         include_str!("../finance_posting/receivable/start_approval.rs"),
         include_str!("../../../../services/src/returns/start_approval/customer_refund.rs"),
         include_str!("../../../../services/src/returns/start_approval/supplier_refund.rs"),
@@ -173,6 +172,17 @@ fn generic_start_replay_paths_return_before_transaction_writes() {
         let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("let PreparedExecution::Apply(writes) = prepared else"));
     }
+    let procurement = include_str!("../procure_to_pay/start_approval.rs")
+        .split("pub(super) async fn persist_purchase_order_start_with_session(")
+        .nth(1)
+        .expect("采购事务内启动入口必须存在");
+    let replay_guard = procurement
+        .find("if !matches!(&input.prepared, PreparedExecution::Apply(_)) {\n        return Ok(None);\n    }")
+        .expect("采购Replay必须在调用写入Port前返回空任务");
+    let first_write = procurement
+        .find("execute_start_steps(&mut posting, session).await?")
+        .expect("采购必须调用真实生产写入Port");
+    assert!(replay_guard < first_write, "采购Replay不得进入写入步骤");
 }
 
 /// 库存启动摘要锁定为无歧义 JSON tuple 的字面 SHA-256。

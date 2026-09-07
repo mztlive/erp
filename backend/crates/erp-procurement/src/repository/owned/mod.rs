@@ -1,0 +1,23 @@
+//! 采购实体拥有仓储；通用操作委托 persistence-core。
+
+mod procurement_responsibility_rule;
+mod purchase_change_order;
+mod purchase_change_submission;
+mod purchase_change_submission_line;
+mod purchase_line_sales_allocation;
+mod purchase_order;
+mod purchase_order_revision;
+mod purchase_order_revision_line;
+mod purchase_order_submission;
+mod purchase_order_submission_line;
+
+pub use procurement_responsibility_rule::ProcurementResponsibilityRuleRepository;
+pub use purchase_change_order::PurchaseChangeOrderRepository;
+pub use purchase_change_submission::PurchaseChangeSubmissionRepository;
+pub use purchase_change_submission_line::PurchaseChangeSubmissionLineRepository;
+pub use purchase_line_sales_allocation::PurchaseLineSalesAllocationRepository;
+pub use purchase_order::PurchaseOrderRepository;
+pub use purchase_order_revision::PurchaseOrderRevisionRepository;
+pub use purchase_order_revision_line::PurchaseOrderRevisionLineRepository;
+pub use purchase_order_submission::PurchaseOrderSubmissionRepository;
+pub use purchase_order_submission_line::PurchaseOrderSubmissionLineRepository;

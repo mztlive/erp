@@ -482,7 +482,7 @@ pub enum SupplierOrderAllowedAction {
 
 impl SupplierOrderAllowedAction {
     /// 返回稳定动作代码。
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryResult => "QUERY_RESULT",
             Self::Replay => "REPLAY",

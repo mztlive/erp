@@ -7,18 +7,13 @@ mod fulfillment;
 mod integration_ops;
 
 pub mod owned;
-mod procurement_responsibility;
-mod purchase_order;
 mod returns;
 
 mod supplier_api;
 mod supplier_fulfillment;
-mod supplier_names;
 mod supplier_offering;
 mod supplier_settlement;
 
 pub use extensions::DatabaseExt;
 pub use owned::*;
-pub use procurement_responsibility::ProcurementResponsibilityRuleFilter;
-pub use supplier_names::current_legal_names_by_account_ids;
 pub use supplier_offering::SupplierOfferingRow;

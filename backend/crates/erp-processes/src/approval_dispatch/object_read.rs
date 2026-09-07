@@ -60,15 +60,12 @@ fn adapter_object_read_for_type(
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::PurchaseOrder => Ok(Some(
-            services::purchase_order::purchase_order_object_readable(organization_id, assignee_user_id)
+            crate::procure_to_pay::purchase_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::PurchaseChangeOrder => Ok(Some(
-            services::purchase_order::purchase_change_order_object_readable(
-                organization_id,
-                assignee_user_id,
-            )
-            .map_err(map_workflow_error)?,
+            crate::procure_to_pay::purchase_change_order_object_readable(organization_id, assignee_user_id)
+                .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::CustomerReceipt => Ok(Some(
             crate::finance_posting::receivable::customer_receipt_object_readable(

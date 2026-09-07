@@ -1,6 +1,5 @@
 use entities::supplier_fulfillment::{
-    SupplierFulfillmentItem, SupplierOrderActionLine, SupplierRefundAllocation, SupplierRefundFact,
-    VerifiedSupplierOrderResolution,
+    SupplierOrderActionLine, SupplierRefundAllocation, SupplierRefundFact, VerifiedSupplierOrderResolution,
 };
 
 use super::dto::SupplierOrderResolution;
@@ -15,29 +14,6 @@ impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
             VerifiedSupplierOrderResolution::Canceled => Self::Canceled,
             VerifiedSupplierOrderResolution::Refunded => Self::Refunded,
         }
-    }
-}
-
-/// 从履约明细实体构造响应视图。
-///
-/// # 参数
-/// * `item` - 履约明细实体
-///
-/// # 返回
-/// 返回响应视图。
-pub(super) fn item_view(
-    item: SupplierFulfillmentItem,
-) -> crate::supplier_fulfillment::dto::SupplierFulfillmentItemView {
-    crate::supplier_fulfillment::dto::SupplierFulfillmentItemView {
-        id: item.base.id,
-        supplier_fulfillment_order_id: item.supplier_fulfillment_order_id.to_string(),
-        supplier_offering_revision_id: item.supplier_offering_revision_id.to_string(),
-        supplier_sku_code_snapshot: item.supplier_sku_code_snapshot,
-        supplier_product_code_snapshot: item.supplier_product_code_snapshot,
-        quantity: item.quantity,
-        unit_cost_snapshot_gross: item.unit_cost_snapshot_gross,
-        cost_snapshot_total_gross: item.cost_snapshot_total_gross,
-        input_tax_rate: item.input_tax_rate,
     }
 }
 
@@ -68,7 +44,7 @@ pub(super) fn action_line_view(
 ///
 /// # 返回
 /// 返回响应视图。
-pub(super) fn refund_fact_view(
+pub fn refund_fact_view(
     fact: &SupplierRefundFact,
     allocations: &[SupplierRefundAllocation],
 ) -> crate::supplier_fulfillment::dto::SupplierRefundFactView {

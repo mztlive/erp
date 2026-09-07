@@ -17,7 +17,7 @@ use erp_workflow::entity::work_item::{
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
-use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use crate::errors::{Error, Result};
 use erp_identity::SharedRbacService;
@@ -27,7 +27,7 @@ const WAREHOUSE_INBOUND_ROLE: &str = "warehouse_inbound_handler";
 const WAREHOUSE_OUTBOUND_ROLE: &str = "warehouse_outbound_handler";
 
 /// 可形成履约执行任务的草稿对象。
-pub(crate) enum FulfillmentTaskObject<'a> {
+pub enum FulfillmentTaskObject<'a> {
     /// 采购到货入库。
     PurchaseReceipt(&'a PurchaseReceipt),
     /// 仓发或供应商直发。
@@ -156,7 +156,7 @@ struct FulfillmentTaskOwner {
 /// # 关键业务约束
 /// 采购履约继承采购单当前责任人；入库与仓发分别取仓库入库、仓发经办人。
 /// 责任配置只影响新任务，已存在任务不得在幂等重入时被配置变化静默改派。
-pub(crate) async fn ensure_fulfillment_task(
+pub async fn ensure_fulfillment_task(
     db: &mongodb::Database,
     object: FulfillmentTaskObject<'_>,
     executor: &mut dyn Executor,
@@ -469,7 +469,7 @@ async fn purchase_order_owner(
 ///
 /// # 错误
 /// 对象权限合同缺失、账号不存在或不可用、权限不足，以及账号或 RBAC 查询失败时返回错误。
-pub(crate) async fn ensure_fulfillment_owner_eligible(
+pub async fn ensure_fulfillment_owner_eligible(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
     owner_user_id: &str,

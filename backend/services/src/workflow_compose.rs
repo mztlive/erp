@@ -35,8 +35,8 @@ use entities::integration_ops::{
     ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
     ReconciliationDifferenceResolutionId, ResolutionType, W29CloseDecision,
 };
-use entities::purchase_order::PurchaseOrderStatus;
 use erp_core::ids::PurchaseOrderId;
+use erp_procurement::entity::purchase_order::PurchaseOrderStatus;
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
 #[derive(Clone)]
@@ -843,7 +843,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         purchase_order_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<(String, Vec<WorkItem>)> {
-        use database::PurchaseOrderExt;
+        use erp_procurement::repository::PurchaseOrderExt;
         use erp_workflow::WorkItemExt;
         let responsibility_key = format!("purchase_order:{purchase_order_id}");
         let order = self
@@ -891,7 +891,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        use database::PurchaseOrderExt;
+        use erp_procurement::repository::PurchaseOrderExt;
         let mut order = self
             .db()
             .purchase_orders()

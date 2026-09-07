@@ -49,7 +49,7 @@ pub use formal_revision::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, SalesOrderRevisionAggregate,
 };
-pub use procurement::{procurement_responsibility_key, ProcurementCoverageSummary};
+pub use procurement::procurement_responsibility_key;
 pub use revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,

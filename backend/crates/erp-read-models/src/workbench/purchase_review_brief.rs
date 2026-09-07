@@ -5,15 +5,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use entities::purchase_order::{
-    PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine,
-};
 use erp_core::ids::PurchaseOrderSubmissionId;
 use erp_core::money::{Amount, Quantity};
 use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 use persistence_core::Executor;
-use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use {
+    erp_procurement::entity::purchase_order::PaymentTermSnapshot,
+    erp_procurement::entity::purchase_order::PurchaseLineType,
+    erp_procurement::entity::purchase_order::PurchaseOrder,
+    erp_procurement::entity::purchase_order::PurchaseOrderSubmission,
+    erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLine,
+};
+use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
@@ -980,18 +983,41 @@ fn non_empty(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use entities::purchase_order::{
-        FulfillmentResponsibility, PurchaseOrderSubmissionData, PurchaseType, SupplierSnapshot,
-    };
+    /// 将供应商受控付款规则映射为采购测试使用的消费事实。
+    fn resolve_procurement_payment_term(
+        code: &str,
+    ) -> erp_core::Result<erp_procurement::entity::facts::PaymentTermFact> {
+        let code = erp_supplier::split_encoded_payment_term_snapshot(code).payment_term_code;
+        let term = erp_supplier::SupplierPaymentTerm::parse(&code)?;
+        Ok(erp_procurement::entity::facts::PaymentTermFact {
+            canonical_code: term.code().to_string(),
+            prepay_gate: term.prepay_gate(),
+            days_after_delivery: term.days_after_delivery(),
+        })
+    }
+
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use {
+        erp_procurement::entity::purchase_order::FulfillmentResponsibility,
+        erp_procurement::entity::purchase_order::PurchaseOrderSubmissionData,
+        erp_procurement::entity::purchase_order::PurchaseType,
+        erp_procurement::entity::purchase_order::SupplierSnapshot,
     };
 
     use super::*;
 
     fn payment(code: &str, prepay: bool) -> PaymentTermSnapshot {
-        PaymentTermSnapshot::new(code.to_string(), prepay, None, None).expect("付款条件必须合法")
+        PaymentTermSnapshot::new(
+            code.to_string(),
+            prepay,
+            None,
+            None,
+            resolve_procurement_payment_term,
+        )
+        .expect("付款条件必须合法")
     }
 
     fn amount(value: &str) -> Amount {

@@ -541,7 +541,7 @@ impl SupplierFulfillmentService {
 ///
 /// # 错误
 /// 能力缺失或未启用时返回 `BusinessLogicError`。
-pub(super) fn ensure_capability(
+pub fn ensure_capability(
     capabilities: &[SupplierApiCapability],
     needed: SupplierApiCapabilityCode,
 ) -> Result<()> {

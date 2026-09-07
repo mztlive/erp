@@ -4,7 +4,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, ReturnsExt, SupplierSettlementExt};
 use entities::returns::PaymentReversal;
 use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use erp_finance::entity::payable::{PayableAccount, PayableEntry, PayableSourceType};
@@ -13,6 +12,7 @@ use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
+use {database::ReturnsExt, database::SupplierSettlementExt, erp_procurement::repository::PurchaseOrderExt};
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use super::PayableReadService;

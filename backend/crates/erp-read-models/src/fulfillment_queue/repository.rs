@@ -15,7 +15,10 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
-use {database::FulfillmentExt, database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use {
+    database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
+    erp_sales::repository::SalesOrderExt,
+};
 
 const PURCHASE_RECEIPTS: &str = <Database as FulfillmentExt>::PURCHASE_RECEIPTS;
 const DELIVERIES: &str = <Database as FulfillmentExt>::DELIVERIES;

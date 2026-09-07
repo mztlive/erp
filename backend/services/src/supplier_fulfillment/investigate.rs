@@ -71,15 +71,42 @@ struct InvestigationFinding {
     summary: String,
 }
 
+/// 已持久化的结构化调查证据；详情投影与命令验证复用同一解析结果。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct InvestigationEvidenceRecord {
+pub struct InvestigationEvidenceRecord {
     pub(super) schema: String,
     pub(super) action: SupplierOrderInvestigationAction,
+    /// 原供应商动作身份。
     pub(super) target_supplier_action_id: String,
+    /// 已经记录的调查结果。
     pub(super) outcome: SupplierOrderInvestigationOutcome,
+    /// 证据已验证的业务终态。
     pub(super) verified_resolution: Option<SupplierOrderResolution>,
     pub(super) operation_id: String,
+    /// 适于详情展示的调查摘要。
     pub(super) summary: String,
+}
+
+impl InvestigationEvidenceRecord {
+    /// 返回证据所绑定的原供应商动作身份。
+    pub fn target_supplier_action_id(&self) -> &str {
+        &self.target_supplier_action_id
+    }
+
+    /// 返回已经记录的调查结果，供详情只读投影。
+    pub fn outcome(&self) -> SupplierOrderInvestigationOutcome {
+        self.outcome
+    }
+
+    /// 返回证据已经验证的业务终态，供详情只读投影。
+    pub fn verified_resolution(&self) -> Option<SupplierOrderResolution> {
+        self.verified_resolution
+    }
+
+    /// 返回已经记录的调查摘要，供详情只读展示。
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -737,7 +764,8 @@ pub(super) fn ensure_task_subject_matches_order(
     ))
 }
 
-pub(super) async fn ensure_task_actor_eligible(
+/// 沿用 W26 当前责任人的资格判定；详情投影与调查命令共享此入口。
+pub async fn ensure_task_actor_eligible(
     db: &Database,
     item: &WorkItem,
     actor_id: &str,
@@ -763,9 +791,8 @@ async fn ensure_no_active_w26_task(db: &Database, order_id: &str, executor: &mut
     Ok(())
 }
 
-pub(super) fn capability_for_action(
-    action_type: SupplierOrderActionType,
-) -> Result<SupplierApiCapabilityCode> {
+/// 返回原供应商动作需要的连接能力；查询记录不能作为再次提交目标。
+pub fn capability_for_action(action_type: SupplierOrderActionType) -> Result<SupplierApiCapabilityCode> {
     match action_type {
         SupplierOrderActionType::Place => Ok(SupplierApiCapabilityCode::Order),
         SupplierOrderActionType::Cancel => Ok(SupplierApiCapabilityCode::Cancel),
@@ -776,7 +803,8 @@ pub(super) fn capability_for_action(
     }
 }
 
-pub(super) async fn ensure_replay_safe(
+/// 校验原下单可重放且最新调查证据明确证明尚未形成结果。
+pub async fn ensure_replay_safe(
     db: &Database,
     order: &SupplierFulfillmentOrder,
     target_action: &SupplierOrderAction,
@@ -1034,7 +1062,8 @@ fn evidence_action_status(outcome: SupplierOrderInvestigationOutcome) -> Supplie
     }
 }
 
-pub(super) fn verified_terminal_evidence(
+/// 校验调查证据属于当前订单并已证明所选业务终态。
+pub fn verified_terminal_evidence(
     evidence: &SupplierOrderAction,
     order: &SupplierFulfillmentOrder,
     expected_resolution: SupplierOrderResolution,
@@ -1058,9 +1087,8 @@ pub(super) fn verified_terminal_evidence(
     Ok(record)
 }
 
-pub(super) fn parse_investigation_evidence(
-    action: &SupplierOrderAction,
-) -> Result<InvestigationEvidenceRecord> {
+/// 解析持久化调查结果并校验已登记的证据结构版本。
+pub fn parse_investigation_evidence(action: &SupplierOrderAction) -> Result<InvestigationEvidenceRecord> {
     let summary = action
         .response_summary
         .as_deref()

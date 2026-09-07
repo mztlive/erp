@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, SupplierSettlementExt};
 use erp_finance::entity::payable::{PayableEntry, PayableSourceType};
 use erp_finance::repository::PayableExt;
+use {database::SupplierSettlementExt, erp_procurement::repository::PurchaseOrderExt};
 
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_party::PartyExt;

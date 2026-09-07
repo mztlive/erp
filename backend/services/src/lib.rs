@@ -4,8 +4,6 @@ pub mod identity_audit;
 pub mod identity_compose;
 pub mod integration_ops;
 
-pub mod procurement_responsibility;
-pub mod purchase_order;
 pub mod returns;
 
 pub mod supplier_api;

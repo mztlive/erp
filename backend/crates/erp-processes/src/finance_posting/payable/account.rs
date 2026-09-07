@@ -1,7 +1,7 @@
 //! 应付往来子账列表、详情与创建编排。
 
-use database::PurchaseOrderExt;
 use erp_finance::repository::PayableExt;
+use erp_procurement::repository::PurchaseOrderExt;
 
 use erp_audit::AuditExt;
 

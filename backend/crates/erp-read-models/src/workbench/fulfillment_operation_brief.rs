@@ -6,7 +6,10 @@
 use std::collections::{HashMap, HashSet};
 
 use persistence_core::Executor;
-use {database::FulfillmentExt, database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use {
+    database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
+    erp_sales::repository::SalesOrderExt,
+};
 
 use super::WorkbenchReadService;
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};

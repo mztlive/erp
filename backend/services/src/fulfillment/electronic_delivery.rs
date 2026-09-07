@@ -1,4 +1,3 @@
-use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::ElectronicDelivery;
 use erp_audit::AuditExt;
 use erp_core::ids::ElectronicDeliveryId;
@@ -7,6 +6,7 @@ use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
+use {database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt};
 
 use crate::errors::{Error, Result};
 use application_core::AuditActor;

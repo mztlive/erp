@@ -221,6 +221,13 @@ impl From<erp_sales::Error> for Error {
     }
 }
 
+impl From<erp_procurement::Error> for Error {
+    /// 将采购领域错误映射为 HTTP 边界错误。
+    fn from(err: erp_procurement::Error) -> Self {
+        services::Error::from(err).into()
+    }
+}
+
 impl From<erp_import::Error> for Error {
     /// 将导入领域错误映射为 HTTP 边界错误。
     fn from(err: erp_import::Error) -> Self {

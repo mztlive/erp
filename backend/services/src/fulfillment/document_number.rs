@@ -23,7 +23,7 @@ use crate::errors::{Error, Result};
 ///
 /// # 关键业务约束
 /// 计数器自增不加入调用方事务；序号一经消费不因履约草稿回滚而回收。
-pub(crate) async fn next_delivery_no(db: &Database) -> Result<String> {
+pub async fn next_delivery_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::Delivery).await
 }
 
@@ -40,7 +40,7 @@ pub(crate) async fn next_delivery_no(db: &Database) -> Result<String> {
 ///
 /// # 关键业务约束
 /// 计数器自增不加入调用方事务；序号一经消费不因入库草稿回滚而回收。
-pub(crate) async fn next_purchase_receipt_no(db: &Database) -> Result<String> {
+pub async fn next_purchase_receipt_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::PurchaseReceipt).await
 }
 

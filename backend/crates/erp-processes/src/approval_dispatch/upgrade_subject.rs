@@ -6,14 +6,13 @@
 //! 同一外层事务中先加载事实并完成授权、查询收据；只有无收据的 Fresh 分支才
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
-use database::PurchaseOrderExt;
 use database::ReturnsExt;
-use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use erp_customer::CustomerExt;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::ReceivableExt;
 use erp_inventory::InventoryExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::entity::sales_review::SalesChangeOrderStatus;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::SalesReviewExt;
@@ -21,6 +20,10 @@ use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;
+use {
+    erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus,
+    erp_procurement::entity::purchase_order::PurchaseOrderStatus,
+};
 use {
     erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::CommercialStatus,
     erp_sales::entity::sales_order::ReviewStatus,
@@ -706,7 +709,9 @@ fn ensure_initial_sales_change_state(
     Ok(())
 }
 
-fn ensure_initial_purchase_state(order: &entities::purchase_order::PurchaseOrder) -> Result<()> {
+fn ensure_initial_purchase_state(
+    order: &erp_procurement::entity::purchase_order::PurchaseOrder,
+) -> Result<()> {
     if order.stable.status != PurchaseOrderStatus::Draft
         || order.approval_subject_version != 0
         || order.current_submission_id.is_some()
@@ -718,7 +723,7 @@ fn ensure_initial_purchase_state(order: &entities::purchase_order::PurchaseOrder
 }
 
 fn ensure_initial_purchase_change_state(
-    change: &entities::purchase_order::PurchaseChangeOrder,
+    change: &erp_procurement::entity::purchase_order::PurchaseChangeOrder,
 ) -> Result<()> {
     if change.stable.status != PurchaseChangeOrderStatus::Draft
         || change.approval_subject_version != 0

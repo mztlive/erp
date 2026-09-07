@@ -2,6 +2,8 @@
 use mongodb::Database;
 mod account;
 mod invoice;
+pub mod purchase_change;
+pub mod purchase_initial;
 pub use invoice::{
     persist_purchase_invoice_in_transaction, prepare_purchase_invoice,
     prepare_purchase_invoice_allocations_in_transaction,

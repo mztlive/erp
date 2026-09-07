@@ -2,10 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::PurchaseOrderExt;
-use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission};
 use erp_core::ids::PurchaseOrderSubmissionId;
+use erp_procurement::repository::PurchaseOrderExt;
 use persistence_core::Executor;
+use {
+    erp_procurement::entity::purchase_order::PurchaseOrder,
+    erp_procurement::entity::purchase_order::PurchaseOrderSubmission,
+};
 
 use super::amount::{non_empty, purchase_review_impact_summary};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};

@@ -1,0 +1,187 @@
+//! `purchase_order_revision`(+line) 仓储：生效版本与版本行批量取回。
+//!
+//! 采购生效版本是不可变修订（§6.6/§4.4）：财务审核通过时由已通过提交原样复制，
+//! 修订一经形成不得修改内容。版本与版本行**不提供软删除方法**。
+
+use crate::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
+use crate::repository::owned::PurchaseOrderRevisionLineRepository;
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionId};
+use mongodb::bson::{doc, Document};
+use mongodb::options::FindOptions;
+
+use super::common::in_filter;
+use super::{PurchaseOrderDomainRepository, PURCHASE_ORDER_REVISIONS, PURCHASE_ORDER_REVISION_LINES};
+use persistence_core::Executor;
+use persistence_core::{mongo_ops, Result};
+
+impl<'a> PurchaseOrderDomainRepository<'a> {
+    /// 按采购单读取全部生效版本，并按版本号升序返回。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的采购生效版本。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_revisions_by_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderRevision>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "revision_no": 1, "id": 1 })
+            .build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
+            doc! { "purchase_order_id": purchase_order_id.to_string() },
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取采购生效版本头。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 采购生效版本稳定身份集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已存在的采购生效版本；空输入直接返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_revisions_by_ids(
+        &self,
+        revision_ids: &[PurchaseOrderRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let options = FindOptions::builder().sort(doc! { "id": 1 }).build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
+            in_filter("id", revision_ids.iter().map(ToString::to_string)),
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 按采购生效版本读取全部明细，并按行号升序返回。
+    ///
+    /// # 参数
+    /// * `revision_id` - 采购生效版本稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的采购版本行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 关键约束
+    /// 查询必须排除软删除行，与通用 `Repository::find_many` 的活动行语义一致。
+    pub async fn list_revision_lines(
+        &self,
+        revision_id: &PurchaseOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderRevisionLine>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "line_no": 1, "id": 1 })
+            .build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
+            revision_lines_filter(revision_id),
+            options,
+            executor,
+        )
+        .await
+    }
+}
+
+/// 构建单个采购生效版本的活动明细过滤条件。
+///
+/// # 参数
+/// * `revision_id` - 采购生效版本稳定身份
+///
+/// # 返回
+/// 返回同时限定版本身份和未删除时间戳的 MongoDB 查询文档。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 专用单版本查询必须与通用 Repository 的软删除过滤语义保持一致。
+fn revision_lines_filter(revision_id: &PurchaseOrderRevisionId) -> Document {
+    doc! {
+        "purchase_order_revision_id": revision_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+impl<'a> PurchaseOrderRevisionLineRepository<'a> {
+    /// 批量取回多个版本的全部明细（`$in`，禁止 N+1）。
+    ///
+    /// 用于版本详情页一次取回行集合；空集合直接返回空结果。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 生效版本 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的版本明细。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_lines_by_revision_ids(
+        &self,
+        revision_ids: &[PurchaseOrderRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderRevisionLine>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            in_filter(
+                "purchase_order_revision_id",
+                revision_ids.iter().map(|id| id.to_string()),
+            ),
+            executor,
+        )
+        .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::PurchaseOrderRevisionId;
+    use mongodb::bson::doc;
+
+    use super::revision_lines_filter;
+
+    /// 验证单版本明细查询保留版本条件并排除软删除行。
+    ///
+    /// 测试直接断言过滤文档，不连接 MongoDB；任一活动行条件缺失时失败。
+    #[test]
+    fn revision_lines_filter_targets_active_rows() {
+        assert_eq!(
+            revision_lines_filter(&PurchaseOrderRevisionId::new("revision-1")),
+            doc! {
+                "purchase_order_revision_id": "revision-1",
+                "deleted_at": 0_i64,
+            }
+        );
+    }
+}

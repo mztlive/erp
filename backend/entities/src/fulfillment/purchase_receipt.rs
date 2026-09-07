@@ -14,10 +14,6 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::purchase_order::{
-    PaymentTermSnapshot, ProgressStatus, PurchaseLineSalesAllocation, PurchaseOrderRevisionLine,
-    PurchaseOrderStatus,
-};
 use erp_core::common::state::{ensure_transition, DocumentState};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -27,6 +23,13 @@ use erp_core::ids::{
 use erp_core::money::{round_to_cent, Amount, Quantity};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use {
+    erp_procurement::entity::purchase_order::PaymentTermSnapshot,
+    erp_procurement::entity::purchase_order::ProgressStatus,
+    erp_procurement::entity::purchase_order::PurchaseLineSalesAllocation,
+    erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
+    erp_procurement::entity::purchase_order::PurchaseOrderStatus,
+};
 
 /// 入库单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
@@ -672,6 +675,18 @@ fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// 将供应商受控付款规则映射为采购测试使用的消费事实。
+    fn resolve_procurement_payment_term(
+        code: &str,
+    ) -> erp_core::Result<erp_procurement::entity::facts::PaymentTermFact> {
+        let term = erp_supplier::SupplierPaymentTerm::parse(code)?;
+        Ok(erp_procurement::entity::facts::PaymentTermFact {
+            canonical_code: term.code().to_string(),
+            prepay_gate: term.prepay_gate(),
+            days_after_delivery: term.days_after_delivery(),
+        })
+    }
+
     use super::*;
     use erp_core::ids::PurchaseReceiptId;
     use std::str::FromStr;
@@ -706,10 +721,10 @@ mod tests {
     fn revision_line(quantity: Quantity) -> PurchaseOrderRevisionLine {
         PurchaseOrderRevisionLine::new(
             PurchaseOrderRevisionLineId::new("po-line-1"),
-            crate::purchase_order::PurchaseOrderRevisionLineData {
+            erp_procurement::entity::purchase_order::PurchaseOrderRevisionLineData {
                 purchase_order_revision_id: erp_core::ids::PurchaseOrderRevisionId::new("po-rev-1"),
                 line_no: 1,
-                line_type: crate::purchase_order::PurchaseLineType::ItemService,
+                line_type: erp_procurement::entity::purchase_order::PurchaseLineType::ItemService,
                 procurement_confirmation_line_id: Some(erp_core::ids::ProcurementConfirmationLineId::new(
                     "confirmation-line-1",
                 )),
@@ -961,6 +976,7 @@ mod tests {
             true,
             Some(Amount::from_str("50.00").unwrap()),
             Some(erp_core::money::Rate::from_str("0.500000").unwrap()),
+            resolve_procurement_payment_term,
         )
         .unwrap();
         assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
@@ -980,6 +996,7 @@ mod tests {
             true,
             None,
             Some(erp_core::money::Rate::from_str("0.750000").unwrap()),
+            resolve_procurement_payment_term,
         )
         .unwrap();
         assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
@@ -993,6 +1010,7 @@ mod tests {
             false,
             Some(Amount::from_str("100.00").unwrap()),
             None,
+            resolve_procurement_payment_term,
         )
         .unwrap();
         assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
@@ -1004,7 +1022,7 @@ mod tests {
 
         let allocation = PurchaseLineSalesAllocation::new(
             erp_core::ids::PurchaseLineSalesAllocationId::new("allocation-1"),
-            crate::purchase_order::PurchaseLineSalesAllocationData {
+            erp_procurement::entity::purchase_order::PurchaseLineSalesAllocationData {
                 purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("po-line-1"),
                 sales_order_revision_line_id: SalesOrderRevisionLineId::new("sales-revision-line-1"),
                 allocated_quantity: Quantity::from_str("10").unwrap(),

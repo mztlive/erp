@@ -1,4 +1,3 @@
-use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{Delivery, DeliveryLine, DeliveryState, DeliveryType};
 use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
@@ -13,6 +12,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
+use {database::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt};
 
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
