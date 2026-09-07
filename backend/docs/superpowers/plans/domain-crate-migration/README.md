@@ -2,22 +2,24 @@
 
 ## 1. 目标与入口
 
-本计划用于把当前 backend 的 entities/database/services 生产代码迁移为领域 crate，缩小日常增量编译范围。执行模式为逐阶段硬切；阶段 00–10 已达「本地门禁通过」，11 执行中，12–17 未开始。
+本计划用于把 backend 的 entities/database/services 生产代码迁入领域 crate，并删除旧三层的生产源码、manifest 和全部活动依赖。阶段 00–17 均已达到「本地门禁通过」。
+
+按 2026-09-07 用户指令，本轮以逻辑正确迁移和旧三层清零为交付目标；停止编译指标测量，性能验收后置，不作为本轮完成条件。不得将后置状态写成性能达标。
 
 - 架构约束：[设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)。
 - 执行入口：[00 基线与执行治理](00-baseline.md)；开始前必须阅读[公共执行合同](execution-contract.md)。
-- 编译基线与复测：[测量执行合同](compile-measurement.md)及[三场景补丁](compile-probes.json)。
+- 后续编译复测：[测量执行合同](compile-measurement.md)及[三场景补丁](compile-probes.json)；本轮不执行。
 - 全量映射：[source-map.tsv](source-map.tsv)，共 922 个旧三层 src 下 Rust 文件；类型/函数索引：[source-symbols.tsv](source-symbols.tsv)。
 - 仓储拥有类型：[repository-types.tsv](repository-types.tsv)，共 141 类专用 Repository 固有实现。
 - 机器可读阶段清单：[plan-manifest.json](plan-manifest.json)；文档校验：[tools/verify_plan.py](tools/verify_plan.py)。
 
-从仓库根执行文档/当前源码快照校验：
+从已包含阶段代码及证据提交的专用 worktree 根执行交付证据校验：
 
 ```bash
-python3 backend/docs/superpowers/plans/domain-crate-migration/tools/verify_plan.py --sources
+python3 backend/docs/superpowers/plans/domain-crate-migration/tools/verify_plan.py --execution
 ```
 
-该命令只读，不实施迁移或编译。快照包含编制时已有未提交工作，进入阶段 00 时必须建立新的、可追溯的实际输入基线。
+该命令只读，核验 18 阶段文档、代码提交、证据提交及已记录门禁。原 `--sources` 仅用于迁移前编制快照，不适用于旧源已删除的最终工作区。仅回填文件、保留原 HEAD 的工作区须与已核验提交逐字节比对，不以其旧 HEAD 冒充最终证据提交。
 
 ## 2. 不可变合同
 
@@ -35,7 +37,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 
 ## 3. 阶段顺序与状态
 
-状态只允许：未开始 → 执行中 → 本地门禁通过 → 已验收；异常时进入阻塞，问题消除后回到执行中。只有前一阶段已验收，后一阶段才可开始。
+状态只允许：未开始 → 执行中 → 本地门禁通过 → 已验收；异常时进入阻塞，问题消除后回到执行中。连续执行必须以前序完整代码及证据提交为输入；执行者最高登记「本地门禁通过」，不自行登记人工「已验收」。
 
 | 阶段 | 执行文档 | 主要目标 | 状态 |
 | --- | --- | --- | --- |
@@ -56,7 +58,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | 14 | [外部集成](14-integration.md) | erp-integration | 本地门禁通过 |
 | 15 | [商城范围核验](15-commerce-scope.md) | 无实现范围核验 | 本地门禁通过 |
 | 16 | [供应链协同](16-supply.md) | erp-supply | 本地门禁通过 |
-| 17 | [最终切换与编译收益验收](17-cutover.md) | 治理或最终验收 | 执行中 |
+| 17 | [最终切换与逻辑迁移验收](17-cutover.md) | 旧三层清零、装配与行为合同 | 本地门禁通过 |
 
 每阶段使用专用 worktree 与可追溯输入提交；共享注册变更由唯一集成负责人管理。阶段输出必须包含代码、调用方切换、旧实现删除、边界检查、完整门禁、证据与阶段提交。
 
@@ -71,16 +73,15 @@ cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-bpm-boundaries.sh
-./scripts/check-service-boundaries.sh
-./scripts/check-domain-boundaries.sh
+./scripts/check-domain-boundaries.sh --cutover
 ./scripts/check-permissions-drift.sh
 git diff --check
 ```
 
-阶段 17 删除旧 services 后，新检查已覆盖同等规则才移除旧 Service 检查命令。纯内联测试和静态调用轨迹不代表真实数据库回滚/并发已经验证。
+新领域检查已承接旧 Service 的七项原始查询规则，并覆盖领域依赖与最终旧三层清零；旧 Service 检查已删除。删除前两种检查的实际成功记录归档于阶段 17。纯内联测试和静态调用轨迹不代表真实数据库回滚/并发已经验证。
 
-## 5. 编译收益验收
+## 5. 本轮交付与后续性能事项
 
-Customer、Sales、Finance 分别测量 check 和 build。每组独立预热，五次有效样本取中位数；check/build 各至少两个场景改善 30%，任一场景回退不超过 10%。Sales 修改不编译 Finance，Finance 修改不编译 Sales，无依赖关系的其他领域保持 Fresh。
+本轮必须满足：19 个领域、3 个基础、2 个组合 crate 具备真实实现；旧三层生产 src、manifest、workspace 注册与 normal/build/dev 依赖全部清零；入口切换、公开合同复核和完整质量门禁通过；历史测试档案保持原字节。阶段结果及证据入口见 [17-cutover.md](17-cutover.md)。
 
-应用入口和实际依赖组合层仍可能编译及链接。必须保留原始样本、日志、timings、Fresh/Dirty、工具链/profile/features/存储与后台负载；结构或耗时任一未通过，阶段 17 不得验收。
+编译耗时、Fresh/Dirty 传播及改善率的性能验收后置。后续启动性能工作时执行测量合同，保留原始样本与失败记录；本轮不声明已达到性能阈值。

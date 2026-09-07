@@ -1,0 +1,1254 @@
+{
+  "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "roots": [
+    {
+      "path": "backend/database/src",
+      "after_absent": true
+    },
+    {
+      "path": "backend/database/Cargo.toml",
+      "after_absent": true
+    },
+    {
+      "path": "backend/entities/src",
+      "after_absent": true
+    },
+    {
+      "path": "backend/entities/Cargo.toml",
+      "after_absent": true
+    },
+    {
+      "path": "backend/services/src",
+      "after_absent": true
+    },
+    {
+      "path": "backend/services/Cargo.toml",
+      "after_absent": true
+    }
+  ],
+  "source_map": {
+    "id": "source_map_and_preparations_zero",
+    "status": "pass",
+    "errors": [],
+    "phase17_rows": [
+      {
+        "phase": "17",
+        "source": "database/src/indexes/mod.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-legacy-registry",
+        "preparation": "01-16",
+        "source_sha256": "baed5101b4ac0c748ea05c99ea966bcae0d341535d5bcb5036531caf195fb27c",
+        "declared_types": "-",
+        "input_blob_sha256": "cf8a022673baacf0411e2484fd571b9ec04f83f763a910826b1a8b72f8358a0f",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "database/src/lib.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-production-entry",
+        "preparation": "01-16",
+        "source_sha256": "da3486e7b241a25a85f92caf63bf21a12f5351e625ba1f5f0348c359cca058ee",
+        "declared_types": "-",
+        "input_blob_sha256": "9a3e13a584fa6737f2e7386828eaade5f5aad5c241ccc5b18f992a2f0b88ff36",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "database/src/repository/extensions/mod.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-legacy-registry",
+        "preparation": "01-16",
+        "source_sha256": "0eb710493f489c084992fa35ec3d3fde8e91a5cfb6ef9531d6c2fed7b17a2e8c",
+        "declared_types": "DatabaseExt",
+        "input_blob_sha256": "b185f5cff31620f53dd63cff3afd87ed1da6f92b8db9f3e41eaf7795ef983c7e",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "database/src/repository/mod.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-legacy-registry",
+        "preparation": "01-16",
+        "source_sha256": "f0da3c4a9f51469a21cc68af29626549216b111b7361ff382374e85c2ad780d9",
+        "declared_types": "-",
+        "input_blob_sha256": "af7335c6849587d0bc7e23cace7cd26fb13d22952a9c9f20d5b09d2f728aad1b",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "entities/src/lib.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-production-entry",
+        "preparation": "01-16",
+        "source_sha256": "2230bd6838bd134fee733e52c3a0c38abf2e144d7182d539e4fbaf51e55d2e62",
+        "declared_types": "-",
+        "input_blob_sha256": "9c83eca6b89186b74ac5246b1123523582c748ade4d9283e73d18c8be6016c74",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "services/src/errors.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "split-error-contracts",
+        "preparation": "01-16",
+        "source_sha256": "4df18a0d897e50acb59043bd02e38e0c149a4e03efbbc7eada19ca62b10543d5",
+        "declared_types": "Error,ErrorClass,ErrorCode,Result",
+        "input_blob_sha256": "7666307ce6617948104ad9683c09beabe861268caaf98bb34a60269f26db7e82",
+        "after_absent": true
+      },
+      {
+        "phase": "17",
+        "source": "services/src/lib.rs",
+        "target_crate": "",
+        "target": "",
+        "operation": "remove-production-entry",
+        "preparation": "01-16",
+        "source_sha256": "03a918554dd4388ae803e28551ab1b8d263f55501881ffc36726edca2471fd2c",
+        "declared_types": "-",
+        "input_blob_sha256": "4df679daad2eee29a1338173909890478928cfd6294b05e3e8b159d6a4963ef1",
+        "after_absent": true
+      }
+    ],
+    "owner_phase17_rows": [],
+    "all_preparation_rows": [
+      {
+        "owned_type": "AccountCoreRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/account_core.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/account_core.rs",
+        "target_sha256": "6c9cf4121ffea98cf131961c1044af20efc9d90d88445c3cd0f198d188cd2af5"
+      },
+      {
+        "owned_type": "ApprovalNotificationOutboxRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/approval_notification_outbox.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/approval_notification_outbox.rs",
+        "target_sha256": "59ea12c69f29fca431789cde9703a6520752e0764e92c1edf1603d94d91c955a"
+      },
+      {
+        "owned_type": "ApprovalSubjectSnapshotRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/approval_subject_snapshot.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/approval_subject_snapshot.rs",
+        "target_sha256": "8b28d86b4f0898432e1dc8e05a48e39f5365021c4e757ac66b074969095dd9be"
+      },
+      {
+        "owned_type": "AuditEventRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/audit_event.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/audit_event.rs",
+        "target_sha256": "55761146106717b82c46dd2120d909c14b355e10b8e65a4c8ea1d0aedb9fa70f"
+      },
+      {
+        "owned_type": "AuditLogRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/audit_log.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-audit/src/repository/owned/audit_log.rs",
+        "target_sha256": "816bc286ba938d2a06fa1ad3a13ab5ae52e083f1afd653118219a0cdb4ebef43"
+      },
+      {
+        "owned_type": "BackgroundJobRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/background_job.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/background_job.rs",
+        "target_sha256": "ad93571a13e5f5695fccf76ff96e06e69ab103d14a93286ada10d8b2171bc926"
+      },
+      {
+        "owned_type": "BackgroundJobItemRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/background_job_item.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/background_job_item.rs",
+        "target_sha256": "ee9890910b37a461644de5224387f201cfd94b911c75e23946431ae0a31eb2b1"
+      },
+      {
+        "owned_type": "BulkSelectionItemRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/bulk_selection_item.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/bulk_selection_item.rs",
+        "target_sha256": "a7978a262195edc904c31154083bda4baa18a9917a8c8aacab73e6d917e60865"
+      },
+      {
+        "owned_type": "BulkSelectionSnapshotRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/bulk_selection_snapshot.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/bulk_selection_snapshot.rs",
+        "target_sha256": "bf515f8db6b5bb722ef233832f16be111b8969f90f125681f2dd3e232ed25afc"
+      },
+      {
+        "owned_type": "BusinessCapabilityConfirmationRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/business_capability_confirmation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/business_capability_confirmation.rs",
+        "target_sha256": "c3fdb773cc5aba899147c0e10ce92342d3c21c9a062aa2c747b590ac2ccc3dcc"
+      },
+      {
+        "owned_type": "BusinessDocumentRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/business_document.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/business_document.rs",
+        "target_sha256": "28dff330e2957cd7006e138791719054a304cbae8f8cfceea720cbb346342333"
+      },
+      {
+        "owned_type": "ContractRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/contract.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-contract/src/repository/owned/contract.rs",
+        "target_sha256": "a978d86d85b98ef0c9e52a9bf22615182fe6470f71247446014281a46b86996d"
+      },
+      {
+        "owned_type": "ContractRevisionRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/contract_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-contract/src/repository/owned/contract_revision.rs",
+        "target_sha256": "6b9f6442936b0beb55c469197ead52f0d7a1a5f809bee4b53511c3ceca109e79"
+      },
+      {
+        "owned_type": "CostAllocationRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/cost_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/cost_allocation.rs",
+        "target_sha256": "46812126640caba47e126b46f92450842af729e82c574a8161ff3c253f38bcbc"
+      },
+      {
+        "owned_type": "CostEntryRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/cost_entry.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/cost_entry.rs",
+        "target_sha256": "3aa786bb4e893eaf96acbe1f49b81e7325451c7edf6e44e4c0f17efd1f95e1eb"
+      },
+      {
+        "owned_type": "CustomerAcceptanceRepository",
+        "owner_phase": "12",
+        "prepare_at": "backend/database/src/repository/owned/customer_acceptance.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-fulfillment/src/repository/owned/customer_acceptance.rs",
+        "target_sha256": "b6577b21c41943f434fc9f0acd53f72bf8b1f7804ce9a383acbbdf8405ca61e5"
+      },
+      {
+        "owned_type": "CustomerAccountRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/customer_account.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-customer/src/repository/owned/customer_account.rs",
+        "target_sha256": "20d028ee221497e95278ccddbfeaffa8e334f3a7ee49c44551a4822a8355a687"
+      },
+      {
+        "owned_type": "CustomerAssignmentRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/customer_assignment.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-customer/src/repository/owned/customer_assignment.rs",
+        "target_sha256": "e45d9607ec0d36683df0bd97deb3ce6bcefae937bf559ea9a70d1dd5f7b8fb18"
+      },
+      {
+        "owned_type": "CustomerProfileCommandRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/customer_profile_command.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-customer/src/repository/owned/customer_profile_command.rs",
+        "target_sha256": "38f202b9edb2bce47523c8c48133b63c80efe4913fb2d4d9403bc2b5c0ec365e"
+      },
+      {
+        "owned_type": "CustomerReceiptRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/customer_receipt.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/customer_receipt.rs",
+        "target_sha256": "4b539336db3cb372b7411c671c3e5550b7d3bb7e40da3e52cdfb7268852b3117"
+      },
+      {
+        "owned_type": "CustomerRefundRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/customer_refund.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/customer_refund.rs",
+        "target_sha256": "f347e26e9c4634a82bef6f6eec825232d8368e824702b7f6bf7e4b2467d2b107"
+      },
+      {
+        "owned_type": "DataScopeRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/data_scope.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/data_scope.rs",
+        "target_sha256": "2e519ac9a7677e0f9994ac16d5509f5533e3ec82e40f271fc2470e5f1ed2e61f"
+      },
+      {
+        "owned_type": "DeliveryRepository",
+        "owner_phase": "12",
+        "prepare_at": "backend/database/src/repository/owned/delivery.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-fulfillment/src/repository/owned/delivery.rs",
+        "target_sha256": "26d3451ae9b4c502ad4d90927c43888ac4a1da5520158bafc5121c6a0d5297c7"
+      },
+      {
+        "owned_type": "DocumentAttachmentRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/document_attachment.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/document_attachment.rs",
+        "target_sha256": "b5df68921a9c06e71050a4b7eed7226711d72a79b68a19aff76eac981c55422f"
+      },
+      {
+        "owned_type": "DocumentParticipantRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/document_participant.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/document_participant.rs",
+        "target_sha256": "84a2cd9e20529a4d0ac45f5f30fa291f6cce940f3b59a84d8fd3d606c4c96ff6"
+      },
+      {
+        "owned_type": "DocumentRelationRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/document_relation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/document_relation.rs",
+        "target_sha256": "ee1446e53f3a422c25305339af38dfdec7fd0ac281e7328e7ddc9a8edc89c16e"
+      },
+      {
+        "owned_type": "ElectronicDeliveryRepository",
+        "owner_phase": "12",
+        "prepare_at": "backend/database/src/repository/owned/electronic_delivery.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-fulfillment/src/repository/owned/electronic_delivery.rs",
+        "target_sha256": "f37949409544d4353460ffd2d7c05745aab5c33fe1fe5d7f0877422815c3f391"
+      },
+      {
+        "owned_type": "ExternalIdentityMapRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/external_identity_map.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/external_identity_map.rs",
+        "target_sha256": "caadcf82d3d739b101f985c41955314b64741b3f562bc974291f60c31d34b763"
+      },
+      {
+        "owned_type": "ExternalIdentityTargetRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/external_identity_target.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/external_identity_target.rs",
+        "target_sha256": "d80ede34afce6113dd41db2ea6b1f2e55481938c04fcd136b20d313fff7746d4"
+      },
+      {
+        "owned_type": "FileAssetRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/file_asset.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/file_asset.rs",
+        "target_sha256": "1a4b8921cd0242a8d7e83c1bb4186d668050ae3f601c7315ee0a1041b77f230c"
+      },
+      {
+        "owned_type": "FinanceResponsibilityRuleRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/finance_responsibility_rule.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/finance_responsibility_rule.rs",
+        "target_sha256": "3fb97659ee055e77486350977fe5ba0fdeca5f11f5e3a27eeb0d57739d9a340c"
+      },
+      {
+        "owned_type": "InboxMessageRepository",
+        "owner_phase": "14",
+        "prepare_at": "backend/database/src/repository/owned/inbox_message.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-integration/src/repository/owned/inbox_message.rs",
+        "target_sha256": "a420c1f50d8c7ed2cd1c2f5f16f64b84214ae2288664cba5a61b077640c3c493"
+      },
+      {
+        "owned_type": "IntegrationErrorTaskRepository",
+        "owner_phase": "14",
+        "prepare_at": "backend/database/src/repository/owned/integration_error_task.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-integration/src/repository/owned/integration_error_task.rs",
+        "target_sha256": "0ed130c20459a368ea5506fd134978fb7f22ed3d19717bfbbbc0ca68c833b63d"
+      },
+      {
+        "owned_type": "InvoiceRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/invoice.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/invoice.rs",
+        "target_sha256": "40fb5217539c161718f5305a6a4dd55be3bcbd73cb94d73905b3c3c2ae42c0cb"
+      },
+      {
+        "owned_type": "LegacyImportBatchRepository",
+        "owner_phase": "07",
+        "prepare_at": "backend/database/src/repository/owned/legacy_import_batch.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-import/src/repository/owned/legacy_import_batch.rs",
+        "target_sha256": "588abe7e20339d1d9bf12c055e1b047bf0c059a4de10e091e5ba679193c4eb2c"
+      },
+      {
+        "owned_type": "LegacyImportConfirmationRepository",
+        "owner_phase": "07",
+        "prepare_at": "backend/database/src/repository/owned/legacy_import_confirmation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-import/src/repository/owned/legacy_import_confirmation.rs",
+        "target_sha256": "7a77f3fd80438620f66d72b53e6a5f4f546e0c61d41518511da65b7c3568a569"
+      },
+      {
+        "owned_type": "LegacyImportRowRepository",
+        "owner_phase": "07",
+        "prepare_at": "backend/database/src/repository/owned/legacy_import_row.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-import/src/repository/owned/legacy_import_row.rs",
+        "target_sha256": "24d6197549ecb76e2a5edf355116b1d26d164f0a17454c176bb11988158fa45b"
+      },
+      {
+        "owned_type": "PartyRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party.rs",
+        "target_sha256": "5553e6c401ce3e4cca61d0fca746b9adad31e2ab902acfab86fd74d7a8f7fd8d"
+      },
+      {
+        "owned_type": "PartyAddressRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party_address.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party_address.rs",
+        "target_sha256": "de687b96cfe9039c29476fd5e47ce18b3ba46aff3e5f37ae6be889f383253a9a"
+      },
+      {
+        "owned_type": "PartyBankAccountRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party_bank_account.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party_bank_account.rs",
+        "target_sha256": "64e2d533604f28fb767c209f53661c8c6b302f9ab4e541d88772abf609177469"
+      },
+      {
+        "owned_type": "PartyContactRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party_contact.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party_contact.rs",
+        "target_sha256": "23f8d1adb4c2650c7d9386c55edb9c6d151f3dd59e1165731287d4688473339c"
+      },
+      {
+        "owned_type": "PartyRevisionRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party_revision.rs",
+        "target_sha256": "78b3db90e43807c31229ca2e86a9bd2f5d5ee7f957ae6c52927e9c7df37a269b"
+      },
+      {
+        "owned_type": "PartyTaxProfileRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/party_tax_profile.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-party/src/repository/owned/party_tax_profile.rs",
+        "target_sha256": "bffe52e5480ea238e7851d5e77a0c219270778ffd0d6ad8dd34f629daa8b0eed"
+      },
+      {
+        "owned_type": "PayableAccountRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/payable_account.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/payable_account.rs",
+        "target_sha256": "9aeec0e0ea3d117e5c285430c044d64499e87591656878b85d3a92cf42e0c9aa"
+      },
+      {
+        "owned_type": "PayableEntryRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/payable_entry.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/payable_entry.rs",
+        "target_sha256": "dcd7239cd820eab36bf857219dcce5a41a8de31aaedab69a8a9d92eef8bfc2c8"
+      },
+      {
+        "owned_type": "PayableEntryOffsetRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/payable_entry_offset.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/payable_entry_offset.rs",
+        "target_sha256": "f7f105b0035ce90f6c997269f4f71bbf2dc7b83c236ed8afdbe2cb63c020c2ea"
+      },
+      {
+        "owned_type": "PaymentAllocationRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/payment_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/payment_allocation.rs",
+        "target_sha256": "85535128b7cd33f3b40b279356f119a7b4c04a7dcb2890f225a8d1872ecf6939"
+      },
+      {
+        "owned_type": "PaymentReversalRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/payment_reversal.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/payment_reversal.rs",
+        "target_sha256": "874d76e9606056d00b4299a7c2ac2501f33b95f646c089e06fa2769a0376ab07"
+      },
+      {
+        "owned_type": "PermissionRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/permission.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/permission.rs",
+        "target_sha256": "6acc03d5d008fc44aa804955efb5afbf362c3b0a863a839cc5b8a51d8a3b3dac"
+      },
+      {
+        "owned_type": "ProcurementResponsibilityRuleRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/procurement_responsibility_rule.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/procurement_responsibility_rule.rs",
+        "target_sha256": "db5336f137ae6a5b61902107f3f80dbde881b28d14851b33c9e323dcf1d479c2"
+      },
+      {
+        "owned_type": "ProductRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product.rs",
+        "target_sha256": "199e45084d47d6d5ee4592ccf5ad4d55a3256200bf884eb904c081e87d9f102d"
+      },
+      {
+        "owned_type": "ProductBrandRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product_brand.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product_brand.rs",
+        "target_sha256": "33b9712dbbd31b5285dc74c734b722a30a28428ac06f55c67f36c0df9e8740fb"
+      },
+      {
+        "owned_type": "ProductCategoryRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product_category.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product_category.rs",
+        "target_sha256": "d91eb7f023870d65fdf1c88ed153213ab03c0f8423bbe8eaeb1621be2059f48f"
+      },
+      {
+        "owned_type": "ProductCategoryAttributeRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product_category_attribute.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product_category_attribute.rs",
+        "target_sha256": "ae3faf44fa45296b44283ca1e7d8e4c291e72ce314f5f488dff6e96add555cd2"
+      },
+      {
+        "owned_type": "ProductRevisionRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product_revision.rs",
+        "target_sha256": "d243a7003d09a601eb4d5f35ac1c550dbb3591bd9960b6bc16a074a80e7cb953"
+      },
+      {
+        "owned_type": "ProductRevisionMediaRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/product_revision_media.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/product_revision_media.rs",
+        "target_sha256": "e853ca83c544a4dd5b944f1afa719b829d821033c3ae78b49bcdf6a8bdde910f"
+      },
+      {
+        "owned_type": "PurchaseChangeOrderRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_change_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_change_order.rs",
+        "target_sha256": "01ab16917390f9202d4f1811ae71095521a235f6e14ecd318095cd713b9b4981"
+      },
+      {
+        "owned_type": "PurchaseChangeSubmissionRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_change_submission.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_change_submission.rs",
+        "target_sha256": "45686a87fbe2640e687f4749af7029f326ab83e2a81a7f7b2cd498a6410bdfce"
+      },
+      {
+        "owned_type": "PurchaseChangeSubmissionLineRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_change_submission_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_change_submission_line.rs",
+        "target_sha256": "31e6ffac393243f1b03f34db44b939fdbd79892e77c09b5104dcbf730db33929"
+      },
+      {
+        "owned_type": "PurchaseInvoiceAllocationRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/purchase_invoice_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/purchase_invoice_allocation.rs",
+        "target_sha256": "e1cfa1d3b356698251fdba3801f1766721dc43786ba4003d8bd7c0bbfc4ad0f1"
+      },
+      {
+        "owned_type": "PurchaseLineSalesAllocationRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_line_sales_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_line_sales_allocation.rs",
+        "target_sha256": "f0184341499b8d626b04b8d5ebc436c45d832e1b3a0052f97452fea9e525aa70"
+      },
+      {
+        "owned_type": "PurchaseOrderRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_order.rs",
+        "target_sha256": "dab1757a2a58cbe5d53ed8727b7c68f5612bfdd93a32e6b7ebb50f8f05c6a7e8"
+      },
+      {
+        "owned_type": "PurchaseOrderRevisionRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_order_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_order_revision.rs",
+        "target_sha256": "67c828a3b95b1a601272a98f305c169d2cf91e9bc3ab8f62ed4a532a55402b9f"
+      },
+      {
+        "owned_type": "PurchaseOrderRevisionLineRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_order_revision_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_order_revision_line.rs",
+        "target_sha256": "9caf35a2151d2a2237b3f7e7a75a8204eb9b430cd70b54525b38b1446f9c753a"
+      },
+      {
+        "owned_type": "PurchaseOrderSubmissionRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_order_submission.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_order_submission.rs",
+        "target_sha256": "904196eb9ffcdf02939b5f4239830ebdf74d5349d3e388115f66a22bd17c1001"
+      },
+      {
+        "owned_type": "PurchaseOrderSubmissionLineRepository",
+        "owner_phase": "11",
+        "prepare_at": "backend/database/src/repository/owned/purchase_order_submission_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-procurement/src/repository/owned/purchase_order_submission_line.rs",
+        "target_sha256": "eb96817534b573b0989be6495e98b855c9223dfad273c3084089275bcacb4129"
+      },
+      {
+        "owned_type": "PurchaseReceiptRepository",
+        "owner_phase": "12",
+        "prepare_at": "backend/database/src/repository/owned/purchase_receipt.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-fulfillment/src/repository/owned/purchase_receipt.rs",
+        "target_sha256": "fcff099049604beffde37d1f4bdb9e3334d6b7ada2bad29c97ebf865728f1435"
+      },
+      {
+        "owned_type": "PurchaseReturnLineRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/purchase_return_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/purchase_return_line.rs",
+        "target_sha256": "5acc7e23921185bd9c895060db61bd9effc151864ac70902a0bbcd32d833a787"
+      },
+      {
+        "owned_type": "PurchaseReturnOrderRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/purchase_return_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/purchase_return_order.rs",
+        "target_sha256": "c00c7d225235ec8a34f8cf0fefd07ab4723d790071553dee035fc4d300988422"
+      },
+      {
+        "owned_type": "ReceiptAllocationRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/receipt_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/receipt_allocation.rs",
+        "target_sha256": "2423b3bb691a43fff58009404a19677fdb3292adc1f3ed29dcc8a928901a468c"
+      },
+      {
+        "owned_type": "ReceiptReversalRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/receipt_reversal.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/receipt_reversal.rs",
+        "target_sha256": "0469dc63d597c25680668ec9c25785c264ed653ade55bbf324205df907292c4d"
+      },
+      {
+        "owned_type": "ReceivableAccountRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/receivable_account.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/receivable_account.rs",
+        "target_sha256": "cfd563830ad477da4c8f287cbfbeff8a0c6b71fba36806a15f9bc1eb043c11c1"
+      },
+      {
+        "owned_type": "ReceivableEntryRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/receivable_entry.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/receivable_entry.rs",
+        "target_sha256": "8f6dd81c96e952220fd68bbc840530d7c9610d2022bfb572fc19e6a7646b4312"
+      },
+      {
+        "owned_type": "ReceivableEntryOffsetRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/receivable_entry_offset.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/receivable_entry_offset.rs",
+        "target_sha256": "57ab2b4caf1477a436938d3dae0c3b33ff4037cddfe32c44693c0d7228add4eb"
+      },
+      {
+        "owned_type": "ReceivableFundsReviewRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/receivable_funds_review.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/receivable_funds_review.rs",
+        "target_sha256": "5dc3dfeee5932b468cd695d336e847028c7325557ef891a61462d2ee4e0b4dba"
+      },
+      {
+        "owned_type": "ReconciliationDifferenceRepository",
+        "owner_phase": "14",
+        "prepare_at": "backend/database/src/repository/owned/reconciliation_difference.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-integration/src/repository/owned/reconciliation_difference.rs",
+        "target_sha256": "5ed9bfadc7dfd0f34221c64603e1762e17317198407168350e02f6d804272048"
+      },
+      {
+        "owned_type": "ReconciliationDifferenceResolutionRepository",
+        "owner_phase": "14",
+        "prepare_at": "backend/database/src/repository/owned/reconciliation_difference_resolution.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-integration/src/repository/owned/reconciliation_difference_resolution.rs",
+        "target_sha256": "c28305f064175605c4f152df55fc31adb76747d3326e602453bc2ff2f0df1cb9"
+      },
+      {
+        "owned_type": "RoleRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/role.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/role.rs",
+        "target_sha256": "8565b8ff11e9c527b75d78858414ddde047c11c5f105ec40e1ced73e9b80d2d5"
+      },
+      {
+        "owned_type": "SalesChangeOrderRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_change_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_change_order.rs",
+        "target_sha256": "84d06b4406bc7d5d2b5478bb671d57e761d438211c7ece4de767ddddfd8bd99a"
+      },
+      {
+        "owned_type": "SalesChangeSubmissionRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_change_submission.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_change_submission.rs",
+        "target_sha256": "a19bf4016f3d8a1713872d1ad9f7614654f68e40f45f9e251355dbbe8790a49b"
+      },
+      {
+        "owned_type": "SalesChangeSubmissionLineRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_change_submission_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_change_submission_line.rs",
+        "target_sha256": "1ec5e744a808a6ea53b7ba6ec5946c1e990cdc6b10aaa4df561dd9699c1853f4"
+      },
+      {
+        "owned_type": "SalesInvoiceAllocationRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/sales_invoice_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/sales_invoice_allocation.rs",
+        "target_sha256": "3424e4e01a2076a59ea449770e7bfc010adadd33c752fbb0b3f68b84720c4e9a"
+      },
+      {
+        "owned_type": "SalesOrderRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order.rs",
+        "target_sha256": "c0058138219941907956063f7d171d600f3094488fca30968a1963e5d4f89ab4"
+      },
+      {
+        "owned_type": "SalesOrderGoodsServiceLineRevisionRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_goods_service_line_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_goods_service_line_revision.rs",
+        "target_sha256": "3d19f4cde93aeac9bc0c6c0dbf1dcd7cee428d187ce4c0df365f873b0ac80867"
+      },
+      {
+        "owned_type": "SalesOrderLineRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_line.rs",
+        "target_sha256": "da576350f7743a578c5a325f8533d0a009a88c442119882010648473b338897b"
+      },
+      {
+        "owned_type": "SalesOrderRevisionRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_revision.rs",
+        "target_sha256": "d9960a746771fcdb9c2a6ce8f7e0a172b50c8a980688454619152644096bed95"
+      },
+      {
+        "owned_type": "SalesOrderRevisionLineRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_revision_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_revision_line.rs",
+        "target_sha256": "0b9f0e22fcc634213a71b03afa50655e4763e209c7a87b3f49940c2990716d52"
+      },
+      {
+        "owned_type": "SalesOrderSubmissionRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_submission.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_submission.rs",
+        "target_sha256": "75e82143891b279740fff926e539ebbbdd9da9f5dddc561c4f191a8a0fa8f82f"
+      },
+      {
+        "owned_type": "SalesOrderSubmissionLineRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_submission_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_submission_line.rs",
+        "target_sha256": "29a0b19ea1351157dba8ce56faec9bb5bd8cf8e46302cf56635a47be302d4226"
+      },
+      {
+        "owned_type": "SalesOrderVoucherLineRevisionRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_voucher_line_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_voucher_line_revision.rs",
+        "target_sha256": "6884e0a52638cb5d015884048b999f3b854aaf2a41c864a0574f4bf111b7d8e6"
+      },
+      {
+        "owned_type": "SalesOrderWorkingCopyRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_working_copy.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_working_copy.rs",
+        "target_sha256": "5c24cb1987c4c395b185cdd0959c94b7c9a777168e00381aa628bb1236717c4a"
+      },
+      {
+        "owned_type": "SalesOrderWorkingCopyLineRepository",
+        "owner_phase": "10",
+        "prepare_at": "backend/database/src/repository/owned/sales_order_working_copy_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-sales/src/repository/owned/sales_order_working_copy_line.rs",
+        "target_sha256": "349cb0f728970096a3de9839696a1d3602dec723cc191fd2d390661afa512e2d"
+      },
+      {
+        "owned_type": "SalesReturnCaseRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/sales_return_case.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/sales_return_case.rs",
+        "target_sha256": "ace54089f5f5f51aa3628eda99af95f123b42945570198bb2e334852d18611ae"
+      },
+      {
+        "owned_type": "SalesReturnLineRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/sales_return_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/sales_return_line.rs",
+        "target_sha256": "e5b77ef33aa28fc310761a8a2384abcec58552248907c21a8a89ce5698e201bb"
+      },
+      {
+        "owned_type": "ServiceFulfillmentRepository",
+        "owner_phase": "12",
+        "prepare_at": "backend/database/src/repository/owned/service_fulfillment.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-fulfillment/src/repository/owned/service_fulfillment.rs",
+        "target_sha256": "05042ef63d862227a973d61109adbac5e1ed0c543eda873599e9267f16a44d0d"
+      },
+      {
+        "owned_type": "SkuRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/sku.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/sku.rs",
+        "target_sha256": "8a20e517c976b060a3658927bfa58711067dfb1f2b0c568bdf8dfbfa80dba9b7"
+      },
+      {
+        "owned_type": "SkuAttributeRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/sku_attribute.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/sku_attribute.rs",
+        "target_sha256": "b4468c5e06fc850e337fc0749080401e01028d3de9d27012ce95b22445a660fd"
+      },
+      {
+        "owned_type": "SkuAttributeValueRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/sku_attribute_value.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/sku_attribute_value.rs",
+        "target_sha256": "0ae23205be3742a708dc251a7f9bdcb00d47e5c591df383c12ab7298eec31cbc"
+      },
+      {
+        "owned_type": "SkuRevisionRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/sku_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/sku_revision.rs",
+        "target_sha256": "98e9fb291764ca7c622d8a944644604681851ff25255bde07b39611bac525f4d"
+      },
+      {
+        "owned_type": "SourceSystemRepository",
+        "owner_phase": "04",
+        "prepare_at": "backend/database/src/repository/owned/source_system.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-support/src/repository/owned/source_system.rs",
+        "target_sha256": "288c97eb9cfdc8d919857fe9aa1e8653dbee8046f21267d1afdf0a8c9fc9dab3"
+      },
+      {
+        "owned_type": "StockAdjustmentRepository",
+        "owner_phase": "08",
+        "prepare_at": "backend/database/src/repository/owned/stock_adjustment.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-inventory/src/repository/owned/stock_adjustment.rs",
+        "target_sha256": "61d7384da6e48221bcb1e223faf0c93200f78156e69c247611924c1dc183ec08"
+      },
+      {
+        "owned_type": "StockAdjustmentLineRepository",
+        "owner_phase": "08",
+        "prepare_at": "backend/database/src/repository/owned/stock_adjustment_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-inventory/src/repository/owned/stock_adjustment_line.rs",
+        "target_sha256": "cc4f5e3f2a820c4cf9a3526604879cf81e8b06ca02c2aa3055bf26ccbbdc38e9"
+      },
+      {
+        "owned_type": "StockBalanceRepository",
+        "owner_phase": "08",
+        "prepare_at": "backend/database/src/repository/owned/stock_balance.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-inventory/src/repository/owned/stock_balance.rs",
+        "target_sha256": "558b57e54764a9c55991a1758e4e5cbaf24c3f2e607361db30c09af7e42508e4"
+      },
+      {
+        "owned_type": "StockMovementRepository",
+        "owner_phase": "08",
+        "prepare_at": "backend/database/src/repository/owned/stock_movement.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-inventory/src/repository/owned/stock_movement.rs",
+        "target_sha256": "faeeae53ccd5f324f94e65e022b9fa599d99ca3b109331ed711a390acbd26382"
+      },
+      {
+        "owned_type": "StockReservationRepository",
+        "owner_phase": "08",
+        "prepare_at": "backend/database/src/repository/owned/stock_reservation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-inventory/src/repository/owned/stock_reservation.rs",
+        "target_sha256": "91df0886cdfc149bc68db5acf96e6abf81379facb6e0c6eb9925fe31631ae71d"
+      },
+      {
+        "owned_type": "SupplierAccountRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_account.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_account.rs",
+        "target_sha256": "91ebf97bdc8cf36048cdb9282d1318f768ff923ea58c09412baf11be450617eb"
+      },
+      {
+        "owned_type": "SupplierApiCapabilityRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_api_capability.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_api_capability.rs",
+        "target_sha256": "a69aaff7ed5606068e81af76cc04bca9a46d34c0166ace836752aed5cfd38c27"
+      },
+      {
+        "owned_type": "SupplierApiConnectionRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_api_connection.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_api_connection.rs",
+        "target_sha256": "ebc91eebcafe41782ef4915830af9dfc31ef163b4fc465fde1284f0ccb3b6e37"
+      },
+      {
+        "owned_type": "SupplierCapabilityRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_capability.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_capability.rs",
+        "target_sha256": "4c7605ffbb18657d9a5b4f96fa58bb933d5249e37bd4e70e381db59b8edbf83b"
+      },
+      {
+        "owned_type": "SupplierCommercialProfileRevisionRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_commercial_profile_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_commercial_profile_revision.rs",
+        "target_sha256": "405ff609ab1c77df9dd234bbffbae5340adf79e2b6caf09e09b79c1ae89b925c"
+      },
+      {
+        "owned_type": "SupplierConnectionCommandReceiptRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_connection_command_receipt.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_connection_command_receipt.rs",
+        "target_sha256": "7405e39ea28518267c871b5c12b8563dce2702b0d2aa2341eeb20abeddca280f"
+      },
+      {
+        "owned_type": "SupplierFulfillmentItemRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_fulfillment_item.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_fulfillment_item.rs",
+        "target_sha256": "7fe82795ec9127a37d8b219b2f6a7ad2592019784d36fa72ecc2d5b6e80f6f7b"
+      },
+      {
+        "owned_type": "SupplierFulfillmentOrderRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_fulfillment_order.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_fulfillment_order.rs",
+        "target_sha256": "aee59d346607329cc138947ccb92e4571f77d5e60cb93f0d6fe8963993c7a485"
+      },
+      {
+        "owned_type": "SupplierHealthCheckRunRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_health_check_run.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_health_check_run.rs",
+        "target_sha256": "9e72426c8c7d8d6021fb18d2cfe59e402673b5c9f05b41be54d0a88e16a894c0"
+      },
+      {
+        "owned_type": "SupplierOfferingRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_offering.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_offering.rs",
+        "target_sha256": "67d781437f239ed44e87e5ac59650f095498f8f9454b1b8964a78c1de0efb57c"
+      },
+      {
+        "owned_type": "SupplierOfferingAvailabilityRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_offering_availability.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_offering_availability.rs",
+        "target_sha256": "578e969e42e1aaf992ed168633abf26db7cc3005d8d765ed97559df0aea51c5c"
+      },
+      {
+        "owned_type": "SupplierOfferingCommandRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_offering_command.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_offering_command.rs",
+        "target_sha256": "3980a20370b97a1592a8878393823ee2f3eaf9ec6a5e7fe5b3066c68943fc59b"
+      },
+      {
+        "owned_type": "SupplierOfferingRevisionRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_offering_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_offering_revision.rs",
+        "target_sha256": "4d4a7356b7dc38e5e9ac5ccbeba339778b8c945a46ac8062c2bc75e4a8af98c4"
+      },
+      {
+        "owned_type": "SupplierOrderActionRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_order_action.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_order_action.rs",
+        "target_sha256": "c38d7bc61364f00a67e11be7ffbd85ed0a2725b740352c9b47ae072bc94e3428"
+      },
+      {
+        "owned_type": "SupplierOrderActionLineRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_order_action_line.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_order_action_line.rs",
+        "target_sha256": "a932d2c8c0a585755960d0bd22329fcaf8453e4ea6993a1f9be422dfe9ad2035"
+      },
+      {
+        "owned_type": "SupplierOrderStatusHistoryRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_order_status_history.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_order_status_history.rs",
+        "target_sha256": "007c9282edc7cb6985b770215cbda0a39ac6afcdcc209bf95b677fcbbc8b42a9"
+      },
+      {
+        "owned_type": "SupplierPaymentRepository",
+        "owner_phase": "09",
+        "prepare_at": "backend/database/src/repository/owned/supplier_payment.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-finance/src/repository/owned/supplier_payment.rs",
+        "target_sha256": "0ca4666720f04d3aadfc82495a9c35cb5a91dede6e88c22f36d955e985cfa868"
+      },
+      {
+        "owned_type": "SupplierProfileCommandRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_profile_command.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_profile_command.rs",
+        "target_sha256": "8a0631ea17d852aebf2c02a27a42ad4e52e097785aec4fde079a66781390c458"
+      },
+      {
+        "owned_type": "SupplierQualificationRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_qualification.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_qualification.rs",
+        "target_sha256": "a1730f1a7e55db9e74e0dc4331783cd76c3df6561b0a7949f80063a5c5b5828a"
+      },
+      {
+        "owned_type": "SupplierQualificationCapabilityRepository",
+        "owner_phase": "05",
+        "prepare_at": "backend/database/src/repository/owned/supplier_qualification_capability.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supplier/src/repository/owned/supplier_qualification_capability.rs",
+        "target_sha256": "d93a6163d24a2dfbdf6761412cc0d8f8307c6a401f3ef5bb01ae603789323fed"
+      },
+      {
+        "owned_type": "SupplierRefundRepository",
+        "owner_phase": "13",
+        "prepare_at": "backend/database/src/repository/owned/supplier_refund.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-returns/src/repository/owned/supplier_refund.rs",
+        "target_sha256": "e0a166e6dbb7cff5fcd175c3cd6a672c1d07269ddfdd1dc8f805e44032d6a13c"
+      },
+      {
+        "owned_type": "SupplierRefundAllocationRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_refund_allocation.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_refund_allocation.rs",
+        "target_sha256": "3ca1ac07e6930f33884b6980c3215695496e00f92dbc69346883dd9907ee4181"
+      },
+      {
+        "owned_type": "SupplierRefundFactRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_refund_fact.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_refund_fact.rs",
+        "target_sha256": "1c83c0826e0f7fa6275f82341af4963b536a000dbb4e8625fc37070b61a7d431"
+      },
+      {
+        "owned_type": "SupplierSettlementDifferenceRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_settlement_difference.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_settlement_difference.rs",
+        "target_sha256": "1b3e1b17d17cb9b20a2177c828f0787b032b6848cf8f29aea5d8a5a08fad98d8"
+      },
+      {
+        "owned_type": "SupplierSettlementDifferenceEvidenceRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_settlement_difference_evidence.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_settlement_difference_evidence.rs",
+        "target_sha256": "91f23ce13c8cd3123078b469aea1941eca2ccfdd98b138a230cc39d722c2ab5e"
+      },
+      {
+        "owned_type": "SupplierSettlementItemRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_settlement_item.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_settlement_item.rs",
+        "target_sha256": "66e52e2252a0d9963f50e16d8d93fe4808874ebf9b7c869655a879afd8ae49da"
+      },
+      {
+        "owned_type": "SupplierSettlementSourceEvidenceRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_settlement_source_evidence.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_settlement_source_evidence.rs",
+        "target_sha256": "a1bc5a8450e00c52ff59665fdc37cb53bc9f7a9cd418929b2395b1af2aa11c9a"
+      },
+      {
+        "owned_type": "SupplierSettlementStatementRepository",
+        "owner_phase": "16",
+        "prepare_at": "backend/database/src/repository/owned/supplier_settlement_statement.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-supply/src/repository/owned/supplier_settlement_statement.rs",
+        "target_sha256": "fd0526cf20a384abb4c1844f87e1c96a39ab2d42d1dd4759482f5fba6af95400"
+      },
+      {
+        "owned_type": "UnitOfMeasureRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/unit_of_measure.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/unit_of_measure.rs",
+        "target_sha256": "e3742787132579cae01c1eee4439fb09afa68020eb072f778a3734e40b7dddb9"
+      },
+      {
+        "owned_type": "UserRoleRepository",
+        "owner_phase": "02",
+        "prepare_at": "backend/database/src/repository/owned/user_role.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-identity/src/repository/owned/user_role.rs",
+        "target_sha256": "244fa35f8b51eae58095abb47acaddee5ecc0043c4cebb64e224bca7e63d9cc9"
+      },
+      {
+        "owned_type": "VoucherCategoryProfileRevisionRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/voucher_category_profile_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-catalog/src/repository/owned/voucher_category_profile_revision.rs",
+        "target_sha256": "01fae4ce43060496f5aa38d971d39c540093036e55511bbd6c9f58103f7533fb"
+      },
+      {
+        "owned_type": "WarehouseRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/warehouse.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-warehouse/src/repository/owned/warehouse.rs",
+        "target_sha256": "80f47282a684505e5ced15b1a7804e6461494e22bf14802796d41ffbc464ddf7"
+      },
+      {
+        "owned_type": "WarehouseRevisionRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/warehouse_revision.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-warehouse/src/repository/owned/warehouse_revision.rs",
+        "target_sha256": "92b3095097568d820f5ae065c3a47bc374438bbae409afa6db5d61c8cbf1920b"
+      },
+      {
+        "owned_type": "WarehouseSkuPolicyRepository",
+        "owner_phase": "06",
+        "prepare_at": "backend/database/src/repository/owned/warehouse_sku_policy.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-warehouse/src/repository/owned/warehouse_sku_policy.rs",
+        "target_sha256": "fee305dd24ccc2d904a57f22ce5cb73ee1db21e913b7b6ea83183e8e3849b0ac"
+      },
+      {
+        "owned_type": "WorkItemRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/work_item.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/work_item.rs",
+        "target_sha256": "a6b3d7084cbebcce92ee203b11a7a6af854f93dd3a380f6e7301084a5e9ddcfc"
+      },
+      {
+        "owned_type": "WorkflowActionRepository",
+        "owner_phase": "03",
+        "prepare_at": "backend/database/src/repository/owned/workflow_action.rs",
+        "after_absent": true,
+        "target": "backend/crates/erp-workflow/src/repository/owned/workflow_action.rs",
+        "target_sha256": "30a497d5db8168fff109d6a3e90fa2a8fed5dc6e30d159d5310d3381b56c1c94"
+      }
+    ],
+    "note": "The checked-in owner_phase=17 set has zero rows; all 141 preparation files are also checked for absence. Input blob hashes supersede planning snapshot hashes."
+  },
+  "evidence": "legacy-final-audit.json",
+  "legacy_references": 0
+}

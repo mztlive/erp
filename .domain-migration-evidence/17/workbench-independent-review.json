@@ -1,0 +1,3730 @@
+{
+  "schema": "cutover17-workbench-independent-review-v1",
+  "reviewer": "G independently reviewed C/A authority production recipes and actual adapter paths; supplemental Import route wrapper/export subsequently implemented by G under separate root authorization",
+  "before_source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "accepted_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "worktree": "/private/tmp/erp-domain-crate-17-cutover",
+  "capture_utc": "2026-09-07T06:53:26.510296+00:00",
+  "status": "sealed_actual_source_blobs_verified_root_gates_passed",
+  "findings": [],
+  "scope": "Read-only independent review of C/A authority/provider/display paths and E adapter. Two later workbench files contain a separately authorized G route projection wrapper/export; that new wrapper is not claimed independent self-review.",
+  "counts": {
+    "before_source_files": 43,
+    "after_source_files": 46,
+    "old_service_leaves_deleted": 15,
+    "command_steps": 20,
+    "atomic_source_providers": 24,
+    "independent_semantic_checks": 18,
+    "complete_production_function_body_token_checks": 20,
+    "original_test_definitions": 63,
+    "after_test_definitions": 75,
+    "added_test_definitions": 12
+  },
+  "command_order": [
+    [
+      "Sales",
+      "load_sales_order_facts"
+    ],
+    [
+      "Purchase",
+      "load_purchase_order_facts"
+    ],
+    [
+      "Fulfillment",
+      "load_fulfillment_operation_facts"
+    ],
+    [
+      "PurchaseChange",
+      "load_purchase_change_facts"
+    ],
+    [
+      "SalesChange",
+      "load_sales_change_review_facts"
+    ],
+    [
+      "Receivable",
+      "load_receivable_account_facts"
+    ],
+    [
+      "Payable",
+      "load_payable_account_facts"
+    ],
+    [
+      "CustomerReceipt",
+      "load_customer_receipt_facts"
+    ],
+    [
+      "CustomerRefund",
+      "load_customer_refund_facts"
+    ],
+    [
+      "ReceiptReversal",
+      "load_receipt_reversal_facts"
+    ],
+    [
+      "SupplierPayment",
+      "load_supplier_payment_facts"
+    ],
+    [
+      "SupplierRefund",
+      "load_supplier_refund_facts"
+    ],
+    [
+      "PaymentReversal",
+      "load_payment_reversal_facts"
+    ],
+    [
+      "Inventory",
+      "load_stock_adjustment_facts"
+    ],
+    [
+      "Settlement",
+      "load_supplier_settlement_facts"
+    ],
+    [
+      "LegacyImport",
+      "load_legacy_import_batch_facts"
+    ],
+    [
+      "IntegrationError",
+      "load_integration_error_task_facts"
+    ],
+    [
+      "Reconciliation",
+      "load_reconciliation_difference_facts"
+    ],
+    [
+      "SupplierFulfillment",
+      "load_supplier_fulfillment_order_facts"
+    ],
+    [
+      "SupplierOffering",
+      "load_supplier_offering_facts"
+    ]
+  ],
+  "empty_input_contract_by_step": [
+    {
+      "step": "Sales",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/sales_order_brief.rs",
+        "symbol": "load_sales_order_facts",
+        "line": 18,
+        "function_sha256": "57fcbac2d5de442ecc0003891f4b241572827e50f861d268e587cc07eeddaee8"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+        "symbol": "load_sales_order_facts",
+        "line": 18,
+        "function_sha256": "3c21f4e4f24287ad5a796af4f880feb0e3370e1416a12c7cd74657dee101e9b4"
+      },
+      "preserved_empty_contract": "keys empty -> no read; no orders -> no submissions"
+    },
+    {
+      "step": "Purchase",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/purchase_review_brief.rs",
+        "symbol": "load_purchase_order_facts",
+        "line": 25,
+        "function_sha256": "cd82ca941b95da973284675afdd0187fc9683cac64e7672a870ba8bd2236d07e"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+        "symbol": "load_purchase_order_facts",
+        "line": 26,
+        "function_sha256": "cd82ca941b95da973284675afdd0187fc9683cac64e7672a870ba8bd2236d07e"
+      },
+      "preserved_empty_contract": "keys guard remains in purchase_orders_for_keys; no orders -> no submissions; no submission IDs -> no lines"
+    },
+    {
+      "step": "Fulfillment",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+        "symbol": "load_fulfillment_operation_facts",
+        "line": 33,
+        "function_sha256": "e6e82b3c5a3dbdabeacaf6a9610c42ab629020c8d1d3896592335308ad667f77"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/fulfillment.rs",
+        "symbol": "load_fulfillment_operation_facts",
+        "line": 30,
+        "function_sha256": "e6e82b3c5a3dbdabeacaf6a9610c42ab629020c8d1d3896592335308ad667f77"
+      },
+      "preserved_empty_contract": "four repository calls even with empty kind IDs; each source-number helper retains its own empty guard"
+    },
+    {
+      "step": "PurchaseChange",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/change_order_brief.rs",
+        "symbol": "load_purchase_change_facts",
+        "line": 89,
+        "function_sha256": "474460ee9c8e8742ba9d8169a324803d2f64b69ff51e0c4ec7d3799c8b55d970"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+        "symbol": "load_purchase_change_facts",
+        "line": 68,
+        "function_sha256": "cdd3aefd0e340ed0076566600362daf44e23b9ec96c31730f85bff716382fb5a"
+      },
+      "preserved_empty_contract": "keys or actual changes empty -> stop; context base/submission source calls retain original empty-ID behavior"
+    },
+    {
+      "step": "SalesChange",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/change_order_brief.rs",
+        "symbol": "load_sales_change_review_facts",
+        "line": 33,
+        "function_sha256": "7aa01710910041c1aa8088c5160cdd659e309b36b079115f180babc83325e1b8"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+        "symbol": "load_sales_change_review_facts",
+        "line": 29,
+        "function_sha256": "4af6d37d9f44898c2280743f59694dc64814f7d85fe14cc1c7f84d693cec354a"
+      },
+      "preserved_empty_contract": "keys or actual changes empty -> stop; context base/submission source calls retain original empty-ID behavior"
+    },
+    {
+      "step": "Receivable",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "load_receivable_account_facts",
+        "line": 15,
+        "function_sha256": "f2361c335fdf67dc07c1ea8daa74b9b3f5ef95d913a158a0996c6a21429c31d0"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "load_receivable_account_facts",
+        "line": 14,
+        "function_sha256": "6dd8f23a543347fb9a659b55a3c1c498b4502dcf399cc849f271a4eec6bfa87f"
+      },
+      "preserved_empty_contract": "keys or actual accounts empty -> stop before parties/revisions"
+    },
+    {
+      "step": "Payable",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "load_payable_account_facts",
+        "line": 61,
+        "function_sha256": "4d55d1f3d47ce9af3685f8a277849b16a750e2c2be353614826661bab03448c7"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "load_payable_account_facts",
+        "line": 48,
+        "function_sha256": "f3f38dd570f2a428c9ed4280c0afb910aa4e930201b5487f1a1ae6db50702a0f"
+      },
+      "preserved_empty_contract": "keys empty -> stop; empty actual accounts still enter supplier and source purchase-number recipe"
+    },
+    {
+      "step": "CustomerReceipt",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "load_customer_receipt_facts",
+        "line": 14,
+        "function_sha256": "5c199cce90814bab071f5e1f3fffee15b67201e029ddfa2958c10a538dfd91a3"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "load_customer_receipt_facts",
+        "line": 14,
+        "function_sha256": "8b16b79f9f50d06b4209577eb4038b79051a39eecb842c5f34d7dd990f29dafc"
+      },
+      "preserved_empty_contract": "keys or actual receipts empty -> stop; no new audit on no receipts"
+    },
+    {
+      "step": "CustomerRefund",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "load_customer_refund_facts",
+        "line": 61,
+        "function_sha256": "237f8b6286f9cecf5e5f8c0177843313ee283c814e7d72aeae8eb18e62369082"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "load_customer_refund_facts",
+        "line": 54,
+        "function_sha256": "61f8a8d2996f2d32a7234bf4d6d217eee68c02c9e70f14fa9cf66478362955f5"
+      },
+      "preserved_empty_contract": "only key guard; empty actual refunds still audit by requested IDs and call original empty origin repositories"
+    },
+    {
+      "step": "ReceiptReversal",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "load_receipt_reversal_facts",
+        "line": 128,
+        "function_sha256": "7d921030bcdfb999ba3ca1e4fca3c027ee8f8a41c75731081b7477f7ddc11b63"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "load_receipt_reversal_facts",
+        "line": 106,
+        "function_sha256": "8a6474a57bb057e47b68322a06c04593876995f9bcd6c056a253b6b0cd453d10"
+      },
+      "preserved_empty_contract": "only key guard; audits and empty original receipt query retained"
+    },
+    {
+      "step": "SupplierPayment",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "load_supplier_payment_facts",
+        "line": 14,
+        "function_sha256": "21283be3cb364d5227b85a1962cc9491ae75b2d9d8374d75396349d2f1cf3010"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "load_supplier_payment_facts",
+        "line": 14,
+        "function_sha256": "3d4fff0dabe6208e5b7a8ef94195a5ddeb2ab319a64939078c927a1dcbf81263"
+      },
+      "preserved_empty_contract": "only key guard; unlike receipt, no actual-row early return"
+    },
+    {
+      "step": "SupplierRefund",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "load_supplier_refund_facts",
+        "line": 56,
+        "function_sha256": "9587b0756bdb0670d0d122534f496ace8a46a81c243bce4a9fb1e404ae5ddf20"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "load_supplier_refund_facts",
+        "line": 49,
+        "function_sha256": "0fa46889068362a80db208b69e4418b03baf9e2a4f00ee1aa1ffaf62e8f72ec0"
+      },
+      "preserved_empty_contract": "only key guard; audits and both empty origin recipes retained"
+    },
+    {
+      "step": "PaymentReversal",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "load_payment_reversal_facts",
+        "line": 118,
+        "function_sha256": "c4044c6d790d2e8d6588fcef66c4b246f092800fc37d13e826bb8084f61a7680"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "load_payment_reversal_facts",
+        "line": 96,
+        "function_sha256": "91050b86e3e589a60854d0c5fe98c9c283aaeb76ca06e918ef561282dba3bf63"
+      },
+      "preserved_empty_contract": "only key guard; audits and empty original payment recipe retained"
+    },
+    {
+      "step": "Inventory",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "symbol": "load_stock_adjustment_facts",
+        "line": 22,
+        "function_sha256": "bdb338e9f26bdabe9e69e9b074e967162877134d539f9257ab67f96475c17b15"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "symbol": "load_stock_adjustment_facts",
+        "line": 20,
+        "function_sha256": "54c001d44e0853898ae4821e6e72363d8c2eff3c7ad257f157ba03e4735f521f"
+      },
+      "preserved_empty_contract": "keys empty -> stop"
+    },
+    {
+      "step": "Settlement",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "symbol": "load_supplier_settlement_facts",
+        "line": 50,
+        "function_sha256": "abd35888717c51da8ad9f3d4a8ae16ac2abc94b2f041f022e6d006ec6a60bc55"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "symbol": "load_supplier_settlement_facts",
+        "line": 39,
+        "function_sha256": "84361824986573fc9f2015920b35af45c60bf5e568ca140406c3d06ac3f57391"
+      },
+      "preserved_empty_contract": "only key guard; empty statements still enter items/differences and supplier recipe"
+    },
+    {
+      "step": "LegacyImport",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_legacy_import_batch_facts",
+        "line": 145,
+        "function_sha256": "3c0fa38acbaa9d291482af17140fa8ff1ad05459bf9c7978bb472c24780318be"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_legacy_import_batch_facts",
+        "line": 54,
+        "function_sha256": "3c0fa38acbaa9d291482af17140fa8ff1ad05459bf9c7978bb472c24780318be"
+      },
+      "preserved_empty_contract": "keys empty -> stop"
+    },
+    {
+      "step": "IntegrationError",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_integration_error_task_facts",
+        "line": 173,
+        "function_sha256": "f0445c8c474c219a4b4bc538681111815a71b91b5beb26b5a69eac674277db86"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_integration_error_task_facts",
+        "line": 82,
+        "function_sha256": "75c208b03fd35f74a4e0231f292b56ff1f5f35a82bdb4ba271742cccf4d87535"
+      },
+      "preserved_empty_contract": "keys empty -> stop"
+    },
+    {
+      "step": "Reconciliation",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_reconciliation_difference_facts",
+        "line": 204,
+        "function_sha256": "1b39d82cb69c49407245000c40ed5962e45add48321e5438f77937ac8dc7f54f"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_reconciliation_difference_facts",
+        "line": 99,
+        "function_sha256": "a7fb7e1f155fbe4eb931de8d457d0fa05b04ee5a27c08fc89a76e30bae083f2e"
+      },
+      "preserved_empty_contract": "keys empty -> stop"
+    },
+    {
+      "step": "SupplierFulfillment",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_supplier_fulfillment_order_facts",
+        "line": 236,
+        "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_supplier_fulfillment_order_facts",
+        "line": 120,
+        "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+      },
+      "preserved_empty_contract": "keys empty -> stop"
+    },
+    {
+      "step": "SupplierOffering",
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_supplier_offering_facts",
+        "line": 272,
+        "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_supplier_offering_facts",
+        "line": 156,
+        "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+      },
+      "preserved_empty_contract": "keys empty -> stop; empty actual offerings still call availability lookup with actual empty offering IDs"
+    }
+  ],
+  "actual_atomic_providers": [
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_sales_orders",
+        "line": 12,
+        "function_sha256": "b4d5046f7a0759082bb45672e082797f6cfc97bbeffbaba189f54f32065202a5"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_purchase_orders",
+        "line": 20,
+        "function_sha256": "9b004af60ddad6c78dc1666701ff75590c7317f345a99800dbe6c562e5b70f77"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_sales_revisions",
+        "line": 32,
+        "function_sha256": "4ec3040640536579b1c5c6f55b9afa0d5e17a090f054fdb3a7d19c7ae491a76c"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_purchase_revisions",
+        "line": 44,
+        "function_sha256": "a6209622da747c63523f633870f6a36951cb7396087b468461f8f376be6bd4b0"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_sales_changes",
+        "line": 56,
+        "function_sha256": "811eb012ff3c2600ac0d9669b8a0ff31ca094678d3644af9192f7b613c845e1e"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_purchase_changes",
+        "line": 68,
+        "function_sha256": "44dadc47a46bb4523ee065b44e80c6bbe6af757cba5b47d0dd87fd7f5d314634"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_sales_change_submissions",
+        "line": 80,
+        "function_sha256": "45458acef9a87bf1669753924dd82774f573ae19509f01994039f72c0e748615"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_purchase_change_submissions",
+        "line": 92,
+        "function_sha256": "f9493b7f6b82d830b5e5c13c707c1361a50481ea9304d6d7bf8983ae41c414e9"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_integration_errors",
+        "line": 104,
+        "function_sha256": "727a0f552fad4e941bb8fbdb0449a0dca1e3db8996e2a295ed3da69c5c030d70"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_reconciliation_differences",
+        "line": 116,
+        "function_sha256": "f95d22cce9821927c76e7386baac868472d91442fd016f0af9ae0c34da8c5433"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_stock_adjustments",
+        "line": 128,
+        "function_sha256": "b90d4462e4834962f8f95817e9ff0efb78804eb27a0e29470b4d3997f59ecda3"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_settlement_statements",
+        "line": 140,
+        "function_sha256": "2ec8f4d8d052b160059e9bf4e331cb4bcbc5eb7384cc9ab7b9744a286ef21d74"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_settlement_items",
+        "line": 152,
+        "function_sha256": "41ec9f96874b6236a8918da5f7ac6b0bf8f2ba5ee6ab70120a4afff24347f62f"
+      },
+      "query": "list_by_statement_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "read_settlement_differences",
+        "line": 164,
+        "function_sha256": "3b93e03042d23e8dccdfba9ed2a14ae3ebcd53be91c1bef9b2d72118b7d5f587"
+      },
+      "query": "list_by_statement_item_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_receivable_accounts",
+        "line": 9,
+        "function_sha256": "578cc13ba95b10e177e9060458646adb09eb394eb0619cfe7e2fa232ca7130f9"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_payable_accounts",
+        "line": 21,
+        "function_sha256": "c403b87684f6e35b0527f32a396b7e71dcb79d260c1f7d6b03038e3599aa11ce"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_customer_receipts",
+        "line": 33,
+        "function_sha256": "54248a378044fc03505cdaccfe6b33f81e78e61c0f433d8eb87f16257a7f2b9a"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_supplier_payments",
+        "line": 45,
+        "function_sha256": "135b20c17e99cbb697cb6dd361dd6b9d61d01df55445e2e6b54ac1dda5b60245"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_customer_refunds",
+        "line": 57,
+        "function_sha256": "2c595777716541d8c549c6e86093089fd3f97a6fefca042dbdd8b531505506ba"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_supplier_refunds",
+        "line": 69,
+        "function_sha256": "bf4590ba7580566b7c7039a053640991808f7cd587af336026b90d65ea2db31d"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_receipt_reversals",
+        "line": 81,
+        "function_sha256": "879ee7810d08ad67e965743a13ae0622b0212ca50e71a9b19abcc40cfd452c32"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_payment_reversals",
+        "line": 93,
+        "function_sha256": "b358921e7b2ac9bb0495e750a99cb8600c13b768cbbe9da08e5a99fa1a4cff61"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_receivable_entries",
+        "line": 105,
+        "function_sha256": "3ff5ce218461878e21eede095a520bbd008c2c9672290d5d8fb9867c0d5d05f5"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    },
+    {
+      "provider": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "read_payable_entries",
+        "line": 117,
+        "function_sha256": "504a1ab7506edf065e4310d190499890339ff921b89878ea758e695956c966fc"
+      },
+      "query": "list_active_by_ids",
+      "same_executor": true,
+      "single_original_query": true,
+      "new_empty_guard": false
+    }
+  ],
+  "semantic_checks": [
+    {
+      "id": "WB01_command_order",
+      "status": "preserved",
+      "conclusion": "20 actual production steps retain original order; sole removed procurement step was Ok(()) without I/O or facts mutation; every step is awaited with original Executor and immediate ?",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/facts.rs",
+          "symbol": "load_object_facts",
+          "line": 89,
+          "function_sha256": "c27cc9533e3edacd1da045233ce43735ed53d85393fde14f8538023f20ebd76a"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/facts.rs",
+          "symbol": "load_independent_object_facts",
+          "line": 127,
+          "function_sha256": "c587d5d67a6483d3742376d4a48a2e02beaa1d5724798847804ddf74bd47d726"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/procurement_brief.rs",
+          "symbol": "load_procurement_confirmation_facts",
+          "line": 18,
+          "function_sha256": "e979ffb6fc8cac1629b2edfa34b992c001670150a04c8eb687d909fa26a1bd25"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+          "symbol": "load",
+          "line": 46,
+          "function_sha256": "195336371090bf2bd6f4c63c72efcabaac568722234ddbbdbcc94b7045974e8e"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+          "symbol": "read",
+          "line": 246,
+          "function_sha256": "2e6ac18aa7f13d0956cb353ea7ba4a8f55df38a921a152047cf6fef821eb2fab"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+          "symbol": "load",
+          "line": 62,
+          "function_sha256": "7d0a03f198815168ba4f31e56607b525d2f52b9ed50c611a4757d87ababecd10"
+        }
+      ],
+      "evidence_method": "Compared original call names, expanded independent dispatch, and actual production ORDER->match target equality; verified real runner body"
+    },
+    {
+      "id": "WB02_empty_keys_and_sources",
+      "status": "preserved",
+      "conclusion": "No new global empty-key shortcut; fulfillment four repository entry calls and original asymmetric empty actual rows/related IDs remain. 24 atomic wrappers each execute one original repository read, forwarding ids and Executor.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+          "symbol": "load_fulfillment_operation_facts",
+          "line": 33,
+          "function_sha256": "e6e82b3c5a3dbdabeacaf6a9610c42ab629020c8d1d3896592335308ad667f77"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "payable_purchase_numbers",
+          "line": 63,
+          "function_sha256": "4124bf1d4be807f0d791325a9ae87931a1d2cc107a08f1ddd58144490d991023"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/fulfillment.rs",
+          "symbol": "load_fulfillment_operation_facts",
+          "line": 30,
+          "function_sha256": "e6e82b3c5a3dbdabeacaf6a9610c42ab629020c8d1d3896592335308ad667f77"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "payable_purchase_numbers",
+          "line": 53,
+          "function_sha256": "bd45813edea12226a8d29cd4f8e966a5e3a49bbab3f4d64f517bd8220978678b"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+          "symbol": "load",
+          "line": 62,
+          "function_sha256": "7d0a03f198815168ba4f31e56607b525d2f52b9ed50c611a4757d87ababecd10"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB03_sales_authority",
+      "status": "preserved",
+      "conclusion": "Sales root=id, creator=stable creator; latest InReview by submission_no wins, otherwise latest; no submission keeps minimal title. Display reads submission lines after common headers/submissions and uses same mapper.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/sales_order_brief.rs",
+          "symbol": "sales_order_fact",
+          "line": 70,
+          "function_sha256": "ab1b64f0731463b76a3efe595b9c4b35a913a54c31ed371671bd2c54b74bab46"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+          "symbol": "load_sales_order_facts",
+          "line": 44,
+          "function_sha256": "2eadb2424d48d4a344eb45fee51e8ce145591185267c954cdd4f3ba8930e0200"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+          "symbol": "sales_order_fact",
+          "line": 81,
+          "function_sha256": "8960cdd7050da3a8119461334047be64b8cefa3544ab34003193349a9945f1ad"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+          "symbol": "preferred_submission",
+          "line": 109,
+          "function_sha256": "1f321e489a32119ca82608e9dc84c48576f90ec9aa7803a713680bfa9d9e59ae"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+          "symbol": "load_sales_order_facts",
+          "line": 46,
+          "function_sha256": "e57416872622d0da1936e379bfbf83e5c154a4d00b890b87498c5135bb5bd12b"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB04_purchase_query_slot",
+      "status": "preserved",
+      "conclusion": "Command orders->submissions->lines; rich orders->submissions->sales numbers->same lines. No complete command load followed by rich load. Full raw rows feed purchase_line_counts while brief/diff states consume same rows.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/purchase_review_brief.rs",
+          "symbol": "purchase_review_displays",
+          "line": 56,
+          "function_sha256": "e4c2fc82f6fe01e6ecfbbae3872137e5709a8559fa4885cf2913fd1c50419e9f"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_review_displays",
+          "line": 119,
+          "function_sha256": "5a0b8c7ebe549855a7752b30538a9425b8aba78bfff78888b1613a7508003b59"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_submission_brief_lines",
+          "line": 214,
+          "function_sha256": "e8d47e0434a3df92a9513abb079314c42745a6b5a34ccad4b9eb64e40e36b0d5"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+          "symbol": "purchase_review_displays",
+          "line": 64,
+          "function_sha256": "e4c2fc82f6fe01e6ecfbbae3872137e5709a8559fa4885cf2913fd1c50419e9f"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_review_displays",
+          "line": 95,
+          "function_sha256": "b5892a870dadc679616939772e3baf4812781734cdec73d0e2dadff465bb944b"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_submission_brief_lines",
+          "line": 169,
+          "function_sha256": "d8ce145c8e30befe81218a56960a2dc47b38853a3871861bd042358f0262a1fd"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+          "symbol": "purchase_line_counts",
+          "line": 245,
+          "function_sha256": "911befa4b039d5a772044c57b783616f7f2e727eaf0f2068745c8c940f35c771"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB05_purchase_counts_and_subjects",
+      "status": "preserved",
+      "conclusion": "Command counts every original submission line; display impact uses selected original/diff brief.lines+more_count. Current submission copies root overlay; every submission retains subject brief, even without current pointer. Previous formal determination uses only formal_sequence group/window order, unchanged. Submission key is not a version constraint.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/purchase_review_brief.rs",
+          "symbol": "purchase_review_display",
+          "line": 198,
+          "function_sha256": "589ee39e200a76904121dc2f1cdc45b54ba6c889ba79ce4917d0c9f54c61254e"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/purchase_review_brief.rs",
+          "symbol": "purchase_order_fact",
+          "line": 127,
+          "function_sha256": "2196a7c8fd6f27e5bdd8c90fc9aaaa452d5950ffd00060d23155ed5b1684dcc2"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_review_display",
+          "line": 481,
+          "function_sha256": "5f8944c27b67e8d0c1557c146b6cea28864393dc896decf847502042808ddd59"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+          "symbol": "purchase_review_display",
+          "line": 223,
+          "function_sha256": "589ee39e200a76904121dc2f1cdc45b54ba6c889ba79ce4917d0c9f54c61254e"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+          "symbol": "purchase_order_fact",
+          "line": 149,
+          "function_sha256": "2196a7c8fd6f27e5bdd8c90fc9aaaa452d5950ffd00060d23155ed5b1684dcc2"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_order_fact",
+          "line": 344,
+          "function_sha256": "7fe0bd4bf3d1de98f746032969ca0c000b4561ced379743b5f074d8a6e488a5d"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+          "symbol": "purchase_review_display",
+          "line": 410,
+          "function_sha256": "5f8944c27b67e8d0c1557c146b6cea28864393dc896decf847502042808ddd59"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB06_change_roots_context",
+      "status": "preserved",
+      "conclusion": "Change root and creator come from change itself; current submission counterparty precedes base, including original empty-string behavior. Header->parent number->base->submission order retained; rich-only two-side line/diff queries remain outside command.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/change_order_brief.rs",
+          "symbol": "load_sales_change_review_facts",
+          "line": 33,
+          "function_sha256": "7aa01710910041c1aa8088c5160cdd659e309b36b079115f180babc83325e1b8"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/change_order_brief.rs",
+          "symbol": "load_purchase_change_facts",
+          "line": 89,
+          "function_sha256": "474460ee9c8e8742ba9d8169a324803d2f64b69ff51e0c4ec7d3799c8b55d970"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+          "symbol": "sales_change_fact",
+          "line": 172,
+          "function_sha256": "0dc3b42efe271617a0ab0780a70755041ce5090fd660cd459e7a2c5d5b5e0cde"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+          "symbol": "purchase_change_fact",
+          "line": 193,
+          "function_sha256": "d93300e74da99c3341b98f969bbba7350832f8a96409d0eed1550093af683664"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+          "symbol": "sales_change_fact_context",
+          "line": 106,
+          "function_sha256": "59cf877db43552c5b277651acdde4040e7e6058f117205481d02b9d7cb563b3c"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+          "symbol": "purchase_change_fact_context",
+          "line": 138,
+          "function_sha256": "26e97bee792a6f1d58db4935808fe39a95ed48f3b3e8a19448343f078b90849e"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB07_voucher_predicates",
+      "status": "preserved",
+      "conclusion": "Command voucher state reads only revision category or expiry flags. Rich revision query feeds same flags set, then voucher rows may add an independent display voucher via entry.or_default. Authority impact uses flags; display impact uses voucher existence. Rich sales number/party/revision/lines/voucher/tax/due slots retained.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "receivable_voucher_revision_ids",
+          "line": 188,
+          "function_sha256": "20a5a19970593469eeec196e08d2d41729fc20c15420675f21c2b293628dd245"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+          "symbol": "receivable_account_revision_briefs",
+          "line": 304,
+          "function_sha256": "5b8539179f501a7e53c13342681afee9acd8668e611f5437d1bc62f967fe769c"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+          "symbol": "load_receivable_account_facts",
+          "line": 29,
+          "function_sha256": "28fad4fc1663b7c7a816804297b87898298645f28cbc7f3865888162fbc6f490"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+          "symbol": "voucher_revision_ids",
+          "line": 12,
+          "function_sha256": "95a0ac349011d496ae1f6db4504ac83c6561b8631e361ad2aad47abef49c87cb"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+          "symbol": "receivable_account_revision_briefs",
+          "line": 191,
+          "function_sha256": "b9be4d45292e4c000a14149d76f723b5036c084865218de0c780365a590136cc"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+          "symbol": "load_receivable_account_facts",
+          "line": 28,
+          "function_sha256": "e983077ddeace5edd5dfcef7999c17951eb26a490bee31a270f4325f05a961ef"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "receivable_fact_display",
+          "line": 535,
+          "function_sha256": "0e647b570fc8c69c5939e15d49330f9fd1b4a5a1ea5f761f57e95430623e97fb"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB08_origin_membership",
+      "status": "preserved",
+      "conclusion": "Command maps filter out rows lacking counterparty/account; rich maps retain every original row including counterparty=None and source document/amount/due facts. Four rich constructors call counterpart-only projection on same already-read rows before independent rich mapping; no command origin I/O is repeated.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "customer_receipt_origins",
+          "line": 214,
+          "function_sha256": "efce99829d15f10874a0e2e4a455bd20a4273235a89bf08d88f9a31af82b80f9"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "receivable_entry_origins",
+          "line": 241,
+          "function_sha256": "c1b86167ab464ce326471a92e63dcd0191dfbb2ce8ec1dee9ec544676ed95626"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "supplier_payment_origins",
+          "line": 286,
+          "function_sha256": "e291863d56e3f8becb3d8ea1dab0e1b2dc9c95bd5503937736a38a5bef0ac95b"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "payable_entry_origins",
+          "line": 317,
+          "function_sha256": "13a78c085278ae75c0a28a9fe17cb6e00b84fa2890d3f728c13e73634d17f110"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+          "symbol": "receipt_counterparties",
+          "line": 90,
+          "function_sha256": "f8603fd046a37e09e81b5c003113e8890693cb0be37743e76458dbe2ac8c4dce"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+          "symbol": "receivable_entry_counterparties",
+          "line": 106,
+          "function_sha256": "502af18e56c86b48929a9edde2c74da09c75878654e1da56aae3829e99b90ac0"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+          "symbol": "payment_counterparties",
+          "line": 124,
+          "function_sha256": "5f26808d447c1eefd64454a53df88df6d38c8ef2febcaa7b030208f7d5d21871"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+          "symbol": "payable_entry_counterparties",
+          "line": 140,
+          "function_sha256": "ea703aa8ec7a19c8a055e7bb4c6fb2aa1bd077eb964c2d656b539c397acf96b0"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "receipt_origins_from_rows",
+          "line": 367,
+          "function_sha256": "e2e74fb4612cbafb37ba3f3f432e0cdf43183d541a8acac93d02f46e866e3680"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "payment_origins_from_rows",
+          "line": 404,
+          "function_sha256": "5ffea79e2a7270dbdb68c299b33e3fa9ae9c3c9b7e5cd308d6876ff2e38526c7"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "receivable_origins_from_rows",
+          "line": 440,
+          "function_sha256": "7ab32566b5e824f192cf0b3ac99ae706f7333f541f83989afdb95f671d5716d4"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "payable_origins_from_rows",
+          "line": 485,
+          "function_sha256": "1a5e853a6e2a05197778a9bc9548f903ebf776e49b720d060055e2dd43e7762a"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB09_customer_refund_fallback",
+      "status": "preserved",
+      "conclusion": "Authority selects customer name, then named receipt origin, then named entry. Rich selects existing receipt source first, even if its name is None; it does not switch to entry merely because receipt has no name. Existing source title and display None stay visible as before.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+          "symbol": "load_customer_refund_facts",
+          "line": 61,
+          "function_sha256": "237f8b6286f9cecf5e5f8c0177843313ee283c814e7d72aeae8eb18e62369082"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+          "symbol": "load_customer_refund_facts",
+          "line": 96,
+          "function_sha256": "67ae01ab475a45ca036524370a165262ca52a33bfa4467809e4fb62bf86a2370"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+          "symbol": "customer_refund_fact",
+          "line": 84,
+          "function_sha256": "31f787e544ee868e79aa17a197e20722804ed444a1471b2292b0e9c64605deb2"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+          "symbol": "load_customer_refund_facts",
+          "line": 92,
+          "function_sha256": "77f82a8c149fdd8a021510db67ff1b6b42995e754ca9e6a46cbeff5c157be750"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "select_funds_origin",
+          "line": 545,
+          "function_sha256": "59e62636b4435c907e3573df9c5258cd831c1564bc22a7b2dd361d84e43badad"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB10_supplier_refund_two_sources",
+      "status": "preserved",
+      "conclusion": "Authority retains supplier->original payment->original payable entry fallback. Rich counterparty is only direct supplier display name; origin remains rich brief data. Explicit display None clears initial authority name; later display application cannot fall back to authority.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/payment.rs",
+          "symbol": "load_supplier_refund_facts",
+          "line": 56,
+          "function_sha256": "9587b0756bdb0670d0d122534f496ace8a46a81c243bce4a9fb1e404ae5ddf20"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+          "symbol": "load_supplier_refund_facts",
+          "line": 127,
+          "function_sha256": "95e9bfe0aa8a382458443cc4d75d0283b77ce9a7f2a59d16d5379a53f066f6c9"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+          "symbol": "supplier_refund_fact",
+          "line": 111,
+          "function_sha256": "88d46604b34da106055c10fdb9109cc28f19c3fd0dea3937aa39c3464e69c6ec"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+          "symbol": "load_supplier_refund_facts",
+          "line": 121,
+          "function_sha256": "a600af06576529d53a32ec5e56022335ad39254b3c14976d019fe86ac15c37ee"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "funds_fact_display",
+          "line": 526,
+          "function_sha256": "f5923eb1770cad6198830e157428be30f19400dbc8a421a369cec9b970520834"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "apply_subject_display",
+          "line": 293,
+          "function_sha256": "0130406331d7dc35c99fbdbe0922e1a3804769829358af212707c3af6aacb397"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB11_audit_and_names",
+      "status": "preserved",
+      "conclusion": "Creation actor retains input HashSet iteration and first audit actor per resource, missing actor empty string. Active party->current revision->trim name and account-number fallback remain single-source helpers; they do not redefine counterparty active semantics.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "load_created_by_from_audit",
+          "line": 23,
+          "function_sha256": "ff19a8ba7f5b75b7ac29bd0a97697dd699a95153951fd920edeb7f3984a159da"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "party_legal_names",
+          "line": 83,
+          "function_sha256": "7c6db73c1b4b09041bff4c1be2b39ac3fc5168d1f132333dbf2f1817c41cc4f0"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "customer_display_names",
+          "line": 126,
+          "function_sha256": "924bbd5e2b6d2d25f5008bd77d552614e8e38350a5f781b044c03de0bcfa310c"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+          "symbol": "supplier_display_names",
+          "line": 157,
+          "function_sha256": "59b520ba429fed1a50579b407c49db4a5cf6bce220784902272462939dbf4142"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "load_created_by_from_audit",
+          "line": 19,
+          "function_sha256": "155a35a26521470708ea607206176ca99335ae44ab1ddee77f8aa9b630a0ca47"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "first_created_by",
+          "line": 205,
+          "function_sha256": "7cbcaf9fa4dc9bad69d851279b48b93e06522c370ead2ad9d26ef226b31637c0"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "party_legal_names",
+          "line": 71,
+          "function_sha256": "7c6db73c1b4b09041bff4c1be2b39ac3fc5168d1f132333dbf2f1817c41cc4f0"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "legal_names_for_parties",
+          "line": 94,
+          "function_sha256": "c8d9d24194cfe434e33ccfcabc781635d8a57b25b3f98b59226564b46492b018"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "customer_display_names",
+          "line": 125,
+          "function_sha256": "924bbd5e2b6d2d25f5008bd77d552614e8e38350a5f781b044c03de0bcfa310c"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+          "symbol": "supplier_display_names",
+          "line": 156,
+          "function_sha256": "59b520ba429fed1a50579b407c49db4a5cf6bce220784902272462939dbf4142"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB12_settlement_slot",
+      "status": "preserved",
+      "conclusion": "Statements->items->differences common reads; rich alone inserts difference_evidence->source_evidence before supplier names. Group order and pending>0/else total>0/else instruction identical; single authority root/prepared_by mapper.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+          "symbol": "supplier_settlement_fact_context",
+          "line": 104,
+          "function_sha256": "6139a79a6633eb8ad9bacd2aac12b3e053886677893820479af9361c0c3d5d5e"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+          "symbol": "supplier_settlement_brief_context",
+          "line": 286,
+          "function_sha256": "2ab3cb3ae3409b5f627dd801e30e3ed62bb647ffc60d14053cb7ef0928bf568d"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+          "symbol": "supplier_settlement_fact_context",
+          "line": 83,
+          "function_sha256": "3c01ece1ead0cfdd6b1a260047f506b6d306e9de0866c28a4a4332f5fb12f745"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+          "symbol": "supplier_settlement_brief_context",
+          "line": 279,
+          "function_sha256": "1923aeb39ec4d5d75e13cc1b048589e64a6bd4b2e0ae1d7d76ac414339b90cc2"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+          "symbol": "settlement_fact",
+          "line": 166,
+          "function_sha256": "0a3aa9291104cc79dfb66c3d55deb6bbd082bb3c3a9f9b616324639513b70f69"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB13_version_authority",
+      "status": "preserved",
+      "conclusion": "Only W26 fulfillment and W21 offering constrain versions. W26 uses fulfillment order base.version; W21 only stopped sources, offering then availability version, none stopped means no fact. Rich delegates these loaders exactly once and cannot redefine root/creator/version.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/facts.rs",
+          "symbol": "load_supplier_fulfillment_order_facts",
+          "line": 236,
+          "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/facts.rs",
+          "symbol": "load_supplier_offering_facts",
+          "line": 272,
+          "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+          "symbol": "load_supplier_fulfillment_order_facts",
+          "line": 120,
+          "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+          "symbol": "load_supplier_offering_facts",
+          "line": 156,
+          "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "load_supplier_fulfillment_order_facts",
+          "line": 470,
+          "function_sha256": "99737b2010f0dc32bfcc60710928f914d8ad6b849c7ee9685d277f0f320b7908"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "load_supplier_offering_facts",
+          "line": 489,
+          "function_sha256": "a27d569c165e65be9c0a4b2be50136ab63e23ef22bba9d95dd0597c561675213"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB14_access_authority",
+      "status": "preserved",
+      "conclusion": "Permission->participation->subject version order remains. Participation uses authority creator/root and WorkItem owner role/organization; explicit-owner shortcut unchanged. Display fields cannot affect authority permissions; counterparty IDs are never organization replacements.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "authorized_fields",
+          "line": 276,
+          "function_sha256": "bdcc20a650cc46f04d3fef69fe452633e7b933e02f9a5176dfbdc7248def8ba0"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "authorized_item_fields",
+          "line": 317,
+          "function_sha256": "c63e74fa9803a26e6bbaf614754c8a4ccd9bb5583ed0edde3f599db7c81ebd41"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "has_object_participation",
+          "line": 403,
+          "function_sha256": "b34ad68eadb89f8856fc5e5a69e43a6c9f3bfc2852fcf8aae47ce14e8cb92282"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "authorized_fields",
+          "line": 276,
+          "function_sha256": "2662450119646a08f7a1d8485d6a6b3a10b916abe2317e8ec3b78de96bf4c7fd"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "authorized_item_fields",
+          "line": 317,
+          "function_sha256": "5acce803d3b6d202a8b859acf8ac44b2076c2544cb628f4c2baae4aa83688e54"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+          "symbol": "has_object_participation",
+          "line": 403,
+          "function_sha256": "3a0fcb393721c315e583fdf118295aa39b71882bf9d660c5a4643cb4871f2263"
+        }
+      ],
+      "evidence_method": "Complete production function body token comparison with explicit authority field qualification only"
+    },
+    {
+      "id": "WB15_display_none_and_subject_fallback",
+      "status": "preserved",
+      "conclusion": "Always-present display object distinguishes assigning None from leaving authority-derived initial display untouched. Runtime reads only display. Original per-subject optional-field fallback to object display remains unchanged (subject field None is not a new suppress-root signal); explicit-owner nonblank task impact is preserved.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "apply_object_display",
+          "line": 321,
+          "function_sha256": "0a60653481f687426da612f1074f0225724de2b03e16649a3d77e7186d51abaf"
+        },
+        {
+          "side": "before",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "apply_subject_display",
+          "line": 340,
+          "function_sha256": "231897c933b1e2a20dda7eddb2c5783ffc2a25a28c690f8d002c4e64b2f7669a"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "from_authority",
+          "line": 42,
+          "function_sha256": "420c04215e55cdf4aa2448b0863e4d0230ee1cc940f05d54fac260a38489e64c"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "apply_object_display",
+          "line": 274,
+          "function_sha256": "51b1a26b28d8d34dcf89715265441b6099942219179cc48b79782549cc1d2cee"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+          "symbol": "apply_subject_display",
+          "line": 293,
+          "function_sha256": "0130406331d7dc35c99fbdbe0922e1a3804769829358af212707c3af6aacb397"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+          "symbol": "funds_fact_display",
+          "line": 526,
+          "function_sha256": "f5923eb1770cad6198830e157428be30f19400dbc8a421a369cec9b970520834"
+        }
+      ],
+      "evidence_method": "Complete original display application bodies compared after field qualification; explicitly inspected assignment of None versus no assignment, independent of fixture strings"
+    },
+    {
+      "id": "WB16_counterparty_port",
+      "status": "preserved",
+      "conclusion": "Exact supplier/customer literals only; every input ID calls original find_by_id without dedup/status/can_login filters. Unknown kind returns empty; is_active remains contains_key. Same Executor throughout, first error stops loop, external identity find_by_id unchanged.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/mod.rs",
+          "symbol": "counterparty_numbers",
+          "line": 45,
+          "function_sha256": "e946519402f83e94f67c86cc75643d973ef9a16147fec8a4db6b85846d8d9171"
+        },
+        {
+          "side": "before",
+          "file": "backend/services/src/work_item/mod.rs",
+          "symbol": "counterparty_is_active",
+          "line": 32,
+          "function_sha256": "07564243efa261637f6632627ba6f0333b169b08654cc111f8f906ada2312fe0"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+          "symbol": "numbers",
+          "line": 85,
+          "function_sha256": "b2d25a3fc37b86417135b95e4bdcacfa79614ceb3729756c82bcaf56dab94ac7"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+          "symbol": "number",
+          "line": 60,
+          "function_sha256": "2727f5117a8e97f67ca59e2271311d037683713f4f322864c12d7e454faab5c6"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+          "symbol": "counterparty_is_active",
+          "line": 5,
+          "function_sha256": "07564243efa261637f6632627ba6f0333b169b08654cc111f8f906ada2312fe0"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+          "symbol": "external_identity_map_exists",
+          "line": 29,
+          "function_sha256": "3dd8022836dc5dc01c6d4531d0d01a122cb8acd54108ee4b5dc415130cc73363"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB17_single_narrow_reader_and_adapter",
+      "status": "preserved",
+      "conclusion": "Reader has only Database, no RBAC/write/transaction root. The three original application fact/name reads use RM->Process->original workflow mapping; exact workflow ObjectFactMap is returned without structural copying. External identity lookup keeps its separate persistence->workflow boundary. Assignment separation stays empty in process; purchase/W29 writes stay out of reader.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/workflow_compose.rs",
+          "symbol": "load_object_facts",
+          "line": 749,
+          "function_sha256": "e637a30b40d7759b657f84072908f0a0a3866635099787d233f194bde66c4edd"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/mod.rs",
+          "symbol": "new",
+          "line": 24,
+          "function_sha256": "ff7f21f3331154cb0f3f54babe1d2055b14f46605a3126843367c11456447b7d"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "symbol": "load_object_facts",
+          "line": 35,
+          "function_sha256": "a9d27abdcc717135df263df6ff2c1b81b40aed7408a0f6afdacc6e5df270d2e1"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "symbol": "assignment_separation_actors",
+          "line": 77,
+          "function_sha256": "f2c6ad78558a67e15e508bdb4f0c083f80dd42b1f5c71f7cb34ede3945292b59"
+        }
+      ],
+      "evidence_method": "Independent inspection of original production implementation and actual new provider/mapper call path"
+    },
+    {
+      "id": "WB18_external_identity_error_boundary",
+      "status": "preserved",
+      "conclusion": "This single original atom returns persistence_core::Result<bool> and the Process Port applies WorkflowError::from directly at the original await boundary. It does not pass through the wider application duplicate-name dictionary. Repository id/Executor and is_some semantics remain unchanged.",
+      "before": [
+        {
+          "side": "before",
+          "file": "backend/services/src/workflow_compose.rs",
+          "symbol": "external_identity_map_exists",
+          "line": 814,
+          "function_sha256": "e72ed65414961bb9e147b2189724fd64e298b130423383379eea03024f2c965d"
+        }
+      ],
+      "after": [
+        {
+          "side": "after",
+          "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+          "symbol": "external_identity_map_exists",
+          "line": 29,
+          "function_sha256": "3dd8022836dc5dc01c6d4531d0d01a122cb8acd54108ee4b5dc415130cc73363"
+        },
+        {
+          "side": "after",
+          "file": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "symbol": "external_identity_map_exists",
+          "line": 67,
+          "function_sha256": "71a2b34a5e960a2629438ca72b2a7a8b7ee0217d3a3a346865720e469a1c6677"
+        }
+      ],
+      "evidence_method": "Compared original method return/mapping, actual new reader return type and actual Process adapter mapper; explicitly distinct from other three fact/name reads"
+    }
+  ],
+  "complete_function_token_checks": [
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/sales_order_brief.rs",
+        "symbol": "preferred_submission",
+        "line": 84,
+        "function_sha256": "1f321e489a32119ca82608e9dc84c48576f90ec9aa7803a713680bfa9d9e59ae"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+        "symbol": "preferred_submission",
+        "line": 109,
+        "function_sha256": "1f321e489a32119ca82608e9dc84c48576f90ec9aa7803a713680bfa9d9e59ae"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/sales_order_brief.rs",
+        "symbol": "sales_order_impact",
+        "line": 101,
+        "function_sha256": "4cfa7ee93e6d0e42e64c491d524d2503e0d85c1686058d6bab025c3527c7acd8"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+        "symbol": "sales_order_impact",
+        "line": 136,
+        "function_sha256": "4cfa7ee93e6d0e42e64c491d524d2503e0d85c1686058d6bab025c3527c7acd8"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/sales_order_brief.rs",
+        "symbol": "sales_order_fact",
+        "line": 70,
+        "function_sha256": "ab1b64f0731463b76a3efe595b9c4b35a913a54c31ed371671bd2c54b74bab46"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+        "symbol": "sales_order_fact",
+        "line": 81,
+        "function_sha256": "8960cdd7050da3a8119461334047be64b8cefa3544ab34003193349a9945f1ad"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/purchase_review_brief.rs",
+        "symbol": "previous_formal_submission_ids",
+        "line": 174,
+        "function_sha256": "f999ba92255839b3a9e854d0306966ca4fed4b8bc2ca1e7d69ede2a33a49421e"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+        "symbol": "previous_formal_submission_ids",
+        "line": 197,
+        "function_sha256": "a9c60b390c2259ff61c1020bf3601e87a789cad8dc576df5d9d9801dfc8d15b3"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/purchase_review_brief.rs",
+        "symbol": "purchase_review_display",
+        "line": 198,
+        "function_sha256": "589ee39e200a76904121dc2f1cdc45b54ba6c889ba79ce4917d0c9f54c61254e"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+        "symbol": "purchase_review_display",
+        "line": 223,
+        "function_sha256": "589ee39e200a76904121dc2f1cdc45b54ba6c889ba79ce4917d0c9f54c61254e"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/purchase_review_brief.rs",
+        "symbol": "purchase_order_fact",
+        "line": 127,
+        "function_sha256": "2196a7c8fd6f27e5bdd8c90fc9aaaa452d5950ffd00060d23155ed5b1684dcc2"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+        "symbol": "purchase_order_fact",
+        "line": 149,
+        "function_sha256": "2196a7c8fd6f27e5bdd8c90fc9aaaa452d5950ffd00060d23155ed5b1684dcc2"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "symbol": "group_settlement_items",
+        "line": 144,
+        "function_sha256": "6db64a6a574571d2be6ff37387cba8374b256c32a89ef6d55efa9902c57154a7"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "symbol": "group_settlement_items",
+        "line": 116,
+        "function_sha256": "6db64a6a574571d2be6ff37387cba8374b256c32a89ef6d55efa9902c57154a7"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "symbol": "group_settlement_differences",
+        "line": 157,
+        "function_sha256": "44eed030d3d8dc5f51bb6c08165355d227b5713e80d397006b7e9554174393be"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "symbol": "group_settlement_differences",
+        "line": 130,
+        "function_sha256": "44eed030d3d8dc5f51bb6c08165355d227b5713e80d397006b7e9554174393be"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "symbol": "settlement_review_instruction",
+        "line": 170,
+        "function_sha256": "d485f8d8f08963cf01eaf94e3636a8eeca969fecb0c85af60d50cc969212eef1"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "symbol": "settlement_review_instruction",
+        "line": 144,
+        "function_sha256": "d485f8d8f08963cf01eaf94e3636a8eeca969fecb0c85af60d50cc969212eef1"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+        "symbol": "fulfillment_source_label",
+        "line": 251,
+        "function_sha256": "25e06e9888ec2620bbeb4f30c5e3cbfe96b8c9462190629519c2168cb1c0aa31"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/fulfillment.rs",
+        "symbol": "fulfillment_source_label",
+        "line": 244,
+        "function_sha256": "ec5b4f080ea1668841cec6530b3c118c560a16e13841a9737194ed6b6e920b0b"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_supplier_fulfillment_order_facts",
+        "line": 236,
+        "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_supplier_fulfillment_order_facts",
+        "line": 120,
+        "function_sha256": "11a61a6a7ebd8ddeec10748ee16d4d2a708571b50db64798f473f35d450d1a5a"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "load_supplier_offering_facts",
+        "line": 272,
+        "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "load_supplier_offering_facts",
+        "line": 156,
+        "function_sha256": "a11f71f9766309310c7048b72a0568947cfa6d070b91bd3e6b6442c4ff16005e"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "object_ids",
+        "line": 80,
+        "function_sha256": "110b0e506e3e765497e7ebf5842d7458d0ae7bda4fb3fb47d4172c33458915a2"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "object_ids",
+        "line": 37,
+        "function_sha256": "110b0e506e3e765497e7ebf5842d7458d0ae7bda4fb3fb47d4172c33458915a2"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/services/src/work_item/facts.rs",
+        "symbol": "integration_error_impact",
+        "line": 66,
+        "function_sha256": "43e64fcd5aeab5a373d8e4a5d83efb337fbbfa3f67433c511e9707a9ad0e6bc9"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "symbol": "integration_error_impact",
+        "line": 26,
+        "function_sha256": "43e64fcd5aeab5a373d8e4a5d83efb337fbbfa3f67433c511e9707a9ad0e6bc9"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": []
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "authorized_fields",
+        "line": 276,
+        "function_sha256": "bdcc20a650cc46f04d3fef69fe452633e7b933e02f9a5176dfbdc7248def8ba0"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "authorized_fields",
+        "line": 276,
+        "function_sha256": "2662450119646a08f7a1d8485d6a6b3a10b916abe2317e8ec3b78de96bf4c7fd"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.subject_versions",
+          "fact.authority.subject_versions"
+        ],
+        [
+          "fact.created_by",
+          "fact.authority.created_by"
+        ],
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ]
+      ]
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "authorized_item_fields",
+        "line": 317,
+        "function_sha256": "c63e74fa9803a26e6bbaf614754c8a4ccd9bb5583ed0edde3f599db7c81ebd41"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "authorized_item_fields",
+        "line": 317,
+        "function_sha256": "5acce803d3b6d202a8b859acf8ac44b2076c2544cb628f4c2baae4aa83688e54"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.subject_versions",
+          "fact.authority.subject_versions"
+        ],
+        [
+          "fact.created_by",
+          "fact.authority.created_by"
+        ],
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ]
+      ]
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "has_item_participation",
+        "line": 390,
+        "function_sha256": "e57f8e8196c24619a28a76557eb5122e177975436c5241a98bb7b1a72ca5f30f"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "has_item_participation",
+        "line": 390,
+        "function_sha256": "c1b3159b95a636d6b358cebfe0149f014001075a10fe3fb014d56f2ec23f656f"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.subject_versions",
+          "fact.authority.subject_versions"
+        ],
+        [
+          "fact.created_by",
+          "fact.authority.created_by"
+        ],
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ]
+      ]
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "has_object_participation",
+        "line": 403,
+        "function_sha256": "b34ad68eadb89f8856fc5e5a69e43a6c9f3bfc2852fcf8aae47ce14e8cb92282"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "symbol": "has_object_participation",
+        "line": 403,
+        "function_sha256": "3a0fcb393721c315e583fdf118295aa39b71882bf9d660c5a4643cb4871f2263"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.subject_versions",
+          "fact.authority.subject_versions"
+        ],
+        [
+          "fact.created_by",
+          "fact.authority.created_by"
+        ],
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ]
+      ]
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "apply_object_display",
+        "line": 321,
+        "function_sha256": "0a60653481f687426da612f1074f0225724de2b03e16649a3d77e7186d51abaf"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "apply_object_display",
+        "line": 274,
+        "function_sha256": "51b1a26b28d8d34dcf89715265441b6099942219179cc48b79782549cc1d2cee"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ],
+        [
+          "fact.label",
+          "fact.display.label"
+        ],
+        [
+          "fact.counterparty_label",
+          "fact.display.counterparty_label"
+        ],
+        [
+          "fact.impact_summary",
+          "fact.display.impact_summary"
+        ],
+        [
+          "fact.brief_source",
+          "fact.display.brief_source"
+        ],
+        [
+          "fact.subject_briefs",
+          "fact.display.subject_briefs"
+        ]
+      ]
+    },
+    {
+      "before": {
+        "side": "before",
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "apply_subject_display",
+        "line": 340,
+        "function_sha256": "231897c933b1e2a20dda7eddb2c5783ffc2a25a28c690f8d002c4e64b2f7669a"
+      },
+      "after": {
+        "side": "after",
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "apply_subject_display",
+        "line": 293,
+        "function_sha256": "0130406331d7dc35c99fbdbe0922e1a3804769829358af212707c3af6aacb397"
+      },
+      "body_token_equal": true,
+      "permitted_replacements": [
+        [
+          "fact.root_document_id",
+          "fact.authority.root_document_id"
+        ],
+        [
+          "fact.label",
+          "fact.display.label"
+        ],
+        [
+          "fact.counterparty_label",
+          "fact.display.counterparty_label"
+        ],
+        [
+          "fact.impact_summary",
+          "fact.display.impact_summary"
+        ],
+        [
+          "fact.brief_source",
+          "fact.display.brief_source"
+        ],
+        [
+          "fact.subject_briefs",
+          "fact.display.subject_briefs"
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "before_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+    "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "worktree": "/private/tmp/erp-domain-crate-17-cutover",
+    "before": [
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "sha256": "94aeef4d421c62cbfeeb315ba66491374603b4844112d9129db1caa7af6404ba",
+        "lines": 598
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "sha256": "e593e9d9dae5c10d71c9c6f42067c78bb136b9a1d63c2c97d37d3ad27d4bd1ac",
+        "lines": 408
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "sha256": "d90df289b8fd1d28a584bc0f348c45cfb35a8ac2a0e0a8adfb49cb9dd54840b3",
+        "lines": 1040
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/mod.rs",
+        "sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+        "lines": 16
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/query.rs",
+        "sha256": "1e3c4f5844bf9afd4dfe3e144ed5265a53fa36d143bf05ab717cab86f1cc0961",
+        "lines": 253
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/status.rs",
+        "sha256": "a832345d6ee9bdea1f6360ee8f43a40dcb1d8001bae0343c7d6350ef075c995b",
+        "lines": 9
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "sha256": "c75c6133f02e16e9ef327579440de45101632bc3732c0a5ee0c5643d356e2e05",
+        "lines": 281
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+        "sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+        "lines": 469
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "sha256": "935d01425f9edf7cb1d481dcc5ed0317976982d5532f7eea401b78b1b7f084ea",
+        "lines": 706
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs",
+        "sha256": "7a9fdeb2c254210705342ccdb5611148ee2d018763d5a9e42d4c04c37b22d30b",
+        "lines": 275
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "sha256": "b36e0022f950073eb70b3d1f25c3690220329d14560d5a399f2058d9ae0c13fc",
+        "lines": 585
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief.rs",
+        "sha256": "785601218d61d9bf3644cff9e43d4a74794be488e348919c54197399e1abcd62",
+        "lines": 45
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "sha256": "76ac8bccf83164b496ea6afbd0c504c1af68cb15c578651401a46d5701262c6c",
+        "lines": 250
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "sha256": "02561c66b367e759e5e764b41a77636a94c99119084e7c69c7d44ba221ee1b3f",
+        "lines": 455
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "sha256": "ae290bf088398a211406f3bc2ad33410d0a93fe585d5540ac2a6525e87f34105",
+        "lines": 280
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "sha256": "885ad74f87a5131c697fcad2d8e6af0f30d4e49664ddc5cd8374f5f0ec0eed16",
+        "lines": 868
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "sha256": "5f2b2e33100d3babd655780842838bf5a44b8455eec9469b30084529f26ae145",
+        "lines": 256
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "sha256": "a2f5778f29c73d5d223019764364fad54b033fcf1f6b7ce8dde9c5c39abafb89",
+        "lines": 728
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/mod.rs",
+        "sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d",
+        "lines": 35
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a",
+        "lines": 315
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "sha256": "413a1dc359b755776cfc8dd89e72acb3558dcba9969209eb8ab918379b8ec061",
+        "lines": 421
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/procurement_brief.rs",
+        "sha256": "40f32f0744bdb03286daa11484b4382f3c542390455c0a3873077b08d9e2a897",
+        "lines": 27
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "sha256": "9d1476eae9c5c46a08f7af540f0625e119212b256b5742e1a1a030fcdf166e03",
+        "lines": 1235
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "sha256": "3fc3ac75b7e3bbe2b093e425f2ff32f05755d010848e4b65a678713066e92a76",
+        "lines": 567
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "sha256": "8597f0454f7fb5ce31830e3459eabf7c48bbc2d0287b442c82b3231c39d751f1",
+        "lines": 536
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/stats.rs",
+        "sha256": "9c952c8e2e122baf794083bebbb59414746380aac6714d805df0480d23a4cc6b",
+        "lines": 243
+      },
+      {
+        "file": "backend/crates/erp-workflow/src/ports/object_facts.rs",
+        "sha256": "f8a73a26774bb2f36517073974fc5bea1116fe19b891537645677f85b22bb05c",
+        "lines": 245
+      },
+      {
+        "file": "backend/services/src/work_item/amount.rs",
+        "sha256": "0239dde376ceb5a334223fe26823a06ddd39994cb8274403070624e81b92f27e",
+        "lines": 82
+      },
+      {
+        "file": "backend/services/src/work_item/change_order_brief.rs",
+        "sha256": "d6b6509a9816ac402b1c89302e0457ba41a19d21096c9cc407a8f4df51aa255c",
+        "lines": 219
+      },
+      {
+        "file": "backend/services/src/work_item/facts.rs",
+        "sha256": "b529177ea4da849aa9eeed536dd499a5b603b720dd05ed3def60bc87a143ac78",
+        "lines": 328
+      },
+      {
+        "file": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+        "sha256": "6dd8b8ebb4a22af053c6d00f9d9428940b10675d29a471a896e53b4769e3f096",
+        "lines": 274
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief.rs",
+        "sha256": "aec303b64ad6f26214de935bb080efcbeb3c955259a926521ec118302da87e68",
+        "lines": 7
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "sha256": "798009596ae8aaf4c01c2b3ea85edf23f2f1ac01d48dcd6bf28d1a774b2851fa",
+        "lines": 89
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief/mapping.rs",
+        "sha256": "7fae8a0301c78d4b74253e2891b6c851614f1c61d497324bf43609826f76bc14",
+        "lines": 22
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "sha256": "5112d2fa9aad3b47550f1a7edc454b5d222d438a41470a7d08fd55f4f0af90f3",
+        "lines": 158
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "sha256": "8f3518386b0191fee1095efa78f76f771696217358df8ba21ed8407f87d62a08",
+        "lines": 352
+      },
+      {
+        "file": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "sha256": "0d2da180c878a24712971d6d8fdf77e8d63a75d324340e1b89aa1e6a33212926",
+        "lines": 168
+      },
+      {
+        "file": "backend/services/src/work_item/inventory_settlement_brief.rs",
+        "sha256": "04a759cec6f6611b508e735cd18256789ba3a8ce3ea8f68d83dccfe1aae1b24e",
+        "lines": 178
+      },
+      {
+        "file": "backend/services/src/work_item/mod.rs",
+        "sha256": "3cf964a9c9e92a15678bc7e2fd1ceb048f692e653f5e46ba4974413bad310329",
+        "lines": 96
+      },
+      {
+        "file": "backend/services/src/work_item/procurement_brief.rs",
+        "sha256": "e82d54651df09a813f503e2099418ca845ceb23b2a64754360d77db6561e9701",
+        "lines": 26
+      },
+      {
+        "file": "backend/services/src/work_item/purchase_review_brief.rs",
+        "sha256": "f0368309854ffec8cdcbde34699769c1e6512a0469b8317134a3c2d6de4568a6",
+        "lines": 217
+      },
+      {
+        "file": "backend/services/src/work_item/sales_order_brief.rs",
+        "sha256": "b024f68312fd73bf1a326b6fe48d6804d050be8ca61b6f64fb231f2942c2d63e",
+        "lines": 107
+      },
+      {
+        "file": "backend/services/src/workflow_compose.rs",
+        "sha256": "e88d2a5a93165fe244f23859f2e13b332056b3ea058186eda982680911cd9e3a",
+        "lines": 1193
+      }
+    ],
+    "after": [
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/access.rs",
+        "sha256": "e08aeb7c51f9228c43025d599bd24e8f747a4993479e78a7615f06883e749f09",
+        "lines": 600,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "8d3e26ac7ce7ada2b215512c0d2af0d65ff6d685",
+          "sha256": "e08aeb7c51f9228c43025d599bd24e8f747a4993479e78a7615f06883e749f09",
+          "bytes": 22062,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "sha256": "5b4dd2c72e4efbb04a500cbfc2bbd814c61888814704bde3ff710262563f263c",
+        "lines": 25,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "98b55ae165d3adcc78051a09e86ebba28a35b789",
+          "sha256": "5b4dd2c72e4efbb04a500cbfc2bbd814c61888814704bde3ff710262563f263c",
+          "bytes": 978,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/changes.rs",
+        "sha256": "5c41795639c3f7bfa446175de4521027f2838be3dc10b23c65111802661dc42d",
+        "lines": 211,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "58ed9f9badc200898867e00ef869ca6e80a70b6f",
+          "sha256": "5c41795639c3f7bfa446175de4521027f2838be3dc10b23c65111802661dc42d",
+          "bytes": 8428,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/command.rs",
+        "sha256": "d3ef1b9eee7469d3672c3e19b85800656a031fef4e7b41f5cad5458a93e14e99",
+        "lines": 286,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "db50a7551306da03b975343ed342483c326ef034",
+          "sha256": "d3ef1b9eee7469d3672c3e19b85800656a031fef4e7b41f5cad5458a93e14e99",
+          "bytes": 11515,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+        "sha256": "cee41a7c74b737e2058de440762d58688fe0ff82bc314ecfbc3f93ca5a50626c",
+        "lines": 195,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "86cd9ffd7121515ff4c1e0dd5617486ea3587b7b",
+          "sha256": "cee41a7c74b737e2058de440762d58688fe0ff82bc314ecfbc3f93ca5a50626c",
+          "bytes": 6367,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/fulfillment.rs",
+        "sha256": "e78418e5a8bae809cbf72bf2aa4a9e4a5b397dd5e9c02d1fa7b438c64d135268",
+        "lines": 271,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "af9696cce5b92faad6a49623ef0f8352a22c2eff",
+          "sha256": "e78418e5a8bae809cbf72bf2aa4a9e4a5b397dd5e9c02d1fa7b438c64d135268",
+          "bytes": 9194,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "sha256": "257fe262cf22be78bbf5442352c9299a613ccb9c0bb566af00c688e368d37afe",
+        "lines": 71,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "d3fc37ec344142259013663eeb5754b5cdca2553",
+          "sha256": "257fe262cf22be78bbf5442352c9299a613ccb9c0bb566af00c688e368d37afe",
+          "bytes": 2732,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "sha256": "380cd66a27f2c03a19fb82057a2f2826821383dd68b6b31b740cf831a11c8941",
+        "lines": 179,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "aa0270df809daf6745593ebb887a005136402d79",
+          "sha256": "380cd66a27f2c03a19fb82057a2f2826821383dd68b6b31b740cf831a11c8941",
+          "bytes": 7109,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/mod.rs",
+        "sha256": "6ef1e042bb4748814ac026c0750f394b20632efc58f363bcd105bc03b683d26b",
+        "lines": 8,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "5a658989a50134c30d81a79ae01ac08932180c7e",
+          "sha256": "6ef1e042bb4748814ac026c0750f394b20632efc58f363bcd105bc03b683d26b",
+          "bytes": 202,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "sha256": "38914a2983acc228cb8da2200673dc9946dbd21822eb05bb7496dc2a91040e8f",
+        "lines": 155,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "1882ff6e26d85ecc269f376133cc47df2bf2e4d9",
+          "sha256": "38914a2983acc228cb8da2200673dc9946dbd21822eb05bb7496dc2a91040e8f",
+          "bytes": 6047,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "sha256": "b6332aaa5803fbd50c027f7dc4539248a5eecb55c446060537cf3583a75fefd5",
+        "lines": 125,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "779cdb10f75496b1cc3bf4c63dea2f8f4cc092ce",
+          "sha256": "b6332aaa5803fbd50c027f7dc4539248a5eecb55c446060537cf3583a75fefd5",
+          "bytes": 4843,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "sha256": "1e69b308f40ac48cd9936ebe8a8039917fa9cebdc0e5fbf381662334a92d0c7d",
+        "lines": 232,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "33f5f7e3520624883a16e35e968654aff88874be",
+          "sha256": "1e69b308f40ac48cd9936ebe8a8039917fa9cebdc0e5fbf381662334a92d0c7d",
+          "bytes": 7964,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "sha256": "75954c6133a63064b9dbcfdefc6e5580179fbed6293e7d36ba6fd57dcf69c3ed",
+        "lines": 135,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "eb83274f5457cb5dd00dc506fb68d2b706975565",
+          "sha256": "75954c6133a63064b9dbcfdefc6e5580179fbed6293e7d36ba6fd57dcf69c3ed",
+          "bytes": 5063,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "sha256": "298e0f4d0b27532608c46bbb0c74cb12c5ce88895c1ce362d43217ee51eb9414",
+        "lines": 128,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "0a7d62e3a000f1cb983ce76b1ba132cd67977b78",
+          "sha256": "298e0f4d0b27532608c46bbb0c74cb12c5ce88895c1ce362d43217ee51eb9414",
+          "bytes": 5063,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/inventory.rs",
+        "sha256": "2fb4bb5358354d58f711b13273d39a343e82191f8b6b7045f3d00f3aa8610a91",
+        "lines": 180,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "e051a2707ef57c8a9846bbdc261f8a6bd0b5cc60",
+          "sha256": "2fb4bb5358354d58f711b13273d39a343e82191f8b6b7045f3d00f3aa8610a91",
+          "bytes": 6795,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/mod.rs",
+        "sha256": "72ea78321d7cb5db38457123be8549c2438ba7d731176056f5bb5506e095df8a",
+        "lines": 27,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "c1ee01a122fc4a7423c878e194ef45feb69e6885",
+          "sha256": "72ea78321d7cb5db38457123be8549c2438ba7d731176056f5bb5506e095df8a",
+          "bytes": 982,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/purchase.rs",
+        "sha256": "8a610001a22501cc45f8a93bd8b0eb2798f7702717778cbcacf563c7d3aea04e",
+        "lines": 269,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "b66df6c5cad28dcef619823b671aaf891bc0d8f0",
+          "sha256": "8a610001a22501cc45f8a93bd8b0eb2798f7702717778cbcacf563c7d3aea04e",
+          "bytes": 8961,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+        "sha256": "7d6c6a7879b14a923d12a05001a1b3da97cbff0993580db0b2d13b5b83e9970d",
+        "lines": 167,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "4a706f3c2f26786761161f5c55ed61772b5e27e0",
+          "sha256": "7d6c6a7879b14a923d12a05001a1b3da97cbff0993580db0b2d13b5b83e9970d",
+          "bytes": 5172,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sales.rs",
+        "sha256": "524b70493d3b982eae423848f97d44ad1031f88395b56524dc9d1c8daf4639d9",
+        "lines": 142,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "8b215b52c5211eb60c5833f78cec0f1d4ed013b4",
+          "sha256": "524b70493d3b982eae423848f97d44ad1031f88395b56524dc9d1c8daf4639d9",
+          "bytes": 4358,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "sha256": "fb940e20b1c2744f44212dadf5a5e3fd31df6a015bc84f5b0445d66717d881fa",
+        "lines": 175,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "b53a0fcd2bb41d90a0e11dbd5cbffb00bef6c76e",
+          "sha256": "fb940e20b1c2744f44212dadf5a5e3fd31df6a015bc84f5b0445d66717d881fa",
+          "bytes": 6804,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "sha256": "e593e9d9dae5c10d71c9c6f42067c78bb136b9a1d63c2c97d37d3ad27d4bd1ac",
+        "lines": 408,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "e823ef5ba13f89e72cb82d2402af13e7f083db48",
+          "sha256": "e593e9d9dae5c10d71c9c6f42067c78bb136b9a1d63c2c97d37d3ad27d4bd1ac",
+          "bytes": 11653,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "sha256": "d548b5ad17c73bafb4bbf9e0b4b476357a7f9b0f287025333377f3dd9f0d1432",
+        "lines": 1015,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "e435bf23e372e0441841b67d50d74728c2c1e04f",
+          "sha256": "d548b5ad17c73bafb4bbf9e0b4b476357a7f9b0f287025333377f3dd9f0d1432",
+          "bytes": 38570,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/mod.rs",
+        "sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+        "lines": 16,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "54ffa00503e498d3600a65452da58a043227bf30",
+          "sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+          "bytes": 285,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/query.rs",
+        "sha256": "1e3c4f5844bf9afd4dfe3e144ed5265a53fa36d143bf05ab717cab86f1cc0961",
+        "lines": 253,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "df60d76aed608f7c655e77e748b2c636d7b4629a",
+          "sha256": "1e3c4f5844bf9afd4dfe3e144ed5265a53fa36d143bf05ab717cab86f1cc0961",
+          "bytes": 9690,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/status.rs",
+        "sha256": "a832345d6ee9bdea1f6360ee8f43a40dcb1d8001bae0343c7d6350ef075c995b",
+        "lines": 9,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "f46330fe6fc1ad4d9a1f7ede6667944519a62dc1",
+          "sha256": "a832345d6ee9bdea1f6360ee8f43a40dcb1d8001bae0343c7d6350ef075c995b",
+          "bytes": 365,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "sha256": "c75c6133f02e16e9ef327579440de45101632bc3732c0a5ee0c5643d356e2e05",
+        "lines": 281,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "c27c81e3abea8a4c79934ab98985d424187b7bd1",
+          "sha256": "c75c6133f02e16e9ef327579440de45101632bc3732c0a5ee0c5643d356e2e05",
+          "bytes": 9019,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+        "sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+        "lines": 481,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "6955029dd04d4cd8a874009a8f5378ec77119f3a",
+          "sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+          "bytes": 19967,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "sha256": "320024a913873e42cb4854d68e9757e431f3eb913002dc22f57d5ab5b67750f0",
+        "lines": 683,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "fc91d9f2229e0f49e4789223c213b658e4ce481b",
+          "sha256": "320024a913873e42cb4854d68e9757e431f3eb913002dc22f57d5ab5b67750f0",
+          "bytes": 25966,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs",
+        "sha256": "b781c6bcf7a5b41025e78672ae7603e142ae998e2aadb365aee01db0305af8d1",
+        "lines": 49,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "8c2d714dc1f74e360a859689df0ec04bb8089e01",
+          "sha256": "b781c6bcf7a5b41025e78672ae7603e142ae998e2aadb365aee01db0305af8d1",
+          "bytes": 1859,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "sha256": "b36e0022f950073eb70b3d1f25c3690220329d14560d5a399f2058d9ae0c13fc",
+        "lines": 585,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "7e63364d2aa284b561c5c76561378194d2a2722f",
+          "sha256": "b36e0022f950073eb70b3d1f25c3690220329d14560d5a399f2058d9ae0c13fc",
+          "bytes": 21062,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "sha256": "7f19e5341ede407d38cba7d5b3758bd018b454ce2d404f451c6b3c4dee57c597",
+        "lines": 243,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "6b49672696bb2367cdeff090dfdffec5995c37fb",
+          "sha256": "7f19e5341ede407d38cba7d5b3758bd018b454ce2d404f451c6b3c4dee57c597",
+          "bytes": 10064,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "sha256": "4c664dd47320ac722efe94ef816d79fc1ada232c7fd4493005f836b34f8eef35",
+        "lines": 834,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "1599eed8a16cc25ca08b6cc0dc9b3c1d4b9c970c",
+          "sha256": "4c664dd47320ac722efe94ef816d79fc1ada232c7fd4493005f836b34f8eef35",
+          "bytes": 31791,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "sha256": "d98e7fd903c4e8509912cca175e1ef64a4864c9bcf941b4b69824efb8aee40e0",
+        "lines": 268,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "3557c38780b3769a781939d3e7ceacd569f2faf3",
+          "sha256": "d98e7fd903c4e8509912cca175e1ef64a4864c9bcf941b4b69824efb8aee40e0",
+          "bytes": 10685,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "sha256": "12652a3dc83eeb9f1109ffd8c1dc5fb353e5b47b26f47a22a2629ff7e955f6a5",
+        "lines": 652,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "356b0c0a3ae4417e681c5dfbd48b8d50443caf8d",
+          "sha256": "12652a3dc83eeb9f1109ffd8c1dc5fb353e5b47b26f47a22a2629ff7e955f6a5",
+          "bytes": 22976,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "sha256": "4b220990a828c8bf443fc25c245cdd60f5cafe034e0a34a81f13c421012031d9",
+        "lines": 246,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "7cff059322bcc2e3810ec87c9ce66fa0e83450e2",
+          "sha256": "4b220990a828c8bf443fc25c245cdd60f5cafe034e0a34a81f13c421012031d9",
+          "bytes": 9750,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief.rs",
+        "sha256": "0433e4a08dbe52e03668f2867e1714327e17735ff448dfbdce85dd45c1e07376",
+        "lines": 59,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "8ea9f97b570f4e033aa8d120de465e3262a15a3b",
+          "sha256": "0433e4a08dbe52e03668f2867e1714327e17735ff448dfbdce85dd45c1e07376",
+          "bytes": 1817,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "sha256": "cead5fadde16405d29dd92111eb0f1edaf7fc37bc36b4f6feca48ad070826df4",
+        "lines": 681,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "ddb5e7e7e743018a409fe8dfa0d20098506113fb",
+          "sha256": "cead5fadde16405d29dd92111eb0f1edaf7fc37bc36b4f6feca48ad070826df4",
+          "bytes": 25941,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/mod.rs",
+        "sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+        "lines": 40,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "aa2d34f0c0387440fa77d00c5531ac9051d43858",
+          "sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+          "bytes": 1250,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a",
+        "lines": 315,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "cd2e2a48d2d505f1e217b3c50382db9721c4be67",
+          "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a",
+          "bytes": 10644,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "sha256": "413a1dc359b755776cfc8dd89e72acb3558dcba9969209eb8ab918379b8ec061",
+        "lines": 421,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "509878bf6621b94fb2832b3202b25c07e114d547",
+          "sha256": "413a1dc359b755776cfc8dd89e72acb3558dcba9969209eb8ab918379b8ec061",
+          "bytes": 18896,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "sha256": "2f0efe25a0c9d6d4810ddfe7dd0522f0ece214fede99a585af9d1ab6c8ae53d5",
+        "lines": 1164,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "a724ef31c6b64cda6ca51a0d468f70c65944e845",
+          "sha256": "2f0efe25a0c9d6d4810ddfe7dd0522f0ece214fede99a585af9d1ab6c8ae53d5",
+          "bytes": 38745,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "sha256": "304df9762fc032e9e1114774840410eb0800c0fe65b31b5d6d70e895381106f9",
+        "lines": 571,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "240018325a948f113fe996235ed0606062d99be2",
+          "sha256": "304df9762fc032e9e1114774840410eb0800c0fe65b31b5d6d70e895381106f9",
+          "bytes": 21091,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "sha256": "a134ce55447b0e57c95028df89c54d1b71175ecda7f82159adc0d5aa1902fed9",
+        "lines": 460,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "b2111a4ff099ab73200b5236eac2abd3e9870d3d",
+          "sha256": "a134ce55447b0e57c95028df89c54d1b71175ecda7f82159adc0d5aa1902fed9",
+          "bytes": 14162,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/stats.rs",
+        "sha256": "9c952c8e2e122baf794083bebbb59414746380aac6714d805df0480d23a4cc6b",
+        "lines": 243,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "2a5fad40415e2516b2b8867e0fe2754349998075",
+          "sha256": "9c952c8e2e122baf794083bebbb59414746380aac6714d805df0480d23a4cc6b",
+          "bytes": 9395,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-workflow/src/ports/object_facts.rs",
+        "sha256": "f8a73a26774bb2f36517073974fc5bea1116fe19b891537645677f85b22bb05c",
+        "lines": 245,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "022a4973be063f45fdf5555a298a8bfa12307a08",
+          "sha256": "f8a73a26774bb2f36517073974fc5bea1116fe19b891537645677f85b22bb05c",
+          "bytes": 7647,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      },
+      {
+        "file": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+        "sha256": "880a686a03ee1db366c5c48f3c0f52027b286fae7532848de62da6235af3b3e7",
+        "lines": 147,
+        "frozen_git_blob": {
+          "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "git_blob_oid": "dd7aa075bb469d24ee7f0228c674c249f21ce12c",
+          "sha256": "880a686a03ee1db366c5c48f3c0f52027b286fae7532848de62da6235af3b3e7",
+          "bytes": 4340,
+          "prior_evidence_hash_equal": true,
+          "actual_worktree_equal": true
+        }
+      }
+    ]
+  },
+  "test_definition_inventory": {
+    "original": [
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "origin_labels_use_business_language"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "instant_labels_use_shanghai_calendar"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "document_section_keeps_routing_id_off_screen"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "document_section_skips_blank_number_and_blank_id"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "change_list_summary_joins_source_and_reason"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "changed_line_exposes_amount_quantity_price_and_due"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "unchanged_line_is_omitted"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "purchase_line_key_prefers_stable_source_over_position"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "changed_line_exposes_position_change"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "scope_status_combinations_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "family_and_type_must_match_registered_mapping"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "text_search_and_focus_are_normalized_for_server_filtering"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "priority_codes_are_strict_and_ordered"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "w13_receivable_review_routes_use_fixed_handlers"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "sales_invoice_execution_routes_to_w11"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "w18_route_context_uses_only_fixed_owner_role_registry"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "retired_and_unmapped_work_items_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "procurement_creation_maps_to_purchase_workspace_and_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "customer_acceptance_maps_to_w06_fulfillment_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "supplier_payment_execution_maps_to_w12_finance_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "document_approval_maps_to_signed_workspace_and_approval_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "integration_brief_exposes_retry_and_redacted_error_evidence"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "reconciliation_brief_exposes_both_immutable_evidence_references"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs",
+        "symbol": "fulfillment_title_uses_source_document_number"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "operation_types_are_canonical_and_deduplicated"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "missing_operation_types_selects_registered_contract"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "unknown_operation_type_fails_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "queue_timezone_is_fixed_to_business_timezone"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "receipt_list_summary_joins_counterparty_amount_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "amount_reason_brief_keeps_amount_and_reason"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "funds_origin_adds_original_document_allocation_impact_and_evidence"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "invoice_tax_profile_label_fails_closed_when_current_profile_is_missing"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "symbol": "stock_line_shows_direction_and_quantity"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "symbol": "settlement_instruction_fails_closed_while_differences_are_pending"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "owner_ids_are_unique_and_skip_unassigned"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "submitter_ids_join_the_same_account_lookup"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "resolved_submitter_ids_become_names"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "unresolved_submitter_ids_are_dropped_rather_than_shown"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "submitter_names_already_resolved_are_left_alone"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "account_ids_are_hex_of_object_id_or_system_length"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "reason_label_maps_known_codes_and_hides_internal_events"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "impact_summary_rejects_templates_and_mechanism_words"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "owner_display_name_never_uses_placeholder_token"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "next_action_hint_tells_user_what_to_do"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "payment_term_uses_business_labels_and_prepay_gate"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "first_formal_submission_ignores_superseded_draft"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "later_formal_submission_is_not_described_as_rejection"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "later_formal_submission_uses_the_previous_formal_submission_as_baseline"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "changed_header_section_exposes_before_and_after"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "list_summary_shows_supplier_scale_payment_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "item_lines_keep_three_and_always_surface_logistics_fee"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "purchase_item_quantity_joins_qty_and_amount"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "authorized_pagination_slices_after_authorization"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "authorized_pagination_reaches_later_batch_and_counts_full_total"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "queue_context_mismatch_fails_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "approval_decision_actions_are_removed_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "candidate_offset_advances_by_batch_len"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "list_summary_shows_customer_scale_payment_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "impact_distinguishes_voucher_and_physical"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "line_quantity_joins_qty_cards_and_amount"
+      },
+      {
+        "file": "backend/services/src/work_item/amount.rs",
+        "symbol": "format_yuan_groups_thousands_and_keeps_nonzero_fraction"
+      },
+      {
+        "file": "backend/services/src/work_item/amount.rs",
+        "symbol": "purchase_review_impact_appends_scale_and_prepay_gate"
+      },
+      {
+        "file": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+        "symbol": "fulfillment_title_uses_source_document_number"
+      }
+    ],
+    "after": [
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "format_yuan_groups_thousands_and_keeps_nonzero_fraction"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "purchase_review_impact_appends_scale_and_prepay_gate"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+        "symbol": "counterparty_recipe_preserves_duplicate_reads_input_order_and_same_executor"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+        "symbol": "unknown_kind_performs_no_reads_and_first_error_stops_later_ids"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/fulfillment.rs",
+        "symbol": "fulfillment_title_uses_source_document_number"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "first_created_by_keeps_first_actor_and_ignores_missing_resource"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+        "symbol": "command_recipe_preserves_every_step_and_same_non_zst_executor_even_for_empty_keys"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+        "symbol": "each_first_read_error_preserves_variant_and_stops_later_reads"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "origin_labels_use_business_language"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "instant_labels_use_shanghai_calendar"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "document_section_keeps_routing_id_off_screen"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "document_section_skips_blank_number_and_blank_id"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "change_list_summary_joins_source_and_reason"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "changed_line_exposes_amount_quantity_price_and_due"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "unchanged_line_is_omitted"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "purchase_line_key_prefers_stable_source_over_position"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/change_order_brief.rs",
+        "symbol": "changed_line_exposes_position_change"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "scope_status_combinations_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "family_and_type_must_match_registered_mapping"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "text_search_and_focus_are_normalized_for_server_filtering"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "priority_codes_are_strict_and_ordered"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "w13_receivable_review_routes_use_fixed_handlers"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "sales_invoice_execution_routes_to_w11"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "w18_route_context_uses_only_fixed_owner_role_registry"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "retired_and_unmapped_work_items_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "procurement_creation_maps_to_purchase_workspace_and_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "customer_acceptance_maps_to_w06_fulfillment_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "supplier_payment_execution_maps_to_w12_finance_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/dto/tests.rs",
+        "symbol": "document_approval_maps_to_signed_workspace_and_approval_family"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "integration_brief_exposes_retry_and_redacted_error_evidence"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "reconciliation_brief_exposes_both_immutable_evidence_references"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "absent_display_counterparty_never_falls_back_to_command_counterparty"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "subject_display_and_authority_impact_remain_separate_and_original_overlay_fallback_is_preserved"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "participation_uses_authority_root_and_creator_and_task_organization"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs",
+        "symbol": "fulfillment_title_uses_source_document_number"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "operation_types_are_canonical_and_deduplicated"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "missing_operation_types_selects_registered_contract"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "unknown_operation_type_fails_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/fulfillment_queue.rs",
+        "symbol": "queue_timezone_is_fixed_to_business_timezone"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "receipt_list_summary_joins_counterparty_amount_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "amount_reason_brief_keeps_amount_and_reason"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "funds_origin_adds_original_document_allocation_impact_and_evidence"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "invoice_tax_profile_label_fails_closed_when_current_profile_is_missing"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "origin_maps_keep_distinct_membership_for_a_nameless_receipt"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "customer_refund_authority_can_fall_back_past_nameless_rich_origin"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "supplier_refund_display_keeps_missing_supplier_while_authority_uses_origin"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "voucher_display_impact_does_not_replace_command_revision_predicate"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "symbol": "stock_line_shows_direction_and_quantity"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs",
+        "symbol": "settlement_instruction_fails_closed_while_differences_are_pending"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "owner_ids_are_unique_and_skip_unassigned"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "submitter_ids_join_the_same_account_lookup"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "resolved_submitter_ids_become_names"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "unresolved_submitter_ids_are_dropped_rather_than_shown"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "submitter_names_already_resolved_are_left_alone"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "account_ids_are_hex_of_object_id_or_system_length"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "reason_label_maps_known_codes_and_hides_internal_events"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "impact_summary_rejects_templates_and_mechanism_words"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "owner_display_name_never_uses_placeholder_token"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "next_action_hint_tells_user_what_to_do"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "payment_term_uses_business_labels_and_prepay_gate"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "first_formal_submission_ignores_superseded_draft"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "later_formal_submission_is_not_described_as_rejection"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "later_formal_submission_uses_the_previous_formal_submission_as_baseline"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "changed_header_section_exposes_before_and_after"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "list_summary_shows_supplier_scale_payment_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "item_lines_keep_three_and_always_surface_logistics_fee"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "symbol": "purchase_item_quantity_joins_qty_and_amount"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "authorized_pagination_slices_after_authorization"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "authorized_pagination_reaches_later_batch_and_counts_full_total"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "queue_context_mismatch_fails_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "approval_decision_actions_are_removed_fail_closed"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/query.rs",
+        "symbol": "candidate_offset_advances_by_batch_len"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "list_summary_shows_customer_scale_payment_and_first_line"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "impact_distinguishes_voucher_and_physical"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/sales_order_brief.rs",
+        "symbol": "line_quantity_joins_qty_cards_and_amount"
+      }
+    ],
+    "new": [
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+        "symbol": "counterparty_recipe_preserves_duplicate_reads_input_order_and_same_executor"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/counterparties.rs",
+        "symbol": "unknown_kind_performs_no_reads_and_first_error_stops_later_ids"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "first_created_by_keeps_first_actor_and_ignores_missing_resource"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+        "symbol": "command_recipe_preserves_every_step_and_same_non_zst_executor_even_for_empty_keys"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/authority/recipe.rs",
+        "symbol": "each_first_read_error_preserves_variant_and_stops_later_reads"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "absent_display_counterparty_never_falls_back_to_command_counterparty"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "subject_display_and_authority_impact_remain_separate_and_original_overlay_fallback_is_preserved"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/facts.rs",
+        "symbol": "participation_uses_authority_root_and_creator_and_task_organization"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "origin_maps_keep_distinct_membership_for_a_nameless_receipt"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "customer_refund_authority_can_fall_back_past_nameless_rich_origin"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "supplier_refund_display_keeps_missing_supplier_while_authority_uses_origin"
+      },
+      {
+        "file": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "voucher_display_impact_does_not_replace_command_revision_predicate"
+      }
+    ],
+    "original_name_multiplicity_preserved": true,
+    "evidence_scope": "Definitions only; review conclusions derive from production bodies/calls, not fixture strings or test execution"
+  },
+  "spec_clarification": "Explicit display None does not fall back to authority. Original subject None->object display fallback remains exactly as frozen16; changing that fallback would be business drift. No separate model/no-overlay flag was invented.",
+  "verification_limits": [
+    "No Cargo, Clippy, library test execution or MongoDB performed by independent reviewer",
+    "Real repository calls and Executor argument propagation reviewed statically; new recording Port tests are production-connected definitions, not database execution proof",
+    "Root owns exhaustive application Error bridges and final unified gates; this review does not broaden original mapper downgrade policy",
+    "All 46 after source SHA values now verified against actual frozen commit blobs; gate log observation does not convert static Executor/provider review into database execution proof."
+  ],
+  "supplemental_route_export": {
+    "path": "/private/tmp/cutover17-import-view-repair.json",
+    "sha256": "1d286c43838000b76cbc23c4c33f6cb986a57e4c65bb3c271d8f9d39f5ebe97f",
+    "files": [
+      "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "backend/crates/erp-read-models/src/workbench/mod.rs"
+    ],
+    "change": "Public two-field wrapper invokes unchanged original handler_route; root re-export only. No authority/provider/display loader modified. Original route definitions token checked against00 and16 separately.",
+    "independence_limit": "The added wrapper is implemented by this reviewer and is excluded from claims of independent review; C/root own its independent gate/review."
+  },
+  "source_freeze": {
+    "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "capture_utc": "2026-09-07T07:01:18.408314+00:00",
+    "method": "Single git cat-file --batch for only declared after paths; verify blob bytes equal actual worktree and previously recorded SHA256 before binding",
+    "unique_source_blobs_checked": 254,
+    "all_prior_after_sha256_equal": true,
+    "all_actual_worktree_bytes_equal_frozen_blobs": true,
+    "root_gate_observations": [
+      {
+        "kind": "lib-tests",
+        "path": "/private/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "bytes": 388932,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_package_test_summaries": 33,
+        "aggregate": {
+          "passed": 3655,
+          "failed": 0,
+          "ignored": 68
+        }
+      },
+      {
+        "kind": "clippy",
+        "path": "/private/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "bytes": 925,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_completion": "Finished dev profile",
+        "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+      },
+      {
+        "kind": "check",
+        "path": "/private/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "bytes": 1023,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_completion": "Finished dev profile",
+        "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+      }
+    ],
+    "root_reported_format_pass": true,
+    "new_import_projection_tests_observed": [
+      {
+        "name": "raw_and_read_only_views_preserve_actual_linked_task_type",
+        "actual_log_line": "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+        "result": "passed"
+      },
+      {
+        "name": "authorized_projection_keeps_actual_type_status_and_existing_action_rules",
+        "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok",
+        "result": "passed"
+      },
+      {
+        "name": "authorized_projection_uses_registered_destinations_and_preserves_route_errors",
+        "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+        "result": "passed"
+      }
+    ],
+    "execution_limits": "G did not run Cargo/Clippy/library tests, DB, heavy scans or modify repo source. Gate executions and exit status are root-owned; aggregate and named passing tests independently read from actual sealed logs."
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "evidence_kind": "read_only_frozen_source_validation",
+  "artifacts": [
+    {
+      "path": "/tmp/cutover17-parser-review.json",
+      "sha256": "c52e07a7bea502e6b94204601abdfdf03af56a93ce0e9c82079548c60731d6ca"
+    },
+    {
+      "path": "/tmp/cutover17-parser-review.md",
+      "sha256": "dc725fc2c681a0f3a24458fb9e87cb55233db22bd49ece3b089ecd6f6fa91827"
+    },
+    {
+      "path": "/tmp/cutover17-index-order-review.json",
+      "sha256": "9f787cd29b0d21b8ca2c4c6447cb1fc41219479423cc990d9cafdc678261f632"
+    },
+    {
+      "path": "/tmp/cutover17-bpm-search-equivalence.json",
+      "sha256": "5bffb7677c6d4e40b4d40b65a70eaf6c72e7e0e15f7429bd667ed661c23b707f"
+    },
+    {
+      "path": "/tmp/cutover17-bpm-search-equivalence.md",
+      "sha256": "748674104f703ad5d093683a9535087561036c1779b60210c28ef7e8948a7ec8"
+    }
+  ],
+  "raw_item_coverage": [
+    {
+      "capture": "step",
+      "raw_category": "changed",
+      "count": 1,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "step",
+      "raw_category": "missing",
+      "count": 2,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "step",
+      "raw_category": "added",
+      "count": 0,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "step",
+      "raw_category": "needs_review",
+      "count": 48,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "cumulative",
+      "raw_category": "changed",
+      "count": 10,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "cumulative",
+      "raw_category": "missing",
+      "count": 24,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "cumulative",
+      "raw_category": "added",
+      "count": 14,
+      "raw_exactly_retained": true
+    },
+    {
+      "capture": "cumulative",
+      "raw_category": "needs_review",
+      "count": 65,
+      "raw_exactly_retained": true
+    }
+  ],
+  "inventory_git_blob_bindings": [
+    {
+      "capture": "step",
+      "side": "before",
+      "count": 1786,
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "raw_match": true,
+      "git_blob_match": true
+    },
+    {
+      "capture": "step",
+      "side": "after",
+      "count": 1792,
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "raw_match": true,
+      "git_blob_match": true
+    },
+    {
+      "capture": "cumulative",
+      "side": "before",
+      "count": 1044,
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "raw_match": true,
+      "git_blob_match": true
+    },
+    {
+      "capture": "cumulative",
+      "side": "after",
+      "count": 1792,
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "raw_match": true,
+      "git_blob_match": true
+    }
+  ],
+  "reviewed_files": 331,
+  "rust_reviewed_files": 292,
+  "raw_reviewed_counts": {
+    "step": {
+      "changed": 1,
+      "missing": 2,
+      "added": 0,
+      "needs_review": 46
+    },
+    "cumulative": {
+      "changed": 7,
+      "missing": 22,
+      "added": 14,
+      "needs_review": 62
+    }
+  },
+  "raw_exit_codes_preserved": {
+    "step": 1,
+    "cumulative": 1
+  },
+  "index_operations": 161,
+  "index_creates": 158,
+  "index_reconciles": 3,
+  "index_function_pairs": 279,
+  "bpm_search_fixture_cases": 21,
+  "cargo_executed_by_reviewer": false,
+  "database_verified": false
+}

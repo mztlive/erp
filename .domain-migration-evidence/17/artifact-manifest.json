@@ -1,0 +1,454 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "artifacts": [
+    {
+      "source_path": "/tmp/cutover17-workflow-facts-implementation.md",
+      "evidence_path": "workflow-facts-implementation.md",
+      "source_sha256": "cce5475c71325ff2ddcf160cbfebf956a2983b05f7130c3eb98b10475f6d3a47",
+      "source_bytes": 12497,
+      "archived_sha256": "cce5475c71325ff2ddcf160cbfebf956a2983b05f7130c3eb98b10475f6d3a47"
+    },
+    {
+      "source_path": "/tmp/cutover17-workflow-facts-implementation.json",
+      "evidence_path": "workflow-facts-implementation.json",
+      "source_sha256": "3d5640483748c44ae3ff544cb29f0cc60532df6678d595d3c5289ad00fbc6c66",
+      "source_bytes": 610796,
+      "archived_sha256": "3d5640483748c44ae3ff544cb29f0cc60532df6678d595d3c5289ad00fbc6c66"
+    },
+    {
+      "source_path": "/tmp/cutover17-funds-result.md",
+      "evidence_path": "funds-result.md",
+      "source_sha256": "5aed4c3736abd233d4e88e03f19c7913f9c24bea614b34538b62ab5373ac5257",
+      "source_bytes": 8314,
+      "archived_sha256": "5aed4c3736abd233d4e88e03f19c7913f9c24bea614b34538b62ab5373ac5257"
+    },
+    {
+      "source_path": "/tmp/cutover17-funds-result.json",
+      "evidence_path": "funds-result.json",
+      "source_sha256": "ee61b4913b7e491587a97b7ac122b906cd15ad17067ec89954695d87844d8796",
+      "source_bytes": 151518,
+      "archived_sha256": "ee61b4913b7e491587a97b7ac122b906cd15ad17067ec89954695d87844d8796"
+    },
+    {
+      "source_path": "/tmp/cutover17-legacy-final-audit.md",
+      "evidence_path": "legacy-final-audit.md",
+      "source_sha256": "3eabf4e5423c8e803b330129d393e4d0b7ea9d6db169003144320d6adfcca453",
+      "source_bytes": 3068,
+      "archived_sha256": "3eabf4e5423c8e803b330129d393e4d0b7ea9d6db169003144320d6adfcca453"
+    },
+    {
+      "source_path": "/tmp/cutover17-legacy-final-audit.json",
+      "evidence_path": "legacy-final-audit.json",
+      "source_sha256": "bfb8c1bb7115832204c82e3a97524ea07505b01369b456b6206b04136173ce16",
+      "source_bytes": 2332929,
+      "archived_sha256": "bfb8c1bb7115832204c82e3a97524ea07505b01369b456b6206b04136173ce16"
+    },
+    {
+      "source_path": "/tmp/cutover17-adapters-implementation.md",
+      "evidence_path": "adapters-implementation.md",
+      "source_sha256": "d71340a9e1a27ca0197d313218709400c46750dbe6cd64daf57d6daeedf12b39",
+      "source_bytes": 8566,
+      "archived_sha256": "d71340a9e1a27ca0197d313218709400c46750dbe6cd64daf57d6daeedf12b39"
+    },
+    {
+      "source_path": "/tmp/cutover17-process-result.md",
+      "evidence_path": "process-result.md",
+      "source_sha256": "b6682076f8ab9b8fb1df2ce5342db752606b92df580c5b1d278ad050812d0355",
+      "source_bytes": 6880,
+      "archived_sha256": "b6682076f8ab9b8fb1df2ce5342db752606b92df580c5b1d278ad050812d0355"
+    },
+    {
+      "source_path": "/tmp/cutover17-process-result.json",
+      "evidence_path": "process-result.json",
+      "source_sha256": "08a1c14aad927aaa9d14fc5eb87e0b408c723294b6d0c134389c553c504da471",
+      "source_bytes": 987112,
+      "archived_sha256": "08a1c14aad927aaa9d14fc5eb87e0b408c723294b6d0c134389c553c504da471"
+    },
+    {
+      "source_path": "/tmp/cutover17-import-view-repair.md",
+      "evidence_path": "import-view-repair.md",
+      "source_sha256": "663cdc4d9643c8b40743504d6cb671d4a973c54922544f31c9005897dd263e4a",
+      "source_bytes": 5292,
+      "archived_sha256": "663cdc4d9643c8b40743504d6cb671d4a973c54922544f31c9005897dd263e4a"
+    },
+    {
+      "source_path": "/tmp/cutover17-import-view-repair.json",
+      "evidence_path": "import-view-repair.json",
+      "source_sha256": "1d286c43838000b76cbc23c4c33f6cb986a57e4c65bb3c271d8f9d39f5ebe97f",
+      "source_bytes": 41510,
+      "archived_sha256": "1d286c43838000b76cbc23c4c33f6cb986a57e4c65bb3c271d8f9d39f5ebe97f"
+    },
+    {
+      "source_path": "/tmp/cutover17-workbench-independent-review.md",
+      "evidence_path": "workbench-independent-review.md",
+      "source_sha256": "e15ab041a01182acf9062ea90db7eeb3a7c49180db3597b15afa7f8d77142f8c",
+      "source_bytes": 10870,
+      "archived_sha256": "e15ab041a01182acf9062ea90db7eeb3a7c49180db3597b15afa7f8d77142f8c"
+    },
+    {
+      "source_path": "/tmp/cutover17-workbench-independent-review.json",
+      "evidence_path": "workbench-independent-review.json",
+      "source_sha256": "83e5b773dd2ec896c3214181d930ff43758e092cc0c5e10912ce22c905351a7d",
+      "source_bytes": 155124,
+      "archived_sha256": "83e5b773dd2ec896c3214181d930ff43758e092cc0c5e10912ce22c905351a7d"
+    },
+    {
+      "source_path": "/tmp/cutover17-readmodels-result.md",
+      "evidence_path": "readmodels-result.md",
+      "source_sha256": "c799868dbabed9a8394a3930bbc22d90c90796242958e25a096dec238e19da0b",
+      "source_bytes": 5879,
+      "archived_sha256": "c799868dbabed9a8394a3930bbc22d90c90796242958e25a096dec238e19da0b"
+    },
+    {
+      "source_path": "/tmp/cutover17-readmodels-result.json",
+      "evidence_path": "readmodels-result.json",
+      "source_sha256": "b9a556b2a40679feee46bf90834e59e36518b7e23e186779fce4ed326f9ec7d6",
+      "source_bytes": 48911,
+      "archived_sha256": "b9a556b2a40679feee46bf90834e59e36518b7e23e186779fce4ed326f9ec7d6"
+    },
+    {
+      "source_path": "/tmp/cutover17-boundary-error-review.md",
+      "evidence_path": "boundary-error-review.md",
+      "source_sha256": "217f7e7621cac4d5c066899068e4c66a6de60f164ed99044d66aa98a0878dc1f",
+      "source_bytes": 13841,
+      "archived_sha256": "217f7e7621cac4d5c066899068e4c66a6de60f164ed99044d66aa98a0878dc1f"
+    },
+    {
+      "source_path": "/tmp/cutover17-boundary-error-review.json",
+      "evidence_path": "boundary-error-review.json",
+      "source_sha256": "bd8357bcb90937e33edb9aaf7f99d76cedad2405fd060d2a0c5f7c7730f0593c",
+      "source_bytes": 77389,
+      "archived_sha256": "bd8357bcb90937e33edb9aaf7f99d76cedad2405fd060d2a0c5f7c7730f0593c"
+    },
+    {
+      "source_path": "/tmp/cutover17-import-projection-review.md",
+      "evidence_path": "import-projection-review.md",
+      "source_sha256": "ab3b29c753e33f8db59a2e8278cd6b83d7bb7ca51c98de25375e0d2b43dfd6cc",
+      "source_bytes": 7379,
+      "archived_sha256": "ab3b29c753e33f8db59a2e8278cd6b83d7bb7ca51c98de25375e0d2b43dfd6cc"
+    },
+    {
+      "source_path": "/tmp/cutover17-import-projection-review.json",
+      "evidence_path": "import-projection-review.json",
+      "source_sha256": "35412928e199e1b553a8b132c694e32074ba1ea255b2adc9591725cb1220bcf1",
+      "source_bytes": 34738,
+      "archived_sha256": "35412928e199e1b553a8b132c694e32074ba1ea255b2adc9591725cb1220bcf1"
+    },
+    {
+      "source_path": "/tmp/cutover17-startup-compensation-review.md",
+      "evidence_path": "startup-compensation-review.md",
+      "source_sha256": "7b7d01374584c71a21d97bfcaf56229ff3dbba9a51d9abadd82164fa693b3ad4",
+      "source_bytes": 54952,
+      "archived_sha256": "7b7d01374584c71a21d97bfcaf56229ff3dbba9a51d9abadd82164fa693b3ad4"
+    },
+    {
+      "source_path": "/tmp/cutover17-startup-compensation-review.json",
+      "evidence_path": "startup-compensation-review.json",
+      "source_sha256": "df161d401d17d853746144beed447b251233c6c7032ee1d44c2deab361e417b7",
+      "source_bytes": 160982,
+      "archived_sha256": "df161d401d17d853746144beed447b251233c6c7032ee1d44c2deab361e417b7"
+    },
+    {
+      "source_path": "/tmp/cutover17-http-error-expectations.md",
+      "evidence_path": "http-error-expectations.md",
+      "source_sha256": "b2d845fc48eb34285ac930b94b74c41a6a5205790b00425be2634a9d4111d35c",
+      "source_bytes": 1942,
+      "archived_sha256": "b2d845fc48eb34285ac930b94b74c41a6a5205790b00425be2634a9d4111d35c"
+    },
+    {
+      "source_path": "/tmp/cutover17-http-error-expectations.json",
+      "evidence_path": "http-error-expectations.json",
+      "source_sha256": "82c197bd12b3b701cbe70f15eb9c5c578d889393ca45f83729ac3da6914ea19d",
+      "source_bytes": 12958,
+      "archived_sha256": "82c197bd12b3b701cbe70f15eb9c5c578d889393ca45f83729ac3da6914ea19d"
+    },
+    {
+      "source_path": "/tmp/cutover17-probe-equivalence-audit.md",
+      "evidence_path": "probe-equivalence-audit.md",
+      "source_sha256": "9fe851b8ade5cfc6744bacee2a7e60950e2c0cbe3ce7e48eb052b909875b026e",
+      "source_bytes": 10190,
+      "archived_sha256": "9fe851b8ade5cfc6744bacee2a7e60950e2c0cbe3ce7e48eb052b909875b026e"
+    },
+    {
+      "source_path": "/tmp/cutover17-probe-equivalence-audit.json",
+      "evidence_path": "probe-equivalence-audit.json",
+      "source_sha256": "062bcf431644fec8b828ed462a9148bc3ffe3d128b5e2da5838fa7f647dc3cb5",
+      "source_bytes": 21299,
+      "archived_sha256": "062bcf431644fec8b828ed462a9148bc3ffe3d128b5e2da5838fa7f647dc3cb5"
+    },
+    {
+      "source_path": "/tmp/cutover17-parser-review.md",
+      "evidence_path": "parser-review.md",
+      "source_sha256": "dc725fc2c681a0f3a24458fb9e87cb55233db22bd49ece3b089ecd6f6fa91827",
+      "source_bytes": 32533,
+      "archived_sha256": "dc725fc2c681a0f3a24458fb9e87cb55233db22bd49ece3b089ecd6f6fa91827"
+    },
+    {
+      "source_path": "/tmp/cutover17-parser-review.json",
+      "evidence_path": "parser-review.json",
+      "source_sha256": "c52e07a7bea502e6b94204601abdfdf03af56a93ce0e9c82079548c60731d6ca",
+      "source_bytes": 3689008,
+      "archived_sha256": "c52e07a7bea502e6b94204601abdfdf03af56a93ce0e9c82079548c60731d6ca"
+    },
+    {
+      "source_path": "/tmp/cutover17-bpm-search-equivalence.md",
+      "evidence_path": "bpm-search-equivalence.md",
+      "source_sha256": "748674104f703ad5d093683a9535087561036c1779b60210c28ef7e8948a7ec8",
+      "source_bytes": 1242,
+      "archived_sha256": "748674104f703ad5d093683a9535087561036c1779b60210c28ef7e8948a7ec8"
+    },
+    {
+      "source_path": "/tmp/cutover17-bpm-search-equivalence.json",
+      "evidence_path": "bpm-search-equivalence.json",
+      "source_sha256": "5bffb7677c6d4e40b4d40b65a70eaf6c72e7e0e15f7429bd667ed661c23b707f",
+      "source_bytes": 6980,
+      "archived_sha256": "5bffb7677c6d4e40b4d40b65a70eaf6c72e7e0e15f7429bd667ed661c23b707f"
+    },
+    {
+      "source_path": "/tmp/cutover17-verify-plan-review.md",
+      "evidence_path": "verify-plan-review.md",
+      "source_sha256": "47093f7d98cb061752b7a2ee51635e1de9b6735594f461e8a3fdcf11d3b5c398",
+      "source_bytes": 2080,
+      "archived_sha256": "47093f7d98cb061752b7a2ee51635e1de9b6735594f461e8a3fdcf11d3b5c398"
+    },
+    {
+      "source_path": "/tmp/cutover17-verify-plan-review.json",
+      "evidence_path": "verify-plan-review.json",
+      "source_sha256": "14f19f9f01cdafe301f869e6196cdb313eceb82e3a912ec52bda424a16c1bed0",
+      "source_bytes": 1777,
+      "archived_sha256": "14f19f9f01cdafe301f869e6196cdb313eceb82e3a912ec52bda424a16c1bed0"
+    },
+    {
+      "source_path": "/tmp/cutover17-work-item-deletions.json",
+      "evidence_path": "work-item-deletions.json",
+      "source_sha256": "8336109a18a8011720a3670efe620f6869b956bf669694147e0eeba9af9ba781",
+      "source_bytes": 4295,
+      "archived_sha256": "8336109a18a8011720a3670efe620f6869b956bf669694147e0eeba9af9ba781"
+    },
+    {
+      "source_path": "/tmp/cutover17-route-wrapper-independent-review.json",
+      "evidence_path": "route-wrapper-independent-review.json",
+      "source_sha256": "f2754435891ef24c5b381bf698f2f5ba388adc3560bdbcdd70638a9de907b788",
+      "source_bytes": 4955,
+      "archived_sha256": "f2754435891ef24c5b381bf698f2f5ba388adc3560bdbcdd70638a9de907b788"
+    },
+    {
+      "source_path": "/tmp/cutover17-adapters-implementation-evidence.json",
+      "evidence_path": "adapters-implementation-evidence.json",
+      "source_sha256": "a2da5331b6db0b51b4afc3cd02b8069df46a506ea5125cd5310068c16e7be25c",
+      "source_bytes": 89653,
+      "archived_sha256": "a2da5331b6db0b51b4afc3cd02b8069df46a506ea5125cd5310068c16e7be25c"
+    },
+    {
+      "source_path": "/tmp/cutover17-adapters-input-rebind.json",
+      "evidence_path": "adapters-input-rebind.json",
+      "source_sha256": "71d398ce3360230106addcc32c463b56a3940fd589b10684bde580cebfb17861",
+      "source_bytes": 33349,
+      "archived_sha256": "71d398ce3360230106addcc32c463b56a3940fd589b10684bde580cebfb17861"
+    },
+    {
+      "source_path": "/tmp/cutover17-g-sealed-evidence.json",
+      "evidence_path": "g-sealed-evidence.json",
+      "source_sha256": "f3512bc9a0b73f1803217f6b553e8d847d650fefc63d0c77e172b23888c13f02",
+      "source_bytes": 3541,
+      "archived_sha256": "f3512bc9a0b73f1803217f6b553e8d847d650fefc63d0c77e172b23888c13f02"
+    },
+    {
+      "source_path": "/tmp/cutover17-readmodels-edits.json",
+      "evidence_path": "readmodels-edits.json",
+      "source_sha256": "c7dd90129313110a18c936425e132d62e9cabf2853b5839c125af0206d728b1d",
+      "source_bytes": 21117,
+      "archived_sha256": "c7dd90129313110a18c936425e132d62e9cabf2853b5839c125af0206d728b1d"
+    },
+    {
+      "source_path": "/tmp/cutover17-index-sequence-review.json",
+      "evidence_path": "index-sequence-review.json",
+      "source_sha256": "ce175486c31602a0ae1473db1c320304b6ea7884185f0f3f8361cb7c9dd69150",
+      "source_bytes": 1454969,
+      "archived_sha256": "ce175486c31602a0ae1473db1c320304b6ea7884185f0f3f8361cb7c9dd69150"
+    },
+    {
+      "source_path": "/tmp/cutover17-startup-final-blob-binding.json",
+      "evidence_path": "startup-final-blob-binding.json",
+      "source_sha256": "26e3e594953f1578b1a8421f529818a904f8895f00c25a785072eee809301790",
+      "source_bytes": 62897,
+      "archived_sha256": "26e3e594953f1578b1a8421f529818a904f8895f00c25a785072eee809301790"
+    },
+    {
+      "source_path": "/tmp/cutover17-b-source-binding.json",
+      "evidence_path": "b-source-binding.json",
+      "source_sha256": "cda9b0ce05ecc5b856856ef3f03b4ae7b3b65a824fd76632631e7db24cc788eb",
+      "source_bytes": 5447,
+      "archived_sha256": "cda9b0ce05ecc5b856856ef3f03b4ae7b3b65a824fd76632631e7db24cc788eb"
+    },
+    {
+      "source_path": "/tmp/cutover17-parser-review-validation.json",
+      "evidence_path": "parser-review-validation.json",
+      "source_sha256": "11116e7011ebfb321f836d5787729b179ab304b58d065777e271344908caf8cc",
+      "source_bytes": 3375,
+      "archived_sha256": "11116e7011ebfb321f836d5787729b179ab304b58d065777e271344908caf8cc"
+    },
+    {
+      "source_path": "/tmp/cutover17-index-order-review.json",
+      "evidence_path": "index-order-review.json",
+      "source_sha256": "9f787cd29b0d21b8ca2c4c6447cb1fc41219479423cc990d9cafdc678261f632",
+      "source_bytes": 1099265,
+      "archived_sha256": "9f787cd29b0d21b8ca2c4c6447cb1fc41219479423cc990d9cafdc678261f632"
+    },
+    {
+      "source_path": "/tmp/cutover17-index-order-correction.json",
+      "evidence_path": "index-order-correction.json",
+      "source_sha256": "6ff9d9946f26a1a093c89fdc7fd2bdf1043f52249da2f129fbd0c49d8c94c221",
+      "source_bytes": 130684,
+      "archived_sha256": "6ff9d9946f26a1a093c89fdc7fd2bdf1043f52249da2f129fbd0c49d8c94c221"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-fmt-sealed.log",
+      "evidence_path": "fmt.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_bytes": 0,
+      "archived_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-check-sealed.log",
+      "evidence_path": "check.log",
+      "source_sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+      "source_bytes": 1023,
+      "archived_sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-clippy-sealed.log",
+      "evidence_path": "clippy.log",
+      "source_sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+      "source_bytes": 925,
+      "archived_sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-lib-tests-sealed.log",
+      "evidence_path": "unit-tests.log",
+      "source_sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+      "source_bytes": 388932,
+      "archived_sha256": "ccba07dadb1e95707637aaec8f9ee7729553b546bec8412b8dc003a0ce0d804b"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-bpm-final-batched.log",
+      "evidence_path": "bpm-boundaries.log",
+      "source_sha256": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2",
+      "source_bytes": 203,
+      "archived_sha256": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-domain-sealed.log",
+      "evidence_path": "boundary.log",
+      "source_sha256": "c5ec1f8574746cbc840f077982c3708e9a49a491ebecb771458d19cd47afc455",
+      "source_bytes": 3674,
+      "archived_sha256": "c5ec1f8574746cbc840f077982c3708e9a49a491ebecb771458d19cd47afc455"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-permissions-final.log",
+      "evidence_path": "permissions.log",
+      "source_sha256": "6666ed979e5616edf3bf5f4550ace1da8122a76cda49d7bec1fadd623d1ce475",
+      "source_bytes": 3850,
+      "archived_sha256": "6666ed979e5616edf3bf5f4550ace1da8122a76cda49d7bec1fadd623d1ce475"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-contract-sealed.log",
+      "evidence_path": "contract-scan.log",
+      "source_sha256": "a3c9066512e80dcb0ce27f81ad7b8bd5a6bc7f7e4d324cfa4aa98fa7c1aaba6c",
+      "source_bytes": 180,
+      "archived_sha256": "a3c9066512e80dcb0ce27f81ad7b8bd5a6bc7f7e4d324cfa4aa98fa7c1aaba6c"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-cumulative-sealed.log",
+      "evidence_path": "cumulative/contract-scan.log",
+      "source_sha256": "c3081a08c4d3923da92e51378d47ccbc8a017d0a1d979ff23c2512d3fcaa637c",
+      "source_bytes": 185,
+      "archived_sha256": "c3081a08c4d3923da92e51378d47ccbc8a017d0a1d979ff23c2512d3fcaa637c"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-tool-selftests.log",
+      "evidence_path": "cutover-tools-selftest.log",
+      "source_sha256": "2580e74da8d3e726013a06a3021d8bd0fdf96e9673fa5e704b56f819ad735f4e",
+      "source_bytes": 2658,
+      "archived_sha256": "2580e74da8d3e726013a06a3021d8bd0fdf96e9673fa5e704b56f819ad735f4e"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-measurement-selftests.log",
+      "evidence_path": "measurement-facts-selftest.log",
+      "source_sha256": "cc87c01c5211cfa1ff71aa82ea59aee0172a0591127d2e4bb7435165ae473f4b",
+      "source_bytes": 3065,
+      "archived_sha256": "cc87c01c5211cfa1ff71aa82ea59aee0172a0591127d2e4bb7435165ae473f4b"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-context-selftests.log",
+      "evidence_path": "measurement-context-selftest.log",
+      "source_sha256": "3a6768601e447198fd005907637cd1c0c182e79baf83216518ddf1b764a8b16c",
+      "source_bytes": 2433,
+      "archived_sha256": "3a6768601e447198fd005907637cd1c0c182e79baf83216518ddf1b764a8b16c"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-performance-selftests.log",
+      "evidence_path": "performance-evaluator-selftest.log",
+      "source_sha256": "0d1af2d211d4182f5dc9dcb79f5b97d0a2389d3e069733129d5d7d7b005e80d7",
+      "source_bytes": 8396,
+      "archived_sha256": "0d1af2d211d4182f5dc9dcb79f5b97d0a2389d3e069733129d5d7d7b005e80d7"
+    },
+    {
+      "source_path": "/tmp/cutover17-verify-plan-selftest.log",
+      "evidence_path": "verify-plan-selftest.log",
+      "source_sha256": "fc69838500369ea49fc96cd32edd728ea6c6578ea504320f5b094ef3e72b8665",
+      "source_bytes": 882,
+      "archived_sha256": "fc69838500369ea49fc96cd32edd728ea6c6578ea504320f5b094ef3e72b8665"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-metadata-final.json",
+      "evidence_path": "metadata.json",
+      "source_sha256": "b90db074d9e0834139fddbd10e9413a4e8eef8fffb8a065a6fc7ce74715e4cdf",
+      "source_bytes": 2844934,
+      "archived_sha256": "b90db074d9e0834139fddbd10e9413a4e8eef8fffb8a065a6fc7ce74715e4cdf"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-contract-sealed/contract-comparison.json",
+      "evidence_path": "contract-comparison.json",
+      "source_sha256": "d6c2f065b37e86514437a8aacfaa7ff51cd0f8fe4ec68d15bdb95f780fd2157b",
+      "source_bytes": 4803062,
+      "archived_sha256": "d6c2f065b37e86514437a8aacfaa7ff51cd0f8fe4ec68d15bdb95f780fd2157b"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-contract-sealed/missing-drift-report.json",
+      "evidence_path": "missing-drift-report.json",
+      "source_sha256": "836010ae552270780e85e1b02137a622c11a975c1ffbe9a70503e3addb29581a",
+      "source_bytes": 544294,
+      "archived_sha256": "836010ae552270780e85e1b02137a622c11a975c1ffbe9a70503e3addb29581a"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-contract-sealed/transaction-contract.json",
+      "evidence_path": "transaction-contract.json",
+      "source_sha256": "9fe7bce21d8cba8170932ec87e4cd9dfc1f04c26744a52f159dbbca4f8808c22",
+      "source_bytes": 526652,
+      "archived_sha256": "9fe7bce21d8cba8170932ec87e4cd9dfc1f04c26744a52f159dbbca4f8808c22"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-cumulative-sealed/contract-comparison.json",
+      "evidence_path": "cumulative/contract-comparison.json",
+      "source_sha256": "c056d66a1e2a64c7bcaaf7d4ba64ed9c4cb6e9a16976f9b533d98d7ca7cf39a5",
+      "source_bytes": 4663071,
+      "archived_sha256": "c056d66a1e2a64c7bcaaf7d4ba64ed9c4cb6e9a16976f9b533d98d7ca7cf39a5"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-cumulative-sealed/missing-drift-report.json",
+      "evidence_path": "cumulative/missing-drift-report.json",
+      "source_sha256": "395ddf81e5ae85acac52e6ca6de2a54bb35e7d0071e95e365d936f713547e5b1",
+      "source_bytes": 631608,
+      "archived_sha256": "395ddf81e5ae85acac52e6ca6de2a54bb35e7d0071e95e365d936f713547e5b1"
+    },
+    {
+      "source_path": "/tmp/erp-cutover17-cumulative-sealed/transaction-contract.json",
+      "evidence_path": "cumulative/transaction-contract.json",
+      "source_sha256": "af8678cd332e0d9864c58baf88e5dc74058dc5e994fa76df4cfe20fbb6b40452",
+      "source_bytes": 523868,
+      "archived_sha256": "af8678cd332e0d9864c58baf88e5dc74058dc5e994fa76df4cfe20fbb6b40452"
+    }
+  ],
+  "raw_bytes_policy": "See evidence-text-normalization.json for exact original attachments; unlisted files are byte-identical to source artifacts"
+}

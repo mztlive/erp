@@ -1,0 +1,95 @@
+{
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "files": [
+    {
+      "old_path": "backend/services/src/work_item/amount.rs",
+      "input_sha256": "0239dde376ceb5a334223fe26823a06ddd39994cb8274403070624e81b92f27e",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/change_order_brief.rs",
+      "input_sha256": "d6b6509a9816ac402b1c89302e0457ba41a19d21096c9cc407a8f4df51aa255c",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/facts.rs",
+      "input_sha256": "b529177ea4da849aa9eeed536dd499a5b603b720dd05ed3def60bc87a143ac78",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/fulfillment_operation_brief.rs",
+      "input_sha256": "6dd8b8ebb4a22af053c6d00f9d9428940b10675d29a471a896e53b4769e3f096",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief/account.rs",
+      "input_sha256": "798009596ae8aaf4c01c2b3ea85edf23f2f1ac01d48dcd6bf28d1a774b2851fa",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief/mapping.rs",
+      "input_sha256": "7fae8a0301c78d4b74253e2891b6c851614f1c61d497324bf43609826f76bc14",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+      "input_sha256": "5112d2fa9aad3b47550f1a7edc454b5d222d438a41470a7d08fd55f4f0af90f3",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief/query.rs",
+      "input_sha256": "8f3518386b0191fee1095efa78f76f771696217358df8ba21ed8407f87d62a08",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+      "input_sha256": "0d2da180c878a24712971d6d8fdf77e8d63a75d324340e1b89aa1e6a33212926",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/funds_document_brief.rs",
+      "input_sha256": "aec303b64ad6f26214de935bb080efcbeb3c955259a926521ec118302da87e68",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/inventory_settlement_brief.rs",
+      "input_sha256": "04a759cec6f6611b508e735cd18256789ba3a8ce3ea8f68d83dccfe1aae1b24e",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/mod.rs",
+      "input_sha256": "3cf964a9c9e92a15678bc7e2fd1ceb048f692e653f5e46ba4974413bad310329",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/procurement_brief.rs",
+      "input_sha256": "e82d54651df09a813f503e2099418ca845ceb23b2a64754360d77db6561e9701",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/purchase_review_brief.rs",
+      "input_sha256": "f0368309854ffec8cdcbde34699769c1e6512a0469b8317134a3c2d6de4568a6",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    },
+    {
+      "old_path": "backend/services/src/work_item/sales_order_brief.rs",
+      "input_sha256": "b024f68312fd73bf1a326b6fe48d6804d050be8ca61b6f64fb231f2942c2d63e",
+      "current_equals_input": true,
+      "deletion": "migrated_unique_authority_and_display_sources"
+    }
+  ]
+}

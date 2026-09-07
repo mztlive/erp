@@ -1,0 +1,15 @@
+{
+  "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+  "exit_code": 0,
+  "passed": 3655,
+  "failed": 0,
+  "ignored": 68,
+  "packages": 33,
+  "previous_phase_passed": 3594,
+  "additional_passed": 61,
+  "http_tests": 10,
+  "actual_http_response_cases": 494,
+  "historical_tests_executed": false,
+  "real_database_verified": false
+}

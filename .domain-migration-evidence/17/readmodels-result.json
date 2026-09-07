@@ -1,0 +1,1143 @@
+{
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "tree": "/private/tmp/erp-domain-crate-17-cutover",
+  "captured_at_utc": "2026-09-07T06:07:17.167465+00:00",
+  "files": [
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+      "relative_path": "catalog_center/mod.rs",
+      "before_sha256": "e698933e9e36b91f2194303df409629fd05b912ec946706ec8519698d8a89c4b",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 2
+        }
+      ],
+      "after_sha256": "00eed97ce0843991ed9a705c957b39f3f860d7e9626647c2ba2d289ba56bc6c3",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 6,
+      "after_import_count": 6,
+      "after_commit_blob_sha256": "00eed97ce0843991ed9a705c957b39f3f860d7e9626647c2ba2d289ba56bc6c3",
+      "after_commit_blob_oid": "4ec1070541fbe22c54d7345621ba3f2d9939f186",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "relative_path": "catalog_center/tests.rs",
+      "before_sha256": "f8e8b784dd1f554800365edd8ff3f26e0e5f0f763ffceb890c68c955c6c83a47",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 87
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 125
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 136
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 139
+        }
+      ],
+      "after_sha256": "c1dfc91dc8c1fff7d50d03fe18691dc9e932ee71c101a9973353f91f0caa167d",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 8,
+      "after_import_count": 8,
+      "after_commit_blob_sha256": "c1dfc91dc8c1fff7d50d03fe18691dc9e932ee71c101a9973353f91f0caa167d",
+      "after_commit_blob_oid": "66c1c5c7277a5a6765595c4ca3ccca6ae9366f1b",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/customer_center/service.rs",
+      "relative_path": "customer_center/service.rs",
+      "before_sha256": "fab8ac38580c55002867b5e0b015aeca47beabb1ac503b0d113b8d4f6f378a03",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ],
+      "after_sha256": "b4cc0643d99686d2bbc88e69a3f953e3fae40f0b4d6f4d6e6c1cfd4b2d3a3857",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 10,
+      "after_import_count": 10,
+      "after_commit_blob_sha256": "b4cc0643d99686d2bbc88e69a3f953e3fae40f0b4d6f4d6e6c1cfd4b2d3a3857",
+      "after_commit_blob_oid": "8ce20c57fe3c74d99c78cc8476fec3d6c5d3d26d",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/account.rs",
+      "relative_path": "finance/payable/account.rs",
+      "before_sha256": "18b95a0e12b8fd403f50f20f67a201dd957fecf181b762cc55ced5a3b97cf3bb",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 23
+        }
+      ],
+      "after_sha256": "6373c601a16d19a3b05ab35b9ecd705b1c89041da2c303fb73453a6d8b2f8cff",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 14,
+      "after_import_count": 14,
+      "after_commit_blob_sha256": "6373c601a16d19a3b05ab35b9ecd705b1c89041da2c303fb73453a6d8b2f8cff",
+      "after_commit_blob_oid": "8699712166a729703b553a18a21fdaa182190b50",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/display.rs",
+      "relative_path": "finance/payable/display.rs",
+      "before_sha256": "84f2ce7c0456a7f5e77ad7b51adb1dba26b9d603140a34d6010a3ab475eecc4c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 22
+        }
+      ],
+      "after_sha256": "c11396667d0ededd8b1d266fb3d7e092a2aaf1eda913ca2fa8b827f5b6d8f343",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 25,
+      "after_import_count": 25,
+      "after_commit_blob_sha256": "c11396667d0ededd8b1d266fb3d7e092a2aaf1eda913ca2fa8b827f5b6d8f343",
+      "after_commit_blob_oid": "815b36d04a69e341dd47aa0a127cb5fe35ef4bad",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/mapping.rs",
+      "relative_path": "finance/payable/mapping.rs",
+      "before_sha256": "af92e9678a12b7a0a37c9545e790783da1529ccb0d07f09d9c0fa874ec06c733",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ],
+      "after_sha256": "8cfb98d8cade9487015b6e5ce6b7a7f21efcb94364df8f57f2e25029d02a63c5",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 11,
+      "after_import_count": 11,
+      "after_commit_blob_sha256": "8cfb98d8cade9487015b6e5ce6b7a7f21efcb94364df8f57f2e25029d02a63c5",
+      "after_commit_blob_oid": "b711acd43542e0aeb8a994cfc9cf5225f038c33c",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/payment.rs",
+      "relative_path": "finance/payable/payment.rs",
+      "before_sha256": "2bfaf2fa09b2a60d018cb820e119417a8fbdaff0818b4c4e38dfae73bb0a4d02",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 27
+        }
+      ],
+      "after_sha256": "b8a8eb8f2bfa345aaaec869f640475bd2e548b4a184ee79fd69b6aec813ba7fd",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 17,
+      "after_import_count": 17,
+      "after_commit_blob_sha256": "b8a8eb8f2bfa345aaaec869f640475bd2e548b4a184ee79fd69b6aec813ba7fd",
+      "after_commit_blob_oid": "e291f7c2a5953cffab51a95ee53f2e1bd962c05a",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/account.rs",
+      "relative_path": "finance/receivable/account.rs",
+      "before_sha256": "5c44822631e9578220876cee9e1fc62801d899e82cc85c2bd6678fb88df8970a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 34
+        }
+      ],
+      "after_sha256": "386b6085e651c2c04047a048523d9dfb8ea30a3bd4cb48c973fb85e836fd3c72",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 32,
+      "after_import_count": 32,
+      "after_commit_blob_sha256": "386b6085e651c2c04047a048523d9dfb8ea30a3bd4cb48c973fb85e836fd3c72",
+      "after_commit_blob_oid": "cc5d23c328facab6a66f23d9b63d48d2a660acf7",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/customer_receipt.rs",
+      "relative_path": "finance/receivable/customer_receipt.rs",
+      "before_sha256": "09a8f38a651ae35d56a1491e4c7e30eb95e6f5da6f6eac0683c15f469ae35db3",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 151
+        }
+      ],
+      "after_sha256": "110fd510d9848e92c863d11a8dfbe8b117d4dd5503347e44077309a7b20cb0db",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 15,
+      "after_import_count": 15,
+      "after_commit_blob_sha256": "110fd510d9848e92c863d11a8dfbe8b117d4dd5503347e44077309a7b20cb0db",
+      "after_commit_blob_oid": "0fa2053e225ce434461e7f5892a480616c13141a",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/separation.rs",
+      "relative_path": "finance/receivable/separation.rs",
+      "before_sha256": "46a680c125285c002cc398ff73e0ba9070cb59bf0199b08f89670594da76c347",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ],
+      "after_sha256": "44ce08f011608d03beb1ce2ef86ee15660f0e71dc1c6367f543099144df5d0a9",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 10,
+      "after_import_count": 10,
+      "after_commit_blob_sha256": "44ce08f011608d03beb1ce2ef86ee15660f0e71dc1c6367f543099144df5d0a9",
+      "after_commit_blob_oid": "54a4c8da3e5f7f9185635c77b3a6b3299deaf13d",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/snapshot.rs",
+      "relative_path": "finance/receivable/snapshot.rs",
+      "before_sha256": "26d6b2ec975b52e9d982791d80ba6cc282a20da975ac47f90248b8a3b5589618",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ],
+      "after_sha256": "360e7d68fd0d0addb61e0a36f19c9f0343e612588058ad48999ff6d26b732c96",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 9,
+      "after_import_count": 9,
+      "after_commit_blob_sha256": "360e7d68fd0d0addb61e0a36f19c9f0343e612588058ad48999ff6d26b732c96",
+      "after_commit_blob_oid": "b0c5176b6c51422c58307a354bbdc07704f93cef",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs",
+      "relative_path": "fulfillment_center/acceptance_eligibility.rs",
+      "before_sha256": "ff9aef95ed3faa303222806acd5d208c1ff30c279ffe6f717421e90bc0c1155f",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ],
+      "after_sha256": "970b7b893810db5f3fc18a57221694c07e03796d6423a13e6d4203e37d61511e",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 17,
+      "after_import_count": 17,
+      "after_commit_blob_sha256": "970b7b893810db5f3fc18a57221694c07e03796d6423a13e6d4203e37d61511e",
+      "after_commit_blob_oid": "9846ac0a5e977a7c9ca9936c1ca059a113b2905d",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/mod.rs",
+      "relative_path": "fulfillment_center/mod.rs",
+      "before_sha256": "d4b5c2dd1d22a00d48d1b237ecbd1747737bec886aee95856833f3155f17b26c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ],
+      "after_sha256": "c180d5510379c44a445abfdc210f7204b67ee72187cf04d19cd4e2452b733432",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 5,
+      "after_import_count": 5,
+      "after_commit_blob_sha256": "c180d5510379c44a445abfdc210f7204b67ee72187cf04d19cd4e2452b733432",
+      "after_commit_blob_oid": "cd4f37c7590d0297d7fc09715b5ed5ea25f37f14",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/repository.rs",
+      "relative_path": "fulfillment_center/repository.rs",
+      "before_sha256": "d3568391843fc79659fa222fd720c30c45b22df8066b42c60c02c080ebb95382",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 8
+        }
+      ],
+      "after_sha256": "93ef089d9b0f8705560eb1b2eaf36a87cad2545c0caadf2deb6a0a536cba8ebc",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "93ef089d9b0f8705560eb1b2eaf36a87cad2545c0caadf2deb6a0a536cba8ebc",
+      "after_commit_blob_oid": "a6fdd6b093f5c7dc34fae06eff9428886f5705da",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "relative_path": "integration_center/error_task.rs",
+      "before_sha256": "f5945fc689cef6a10a5003eb96080665f444e68b964fe8c1e4ae44dfc9219a67",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ],
+      "after_sha256": "585476c4174a0996d875a44789aa63e02cef29f269dbb2648d411ddefdeb436b",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 9,
+      "after_import_count": 9,
+      "after_commit_blob_sha256": "585476c4174a0996d875a44789aa63e02cef29f269dbb2648d411ddefdeb436b",
+      "after_commit_blob_oid": "04003bbadc892cce269ee1dde054d6f16e996bd2",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "relative_path": "integration_center/reconciliation_difference.rs",
+      "before_sha256": "3991a18b220af63c8aa206d5cbef96aa2e2c997a345a4cc2c97fcfc5845a9bbf",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ],
+      "after_sha256": "72b3e51502c59f415094dba858c966a015057f3282c466d2715286a27628d6f9",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 10,
+      "after_import_count": 10,
+      "after_commit_blob_sha256": "72b3e51502c59f415094dba858c966a015057f3282c466d2715286a27628d6f9",
+      "after_commit_blob_oid": "4a7bbd93d0953a6d4fe8f11659e10e736408ac62",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/approval_query.rs",
+      "relative_path": "purchase_center/approval_query.rs",
+      "before_sha256": "7311febb9e7bfe19493449ef0c8a723615b925ad5415d63197b320e8cdda1117",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 19
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 240
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 253
+        }
+      ],
+      "after_sha256": "4eb41b41de6750d68cb3c48c3a5c8d132e0d15f4d511acca58b449a6a4619895",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 11,
+      "after_import_count": 11,
+      "after_commit_blob_sha256": "4eb41b41de6750d68cb3c48c3a5c8d132e0d15f4d511acca58b449a6a4619895",
+      "after_commit_blob_oid": "b95ad54c700cbad8207143bb7c3864fff8e9311e",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/change/query.rs",
+      "relative_path": "purchase_center/change/query.rs",
+      "before_sha256": "18115845d16f02671b55035842c5b879056be3ef0faa193597977a4c05b6c707",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 9
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 90
+        }
+      ],
+      "after_sha256": "537c365b24dcd6600d07433429f42ccd53a62dfb2aa29ce0af84141b77bfbe79",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 11,
+      "after_import_count": 11,
+      "after_commit_blob_sha256": "537c365b24dcd6600d07433429f42ccd53a62dfb2aa29ce0af84141b77bfbe79",
+      "after_commit_blob_oid": "7164b346fc2eebd0ab67d349b0a90368ed652d49",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/creation_basis/mapping.rs",
+      "relative_path": "purchase_center/creation_basis/mapping.rs",
+      "before_sha256": "64d3e00b31dad6b3096124f92630bcb79b600e1c03e09980d1577be1e647516e",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ],
+      "after_sha256": "79cd10e9af1d86a8aa9e1272bd85c6569d6e0794b2e02f3624de5ccd2821ea60",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 8,
+      "after_import_count": 8,
+      "after_commit_blob_sha256": "79cd10e9af1d86a8aa9e1272bd85c6569d6e0794b2e02f3624de5ccd2821ea60",
+      "after_commit_blob_oid": "95e9963f7ae109ff61bd94fd16fbb6a950e3c461",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/creation_basis/query.rs",
+      "relative_path": "purchase_center/creation_basis/query.rs",
+      "before_sha256": "ac9bb23ebeb78db583f92298b0c9995683c4279d4db304244c416d9e51ed8495",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 17
+        }
+      ],
+      "after_sha256": "a1d9f3bdb9f971f677ba10474da7b4666fcf77613d13cb2450ec8516979a9033",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 12,
+      "after_import_count": 12,
+      "after_commit_blob_sha256": "a1d9f3bdb9f971f677ba10474da7b4666fcf77613d13cb2450ec8516979a9033",
+      "after_commit_blob_oid": "cd74d298214d6b78b2e95ab5e4c8dbd585d8c47f",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/query.rs",
+      "relative_path": "purchase_center/procurement_responsibility/query.rs",
+      "before_sha256": "e4aa7648cdb71ef851064cb85c134145e013d71e0f5e12b8c0a1649f5ad2e521",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 6
+        }
+      ],
+      "after_sha256": "9e8ad86dad3ed5c57234a0b28f6b6a3e97a9c7451501980db39a3a09c9ad3f63",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 5,
+      "after_import_count": 5,
+      "after_commit_blob_sha256": "9e8ad86dad3ed5c57234a0b28f6b6a3e97a9c7451501980db39a3a09c9ad3f63",
+      "after_commit_blob_oid": "39a83a2549174448c8ebdac3ca6b99a5ce0f0bcc",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/repository/isolation_tests.rs",
+      "relative_path": "purchase_center/procurement_responsibility/repository/isolation_tests.rs",
+      "before_sha256": "c0b85d06da4a91b1905b6e57ffded318e45b4353805566e502a5c6a337f7b2ee",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 1
+        }
+      ],
+      "after_sha256": "cce76f96ffa3b4ee474d07dcddaaf1bceccc3fe03ba7b0c2aa4a63db476ca01c",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 14,
+      "after_import_count": 14,
+      "after_commit_blob_sha256": "cce76f96ffa3b4ee474d07dcddaaf1bceccc3fe03ba7b0c2aa4a63db476ca01c",
+      "after_commit_blob_oid": "8a98b6fdafabb5518f0a04a135326e4ba7b100f8",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/repository/rule_list_isolation_tests.rs",
+      "relative_path": "purchase_center/procurement_responsibility/repository/rule_list_isolation_tests.rs",
+      "before_sha256": "357bd1f075a29c673ab202e9ec218844617cc65b518884771936ca6487673827",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 1
+        }
+      ],
+      "after_sha256": "880859b5554c56de4b5d99692fc3279322fb001caef201d2e21b54c89dd66459",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 17,
+      "after_import_count": 17,
+      "after_commit_blob_sha256": "880859b5554c56de4b5d99692fc3279322fb001caef201d2e21b54c89dd66459",
+      "after_commit_blob_oid": "8f0c72aa02024c99d6fae09853c536b1e82aa984",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/query.rs",
+      "relative_path": "purchase_center/query.rs",
+      "before_sha256": "5b8c6b4a7df3b3f7ed3347656262a81ff3f1e8df7c4b0c8d386c14be5a3342fa",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 15
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 242
+        }
+      ],
+      "after_sha256": "097d43c3de2483d203f4cf2cb71ddba1c6dafc01314147db7d8689e2828c2ad4",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 20,
+      "after_import_count": 20,
+      "after_commit_blob_sha256": "097d43c3de2483d203f4cf2cb71ddba1c6dafc01314147db7d8689e2828c2ad4",
+      "after_commit_blob_oid": "fde96a5a56aaf508f6e2794318f51ce637f4af80",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs",
+      "relative_path": "purchase_center/repository/basis_sources.rs",
+      "before_sha256": "932c2fda2e8c6dbece4ab6684f11591144d020b90d3143d94f9e7dbea54f4333",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 18
+        }
+      ],
+      "after_sha256": "37260ec4e07cc8c0d8a3e5cd33b78c4b819dd21054489ad62f0615ccffbb4aeb",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 11,
+      "after_import_count": 11,
+      "after_commit_blob_sha256": "37260ec4e07cc8c0d8a3e5cd33b78c4b819dd21054489ad62f0615ccffbb4aeb",
+      "after_commit_blob_oid": "20cf97b3cafa42a3f54e82c8f9faf1e1de3c80b6",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/center_facts.rs",
+      "relative_path": "purchase_center/repository/center_facts.rs",
+      "before_sha256": "4404d967a80119521ca13ac77a8bc7fb5ccbf89449c6ade4485f1bc759117572",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 261
+        }
+      ],
+      "after_sha256": "97923f1baa6225114696ae74d4aa3029c2c844647474fc5a71650eb1ad4d59a8",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 18,
+      "after_import_count": 18,
+      "after_commit_blob_sha256": "97923f1baa6225114696ae74d4aa3029c2c844647474fc5a71650eb1ad4d59a8",
+      "after_commit_blob_oid": "7f91624c8a230d1739507b03a1a8ae941306dca6",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/coverage.rs",
+      "relative_path": "purchase_center/repository/coverage.rs",
+      "before_sha256": "0e678c148643322e76e414d44f8677a0952c986158d0317dba7cdc7514cb8b17",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 167
+        }
+      ],
+      "after_sha256": "7ecfc6405c53fba1045bc39e37a4955435857fbc800f99b39a476d3c2e751c34",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 32,
+      "after_import_count": 32,
+      "after_commit_blob_sha256": "7ecfc6405c53fba1045bc39e37a4955435857fbc800f99b39a476d3c2e751c34",
+      "after_commit_blob_oid": "c7d185844e0938619bf2eb163e7d9f8e2ba3d8fb",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/coverage_service.rs",
+      "relative_path": "purchase_center/repository/coverage_service.rs",
+      "before_sha256": "6556b10fa21113d6494af3040b1012046e58be5dc0c37eedc35c5e0084c50488",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ],
+      "after_sha256": "8ae6cb1808019c0cc04757ca422e3ee2b71a883b3da27d3b862e0afa5bf3add6",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 8,
+      "after_import_count": 8,
+      "after_commit_blob_sha256": "8ae6cb1808019c0cc04757ca422e3ee2b71a883b3da27d3b862e0afa5bf3add6",
+      "after_commit_blob_oid": "855f47c9503f7aa9ce93f37f2fd2830bc8efb46d",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/creation_basis.rs",
+      "relative_path": "purchase_center/repository/creation_basis.rs",
+      "before_sha256": "01283ce57bb9d8cf99c518149e1fa1b50f4268779030cd9d8b263cbca5ccbb03",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 192
+        }
+      ],
+      "after_sha256": "3c22bb62aa0a5d4f66c9aaea8e3cfe2fc2b4e56f8778021b163d44ffe5835472",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 25,
+      "after_import_count": 25,
+      "after_commit_blob_sha256": "3c22bb62aa0a5d4f66c9aaea8e3cfe2fc2b4e56f8778021b163d44ffe5835472",
+      "after_commit_blob_oid": "924f84408a5fcc09c25777a5c21a8fe756074006",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/list_facts.rs",
+      "relative_path": "purchase_center/repository/list_facts.rs",
+      "before_sha256": "6385e80c40d5a9a432a03800b4f2ad3b7e766944714c7b554a595b2aba22cae7",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 357
+        }
+      ],
+      "after_sha256": "4ed9a5e60d800ae43be4edd0bff891eb4f051d5e2ccda7b149c7a4242c0c1dcf",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 24,
+      "after_import_count": 24,
+      "after_commit_blob_sha256": "4ed9a5e60d800ae43be4edd0bff891eb4f051d5e2ccda7b149c7a4242c0c1dcf",
+      "after_commit_blob_oid": "0ccb20b15b0aa89f5abc1dd2a1193a660b7731ea",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "relative_path": "returns_center/customer_refund.rs",
+      "before_sha256": "530a8f5c3461a5e9df0a1dc5c757ce3f1ea64bf542316d1edc2746b11e8d05e2",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 123
+        }
+      ],
+      "after_sha256": "91ab6780d61dcaa454cbf39516fd95934ec368b72f5f9a5e2d4def784b04b352",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 10,
+      "after_import_count": 10,
+      "after_commit_blob_sha256": "91ab6780d61dcaa454cbf39516fd95934ec368b72f5f9a5e2d4def784b04b352",
+      "after_commit_blob_oid": "c08bcf9d3bd6d33b35b94f8c74586c5d7d50aec9",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/dto.rs",
+      "relative_path": "returns_center/dto.rs",
+      "before_sha256": "b3443aa0b7c021bedc14f0dbcd1db5fc7365874273abfe8f6ca9f5aa74bdb09d",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 17
+        }
+      ],
+      "after_sha256": "b73e7bab7f0ef0249f7337e94374e6d81af578be52dddf31806e82ef1f13adbd",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 13,
+      "after_import_count": 13,
+      "after_commit_blob_sha256": "b73e7bab7f0ef0249f7337e94374e6d81af578be52dddf31806e82ef1f13adbd",
+      "after_commit_blob_oid": "f7418a7dce706891456dd36560b8d3b1374f1728",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/payment_reversal.rs",
+      "relative_path": "returns_center/payment_reversal.rs",
+      "before_sha256": "22abe5e7ac8fe091693d18fcf4ecbe39b529cae193f339df08162be4953bb5dd",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ],
+      "after_sha256": "b2c1c0d623ad4e0ec55ebe0a997ce3012f9c885f75d0c531b339e783027205ee",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "b2c1c0d623ad4e0ec55ebe0a997ce3012f9c885f75d0c531b339e783027205ee",
+      "after_commit_blob_oid": "54f2822e1be6b093feccf23c56a06b756345785b",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "relative_path": "returns_center/purchase_return.rs",
+      "before_sha256": "c4706241854c235cc10f9162643b02b1a8b7ccccd0abda54bd6fea15090c7f33",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ],
+      "after_sha256": "01ab6c681fb1545341b45f6028cefa7b4e700f66d23fd13eefd15b0ef598ebfa",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "01ab6c681fb1545341b45f6028cefa7b4e700f66d23fd13eefd15b0ef598ebfa",
+      "after_commit_blob_oid": "391a9764379c872b089c296c7a5a411561cf0281",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/receipt_reversal.rs",
+      "relative_path": "returns_center/receipt_reversal.rs",
+      "before_sha256": "3b9ce5c052251ca70c221f75cd46757c0ec7d4d8125b7ca79997d69914f9f5ef",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ],
+      "after_sha256": "437a72393330ded422adfef82ba7e9d373de50f686f59baff066821eb374ea11",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "437a72393330ded422adfef82ba7e9d373de50f686f59baff066821eb374ea11",
+      "after_commit_blob_oid": "a5aa009a51f97d71a0019589eae48a8ea07a13d1",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/sales_return.rs",
+      "relative_path": "returns_center/sales_return.rs",
+      "before_sha256": "563b94581be6c97acb8aca99092c57ab1e027a5cd455be42db14d828592c7954",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ],
+      "after_sha256": "9f34bd10c2608e63c2762ecb559d05d292236fb23960495899cf28c9fecec7f1",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "9f34bd10c2608e63c2762ecb559d05d292236fb23960495899cf28c9fecec7f1",
+      "after_commit_blob_oid": "0757f191150f792d6b68d615552325a6080daea3",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/supplier_refund.rs",
+      "relative_path": "returns_center/supplier_refund.rs",
+      "before_sha256": "656f395d24dd2ab4f71a4c59b46511b9408f41928963b9a7090efcad5f315098",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ],
+      "after_sha256": "dc58a5b8ba9115477144b0368eef051e358f0a11fa53c33074101b5317860777",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "dc58a5b8ba9115477144b0368eef051e358f0a11fa53c33074101b5317860777",
+      "after_commit_blob_oid": "1826117d5ae8e3bf11c5879a1de4802b8ebc82c8",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/approval_query.rs",
+      "relative_path": "sales_center/order/approval_query.rs",
+      "before_sha256": "d59515770ccfdec093f0504dca9f286ae8acb3147b3cdcd9d7688d0fe3cef08c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 22
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 59
+        }
+      ],
+      "after_sha256": "fe12e5118081a7780d253c3e0653c5a1bb936cd9de584d83b4d84cbdc1981ca9",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 16,
+      "after_import_count": 16,
+      "after_commit_blob_sha256": "fe12e5118081a7780d253c3e0653c5a1bb936cd9de584d83b4d84cbdc1981ca9",
+      "after_commit_blob_oid": "cdb140a1e5b5d00b4a8e6740f8755686ad43a790",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/mod.rs",
+      "relative_path": "sales_center/order/mod.rs",
+      "before_sha256": "bca1147c688ce3721eaad2e57fc87b6255a96a2e6e711f062d8d0d14a025b18a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ],
+      "after_sha256": "01ef498b93b586ccd0e4448b044612ae5625c032969110578187a9d347ba62c7",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 5,
+      "after_import_count": 5,
+      "after_commit_blob_sha256": "01ef498b93b586ccd0e4448b044612ae5625c032969110578187a9d347ba62c7",
+      "after_commit_blob_oid": "766d41b5d92b93869cc19bcf317da1c73342ab1b",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/query.rs",
+      "relative_path": "sales_center/order/query.rs",
+      "before_sha256": "1ca3f88154b4be4bc41dca21a17bdaa8e984daba48efdc1f80f8db6c613819ef",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 32
+        }
+      ],
+      "after_sha256": "3f1032a97726add2cf0b9593956ee0ffa2f9683df6209a00bce23461b3cd8a84",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 25,
+      "after_import_count": 25,
+      "after_commit_blob_sha256": "3f1032a97726add2cf0b9593956ee0ffa2f9683df6209a00bce23461b3cd8a84",
+      "after_commit_blob_oid": "c816f184ae57473824074e3995c1b2fc50c52e5e",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/review/query.rs",
+      "relative_path": "sales_center/review/query.rs",
+      "before_sha256": "612464912564e91f352be3c8bb7a48357f8b6f25654c0c3e2786f74ac55bab80",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 42
+        }
+      ],
+      "after_sha256": "6ea973d3318cb6d62e7a5290d337695d6aecc51bd263c7516fe0b8f10cd4d4d9",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "6ea973d3318cb6d62e7a5290d337695d6aecc51bd263c7516fe0b8f10cd4d4d9",
+      "after_commit_blob_oid": "3100aafb57d27d9b9aae15ebd2211b4d5a39dd79",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_access.rs",
+      "relative_path": "supplier_center/fulfillment_access.rs",
+      "before_sha256": "96bbeda8a9fd86eb1d614d1d5fa2bd2c31d9c500180c851011279b29f8a85864",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ],
+      "after_sha256": "996c3f5ef8350eefe00a02a9143a50d981c4887b08bec0a7fb5b4d6e1dc13ddf",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 4,
+      "after_import_count": 4,
+      "after_commit_blob_sha256": "996c3f5ef8350eefe00a02a9143a50d981c4887b08bec0a7fb5b4d6e1dc13ddf",
+      "after_commit_blob_oid": "3b2a327bccfae14531ffd973841a8f7d78bb4f38",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "relative_path": "supplier_center/fulfillment_detail.rs",
+      "before_sha256": "c86627e8daab09da8fcdf0d02fbc15f5aa0d1c488e7556a73308f304a22ea46a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 21
+        }
+      ],
+      "after_sha256": "dd5addbd0ed1d2605859c1583c7328073ebba789af2f19e38085c4c604879d13",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 17,
+      "after_import_count": 17,
+      "after_commit_blob_sha256": "dd5addbd0ed1d2605859c1583c7328073ebba789af2f19e38085c4c604879d13",
+      "after_commit_blob_oid": "a9c26bf2e36661e6f6aa6129f22a7137880e45b4",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/offering/mod.rs",
+      "relative_path": "supplier_center/offering/mod.rs",
+      "before_sha256": "a68b128355e1609bfd04117edc2b33c367468169d4cac0dc4824938f3b05da79",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ],
+      "after_sha256": "631d8d8028ecaab3c1fc4db834c68a8c3a7ad363bd17e51d980be25f0ac99bf3",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 13,
+      "after_import_count": 13,
+      "after_commit_blob_sha256": "631d8d8028ecaab3c1fc4db834c68a8c3a7ad363bd17e51d980be25f0ac99bf3",
+      "after_commit_blob_oid": "968a4f30f39c4281353bd0f13ae35426da699561",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/settlement/query.rs",
+      "relative_path": "supplier_center/settlement/query.rs",
+      "before_sha256": "24ad428ff7add4e36851b90509b8d0ce9945394440397ed13395d36c69ae4c00",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 19
+        }
+      ],
+      "after_sha256": "8091d7c3e2349c0c60328f630a777eb2dedafb29035e68bb38b78e2f6a184560",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 11,
+      "after_import_count": 11,
+      "after_commit_blob_sha256": "8091d7c3e2349c0c60328f630a777eb2dedafb29035e68bb38b78e2f6a184560",
+      "after_commit_blob_oid": "370dedfd752e0325a4c2b28474a70fa3b2147c82",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/settlement/tests.rs",
+      "relative_path": "supplier_center/settlement/tests.rs",
+      "before_sha256": "b6849ebd4216c8488c9b1ef970c20035ad542657e9f86798ec48aa2ead92a417",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ],
+      "after_sha256": "89ee277d95f7518bdb1558e26855d8e695d0bc228da4443c53b4475dd9eda322",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 16,
+      "after_import_count": 16,
+      "after_commit_blob_sha256": "89ee277d95f7518bdb1558e26855d8e695d0bc228da4443c53b4475dd9eda322",
+      "after_commit_blob_oid": "ffd22816c645409bee2aacf938ca8cfca794f239",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/context.rs",
+      "relative_path": "supplier_center/supplier_api/context.rs",
+      "before_sha256": "139fffc45989220992d8bfc4942276e77282ff35f4a61ce51898c5db9c973ea2",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 14
+        }
+      ],
+      "after_sha256": "f91d051582fd9c0c3dd6cf2ce9dd8f4a583a9f0becd8665ca33c0a6703419f77",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 7,
+      "after_import_count": 7,
+      "after_commit_blob_sha256": "f91d051582fd9c0c3dd6cf2ce9dd8f4a583a9f0becd8665ca33c0a6703419f77",
+      "after_commit_blob_oid": "9f6dc7c737da81e714ec6e156df9f9b0d4f16068",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/jobs.rs",
+      "relative_path": "supplier_center/supplier_api/jobs.rs",
+      "before_sha256": "aa49a8d1508056b723881955df22faa8b9ef41342f43c2650c547842f7c2bed0",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 6
+        }
+      ],
+      "after_sha256": "04f6d3c59302339808a168cce90f0b3883ccd9efe913a5d1c83556eecdb78934",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 4,
+      "after_import_count": 4,
+      "after_commit_blob_sha256": "04f6d3c59302339808a168cce90f0b3883ccd9efe913a5d1c83556eecdb78934",
+      "after_commit_blob_oid": "49eee7950e70176a69c77db2fe86abe2e06fe0f2",
+      "after_commit_blob_verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/query.rs",
+      "relative_path": "supplier_center/supplier_api/query.rs",
+      "before_sha256": "5177e2a98d1c43db4f2c9f5c6b26bb6a1ab1c4dafaf73cab369f596c6970f683",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 14
+        }
+      ],
+      "after_sha256": "d6a5679bb3f5ff592c01113d8c8e1254487ce119ae49928fab5e91af1f90c556",
+      "non_import_tokens_equal_after_allowed_path_normalization": true,
+      "comments_multiset_equal": true,
+      "before_import_count": 14,
+      "after_import_count": 14,
+      "after_commit_blob_sha256": "d6a5679bb3f5ff592c01113d8c8e1254487ce119ae49928fab5e91af1f90c556",
+      "after_commit_blob_oid": "7b7c410c49247f0bb6b4b3661fe01cee5c1e9669",
+      "after_commit_blob_verified": true
+    }
+  ],
+  "changed_files": 49,
+  "allowed_path_edits": 63,
+  "all_non_import_tokens_equal": true,
+  "all_comments_preserved": true,
+  "remaining_legacy_references": [],
+  "runtime": "Reviewer did not execute Cargo/DB; root sealed gates were observed separately in root_gate_observation.",
+  "excluded_owners": [
+    "workbench/**",
+    "lib.rs",
+    "errors.rs",
+    "test_indexes.rs",
+    "Cargo.toml"
+  ],
+  "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "source_commit_binding": {
+    "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "file_count": 49,
+    "all_existing_reviewed_file_hashes_match_actual_commit_blobs": true,
+    "bound_at_utc": "2026-09-07T07:04:37.979496+00:00"
+  },
+  "root_gate_observation": {
+    "observation_kind": "Reviewer read root-provided sealed execution logs; reviewer did not run Cargo",
+    "reported_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "logs": [
+      {
+        "kind": "lib-tests",
+        "path": "/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 18s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "clippy",
+        "path": "/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.31s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "check",
+        "path": "/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.54s"
+        ],
+        "future_compatibility_advisory_present": true
+      }
+    ],
+    "library_aggregate": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "actual_http_golden_test_lines": [
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ],
+    "http_golden_test_functions_passed": 10,
+    "http_response_cases_from_reviewed_definition": 494,
+    "actual_import_projection_test_lines": [
+      "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+      "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+      "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok"
+    ],
+    "reviewer_executed_cargo": false,
+    "real_database_verified": false
+  },
+  "binding_script": {
+    "path": "/private/tmp/bind-cutover17-b-reviews.py",
+    "sha256": "c8d8c6733b5845f58ea640387d9cb7a3082cee3a73d940861ce36b0db31f95f7"
+  }
+}

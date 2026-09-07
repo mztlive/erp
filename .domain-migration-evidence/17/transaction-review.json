@@ -1,0 +1,49 @@
+{
+  "phase": "17",
+  "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "verification_level": "Actual source/provider/call-order review and executed pure inline tests; no database runtime",
+  "invariants": [
+    {
+      "contract": "Same Executor, write order, first error, clock and idempotent recovery",
+      "evidence": [
+        "process-result.json",
+        "funds-result.json",
+        "adapters-implementation-evidence.json",
+        "startup-compensation-review.json"
+      ]
+    },
+    {
+      "contract": "One authority fact reader; preserve 20 steps, 24 providers, original query order and sparse-data behavior",
+      "evidence": [
+        "workflow-facts-implementation.json",
+        "workbench-independent-review.json"
+      ]
+    },
+    {
+      "contract": "ReadModel error to Process to original approval guard; keep three exact historical typed duplicate exceptions",
+      "evidence": [
+        "boundary-error-review.json",
+        "http-error-expectations.json"
+      ]
+    },
+    {
+      "contract": "Four composition roots preserve phase00 161 index operations and all collection index keys/options",
+      "evidence": [
+        "index-sequence-review.json",
+        "index-order-review.json"
+      ]
+    },
+    {
+      "contract": "Actual task enum, status, authorization, dynamic route and original post-write projection behavior",
+      "evidence": [
+        "import-view-repair.json",
+        "import-projection-review.json",
+        "route-wrapper-independent-review.json"
+      ]
+    }
+  ],
+  "cumulative_lineage": "Prior phase transaction contracts and independent review attachments remain in ../01 through ../16; phase17 reviews cover their final provider rewiring. Raw source-hash changes are not database execution evidence.",
+  "baseline_capture_erratum": "baseline-transaction-capture-erratum.json",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

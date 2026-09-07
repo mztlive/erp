@@ -1,0 +1,479 @@
+{
+  "before_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "probes": [
+    {
+      "id": "customer",
+      "symbol": "CustomerProfileFactInput for CustomerProfileContactInput::required_value",
+      "before_expression": "self.mobile.as_deref()",
+      "after_expression": "self.mobile.as_ref().map(String::as_str)",
+      "sources": [
+        {
+          "side": "00",
+          "path": "backend/services/src/customer/profile/validation.rs",
+          "sha256": "1e63e136caff3347b172250ce5539a13ca0f8890f26b9c7c2770bab11f827011",
+          "git_blob": "c63822997609cf25caa624ac08ad441cc98f6ce9",
+          "fragment_line": 26,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": ""
+        },
+        {
+          "side": "17",
+          "path": "backend/crates/erp-customer/src/service/customer/profile/validation.rs",
+          "sha256": "12b8f234ef1e64f68c495ba2f0a7a6fa9ba8e5d38a48f1004ade1d02d4001a68",
+          "git_blob": "a74e36b6f4b63cc1bed8bf2eaf3fa91934027570",
+          "fragment_line": 26,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": "",
+          "initial_audit_source": {
+            "path": "backend/crates/erp-customer/src/service/customer/profile/validation.rs",
+            "sha256": "f22432ec12398a8156fb52787f7c382ba01a5936b2074709cde24636f498314f",
+            "git_blob": "1406f21ad1c1ec1733c45fa6ec09515fcd1027a3",
+            "fragment_line": 26,
+            "before_count": 1,
+            "after_count": 0,
+            "worktree_status": ""
+          },
+          "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "actual_worktree_matches_blob": true
+        }
+      ],
+      "initial_after_expression": "self.mobile.as_ref().map(String::as_str)",
+      "equivalence": "Option<String> 到 Option<&str> 的等价映射；覆盖 None、空串、非空 Unicode；纯校验实现保留在 erp-customer"
+    },
+    {
+      "id": "sales",
+      "symbol": "sales_submission_fingerprint",
+      "before_expression": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(payload)))",
+      "after_expression": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(&payload)))",
+      "sources": [
+        {
+          "side": "00",
+          "path": "backend/services/src/sales_order/command/identity.rs",
+          "sha256": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+          "git_blob": "a74d1429de385ff28f93f09397675aa54b9dfcb5",
+          "fragment_line": 38,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": ""
+        },
+        {
+          "side": "17",
+          "path": "backend/crates/erp-sales/src/service/sales_order/command/identity.rs",
+          "sha256": "8f8f70db4a3c5386ea7bcee1770e425f8024f6bf6f7e429fffac8abbbe905a2b",
+          "git_blob": "abc17ebcf739ede74c112ed39be5a3dcb2ffae8b",
+          "fragment_line": 25,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": "",
+          "initial_audit_source": {
+            "path": "backend/crates/erp-sales/src/service/sales_order/command/identity.rs",
+            "sha256": "b166441bbef3f84d325296080193642869b6022a6368138b6859cabb8b7ae96c",
+            "git_blob": "e313185b66ca96695aaa9ec0713e2873bac74c43",
+            "fragment_line": 25,
+            "before_count": 1,
+            "after_count": 0,
+            "worktree_status": ""
+          },
+          "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "actual_worktree_matches_blob": true
+        }
+      ],
+      "initial_after_expression": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(&payload)))",
+      "equivalence": "对同一 payload 字节计算相同摘要；传 Vec 与借用 Vec 的输入字节一致；审批绑定方法另行拆出，纯指纹算法保留在 erp-sales"
+    },
+    {
+      "id": "finance",
+      "symbol": "zero_amount",
+      "before_expression": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+      "after_expression": "\"0.00\".parse::<Amount>().expect(\"固定零金额必须可解析\")",
+      "sources": [
+        {
+          "side": "00",
+          "path": "backend/services/src/receivable/mapping.rs",
+          "sha256": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+          "git_blob": "8ada6d0fe682777e770a6adcef069ee35a575f94",
+          "fragment_line": 259,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": ""
+        },
+        {
+          "side": "17",
+          "path": "backend/crates/erp-finance/src/service/receivable/mapping.rs",
+          "sha256": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+          "git_blob": "91a9407a455a955de76317442393527704c9d1cc",
+          "fragment_line": 181,
+          "before_count": 1,
+          "after_count": 0,
+          "worktree_status": "",
+          "initial_audit_source": {
+            "path": "backend/crates/erp-finance/src/service/receivable/mapping.rs",
+            "sha256": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+            "git_blob": "91a9407a455a955de76317442393527704c9d1cc",
+            "fragment_line": 181,
+            "before_count": 1,
+            "after_count": 0,
+            "worktree_status": ""
+          },
+          "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+          "actual_worktree_matches_blob": true
+        }
+      ],
+      "initial_after_expression": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
+      "equivalence": "同一zero_amount内对同一0.00文本调用Amount的FromStr实现；Amount值、JSON字符串及BSON Decimal128同形，不改变内部Decimal scale"
+    }
+  ],
+  "phase_probe_records": [
+    {
+      "phase": "00",
+      "group": "customer-build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "1e63e136caff3347b172250ce5539a13ca0f8890f26b9c7c2770bab11f827011",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "00",
+      "group": "customer-check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "1e63e136caff3347b172250ce5539a13ca0f8890f26b9c7c2770bab11f827011",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "00",
+      "group": "finance-build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "00",
+      "group": "finance-check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "00",
+      "group": "sales-build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "00",
+      "group": "sales-check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "05",
+      "group": "customer-build",
+      "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+      "sha256_before": "f22432ec12398a8156fb52787f7c382ba01a5936b2074709cde24636f498314f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "05",
+      "group": "customer-check",
+      "commit": "9838c29b26521e78c4d7405b7db9071b1ad9dc66",
+      "sha256_before": "f22432ec12398a8156fb52787f7c382ba01a5936b2074709cde24636f498314f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "09",
+      "group": "baseline-finance-build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "09",
+      "group": "baseline-finance-check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "09",
+      "group": "final-finance-build",
+      "commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+      "sha256_before": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "09",
+      "group": "final-finance-check",
+      "commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+      "sha256_before": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "baseline-sales-build",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "baseline-sales-check",
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "sha256_before": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "final-finance-build",
+      "commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+      "sha256_before": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "final-finance-check",
+      "commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+      "sha256_before": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "final-sales-build",
+      "commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+      "sha256_before": "b166441bbef3f84d325296080193642869b6022a6368138b6859cabb8b7ae96c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    },
+    {
+      "phase": "10",
+      "group": "final-sales-check",
+      "commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+      "sha256_before": "b166441bbef3f84d325296080193642869b6022a6368138b6859cabb8b7ae96c",
+      "same_probe_contract": true,
+      "valid_samples": 5,
+      "source_restored": true
+    }
+  ],
+  "implementation_scope": {
+    "authorized": "three current probe leaves append real inline tests; baseline patch only",
+    "cargo_or_db_run": false,
+    "new_test_count": 4,
+    "patch_check_passed": true,
+    "baseline_modified": false,
+    "finance_original_probe_equivalent": false,
+    "replacement_after": "\"0.00\".parse::<Amount>().expect(\"固定零金额必须可解析\")",
+    "same_run_checks_both_expressions": true,
+    "final_test_locations": "Customer/Sales probe leaves and Finance lib.rs; Finance uses public actual zero_amount",
+    "baseline_modified_by_root_temporarily": true,
+    "baseline_restored_after_root_tests": true,
+    "final_results": "4 equivalence tests passed on temporarily augmented baseline and frozen candidate"
+  },
+  "baseline_patch_sha256": "c3b270657d9a9a5abb90efb680bfc1c84413e497deb138c578de8919e32eee38",
+  "initial_audit": {
+    "scope": "read-only; no Cargo/DB/execution tests",
+    "after_head": "a537414eb8f78c43ebc383a3457a45c437dececc",
+    "after_is_worktree": true,
+    "spec_sha256": "90b68e088ceb02c499762575b36aee0620c60d46f1edb4971f25206faa2da211",
+    "new_test_files": [
+      {
+        "path": "backend/crates/erp-customer/src/service/customer/profile/validation.rs",
+        "sha256": "ce12407c61cb126afbe2a92fafe432feeac6a731e9757970409535e1775b57ca"
+      },
+      {
+        "path": "backend/crates/erp-sales/src/service/sales_order/command/identity.rs",
+        "sha256": "8f8f70db4a3c5386ea7bcee1770e425f8024f6bf6f7e429fffac8abbbe905a2b"
+      },
+      {
+        "path": "backend/crates/erp-finance/src/service/receivable/mapping.rs",
+        "sha256": "97529bec3d81da78ecaec097b17aed49eefb141891a02687707e0e8d648e5c66"
+      }
+    ]
+  },
+  "scope": "Frozen source binding and root-executed pure inline results; this agent did not run Cargo/DB",
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "after_is_worktree": false,
+  "spec": {
+    "path": "backend/docs/superpowers/plans/domain-crate-migration/compile-probes.json",
+    "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "git_blob": "f7fbd9eb4eb89d6306ec9386801f11a5b273b43b",
+    "sha256": "9d248ca097d1f02ea80dfccc93e5fb94dd3618c5f9a6f4cb18dd9e16ae06217e",
+    "actual_worktree_matches_blob": true
+  },
+  "new_test_files": [
+    {
+      "path": "backend/crates/erp-customer/src/service/customer/profile/validation.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "a74e36b6f4b63cc1bed8bf2eaf3fa91934027570",
+      "sha256": "12b8f234ef1e64f68c495ba2f0a7a6fa9ba8e5d38a48f1004ade1d02d4001a68",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/service/sales_order/command/identity.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "abc17ebcf739ede74c112ed39be5a3dcb2ffae8b",
+      "sha256": "8f8f70db4a3c5386ea7bcee1770e425f8024f6bf6f7e429fffac8abbbe905a2b",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/lib.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "4a024a8b95a6a3ef7faa7719447b79fa7d90848f",
+      "sha256": "d5a1da82cb48fc49e527a01a5b17109fb225e20749d328b724f8f65a04a3b3a8",
+      "actual_worktree_matches_blob": true
+    }
+  ],
+  "supporting_sources": [
+    {
+      "path": "backend/crates/erp-core/src/money.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "a0415fd4259c55fba3c73146c7b11c41f10c2e85",
+      "sha256": "2e2c3c76ddcff291b35f97cd8bb40f0e74e495fda89270642cef2cb47b32da10",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/scripts/measure-incremental.py",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "b0733f9b26c5b2f0c3a5d578c185ea9f51afe4d9",
+      "sha256": "535778bce999358dc022c6fba2a25c499ee4ea31a68957c27dff1f983ad730b6",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/docs/superpowers/plans/domain-crate-migration/compile-measurement.md",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "806cea74e4a01694253fbeed28a0a393ceffdf00",
+      "sha256": "3c11fb88356a0bc8ded0b382e70b2b5f268d6f8ad465790f146ea02d402cd5b2",
+      "actual_worktree_matches_blob": true
+    }
+  ],
+  "baseline_augmentation": {
+    "baseline_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+    "patch_sha256": "c3b270657d9a9a5abb90efb680bfc1c84413e497deb138c578de8919e32eee38",
+    "command": [
+      "env",
+      "-u",
+      "ERP_TEST_MONGO_URI",
+      "cargo",
+      "test",
+      "--workspace",
+      "--lib",
+      "--locked"
+    ],
+    "target_dir": "/Volumes/Kingston/erp-domain-crate-09-baseline-finance-build",
+    "files": [
+      {
+        "path": "backend/services/src/customer/profile/validation.rs",
+        "original_sha256": "1e63e136caff3347b172250ce5539a13ca0f8890f26b9c7c2770bab11f827011",
+        "test_augmented_sha256": "cb0c8e6fa14f67575caf2849de1094c34afd70651d1f4934bc4c1aae119b0226"
+      },
+      {
+        "path": "backend/services/src/sales_order/command/identity.rs",
+        "original_sha256": "08ff0f18076c93a01e1c271b8d685d47e38db4901ec5ea25bca8c8f27680267c",
+        "test_augmented_sha256": "19a013639fe61290f2d1ff5bf484b9fda5ebaf20269a22617d827c65a36e641b"
+      },
+      {
+        "path": "backend/services/src/receivable/mapping.rs",
+        "original_sha256": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73",
+        "test_augmented_sha256": "7073dccdf0fe84a2581b78443a282acc251b6f407068a4df05add8f5f75d350d"
+      }
+    ],
+    "exit_code": 0,
+    "all_original_bytes_restored": true,
+    "git_status_clean": true,
+    "execution_record": {
+      "path": "/private/tmp/erp-cutover17-baseline-probe-execution.json",
+      "sha256": "6ad8dc8c873e90495cd1636615334e783666ab635a7286c5724dd0c7bdf924e2"
+    },
+    "original_commit_contains_added_tests": false,
+    "temporary_augmentation_only": true,
+    "current_restored_bytes_independently_checked": true,
+    "current_worktree_clean_independently_checked": true,
+    "log": {
+      "path": "/private/tmp/erp-cutover17-baseline-probe-lib-tests.log",
+      "sha256": "b7faf3ac7ab978ec25eb67ff6391323deef12d47205a25b407f54f4d7d99fa67",
+      "totals": {
+        "passed": 3266,
+        "failed": 0,
+        "ignored": 71
+      },
+      "lib_results_count": 12,
+      "executor": "root integrator",
+      "exit_code_reported_by_executor": 0,
+      "matching_test_lines": [
+        "test customer::profile::validation::compile_probe_equivalence_tests::contact_required_value_preserves_none_empty_and_unicode ... ok",
+        "test receivable::mapping::compile_probe_equivalence_tests::zero_amount_parse_spelling_preserves_value_json_and_decimal128_wire ... ok",
+        "test receivable::mapping::compile_probe_equivalence_tests::former_zero_literal_probe_changes_scale_json_and_decimal128_wire ... ok",
+        "test sales_order::command::identity::compile_probe_equivalence_tests::complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes ... ok"
+      ]
+    }
+  },
+  "candidate_execution": {
+    "path": "/private/tmp/erp-cutover17-lib-tests-sealed.log",
+    "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+    "totals": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "lib_results_count": 33,
+    "executor": "root integrator",
+    "exit_code_reported_by_executor": 0,
+    "matching_test_lines": [
+      "test service::customer::profile::validation::compile_probe_equivalence_tests::contact_required_value_preserves_none_empty_and_unicode ... ok",
+      "test compile_probe_equivalence_tests::zero_amount_parse_spelling_preserves_value_json_and_decimal128_wire ... ok",
+      "test compile_probe_equivalence_tests::former_zero_literal_probe_changes_scale_json_and_decimal128_wire ... ok",
+      "test service::sales_order::command::identity::compile_probe_equivalence_tests::complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes ... ok",
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ]
+  },
+  "strict_clippy": {
+    "path": "/private/tmp/erp-cutover17-clippy-sealed.log",
+    "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+    "exit_code_reported_by_executor": 0,
+    "finished_dev_profile_present": true,
+    "executor": "root integrator"
+  }
+}

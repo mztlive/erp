@@ -1,0 +1,120 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "bound_at_utc": "2026-09-07T07:04:37.979496+00:00",
+  "root_gate_observation": {
+    "observation_kind": "Reviewer read root-provided sealed execution logs; reviewer did not run Cargo",
+    "reported_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "logs": [
+      {
+        "kind": "lib-tests",
+        "path": "/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 18s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "clippy",
+        "path": "/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.31s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "check",
+        "path": "/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.54s"
+        ],
+        "future_compatibility_advisory_present": true
+      }
+    ],
+    "library_aggregate": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "actual_http_golden_test_lines": [
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ],
+    "http_golden_test_functions_passed": 10,
+    "http_response_cases_from_reviewed_definition": 494,
+    "actual_import_projection_test_lines": [
+      "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+      "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+      "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok"
+    ],
+    "reviewer_executed_cargo": false,
+    "real_database_verified": false
+  },
+  "reports": [
+    {
+      "path": "/private/tmp/cutover17-readmodels-result.json",
+      "sha256": "b9a556b2a40679feee46bf90834e59e36518b7e23e186779fce4ed326f9ec7d6",
+      "files_verified": 49
+    },
+    {
+      "path": "/private/tmp/cutover17-boundary-error-review.json",
+      "sha256": "bd8357bcb90937e33edb9aaf7f99d76cedad2405fd060d2a0c5f7c7730f0593c",
+      "files_verified": 32
+    },
+    {
+      "path": "/private/tmp/cutover17-import-projection-review.json",
+      "sha256": "35412928e199e1b553a8b132c694e32074ba1ea255b2adc9591725cb1220bcf1",
+      "files_verified": 14
+    }
+  ],
+  "child_reports": [
+    {
+      "path": "/tmp/cutover17-startup-compensation-review.json",
+      "sha256": "df161d401d17d853746144beed447b251233c6c7032ee1d44c2deab361e417b7",
+      "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b"
+    },
+    {
+      "path": "/tmp/cutover17-index-sequence-review.json",
+      "sha256": "ce175486c31602a0ae1473db1c320304b6ea7884185f0f3f8361cb7c9dd69150",
+      "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b"
+    },
+    {
+      "path": "/tmp/cutover17-startup-final-blob-binding.json",
+      "sha256": "26e3e594953f1578b1a8421f529818a904f8895f00c25a785072eee809301790",
+      "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b"
+    }
+  ],
+  "documents": [
+    {
+      "path": "/tmp/cutover17-readmodels-result.md",
+      "sha256": "c799868dbabed9a8394a3930bbc22d90c90796242958e25a096dec238e19da0b"
+    },
+    {
+      "path": "/tmp/cutover17-boundary-error-review.md",
+      "sha256": "217f7e7621cac4d5c066899068e4c66a6de60f164ed99044d66aa98a0878dc1f"
+    },
+    {
+      "path": "/tmp/cutover17-import-projection-review.md",
+      "sha256": "ab3b29c753e33f8db59a2e8278cd6b83d7bb7ca51c98de25375e0d2b43dfd6cc"
+    },
+    {
+      "path": "/tmp/cutover17-startup-compensation-review.md",
+      "sha256": "7b7d01374584c71a21d97bfcaf56229ff3dbba9a51d9abadd82164fa693b3ad4"
+    }
+  ],
+  "final_references_updated_at_utc": "2026-09-07T07:12:03.197963+00:00",
+  "source_io_stopped": true
+}

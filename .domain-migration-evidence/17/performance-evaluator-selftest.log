@@ -1,0 +1,292 @@
+{
+  "self_test": true,
+  "passed": true,
+  "cases": [
+    {
+      "case": "exact_30_improvement_and_exact_10_regression_pass",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "case": "missing_scenario",
+      "passed": true,
+      "expected_failure": "manifest.scenarios",
+      "observed_failures": [
+        "manifest.scenarios",
+        "manifest.modes.finance",
+        "finance.check.directory.baseline",
+        "finance.check.directory.candidate",
+        "finance.check.comparison_path",
+        "finance.build.directory.baseline",
+        "finance.build.directory.candidate",
+        "finance.build.comparison_path",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "four_samples",
+      "passed": true,
+      "expected_failure": "five_valid_samples",
+      "observed_failures": [
+        "customer.check.baseline.five_valid_samples",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "source_not_restored",
+      "passed": true,
+      "expected_failure": ".source_restored",
+      "observed_failures": [
+        "customer.check.baseline.source_restored",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "forged_median",
+      "passed": true,
+      "expected_failure": ".median",
+      "observed_failures": [
+        "customer.check.baseline.median",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "reordered_summary",
+      "passed": true,
+      "expected_failure": ".raw_seconds",
+      "observed_failures": [
+        "customer.check.baseline.raw_seconds",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "nonzero_exit",
+      "passed": true,
+      "expected_failure": ".exit",
+      "observed_failures": [
+        "customer.check.candidate.sample-03.exit",
+        "customer.check.candidate.five_valid_samples",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "wrong_commit",
+      "passed": true,
+      "expected_failure": ".commit",
+      "observed_failures": [
+        "sales.build.candidate.commit",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "missing_comparability",
+      "passed": true,
+      "expected_failure": ".comparison_path",
+      "observed_failures": [
+        "sales.build.comparison_path",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "different_media",
+      "passed": true,
+      "expected_failure": ".attested.physical_device_id",
+      "observed_failures": [
+        "finance.build.attested.physical_device_id",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "unreviewed_load",
+      "passed": true,
+      "expected_failure": ".background_load_review",
+      "observed_failures": [
+        "customer.check.background_load_review",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "changed_profile",
+      "passed": true,
+      "expected_failure": ".environment.profile",
+      "observed_failures": [
+        "customer.check.candidate.contracted_environment",
+        "customer.check.environment.profile",
+        "customer.check.proof_environment_hash.candidate",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "failed_measurement_flag",
+      "passed": true,
+      "expected_failure": ".measurement_passed",
+      "observed_failures": [
+        "customer.check.baseline.measurement_passed",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "missing_build_mode",
+      "passed": true,
+      "expected_failure": "manifest.modes",
+      "observed_failures": [
+        "manifest.modes.finance",
+        "finance.build.directory.baseline",
+        "finance.build.directory.candidate",
+        "finance.build.comparison_path",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "restore_command_failed",
+      "passed": true,
+      "expected_failure": ".restore.exit",
+      "observed_failures": [
+        "sales.build.candidate.sample-02.restore.exit",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "untrue_noop_flag",
+      "passed": true,
+      "expected_failure": ".noop_all_business_units_fresh",
+      "observed_failures": [
+        "customer.check.baseline.noop_all_business_units_fresh",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "restore_error_with_true_flag",
+      "passed": true,
+      "expected_failure": ".no_restore_error",
+      "observed_failures": [
+        "customer.check.baseline.no_restore_error",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "forged_source_hash",
+      "passed": true,
+      "expected_failure": ".source_hash",
+      "observed_failures": [
+        "customer.check.baseline.source_hash",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "stale_source_evidence_reference",
+      "passed": true,
+      "expected_failure": ".environment_sources",
+      "observed_failures": [
+        "customer.check.environment_sources",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "unequal_build_jobs",
+      "passed": true,
+      "expected_failure": ".attested.build_jobs",
+      "observed_failures": [
+        "customer.check.attested.build_jobs",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "same_changed_jobs_in_one_pair",
+      "passed": true,
+      "expected_failure": "matrix.environment_consistency",
+      "observed_failures": [
+        "matrix.environment_consistency",
+        "matrix.environment_consistency",
+        "matrix.environment_consistency",
+        "matrix.environment_consistency",
+        "matrix.environment_consistency",
+        "check.all_scenarios_valid",
+        "check.two_improvements",
+        "check.no_regression_over_10",
+        "build.all_scenarios_valid",
+        "build.two_improvements",
+        "build.no_regression_over_10"
+      ]
+    },
+    {
+      "case": "sales_edit_dirty_finance",
+      "passed": true,
+      "expected_failure": ".unrelated_fresh.erp-finance"
+    },
+    {
+      "case": "sales_edit_missing_finance",
+      "passed": true,
+      "expected_failure": ".unrelated_fresh.erp-finance"
+    },
+    {
+      "case": "string_fresh_is_not_boolean",
+      "passed": true,
+      "expected_failure": ".artifact"
+    },
+    {
+      "case": "finance_edit_dirty_sales",
+      "passed": true
+    },
+    {
+      "case": "actual_missing_sample_directory",
+      "passed": true
+    },
+    {
+      "case": "less_than_30_improvement",
+      "passed": true,
+      "expected_failure": ".two_improvements"
+    },
+    {
+      "case": "more_than_10_regression",
+      "passed": true,
+      "expected_failure": ".no_regression_over_10"
+    },
+    {
+      "case": "sixth_sample_not_silently_dropped",
+      "passed": true
+    }
+  ],
+  "execution": "Pure Python temporary fixtures only; no subprocess, Cargo, database or repository writes."
+}

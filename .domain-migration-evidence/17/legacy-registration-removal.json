@@ -15,6 +15,9 @@
   "old_service_rules_absorbed": true,
   "old_service_exit_code": 0,
   "new_domain_exit_code": 0,
-  "remaining_old_work_item": "owned by fact-reader shard; final clearance required",
-  "real_database_verified": false
+  "remaining_old_work_item": 0,
+  "real_database_verified": false,
+  "output_code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "final_source_and_manifest_roots_absent": true,
+  "final_audit": "legacy-final-audit.json"
 }

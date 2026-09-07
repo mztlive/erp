@@ -1,0 +1,82 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "unique_source_blobs_checked": 254,
+  "evidence": [
+    {
+      "path": "/private/tmp/cutover17-import-view-repair.json",
+      "sha256": "1d286c43838000b76cbc23c4c33f6cb986a57e4c65bb3c271d8f9d39f5ebe97f",
+      "bound_after_source_records": 11
+    },
+    {
+      "path": "/private/tmp/cutover17-process-result.json",
+      "sha256": "08a1c14aad927aaa9d14fc5eb87e0b408c723294b6d0c134389c553c504da471",
+      "bound_after_source_records": 202
+    },
+    {
+      "path": "/private/tmp/cutover17-workbench-independent-review.json",
+      "sha256": "83e5b773dd2ec896c3214181d930ff43758e092cc0c5e10912ce22c905351a7d",
+      "bound_after_source_records": 46
+    }
+  ],
+  "root_gate_observations": [
+    {
+      "kind": "lib-tests",
+      "path": "/private/tmp/erp-cutover17-lib-tests-sealed.log",
+      "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+      "bytes": 388932,
+      "execution_owner": "root",
+      "root_reported_exit_code": 0,
+      "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+      "observed_package_test_summaries": 33,
+      "aggregate": {
+        "passed": 3655,
+        "failed": 0,
+        "ignored": 68
+      }
+    },
+    {
+      "kind": "clippy",
+      "path": "/private/tmp/erp-cutover17-clippy-sealed.log",
+      "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+      "bytes": 925,
+      "execution_owner": "root",
+      "root_reported_exit_code": 0,
+      "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+      "observed_completion": "Finished dev profile",
+      "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+    },
+    {
+      "kind": "check",
+      "path": "/private/tmp/erp-cutover17-check-sealed.log",
+      "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+      "bytes": 1023,
+      "execution_owner": "root",
+      "root_reported_exit_code": 0,
+      "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+      "observed_completion": "Finished dev profile",
+      "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+    }
+  ],
+  "new_import_projection_tests_observed": [
+    {
+      "name": "raw_and_read_only_views_preserve_actual_linked_task_type",
+      "actual_log_line": "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+      "result": "passed"
+    },
+    {
+      "name": "authorized_projection_keeps_actual_type_status_and_existing_action_rules",
+      "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok",
+      "result": "passed"
+    },
+    {
+      "name": "authorized_projection_uses_registered_destinations_and_preserves_route_errors",
+      "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+      "result": "passed"
+    }
+  ],
+  "no_repo_source_modified": true,
+  "no_cargo_or_database_or_heavy_scan": true
+}

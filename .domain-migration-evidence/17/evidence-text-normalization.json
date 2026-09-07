@@ -1,0 +1,11 @@
+{
+  "rule": "Only trailing whitespace normalized in readable copies; exact original bytes retained in gzip attachments",
+  "files": [
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+      "normalized_sha256": "ccba07dadb1e95707637aaec8f9ee7729553b546bec8412b8dc003a0ce0d804b"
+    }
+  ]
+}

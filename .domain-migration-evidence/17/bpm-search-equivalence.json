@@ -1,0 +1,221 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "source": {
+    "path": "/private/tmp/erp-domain-crate-17-cutover/backend/scripts/check-bpm-boundaries.sh",
+    "sha256": "0ea6901685f88a4a9fcbe4c8fdade695eeb092cb605da86095b65c3879954546",
+    "actual_git_blob_match": true
+  },
+  "prototype_before": {
+    "path": "/private/tmp/domain-cutover17-tools/after/backend/scripts/check-bpm-boundaries.sh",
+    "sha256": "08301439cfd4590557bf1ce49acdc806b4514f06d3b8ed1367d10199320f8ace",
+    "scope": "Prior reviewed cutover-tool prototype; only actual search_rs function is compared."
+  },
+  "before_function": "search_rs() {\n    local source\n    for source in \"${ACTIVE_RUST_SOURCES[@]}\"; do\n        grep -Hn -E \"$1\" \"$source\" || true\n    done\n}",
+  "after_function": "search_rs() {\n    # Keep the same ERE and exact metadata-derived files; batch subprocesses\n    # within the platform argv limit instead of spawning grep for every file.\n    printf '%s\\0' \"${ACTIVE_RUST_SOURCES[@]}\" | xargs -0 grep -Hn -E \"$1\" || true\n}",
+  "actual_inventory_unchanged": "Both functions consume ACTIVE_RUST_SOURCES in the original array order. Frozen caller obtains SOURCE_LIST from bpm_workspace.py; rejects empty array before search. This review did not invoke that Cargo metadata producer.",
+  "equivalence_constraints": [
+    "Same grep -Hn -E and same ERE argument; filenames always shown and line numbers preserved.",
+    "NUL-delimited argv prevents splitting spaces or glob characters; xargs preserves source order and splits only at argv limits.",
+    "Nonempty immutable inventory and readable Rust files are caller preconditions. Both helpers suppress grep no-match status via || true.",
+    "Only process batching changes; caller ID/macros checks and hit-count interpretation are untouched by search_rs optimization."
+  ],
+  "fixture_results": [
+    {
+      "ere": "id_type!\\(ApprovalProcessDefinitionId\\)",
+      "stdout_bytes": 268,
+      "matched_lines": 2,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalProcessDefinitionId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalNodeDefinitionId\\)",
+      "stdout_bytes": 131,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalNodeDefinitionId[[:space:](]",
+      "stdout_bytes": 137,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalTransitionDefinitionId\\)",
+      "stdout_bytes": 137,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalTransitionDefinitionId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalProcessInstanceId\\)",
+      "stdout_bytes": 132,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalProcessInstanceId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalNodeExecutionId\\)",
+      "stdout_bytes": 130,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalNodeExecutionId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalInstanceAssigneeId\\)",
+      "stdout_bytes": 133,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalInstanceAssigneeId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalCommandReceiptId\\)",
+      "stdout_bytes": 262,
+      "matched_lines": 2,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalCommandReceiptId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalSubjectSnapshotId\\)",
+      "stdout_bytes": 132,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalSubjectSnapshotId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(ApprovalNotificationOutboxId\\)",
+      "stdout_bytes": 135,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "struct ApprovalNotificationOutboxId[[:space:](]",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "macro_rules![[:space:]]+id_type",
+      "stdout_bytes": 122,
+      "matched_lines": 1,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "NEVER_MATCH_17",
+      "stdout_bytes": 0,
+      "matched_lines": 0,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    },
+    {
+      "ere": "id_type!\\(Approval(Process|Command)",
+      "stdout_bytes": 662,
+      "matched_lines": 5,
+      "stdout_equal": true,
+      "stderr_equal": true,
+      "exit_before": 0,
+      "exit_after": 0
+    }
+  ],
+  "production_bpm_gate": {
+    "path": "/tmp/erp-cutover17-bpm-final-batched.log",
+    "sha256": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2",
+    "exit_code": 0,
+    "exit_evidence": "Parent actually ran the full gate and reported exit 0; log contains success. Reviewer did not rerun Cargo metadata."
+  },
+  "reviewer_ran_cargo": false,
+  "database_verified": false
+}

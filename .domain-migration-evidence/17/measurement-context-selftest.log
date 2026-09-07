@@ -1,0 +1,25 @@
+test_apfs_physical_chain_and_no_serial (__main__.SelfTests.test_apfs_physical_chain_and_no_serial) ... ok
+test_baseline_missing_defaults_with_explicit_external_inputs (__main__.SelfTests.test_baseline_missing_defaults_with_explicit_external_inputs) ... ok
+test_cli_explicit_missing_input_returns_two_and_does_not_fallback (__main__.SelfTests.test_cli_explicit_missing_input_returns_two_and_does_not_fallback) ... ok
+test_cli_forwards_all_three_selected_inputs (__main__.SelfTests.test_cli_forwards_all_three_selected_inputs) ... ok
+test_cli_missing_paths_returns_two_without_files (__main__.SelfTests.test_cli_missing_paths_returns_two_without_files) ... ok
+test_config_precedence_and_environment (__main__.SelfTests.test_config_precedence_and_environment) ... ok
+test_default_jobs (__main__.SelfTests.test_default_jobs) ... ok
+test_df_rejects_network_and_failure (__main__.SelfTests.test_df_rejects_network_and_failure) ... ok
+test_effective_jobs_does_not_ignore_config_env (__main__.SelfTests.test_effective_jobs_does_not_ignore_config_env) ... ok
+test_exclusive_private_output_and_no_comparability (__main__.SelfTests.test_exclusive_private_output_and_no_comparability) ... ok
+test_existing_default_and_explicit_symlink_real_location (__main__.SelfTests.test_existing_default_and_explicit_symlink_real_location) ... ok
+test_explicit_same_inputs_bind_same_sha_across_baseline_and_candidate (__main__.SelfTests.test_explicit_same_inputs_bind_same_sha_across_baseline_and_candidate) ... ok
+test_include_is_incomplete (__main__.SelfTests.test_include_is_incomplete) ... ok
+test_incomplete_capture_does_not_leak_command_errors (__main__.SelfTests.test_incomplete_capture_does_not_leak_command_errors) ... ok
+test_jobs (__main__.SelfTests.test_jobs) ... ok
+test_lock_ignores_workspace_and_hides_source (__main__.SelfTests.test_lock_ignores_workspace_and_hides_source) ... ok
+test_missing_default_stays_missing_without_external_override (__main__.SelfTests.test_missing_default_stays_missing_without_external_override) ... ok
+test_missing_repo_target_and_overwrite (__main__.SelfTests.test_missing_repo_target_and_overwrite) ... ok
+test_processes_only_exact_comm (__main__.SelfTests.test_processes_only_exact_comm) ... ok
+test_safe_values_and_config_exclude_secrets (__main__.SelfTests.test_safe_values_and_config_exclude_secrets) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.151s
+
+OK

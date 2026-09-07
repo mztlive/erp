@@ -1,0 +1,693 @@
+{
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "tree": "/private/tmp/erp-domain-crate-17-cutover",
+  "files": [
+    {
+      "path": "backend/services/src/identity_audit.rs",
+      "sha256": "9eb01d6746d5533e607649ac4ba18d0ca8bd58d0c4c7e8ccf7bcdf9286ee0223",
+      "line_count": 122,
+      "functions": [
+        {
+          "name": "new",
+          "line": 27,
+          "end_line": 29,
+          "body_sha256": "7035426e436eb308153079c614483ad063de6805e753de777ef95fbd94670e43",
+          "tokens_sha256": "439878511797f3ced2f6512e257ab7aec8e4a274e9c5a013fda0925c220224af",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "shared",
+          "line": 32,
+          "end_line": 34,
+          "body_sha256": "10e3a9c7459d01301304d1495b44ef5bccbc208d611dd7dfbf4d2cecfdee9728",
+          "tokens_sha256": "17c0bbe4d2c22106f4070696bd0955147015cbc1920e57bdfee92b382fab0cbd",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "resource_log",
+          "line": 39,
+          "end_line": 50,
+          "body_sha256": "9ff22396a39fdb71cf940c7878cd59404feec63476f7faae0666326427eb6eca",
+          "tokens_sha256": "2d08d80721427c36b710a33f5ba122ac15a9475430eb27d210e512d1fd4ba7de",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "persist",
+          "line": 52,
+          "end_line": 64,
+          "body_sha256": "65ea9e81e83419213853d96afbf834cfd1cd125c22952f1cb457881ade194f76",
+          "tokens_sha256": "d124dcdeda9b60a966b2c7bf3ea83cdc5ffcdde9554836f3fc8ecd7cb7dd0998",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "prepared_from_log",
+          "line": 68,
+          "end_line": 80,
+          "body_sha256": "c8779eb29408cd8e32026fe3236bce3a46305f41afffca10788f6a34cfa4c891",
+          "tokens_sha256": "ea949fc2d35d32f730fd2fce62d2905454ea2661b3c02050a0059bd893b751e3",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "audit_log_from_prepared",
+          "line": 83,
+          "end_line": 105,
+          "body_sha256": "7945f3af4bb027ea584e20f2417d27f5e2c5bfc47317e176450873b72058466d",
+          "tokens_sha256": "058cdc40cc80840aa325cb8a0e33e1310cf1f6b4758bafc05abf0121c1523890",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        },
+        {
+          "name": "map_audit_error",
+          "line": 107,
+          "end_line": 122,
+          "body_sha256": "fe1261acff101d859a6eb30b170c07f6cb280c10d9b7391046f70f516caec265",
+          "tokens_sha256": "639ce358965b13fdabe8f12f6bddfb73fc6328bd0fdc4c15724159df3dba8a1f",
+          "target": "backend/crates/erp-processes/src/adapters/identity_audit.rs"
+        }
+      ],
+      "original_tests": [],
+      "head_blob_equal": true,
+      "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "implementation_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc"
+    },
+    {
+      "path": "backend/services/src/identity_compose.rs",
+      "sha256": "6017bcceb790186370c27d41c4a387d0f2852dbade3c0754193aa844e7012e70",
+      "line_count": 18,
+      "functions": [
+        {
+          "name": "shared_rbac_service",
+          "line": 15,
+          "end_line": 18,
+          "body_sha256": "d21ac12ad29cbb9db78b5e5dfa729c55c702844c81d2b531d20ccd8bc2ddbd77",
+          "tokens_sha256": "7009336f9206544af2482a7af18ded4ca900a72121e4c0a753450c909cfad2e5",
+          "target": "backend/crates/erp-processes/src/adapters/identity.rs"
+        }
+      ],
+      "original_tests": [],
+      "head_blob_equal": true,
+      "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "implementation_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc"
+    },
+    {
+      "path": "backend/services/src/support_audit.rs",
+      "sha256": "dbf3700f91d6ca51668d5db89a4c3bf6918b507627964a79fc3860d389c386fd",
+      "line_count": 122,
+      "functions": [
+        {
+          "name": "new",
+          "line": 27,
+          "end_line": 29,
+          "body_sha256": "7035426e436eb308153079c614483ad063de6805e753de777ef95fbd94670e43",
+          "tokens_sha256": "439878511797f3ced2f6512e257ab7aec8e4a274e9c5a013fda0925c220224af",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "shared",
+          "line": 32,
+          "end_line": 34,
+          "body_sha256": "10e3a9c7459d01301304d1495b44ef5bccbc208d611dd7dfbf4d2cecfdee9728",
+          "tokens_sha256": "17c0bbe4d2c22106f4070696bd0955147015cbc1920e57bdfee92b382fab0cbd",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "resource_log",
+          "line": 39,
+          "end_line": 50,
+          "body_sha256": "9ff22396a39fdb71cf940c7878cd59404feec63476f7faae0666326427eb6eca",
+          "tokens_sha256": "2d08d80721427c36b710a33f5ba122ac15a9475430eb27d210e512d1fd4ba7de",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "persist",
+          "line": 52,
+          "end_line": 64,
+          "body_sha256": "61ade5286833621760b0d474b3466973b6bf42812f8877a7a8cec7a9521a4952",
+          "tokens_sha256": "a38c7b18bb6d6fe052e23178f71b0e59125431ab829484f089e1fdbe0a6b0c4a",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "prepared_from_log",
+          "line": 68,
+          "end_line": 80,
+          "body_sha256": "2a1011e3a8ffa21a16e15177a7d46756bd43b7750a9b269a95e31fabed29c19e",
+          "tokens_sha256": "9b943b4940e9568ec26be062d82380bff3c61e8d348b892fb5a945e1b40d8f54",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "audit_log_from_prepared",
+          "line": 83,
+          "end_line": 105,
+          "body_sha256": "7945f3af4bb027ea584e20f2417d27f5e2c5bfc47317e176450873b72058466d",
+          "tokens_sha256": "058cdc40cc80840aa325cb8a0e33e1310cf1f6b4758bafc05abf0121c1523890",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        },
+        {
+          "name": "map_audit_error",
+          "line": 107,
+          "end_line": 122,
+          "body_sha256": "6e1a3ce49c8051bd84380190d522fa22124a2e2644956a0cb84d3e71c92ead83",
+          "tokens_sha256": "260c2959ccc364e80f63f848047b7bdbb77ad896009099d35b32cf4d06f40779",
+          "target": "backend/crates/erp-processes/src/adapters/support_audit.rs"
+        }
+      ],
+      "original_tests": [],
+      "head_blob_equal": true,
+      "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "implementation_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc"
+    },
+    {
+      "path": "backend/services/src/support_documents.rs",
+      "sha256": "c68f9b952ac623e29727f06378ffd7f871708e05eb19828f20570aa4bd1c36fc",
+      "line_count": 67,
+      "functions": [
+        {
+          "name": "new",
+          "line": 25,
+          "end_line": 27,
+          "body_sha256": "7035426e436eb308153079c614483ad063de6805e753de777ef95fbd94670e43",
+          "tokens_sha256": "439878511797f3ced2f6512e257ab7aec8e4a274e9c5a013fda0925c220224af",
+          "target": "backend/crates/erp-processes/src/adapters/support_documents.rs"
+        },
+        {
+          "name": "shared",
+          "line": 30,
+          "end_line": 32,
+          "body_sha256": "10e3a9c7459d01301304d1495b44ef5bccbc208d611dd7dfbf4d2cecfdee9728",
+          "tokens_sha256": "17c0bbe4d2c22106f4070696bd0955147015cbc1920e57bdfee92b382fab0cbd",
+          "target": "backend/crates/erp-processes/src/adapters/support_documents.rs"
+        },
+        {
+          "name": "ensure_registered",
+          "line": 37,
+          "end_line": 49,
+          "body_sha256": "216c815ed12e8642713359108bd2b297294059ce9f7fbb761e5e07acc78223b3",
+          "tokens_sha256": "1a0744a46718eb152158ff2c769329533a66a7c2e910c7d263f4ac88893d62ae",
+          "target": "backend/crates/erp-processes/src/adapters/support_documents.rs"
+        },
+        {
+          "name": "find_registered_ids",
+          "line": 51,
+          "end_line": 66,
+          "body_sha256": "eab7805a7f221aa4c42441a74b2dd87eec584935800d212556d5234c76a2a820",
+          "tokens_sha256": "b77a33b079aaf32f43a4df112d98008cb17faf2d638687721f095bd547b68e6d",
+          "target": "backend/crates/erp-processes/src/adapters/support_documents.rs"
+        }
+      ],
+      "original_tests": [],
+      "head_blob_equal": true,
+      "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "implementation_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc"
+    },
+    {
+      "path": "backend/services/src/workflow_compose.rs",
+      "sha256": "e88d2a5a93165fe244f23859f2e13b332056b3ea058186eda982680911cd9e3a",
+      "line_count": 1193,
+      "functions": [
+        {
+          "name": "new",
+          "line": 50,
+          "end_line": 52,
+          "body_sha256": "1fba31d68a587e473780324a1a92e45fbb66e527008671d6ed57debe2c8ff9ba",
+          "tokens_sha256": "9c252d093ae3d0ce005d2932375ce80d2adfef4f0c872b0a8a2f4fc3624efcdf",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "map_identity",
+          "line": 54,
+          "end_line": 56,
+          "body_sha256": "0fc933fad36bb8e638b0025cc6e86e0ee3fe7f6b080dba6e23b4c2554b710f9b",
+          "tokens_sha256": "5ed51815c11572e171f085eb67467436d9c958f63a511f4df7eefdf5becd41d7",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "map_persistence",
+          "line": 58,
+          "end_line": 60,
+          "body_sha256": "80a3c06b0d772d27cdfcd0753c3b4b160a28380369766ec4f3cc581f1247dfb5",
+          "tokens_sha256": "1561780a88bcc32c852bfc32f4b4cff09a2cd1c4921eff7d11492fdbdab799e9",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "account_fact",
+          "line": 62,
+          "end_line": 64,
+          "body_sha256": "4eb948be9e0f6b16478b210c58dac938a140b0513e2f682e567e24f04c85a886",
+          "tokens_sha256": "13d01ebb08c8e2b2d8c5db66c647bcae251065e132fb66799a426d7bfb03fc64",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "parse_permission",
+          "line": 66,
+          "end_line": 68,
+          "body_sha256": "87d6234e2794689845eb1faf053bc05d649df48f5c3887f2e7f9dd0afd441090",
+          "tokens_sha256": "f293a6b53449eeaac65f276e29a34c3de6e036eb4a523baee2bcbd8960739079",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "scope_type_fact",
+          "line": 70,
+          "end_line": 78,
+          "body_sha256": "d98a6ad7c896370e1388220640d36f3f081bb9cfc26c7debcbc216ae0c1d7c0e",
+          "tokens_sha256": "feae539bb62fd6c77c8f93d66726e9f699861d2542daa6531a97a15c249d6e71",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "scope_facts",
+          "line": 80,
+          "end_line": 91,
+          "body_sha256": "1e4726e304373252fb7bf41069e009035612ff44f9c566abc4c9bb9d43eda355",
+          "tokens_sha256": "78a845e635a4c36fc9a013cebbf1ba4e1e60c597654d6b12083553e5f8eeac0b",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "role_ids",
+          "line": 95,
+          "end_line": 107,
+          "body_sha256": "808df630a64b603c11fa300d381140fac9c29423493a46cdc27c4f055159ffcb",
+          "tokens_sha256": "d92dbb459635121a6cc85d7a6186e3936d87d06fd6b5dc1682e458c2702583fc",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "role_ids_with_executor",
+          "line": 109,
+          "end_line": 142,
+          "body_sha256": "d8631f28a24f9cfaa6def13d55f5d97fcc95355e224900e7ec4e20479869979f",
+          "tokens_sha256": "126ef4f17bb90095b444a70bd64927fea2f3b9f4160d2d5d2757adba906a5dac",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "permission_codes",
+          "line": 144,
+          "end_line": 160,
+          "body_sha256": "a879b3ec5a1b5c1daa83df862c3c7c57fe4ed1614306686e9b8debd9bd97226c",
+          "tokens_sha256": "4359ef7e746fa0bc2a42ab15eb627a0be91d6ef66a74735bed41e98f051adc87",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "enforce",
+          "line": 162,
+          "end_line": 176,
+          "body_sha256": "2577f1deb34873af8d80dafcf90234d977630ba6945b76c5dddfdf25bf3025c7",
+          "tokens_sha256": "3642eb6eb36ec60a27385671518c4bba4a6bb94c8be3f6ad6fdf9d1194323a4f",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "permissions_cover",
+          "line": 178,
+          "end_line": 192,
+          "body_sha256": "db52ddf6813b53b64330454601e38afdbc28911a333499fab7ab1036a41b7e88",
+          "tokens_sha256": "0d41ea23e39a97969de614e5931c85e30a9a7e79252345e0602a47be8f14301b",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "roles_granting_permission",
+          "line": 194,
+          "end_line": 216,
+          "body_sha256": "af53495f60432341183b2233c4205cb6c1028bebbf3ba39a3c427e0aac1fcd8a",
+          "tokens_sha256": "795ed1e63e2b60b61375908f0d3b88b8250cc2be909c9c545f093bb7f27e181f",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "role_permission_snapshot",
+          "line": 218,
+          "end_line": 268,
+          "body_sha256": "f9e488fe6300f1ae77eb7d3522f37950d0070660b74f0d4abf066c8839b99dcf",
+          "tokens_sha256": "ff872d75dbccfd86a8af1c8ac033c8ad85191afd6a8f94cb641e640db599bb18",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "enabled_role_ids",
+          "line": 270,
+          "end_line": 290,
+          "body_sha256": "2242521c99e6f1550bf267cd243519c24dd8d4fac2a99b4fe72004625508f51a",
+          "tokens_sha256": "d6ac784287b3d868750dc5d5244c7c4787cfb5d7b5d709c4144a7b68bb5caba0",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "ensure_policy_snapshot_with_executor",
+          "line": 292,
+          "end_line": 303,
+          "body_sha256": "7a5b4a664dcf0be21fd26da14cfd0568d3885b2681e8bab290a027da75c617e6",
+          "tokens_sha256": "0dba165ac5f5cf6b99a8f072196c21656444bdeb2f74c66fec85648347c777d2",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "current_policy_revision",
+          "line": 305,
+          "end_line": 308,
+          "body_sha256": "418207dffacc456023a66abf9ba4897ea894e77f08fed086374782e10153c198",
+          "tokens_sha256": "d776f40d4bde8d5388174245878c518c130fce4f717208509a6b3c56aaba8eec",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "policy_revision_with_executor",
+          "line": 310,
+          "end_line": 320,
+          "body_sha256": "e92caf83d9e150520669f63ac26eef2f350de203f91c0aad9fdb10820905dcbe",
+          "tokens_sha256": "cafb57e9521cde2c7586a0b1b33bc8eb87ba4b31e7dcad43f3f163444d7da61c",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "load_account",
+          "line": 322,
+          "end_line": 337,
+          "body_sha256": "0b2722d5367e611b0d7dda55919ae789841701e57d22b95135a4c0c3f991c4d8",
+          "tokens_sha256": "72c35412e876f29ea259d5a0338085d9487c3f4d2ad7fb5c5c2392dfbe1f9031",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "load_accounts",
+          "line": 339,
+          "end_line": 356,
+          "body_sha256": "c5b4086ac6d4258351f54c93bc2492d6cbe768d2c8043ba6df8a78da3b646bca",
+          "tokens_sha256": "36b1210e6ddf254bbfcbe32c2918f45abc9ae626b9bba9d98f6dd4386741d197",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "list_accounts_by_kind",
+          "line": 358,
+          "end_line": 374,
+          "body_sha256": "a2b448ce68829c762a0ef4057d126826434b7fed064eee52068f9d14bd8d303d",
+          "tokens_sha256": "fd6f86ba6abe86a2b04c3b2a95f9cd5f1102b936e51eda34e4a8d30edb206a66",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "list_active_approval_candidates",
+          "line": 376,
+          "end_line": 394,
+          "body_sha256": "66f04a4dabed6c5a18911e2cbee9383fe6949de959c56d8c395e9bcf79ffbdd5",
+          "tokens_sha256": "0c23e1b86dd111a564859844c05bd23f00e08aaceb9a25067f20057e36baf39c",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "load_data_scopes",
+          "line": 396,
+          "end_line": 422,
+          "body_sha256": "7b6e304fd4539e4568da2320fe82dad47517373dc11a75b750166ed6eb88690f",
+          "tokens_sha256": "29af3db066f44313c8eabf68cb0e3a36235e426d230e81fc5f9d47f621b6ef86",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "load_data_scopes_for_subjects",
+          "line": 424,
+          "end_line": 450,
+          "body_sha256": "623910a10e69c14bd1aea5eb0ce3f5caf56b3d3b339eaad5237280dc5f4afc1b",
+          "tokens_sha256": "58f0dc432afcdaef02b55695e9d6c95361a930bf838ecf4f58ea338c2983399f",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "organization_ids",
+          "line": 452,
+          "end_line": 472,
+          "body_sha256": "63f892a62d01551bd52b94312243e5ac392704b1f3e60eea947f45615e15c2a1",
+          "tokens_sha256": "76aee3fece51b9bdf99921d8c7b015863ae692d5bb36ea79b61125f4b52a761e",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "responsibility_scopes",
+          "line": 474,
+          "end_line": 503,
+          "body_sha256": "5bf7475cd000912c5c40f2c725653a11ebac243575a52ea326fb739e4e2538c9",
+          "tokens_sha256": "1fc9b110473acfee4dc3945262fb34b048f9249f065d5b5c50ed023debd508f6",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "run_authorized_policy_transaction",
+          "line": 505,
+          "end_line": 543,
+          "body_sha256": "3d6b9dc57176b7e973350ed9aaa0e15cbddf512b682ae2077232258558f0fa68",
+          "tokens_sha256": "b2d15c1008781530e3d3ffaebe235b78ed8c31fb414762f27184ef2269f02ea4",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "from",
+          "line": 554,
+          "end_line": 556,
+          "body_sha256": "f4ca844e57504001f6732de2b0509823730af7f1c790ab2f0e0ee55b5c3af348",
+          "tokens_sha256": "b4530297346eb4cf719938969373855ec55a295d407a634c09f14deb302fa739",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "from",
+          "line": 560,
+          "end_line": 562,
+          "body_sha256": "25b9f1cd0d27496a0e0699e6824c37c162bb2b9c534d17ef85467a3ab82c12fa",
+          "tokens_sha256": "916e1b701022ddd5ecb8eb78a75212bc9be7ab6f1e9629a0553fecff2fd6287c",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "from",
+          "line": 566,
+          "end_line": 568,
+          "body_sha256": "b2caa60f3a85035f3430de30fa26c22f99fe39919571498aca42387338d2db02",
+          "tokens_sha256": "d2b4fe6375dc1a00c562300b05e368be76e00d6a18b8b91156706ba04cb86a0c",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "fmt",
+          "line": 575,
+          "end_line": 582,
+          "body_sha256": "b944e3d4f09650714fa94fa73e202361961a5c823db9b2e55218c2558ec1d618",
+          "tokens_sha256": "47de7b9cc3b4dbac0d50d214dc884a57a3165ded0cef77831eb986039d9192ce",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "fmt",
+          "line": 589,
+          "end_line": 596,
+          "body_sha256": "9849b42b91823cf0062ea7ed8a5821e6f9dc9d47b548aaa4b675bc1008f1b35f",
+          "tokens_sha256": "154f17f3d73383315e6be175de1e37e54dcc92d3b6fbb59e963335b5ebd7be20",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "responsibility_pairs",
+          "line": 601,
+          "end_line": 622,
+          "body_sha256": "8f29962db8081596a1b0f88085f02a1cac39e4e022697f38d1cdaec6c7496836",
+          "tokens_sha256": "fc701b0a3cd95fbf0c58aeeb7a8cd518771209bf7cfe85d0fa1cc7ae7b3657da",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "organization_coverage",
+          "line": 624,
+          "end_line": 645,
+          "body_sha256": "3f58c90bbe544cf49b28e5b057c7a5a59e29d2405fe35ac7f8eb63fa8b69ff74",
+          "tokens_sha256": "32bef284d0ea8a12cb0b69f6c5893e3092ce3c23102dba6b5a872a69dc8d3c10",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs"
+        },
+        {
+          "name": "new",
+          "line": 655,
+          "end_line": 657,
+          "body_sha256": "7035426e436eb308153079c614483ad063de6805e753de777ef95fbd94670e43",
+          "tokens_sha256": "439878511797f3ced2f6512e257ab7aec8e4a274e9c5a013fda0925c220224af",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/audit.rs"
+        },
+        {
+          "name": "persist",
+          "line": 662,
+          "end_line": 689,
+          "body_sha256": "7e07ce36c96b3c1c523ffecfafb8b20b0e9c414b9c1e4beca37e8772e4ae23dc",
+          "tokens_sha256": "4a812654784be6312966b81261d63656a69ec20ae2c1effb873b4ecc6e6d6114",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/audit.rs"
+        },
+        {
+          "name": "find_command_receipts_by_ids",
+          "line": 691,
+          "end_line": 701,
+          "body_sha256": "073fe3201f2501c28c39d0023e3f468f23d15e2a7152a101193cf79c6ed8da57",
+          "tokens_sha256": "95597d314da9574278298f307953cf1230fe43875b08cb0f5cf84d922aec578d",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/audit.rs"
+        },
+        {
+          "name": "list_successful_resource_audits",
+          "line": 703,
+          "end_line": 725,
+          "body_sha256": "a039cb2ad1f53c94f731b6b3784bc73e62fd3aed40cc09472e49aa1dc1d0735b",
+          "tokens_sha256": "807b5096b25a89f89222902fcb240d60c6e3d152e1153078e681d4d092aef764",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/audit.rs"
+        },
+        {
+          "name": "new",
+          "line": 736,
+          "end_line": 740,
+          "body_sha256": "48ba8f540a75c6fcdd8e09e74bf1250a5961e3afbbddcbcb9cf71c4c9f1b1dd8",
+          "tokens_sha256": "6a3cf146c8e8a81c2185ef9fdf5a0faf12b4c80124c435dcaec479a4507c6bad",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs"
+        },
+        {
+          "name": "db",
+          "line": 742,
+          "end_line": 744,
+          "body_sha256": "fc150559b1a7bf7420e41979bea9dfdb35aeff2f927aa84464eb164f0225abcb",
+          "tokens_sha256": "87e0f20a9b4c3c79f61700a3a52e87c817f93b710bb139ce90a279c2e18b4412",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs"
+        },
+        {
+          "name": "load_object_facts",
+          "line": 749,
+          "end_line": 788,
+          "body_sha256": "542a3f877fbca98d2a4118d064fe39b82392ad1100430e7edce67c05ad1d4223",
+          "tokens_sha256": "5d45096170a5897004f6559ab0bc8e94004dfab92a1a58e0715b5de87e61b1a4",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "reader_delegate": "erp_read_models::workbench::authority::WorkItemFactsReader::load"
+        },
+        {
+          "name": "counterparty_is_active",
+          "line": 790,
+          "end_line": 800,
+          "body_sha256": "b60f92573788dd9d020aeddaa451776d6065895ff119a021d417e0605b7c1d1c",
+          "tokens_sha256": "1b7d167aca64c0a10b2d6274740fb56c60f2756b965c16534ddded905ac14751",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "reader_delegate": "erp_read_models::workbench::authority::WorkItemFactsReader::counterparty_is_active"
+        },
+        {
+          "name": "counterparty_numbers",
+          "line": 802,
+          "end_line": 812,
+          "body_sha256": "eca2b11037ade6bb01cac723354aead162f37a97b881a4cb2e32d7fab400f2c2",
+          "tokens_sha256": "19f84bc9a978af897c3cc2837adeb637d3fdbfaa779ff135d2899f2c12ac9312",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "reader_delegate": "erp_read_models::workbench::authority::WorkItemFactsReader::counterparty_numbers"
+        },
+        {
+          "name": "external_identity_map_exists",
+          "line": 814,
+          "end_line": 827,
+          "body_sha256": "119aa1bc8101253c6764d4012c28883ce74cbc76101bd07cc8538f1456a5cd5f",
+          "tokens_sha256": "b6ec35606c4c4130bf588b083f4b811c2a2ef5e88d536e94832fcb3e49e8055a",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "reader_delegate": "erp_read_models::workbench::authority::WorkItemFactsReader::external_identity_map_exists"
+        },
+        {
+          "name": "assignment_separation_actors",
+          "line": 829,
+          "end_line": 838,
+          "body_sha256": "7bf1d60f8b78f4a31e3878aa861bee67da1f517497fe6e9349dbaa32c888d231",
+          "tokens_sha256": "cdd3796fefc7d18cc4dd89ef75ec80e46612f599a2fcd98c675e61e947528191",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs"
+        },
+        {
+          "name": "purchase_order_fulfillment_scope",
+          "line": 840,
+          "end_line": 885,
+          "body_sha256": "a974d611f9069ce4b301d545569b3cbce973ca5de311988fcc7b4d7d2ee0d408",
+          "tokens_sha256": "c13b2723cd4d934b4481ddd94bb6a3fe7d191df81ad20c9e3dd263aef2d23a92",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "production_delegate": "backend/crates/erp-processes/src/adapters/workflow/purchase_responsibility.rs::purchase_order_fulfillment_scope"
+        },
+        {
+          "name": "reassign_purchase_order_owner",
+          "line": 887,
+          "end_line": 911,
+          "body_sha256": "dbb6a488d350db40e9d8ec07919789eb56fbd806c12f9a08a7d8e1521d15bd9c",
+          "tokens_sha256": "159c9795a6796543d066a7a084c4fa43fabb2a35eb921e80164bf9c9802a8f6a",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "production_delegate": "backend/crates/erp-processes/src/adapters/workflow/purchase_responsibility.rs::reassign_purchase_order_owner"
+        },
+        {
+          "name": "prepare_w29_close",
+          "line": 913,
+          "end_line": 925,
+          "body_sha256": "6c759fc2348b4de83318ad8730e9490c9acef26e417636bbff72c6e9c7f135db",
+          "tokens_sha256": "c19e8a6682d29944384dacbd46ca8784367c22db3faf43dce3dfdbb09efbb43e",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "production_delegate": "backend/crates/erp-processes/src/adapters/workflow/w29_close.rs::prepare_w29_close"
+        },
+        {
+          "name": "persist_w29_close",
+          "line": 927,
+          "end_line": 1042,
+          "body_sha256": "a9b15118fa168216194ae3a1e4562efb72e8b9f5737d9ace126e1b0714c2ca32",
+          "tokens_sha256": "524e80a40711a9e8e7e7a1ce3f210d4e0fc919698210d8afe3251c41a5104189",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/object_facts.rs",
+          "production_delegate": "backend/crates/erp-processes/src/adapters/workflow/w29_close.rs::persist_w29_close"
+        },
+        {
+          "name": "map_service",
+          "line": 1045,
+          "end_line": 1062,
+          "body_sha256": "4c45081041edfb38dcb32dc3ab69b0a3a5fccc887a091db2bb3da7e866ac1be9",
+          "tokens_sha256": "40568d3d604a146051d17e30e93466be72cb7b9993183dc638bdaee0b98623a6",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "map_workflow_code",
+          "line": 1064,
+          "end_line": 1124,
+          "body_sha256": "ea734d49d00587d2a725f167b0712b65621e7aead1b2afd88032483a17e0eac4",
+          "tokens_sha256": "19b480a1a909e94d4c490731653a18658a712f7291134342084a60d18c2937f8",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "account_fact",
+          "line": 1127,
+          "end_line": 1131,
+          "body_sha256": "cc8768b720d99afe39032e584ce195380c474f5bc40ff78dd9cf58940fc568c5",
+          "tokens_sha256": "83170716df7a54ca6d66a59ecdfa40990e416fd6b589b8b96d58f971c973d899",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "work_item_service",
+          "line": 1134,
+          "end_line": 1139,
+          "body_sha256": "9f7e4537ddd19ccb8081daeebf42cc22d25cb3a265c3021d18f73db3d70b0e6c",
+          "tokens_sha256": "a78b84b7294463610f3de96573d9cf92ce3cfc85ecb2d850e1b0253a52caca7b",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "workflow_auth",
+          "line": 1142,
+          "end_line": 1144,
+          "body_sha256": "dcf104b95b4c4d5db3aa56fb0dbbfc2c781b081984a15a476b1f9b0d5f888b55",
+          "tokens_sha256": "b806026717df957edb0a0ce3221d8da6256597ddc173c1fc0e8afd9319678c61",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "workflow_audit",
+          "line": 1147,
+          "end_line": 1149,
+          "body_sha256": "565f63b3eb621d97bb65be8a58c52f9caacc99651e250e887cb5494eaf533ab9",
+          "tokens_sha256": "503b16fcadd09bb9055cccd2ac860f844242eb5d2cba184d6575509d61385e92",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "workflow_object_facts",
+          "line": 1152,
+          "end_line": 1154,
+          "body_sha256": "4370f7d1df4df7e7ae6e6726884f9c8811ddb37b78b0906e881b200e7a464a16",
+          "tokens_sha256": "b9606a71e732d454e56169566eb48673d239bd87e073f5c6ade883280ca0fcef",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "bind_published_definition_on_document_create",
+          "line": 1160,
+          "end_line": 1181,
+          "body_sha256": "de1c6e3edd0b05172f154079c628f1b06267069e5526a43b405fef3e4f473786",
+          "tokens_sha256": "3e00e534ff3e5bdc717804026c9949bb3de36d9c169fd723ef40a453e2549aca",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "map_service_err",
+          "line": 1183,
+          "end_line": 1185,
+          "body_sha256": "50e0cd9e147525201c06652a9caf90ee347eb84060f9a7b80995435f6d815aac",
+          "tokens_sha256": "5bf04c12cfbbf570e6d62202b4c80242528b2b5ba622f83a217ef07bc3fe843b",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        },
+        {
+          "name": "attach_published_binding",
+          "line": 1188,
+          "end_line": 1193,
+          "body_sha256": "12add7f8983acead466b51753e73caa6ed61e153340837adcd9cfd2a02c3c1a1",
+          "tokens_sha256": "8ded8efd87030adcda9dd065af1fa4c4902041a473044aeb6a1053fdff128634",
+          "target": "backend/crates/erp-processes/src/adapters/workflow/mod.rs (root integration candidate)"
+        }
+      ],
+      "original_tests": [],
+      "head_blob_equal": true,
+      "source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "implementation_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc"
+    }
+  ]
+}

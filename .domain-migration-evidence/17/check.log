@@ -1,0 +1,10 @@
+    Checking erp-finance v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/crates/erp-finance)
+    Checking erp-sales v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/crates/erp-sales)
+    Checking erp-customer v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/crates/erp-customer)
+    Checking erp-read-models v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/crates/erp-read-models)
+    Checking erp-processes v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/crates/erp-processes)
+    Checking web-api v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/apps/web-api)
+    Checking cli v0.1.0 (/private/tmp/erp-domain-crate-17-cutover/backend/apps/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.54s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`

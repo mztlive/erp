@@ -1,0 +1,60 @@
+rustc --version: rustc 1.99.0-nightly (daf2e5e18 2026-07-13)
+cargo --version: cargo 1.99.0-nightly (59800466c 2026-07-07)
+python3 --version: Python 3.14.7
+SOURCE_COMMIT 39c55021d8bb1d030eade4afb3e135e4b5a8a18b
+
+COMMAND cargo fmt --all -- --check
+SCOPE sealed source
+EXIT 0
+EVIDENCE fmt.log
+
+COMMAND cargo check --workspace --locked
+SCOPE sealed source
+EXIT 0
+EVIDENCE check.log
+
+COMMAND cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+SCOPE sealed source
+EXIT 0
+EVIDENCE clippy.log
+
+COMMAND env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+SCOPE sealed source
+EXIT 0
+EVIDENCE unit-tests.log
+
+COMMAND ./scripts/check-bpm-boundaries.sh
+SCOPE sealed source
+EXIT 0
+EVIDENCE bpm-boundaries.log
+
+COMMAND ./scripts/check-domain-boundaries.sh --cutover
+SCOPE sealed source; includes all seven former Service rules
+EXIT 0
+EVIDENCE boundary.log
+
+COMMAND ./scripts/check-permissions-drift.sh
+SCOPE sealed source
+EXIT 0
+EVIDENCE permissions.log
+
+COMMAND ./scripts/check-service-boundaries.sh
+SCOPE ACTUALLY EXECUTED BEFORE REMOVAL; final replacement is domain --cutover, not a final invocation of deleted script
+EXIT 0
+EVIDENCE old-service-pre-removal.log
+
+COMMAND git diff --check
+SCOPE source commit and final evidence working/index diff checks completed
+EXIT 0
+EVIDENCE source implementation commit checks and final evidence diff check
+
+COMMAND compare-domain-contracts.py (16 to 17)
+EXIT 1
+EVIDENCE contract-scan.log, contract-review.json
+
+COMMAND compare-domain-contracts.py (00 to 17)
+EXIT 1
+EVIDENCE cumulative/contract-scan.log, contract-review.json
+
+PERFORMANCE deferred_by_user; no threshold verdict
+真实数据库运行未验证

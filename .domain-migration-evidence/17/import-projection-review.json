@@ -1,0 +1,681 @@
+{
+  "scope": "independent bounded Import composite response and unique route-wrapper review",
+  "tree": "/private/tmp/erp-domain-crate-17-cutover",
+  "phase00_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "frozen16_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "accepted17_input": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "capture_utc": "2026-09-07T07:01:00.643937+00:00",
+  "implementation_report": {
+    "path": "/private/tmp/cutover17-import-view-repair.json",
+    "sha256": "1d286c43838000b76cbc23c4c33f6cb986a57e4c65bb3c271d8f9d39f5ebe97f",
+    "reviewed_snapshot_sha256": "43bdcd1b3c153e7f1e8ef7369aca5a39e3b0a9cca737b13822ba35abc4a91d71",
+    "current_report_after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b"
+  },
+  "supplemental_files": [
+    "backend/crates/erp-import/src/dto/legacy_import.rs",
+    "backend/crates/erp-import/src/lib.rs",
+    "backend/crates/erp-processes/src/import_apply/mod.rs",
+    "backend/crates/erp-processes/src/import_apply/confirmation_query.rs",
+    "backend/crates/erp-processes/src/import_apply/create_confirmation.rs",
+    "backend/crates/erp-processes/src/import_apply/complete.rs",
+    "backend/apps/web-api/src/core/handler/legacy_import/mod.rs",
+    "backend/crates/erp-processes/src/import_apply/dto.rs",
+    "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+    "backend/crates/erp-read-models/src/workbench/mod.rs",
+    "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs"
+  ],
+  "supporting_provider_files": [
+    "backend/crates/erp-workflow/src/entity/work_item/entity/types.rs",
+    "backend/crates/erp-read-models/src/workbench/dto/mod.rs",
+    "backend/crates/erp-processes/src/errors.rs"
+  ],
+  "files": {
+    "backend/crates/erp-import/src/dto/legacy_import.rs": {
+      "after_sha256": "21e2e6221479a26bae3eb6bcabdf5273b69934fb831f628cd8de21112569b15e",
+      "frozen16_sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e",
+      "accepted17_sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e",
+      "after_commit_blob_sha256": "21e2e6221479a26bae3eb6bcabdf5273b69934fb831f628cd8de21112569b15e",
+      "after_commit_blob_oid": "65c3cf25166eba56350b6b33aad6a8ec84904e98",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-import/src/lib.rs": {
+      "after_sha256": "b14d0b20be43568c19cc77770cbdf133a7902d908d99624cbd891a479e66bad3",
+      "frozen16_sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77",
+      "accepted17_sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77",
+      "after_commit_blob_sha256": "b14d0b20be43568c19cc77770cbdf133a7902d908d99624cbd891a479e66bad3",
+      "after_commit_blob_oid": "1d839c6b8ba2d6faca15a811dc38ad0e92ffb7f0",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/mod.rs": {
+      "after_sha256": "373c1d5bd0e04643f932476792a6112f0d62a7b65ac3d337c41c84cb5279711a",
+      "frozen16_sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451",
+      "accepted17_sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451",
+      "after_commit_blob_sha256": "373c1d5bd0e04643f932476792a6112f0d62a7b65ac3d337c41c84cb5279711a",
+      "after_commit_blob_oid": "b8d63c036386beb8a0a8af8cffcb0a457a6f4cfa",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/confirmation_query.rs": {
+      "after_sha256": "510676eebca8a1e0aabc777c564fbb90c2f7c966a6bb847a68577c2bbaa2c9c1",
+      "frozen16_sha256": "18406287a39d3cb988aeab28b907948e1fd75a91fb7c82a253216dd03fc5f441",
+      "accepted17_sha256": "18406287a39d3cb988aeab28b907948e1fd75a91fb7c82a253216dd03fc5f441",
+      "after_commit_blob_sha256": "510676eebca8a1e0aabc777c564fbb90c2f7c966a6bb847a68577c2bbaa2c9c1",
+      "after_commit_blob_oid": "c7ab2dfe9e3767f643704178f04031e33282b8bf",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/create_confirmation.rs": {
+      "after_sha256": "55cf19f645a764c8b2fb979c51941d15d7d2e5104c41ca184a996956b608a026",
+      "frozen16_sha256": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c",
+      "accepted17_sha256": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c",
+      "after_commit_blob_sha256": "55cf19f645a764c8b2fb979c51941d15d7d2e5104c41ca184a996956b608a026",
+      "after_commit_blob_oid": "fa7e57800abf5d7b156ab57e56429b33430df51a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/complete.rs": {
+      "after_sha256": "bb31afc99b620e5e092cf34626cbf29423231379498b3dd032c2f7acd0230d83",
+      "frozen16_sha256": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895",
+      "accepted17_sha256": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895",
+      "after_commit_blob_sha256": "bb31afc99b620e5e092cf34626cbf29423231379498b3dd032c2f7acd0230d83",
+      "after_commit_blob_oid": "5cec8323c1d70624d24361f13d063da6433657c8",
+      "after_commit_blob_verified": true
+    },
+    "backend/apps/web-api/src/core/handler/legacy_import/mod.rs": {
+      "after_sha256": "cb666480707c4ba454ad0c887a35c9c265523cd66d242d4ae3b9e49396c35c23",
+      "frozen16_sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9",
+      "accepted17_sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9",
+      "after_commit_blob_sha256": "cb666480707c4ba454ad0c887a35c9c265523cd66d242d4ae3b9e49396c35c23",
+      "after_commit_blob_oid": "d5765d19c109ed63105b70f00689f60c3dabd219",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/dto.rs": {
+      "after_sha256": "6ea61d64ac2a955933e2a54a8f3f271af1dec1322bb2ff554c69b42d8aced7df",
+      "frozen16_sha256": null,
+      "accepted17_sha256": null,
+      "after_commit_blob_sha256": "6ea61d64ac2a955933e2a54a8f3f271af1dec1322bb2ff554c69b42d8aced7df",
+      "after_commit_blob_oid": "8297810348c4bba27075915b38d9a8906a7ddee4",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-read-models/src/workbench/dto/view.rs": {
+      "after_sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+      "frozen16_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "accepted17_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "after_commit_blob_sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+      "after_commit_blob_oid": "6955029dd04d4cd8a874009a8f5378ec77119f3a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-read-models/src/workbench/mod.rs": {
+      "after_sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+      "frozen16_sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d",
+      "accepted17_sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d",
+      "after_commit_blob_sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+      "after_commit_blob_oid": "aa2d34f0c0387440fa77d00c5531ac9051d43858",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs": {
+      "after_sha256": "1a9e23afdfd2de9078646d6adea09287cb3ac1a4bf180e3453527c8935f64894",
+      "frozen16_sha256": null,
+      "accepted17_sha256": null,
+      "after_commit_blob_sha256": "1a9e23afdfd2de9078646d6adea09287cb3ac1a4bf180e3453527c8935f64894",
+      "after_commit_blob_oid": "566a0e8f2025d58278248c21489f335f11815707",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-workflow/src/entity/work_item/entity/types.rs": {
+      "after_sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced",
+      "frozen16_sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced",
+      "accepted17_sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced",
+      "after_commit_blob_sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced",
+      "after_commit_blob_oid": "2efd406e5c5567d31f6586661a804c0b93f4586c",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-read-models/src/workbench/dto/mod.rs": {
+      "after_sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+      "frozen16_sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+      "accepted17_sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+      "after_commit_blob_sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec",
+      "after_commit_blob_oid": "54ffa00503e498d3600a65452da58a043227bf30",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/errors.rs": {
+      "after_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "frozen16_sha256": null,
+      "accepted17_sha256": null,
+      "after_commit_blob_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "after_commit_blob_oid": "a08a69e7f6743699c1fc0975e9c8bcbcd3b8149d",
+      "after_commit_blob_verified": true
+    }
+  },
+  "baseline_source_blobs": [
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-import/src/lib.rs",
+      "sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-import/src/lib.rs",
+      "sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-processes/src/import_apply/mod.rs",
+      "sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-processes/src/import_apply/mod.rs",
+      "sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-processes/src/import_apply/confirmation_query.rs",
+      "sha256": "18406287a39d3cb988aeab28b907948e1fd75a91fb7c82a253216dd03fc5f441"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-processes/src/import_apply/confirmation_query.rs",
+      "sha256": "18406287a39d3cb988aeab28b907948e1fd75a91fb7c82a253216dd03fc5f441"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-processes/src/import_apply/create_confirmation.rs",
+      "sha256": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-processes/src/import_apply/create_confirmation.rs",
+      "sha256": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-processes/src/import_apply/complete.rs",
+      "sha256": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-processes/src/import_apply/complete.rs",
+      "sha256": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/apps/web-api/src/core/handler/legacy_import/mod.rs",
+      "sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/apps/web-api/src/core/handler/legacy_import/mod.rs",
+      "sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-read-models/src/workbench/mod.rs",
+      "sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-read-models/src/workbench/mod.rs",
+      "sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d"
+    },
+    {
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "path": "backend/services/src/legacy_import/dto.rs",
+      "sha256": "f7fd2685d48a77b510d192a5de234fad52f06cb6004c3c01e6b7b87423db94b2"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-workflow/src/entity/work_item/entity/types.rs",
+      "sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-workflow/src/entity/work_item/entity/types.rs",
+      "sha256": "fd081ab96c3ceb59e0512caf8c3b8149650ac9140cb8ae3f58e163b5c02faced"
+    },
+    {
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "path": "backend/entities/src/work_item/entity/types.rs",
+      "sha256": "04e9b2e955395e0b7350b80cfe0f160974df81a90cf357cdb74f800fa5a6c3c0"
+    },
+    {
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "path": "backend/services/src/legacy_import/confirmation/query.rs",
+      "sha256": "bef88d9b168dc767b18394d1d18b1e194fc707a94dfaad71ad2133697b8b5f2f"
+    },
+    {
+      "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "path": "backend/services/src/work_item/dto/view.rs",
+      "sha256": "89c7c3f4433fd224243e29bea09350578bea62ead5bfa1da79f88cea5db86735"
+    },
+    {
+      "commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "path": "backend/crates/erp-read-models/src/workbench/dto/mod.rs",
+      "sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec"
+    },
+    {
+      "commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "path": "backend/crates/erp-read-models/src/workbench/dto/mod.rs",
+      "sha256": "346483fed8119e6be26a0f373b81ee24d38bc1a991d6c14f2b242b77558331ec"
+    }
+  ],
+  "review_script": {
+    "path": "/private/tmp/audit-cutover17-import-projection-review.py",
+    "sha256": "483d2b9141cba47a8663d13018c1da09673a237688b8c8f598b2ead34ebc1fe4"
+  },
+  "checks": [
+    {
+      "name": "DTO complete declaration including derive/serde vs00::ImportBusinessConfirmationWorkItemView",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "259034b06dda7b9dfa275ab0bb4e35b6e4626644d6ef8e54bb6e9c50ec936590",
+      "after_normalized_tokens_sha256": "259034b06dda7b9dfa275ab0bb4e35b6e4626644d6ef8e54bb6e9c50ec936590",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "DTO fields restore unique provider vs16::ImportBusinessConfirmationWorkItemView",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "259034b06dda7b9dfa275ab0bb4e35b6e4626644d6ef8e54bb6e9c50ec936590",
+      "after_normalized_tokens_sha256": "259034b06dda7b9dfa275ab0bb4e35b6e4626644d6ef8e54bb6e9c50ec936590",
+      "approved_namespace_token_changes": [
+        [
+          "ImportWorkItemType",
+          "WorkItemType"
+        ],
+        [
+          "ImportWorkItemStatus",
+          "WorkItemStatus"
+        ]
+      ]
+    },
+    {
+      "name": "DTO complete declaration including derive/serde vs00::LegacyImportConfirmationView",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7766d65a73582bc396f908a6e760a25c9456dd31e6100bf1dcf393c748b9fa05",
+      "after_normalized_tokens_sha256": "7766d65a73582bc396f908a6e760a25c9456dd31e6100bf1dcf393c748b9fa05",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "DTO fields restore unique provider vs16::LegacyImportConfirmationView",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7766d65a73582bc396f908a6e760a25c9456dd31e6100bf1dcf393c748b9fa05",
+      "after_normalized_tokens_sha256": "7766d65a73582bc396f908a6e760a25c9456dd31e6100bf1dcf393c748b9fa05",
+      "approved_namespace_token_changes": [
+        [
+          "ImportWorkItemType",
+          "WorkItemType"
+        ],
+        [
+          "ImportWorkItemStatus",
+          "WorkItemStatus"
+        ]
+      ]
+    },
+    {
+      "name": "DTO complete declaration including derive/serde vs00::CompleteImportBusinessConfirmationResult",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "96066b9941eb588ca8ce01c943e399033db3a6b925fb000939a075a1b832b124",
+      "after_normalized_tokens_sha256": "96066b9941eb588ca8ce01c943e399033db3a6b925fb000939a075a1b832b124",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "DTO fields restore unique provider vs16::CompleteImportBusinessConfirmationResult",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "96066b9941eb588ca8ce01c943e399033db3a6b925fb000939a075a1b832b124",
+      "after_normalized_tokens_sha256": "96066b9941eb588ca8ce01c943e399033db3a6b925fb000939a075a1b832b124",
+      "approved_namespace_token_changes": [
+        [
+          "ImportWorkItemType",
+          "WorkItemType"
+        ],
+        [
+          "ImportWorkItemStatus",
+          "WorkItemStatus"
+        ]
+      ]
+    },
+    {
+      "name": "entity From payload/time conversion vs00",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "47a0b9ff51cc5f8b0fbedcf9eef351d32d6ad0fe02570e250618843114461859",
+      "after_normalized_tokens_sha256": "47a0b9ff51cc5f8b0fbedcf9eef351d32d6ad0fe02570e250618843114461859",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "entity From payload/time conversion vs16",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "47a0b9ff51cc5f8b0fbedcf9eef351d32d6ad0fe02570e250618843114461859",
+      "after_normalized_tokens_sha256": "47a0b9ff51cc5f8b0fbedcf9eef351d32d6ad0fe02570e250618843114461859",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique workflow serde declaration vs00::WorkItemType",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "5cb3d6a958d1731aade7d0b13f78bab30335e529b603371a2b64d0049c11255c",
+      "after_normalized_tokens_sha256": "5cb3d6a958d1731aade7d0b13f78bab30335e529b603371a2b64d0049c11255c",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique workflow serde declaration unchanged16::WorkItemType",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "5cb3d6a958d1731aade7d0b13f78bab30335e529b603371a2b64d0049c11255c",
+      "after_normalized_tokens_sha256": "5cb3d6a958d1731aade7d0b13f78bab30335e529b603371a2b64d0049c11255c",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique workflow serde declaration vs00::WorkItemStatus",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "9dba81dbc8881b384822917a33513fd43965bdf9f694b535abf1f2831ebe4379",
+      "after_normalized_tokens_sha256": "9dba81dbc8881b384822917a33513fd43965bdf9f694b535abf1f2831ebe4379",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique workflow serde declaration unchanged16::WorkItemStatus",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "9dba81dbc8881b384822917a33513fd43965bdf9f694b535abf1f2831ebe4379",
+      "after_normalized_tokens_sha256": "9dba81dbc8881b384822917a33513fd43965bdf9f694b535abf1f2831ebe4379",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::work_item_view",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "c7147b869cfd447bfa28d5ebc37f6288a0ffd65689f7e3a4c7cbc8185175f9dd",
+      "after_normalized_tokens_sha256": "c7147b869cfd447bfa28d5ebc37f6288a0ffd65689f7e3a4c7cbc8185175f9dd",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::read_only_work_item_view",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "e15a92d3f32d45f960630e201323458f85e376619ea54c991335c912533a7013",
+      "after_normalized_tokens_sha256": "e15a92d3f32d45f960630e201323458f85e376619ea54c991335c912533a7013",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::append_confirmation_actions",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7abb78006724777869bccb5e85a0bed7903c8a3983c6112daf5008464bfc9708",
+      "after_normalized_tokens_sha256": "7abb78006724777869bccb5e85a0bed7903c8a3983c6112daf5008464bfc9708",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::work_item_action_code",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7164996df756cd39e9b32c601e59d033043e2e3744f709428a6dcb45edfbbd28",
+      "after_normalized_tokens_sha256": "7164996df756cd39e9b32c601e59d033043e2e3744f709428a6dcb45edfbbd28",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::processing_state_code",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "6bd0c2c84ce57325789894d1cb36757d7367b711c2c46633b97fee1cf3d5491e",
+      "after_normalized_tokens_sha256": "6bd0c2c84ce57325789894d1cb36757d7367b711c2c46633b97fee1cf3d5491e",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Original raw/projection/action function vs00::confirmation_view",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "317f8e1eeb9dd4363e25df4e8fbad550d374c0831c8120d86cb5c2850adf9607",
+      "after_normalized_tokens_sha256": "317f8e1eeb9dd4363e25df4e8fbad550d374c0831c8120d86cb5c2850adf9607",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Full list body only propagates authorized route error at same successful row",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "6b2307d622b52f2e11f60b4ac89c89b72139c60afd702f4a671bfc43a720c2c9",
+      "after_normalized_tokens_sha256": "6b2307d622b52f2e11f60b4ac89c89b72139c60afd702f4a671bfc43a720c2c9",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs00::handler_route",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "aefe826a2609b51d856232560c51ef563d8a0a1d126723c470b4c2e62655a512",
+      "after_normalized_tokens_sha256": "aefe826a2609b51d856232560c51ef563d8a0a1d126723c470b4c2e62655a512",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs16::handler_route",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "aefe826a2609b51d856232560c51ef563d8a0a1d126723c470b4c2e62655a512",
+      "after_normalized_tokens_sha256": "aefe826a2609b51d856232560c51ef563d8a0a1d126723c470b4c2e62655a512",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs00::document_approval_route",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "13ea11b5b3f79fdde2802c83f3ad9d9db7b9bcad86f0824a79b900b059d5ca81",
+      "after_normalized_tokens_sha256": "13ea11b5b3f79fdde2802c83f3ad9d9db7b9bcad86f0824a79b900b059d5ca81",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs16::document_approval_route",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "13ea11b5b3f79fdde2802c83f3ad9d9db7b9bcad86f0824a79b900b059d5ca81",
+      "after_normalized_tokens_sha256": "13ea11b5b3f79fdde2802c83f3ad9d9db7b9bcad86f0824a79b900b059d5ca81",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs00::w18_confirmation_scope",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "efa8f77d26e92a32ec730693ddfc7b51b90237b4da17371d34e8f32aad609910",
+      "after_normalized_tokens_sha256": "efa8f77d26e92a32ec730693ddfc7b51b90237b4da17371d34e8f32aad609910",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Unique route rule unchanged vs16::w18_confirmation_scope",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "efa8f77d26e92a32ec730693ddfc7b51b90237b4da17371d34e8f32aad609910",
+      "after_normalized_tokens_sha256": "efa8f77d26e92a32ec730693ddfc7b51b90237b4da17371d34e8f32aad609910",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Narrow wrapper is exactly one original rule call and two field moves",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "00528ed9f04c42161ccc9cc3efbc91d3cefafbae8aa5fc600ab246147fcbb72e",
+      "after_normalized_tokens_sha256": "00528ed9f04c42161ccc9cc3efbc91d3cefafbae8aa5fc600ab246147fcbb72e",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Authorized projection has only allowed restoration; route before actions and field moves",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "64a18e3d29cb6c126ca48466359d7f964cbfca40b500eeba9756f905bbb48e1f",
+      "after_normalized_tokens_sha256": "64a18e3d29cb6c126ca48466359d7f964cbfca40b500eeba9756f905bbb48e1f",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Whole command implementations vs16::create_confirmation.rs",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "1f741a6cb40f1e087433451dc7dedb29548ff4d533ab03eb08bb9cdf6a5e3385",
+      "after_normalized_tokens_sha256": "1f741a6cb40f1e087433451dc7dedb29548ff4d533ab03eb08bb9cdf6a5e3385",
+      "approved_namespace_token_changes": [
+        [
+          "services::Error",
+          "crate::Error"
+        ],
+        [
+          "services::identity_compose::shared_rbac_service",
+          "crate::adapters::identity::shared_rbac_service"
+        ]
+      ]
+    },
+    {
+      "name": "Whole command implementations vs16::complete.rs",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7963106aeb3219a53fd9d90a29d3967a0815f625b5f4a75b1ad376dec62e47b7",
+      "after_normalized_tokens_sha256": "7963106aeb3219a53fd9d90a29d3967a0815f625b5f4a75b1ad376dec62e47b7",
+      "approved_namespace_token_changes": [
+        [
+          "services::Error",
+          "crate::Error"
+        ],
+        [
+          "services::identity_compose::shared_rbac_service",
+          "crate::adapters::identity::shared_rbac_service"
+        ]
+      ]
+    },
+    {
+      "name": "Whole HTTP implementations and permission attributes unchanged16",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "7512caf536e62966bfe1b6cec39833cb0f602735efe2442339f3eb1aa71812e2",
+      "after_normalized_tokens_sha256": "7512caf536e62966bfe1b6cec39833cb0f602735efe2442339f3eb1aa71812e2",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Workbench view whole existing content unchanged16",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "8e112ee86ad562510817e2b36042e936aa394603f355ff8d8e6ab78a3eb78db0",
+      "after_normalized_tokens_sha256": "8e112ee86ad562510817e2b36042e936aa394603f355ff8d8e6ab78a3eb78db0",
+      "approved_namespace_token_changes": []
+    },
+    {
+      "name": "Remaining Import domain DTO code unchanged16",
+      "tokens_equal": true,
+      "before_normalized_tokens_sha256": "3ac71bd21286f40fb243f94f93c4d4aef73d94cf3f08cefbc9eb9452b7ef153f",
+      "after_normalized_tokens_sha256": "3ac71bd21286f40fb243f94f93c4d4aef73d94cf3f08cefbc9eb9452b7ef153f",
+      "approved_namespace_token_changes": []
+    }
+  ],
+  "all_checks_satisfied": true,
+  "root_export_checks": {
+    "process_import_apply_pub_dto": true,
+    "workbench_dto_reexports_original_view_module": true,
+    "workbench_root_reexports_new_wrapper": true,
+    "dto_direct_unique_workflow_import": true,
+    "http_composite_provider": true,
+    "RM_to_Process_real_typed_bridge": true
+  },
+  "removed_snapshot_symbols_search": {
+    "command": [
+      "rg",
+      "-n",
+      "--glob",
+      "*.rs",
+      "\\b(?:ImportWorkItemType|ImportWorkItemStatus|import_work_item_type|import_work_item_status)\\b",
+      "backend/crates",
+      "backend/apps"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "production_contract": {
+    "wrapper_arguments": [
+      "WorkItemType",
+      "business_object_type:&str",
+      "owner_role:&str"
+    ],
+    "wrapper_has_exactly_original_handler_route_call": true,
+    "wrapper_database_or_RBAC_or_clock_or_id_calls": 0,
+    "route_error": "Same RM ValidationError message moved unchanged by real exhaustive From<RM Error> for Process Error",
+    "row_order": [
+      "validate",
+      "normalize",
+      "search confirmations",
+      "prefetch linked tasks",
+      "build workflow service",
+      "for each row: authorize await",
+      "authorized branch: route? before actions/blockers",
+      "push completed row",
+      "assemble page"
+    ],
+    "fallback": "Only Forbidden/NotFound use prefetched read-only view; that projection keeps fixed W18; all other errors stop at same row",
+    "restore_scope": "Task type/status values and authorized destination route are intentionally restored from phase00; whole previous Workbench detail read migration is outside this supplemental review"
+  },
+  "new_production_projection_test_definitions": [
+    "raw_and_read_only_views_preserve_actual_linked_task_type",
+    "authorized_projection_keeps_actual_type_status_and_existing_action_rules",
+    "authorized_projection_uses_registered_destinations_and_preserves_route_errors"
+  ],
+  "cargo_executed": false,
+  "database_verified": false,
+  "runtime_evidence": "Root sealed logs observed: 3655 passed / 0 failed / 68 ignored; all 10 actual HTTP golden tests and 3 Import projection tests passed. Reviewer did not execute Cargo/DB.",
+  "findings": [],
+  "source_commit_binding": {
+    "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "file_count": 14,
+    "all_existing_reviewed_file_hashes_match_actual_commit_blobs": true,
+    "bound_at_utc": "2026-09-07T07:04:37.979496+00:00"
+  },
+  "root_gate_observation": {
+    "observation_kind": "Reviewer read root-provided sealed execution logs; reviewer did not run Cargo",
+    "reported_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "logs": [
+      {
+        "kind": "lib-tests",
+        "path": "/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 18s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "clippy",
+        "path": "/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.31s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "check",
+        "path": "/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.54s"
+        ],
+        "future_compatibility_advisory_present": true
+      }
+    ],
+    "library_aggregate": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "actual_http_golden_test_lines": [
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ],
+    "http_golden_test_functions_passed": 10,
+    "http_response_cases_from_reviewed_definition": 494,
+    "actual_import_projection_test_lines": [
+      "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+      "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+      "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok"
+    ],
+    "reviewer_executed_cargo": false,
+    "real_database_verified": false
+  },
+  "binding_script": {
+    "path": "/private/tmp/bind-cutover17-b-reviews.py",
+    "sha256": "c8d8c6733b5845f58ea640387d9cb7a3082cee3a73d940861ce36b0db31f95f7"
+  }
+}

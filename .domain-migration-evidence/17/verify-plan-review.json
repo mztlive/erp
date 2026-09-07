@@ -1,0 +1,60 @@
+{
+  "scope": "Only verify_plan.py execution mode and phase15 section6 explicit non-owned table",
+  "files": [
+    {
+      "path": "backend/docs/superpowers/plans/domain-crate-migration/tools/verify_plan.py",
+      "sha256": "04640c96f253c8ab6143de11ce8f91415be09ece549093da8584a7175d50a364"
+    },
+    {
+      "path": "backend/docs/superpowers/plans/domain-crate-migration/15-commerce-scope.md",
+      "sha256": "b5f8fbf4db47218cd1d986b5062e54680b41176c368e6daa98f47299988bc210"
+    }
+  ],
+  "selftest": "6 inline tests, real temporary Git objects and positive/negative fixtures; no Cargo/DB",
+  "execution_status": "passed",
+  "local_execution_complete": false,
+  "human_acceptance_asserted": false,
+  "phases_with_bound_local_evidence": [
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16"
+  ],
+  "incomplete_phase": [
+    "17"
+  ],
+  "default_mode_exact_report_and_exit_match_original_on_current_documents": true,
+  "sources_mode_rejected_after_migration": true,
+  "historical_manifests_maps_evidence_unchanged": true,
+  "logs": [
+    {
+      "path": "/tmp/cutover17-verify-plan-selftest.log",
+      "sha256": "fc69838500369ea49fc96cd32edd728ea6c6578ea504320f5b094ef3e72b8665"
+    },
+    {
+      "path": "/tmp/cutover17-verify-plan-execution.log",
+      "sha256": "6c79502c16e66c1a6512022cf63c6b408aaff3c3689098ffd6081e6749e719fa"
+    },
+    {
+      "path": "/tmp/cutover17-verify-plan-default.log",
+      "sha256": "3e7a24a7e73f32fb0dd34d1c625914a4c75f35eb0f594e83617d1d536037962b"
+    },
+    {
+      "path": "/tmp/cutover17-verify-plan-sources-rejected.log",
+      "sha256": "8d5c00ae64f91e48ca884d065f4fb5f2edaf05c7c87ef64881e194ff8de81e10"
+    }
+  ]
+}

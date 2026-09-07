@@ -1,0 +1,96 @@
+{
+  "schema": "cutover17-route-wrapper-independent-v1",
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "reviewer": "/root/finance_persistence",
+  "status": "pass_static_scope",
+  "scope": "Only added workbench route projection and import authorized/raw/read-only route fields; not full import semantics audit.",
+  "files": [
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+      "commit_blob_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/mod.rs",
+      "sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+      "commit_blob_equal": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/import_apply/confirmation_query.rs",
+      "sha256": "510676eebca8a1e0aabc777c564fbb90c2f7c966a6bb847a68577c2bbaa2c9c1",
+      "commit_blob_equal": true
+    }
+  ],
+  "route_rule_checks": [
+    {
+      "input": "00",
+      "input_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "input_path": "backend/services/src/work_item/dto/view.rs",
+      "input_file_sha256": "89c7c3f4433fd224243e29bea09350578bea62ead5bfa1da79f88cea5db86735",
+      "symbol": "handler_route",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "79cbd90e24f1ccbf633ef713a6a7c793016c8aba81d85468ac2cdb76345172ad"
+    },
+    {
+      "input": "00",
+      "input_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "input_path": "backend/services/src/work_item/dto/view.rs",
+      "input_file_sha256": "89c7c3f4433fd224243e29bea09350578bea62ead5bfa1da79f88cea5db86735",
+      "symbol": "document_approval_route",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "4dacd6d07794ad455de0516a0865d74cbdf5e0b8f040f424733baa6e897bb24a"
+    },
+    {
+      "input": "00",
+      "input_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "input_path": "backend/services/src/work_item/dto/view.rs",
+      "input_file_sha256": "89c7c3f4433fd224243e29bea09350578bea62ead5bfa1da79f88cea5db86735",
+      "symbol": "w18_confirmation_scope",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "be692051a4dcdce3fe59700e8b10b2f4626ef04f5338aef10dc07f42b37397ee"
+    },
+    {
+      "input": "16",
+      "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "input_path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "input_file_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "symbol": "handler_route",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "79cbd90e24f1ccbf633ef713a6a7c793016c8aba81d85468ac2cdb76345172ad"
+    },
+    {
+      "input": "16",
+      "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "input_path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "input_file_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "symbol": "document_approval_route",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "4dacd6d07794ad455de0516a0865d74cbdf5e0b8f040f424733baa6e897bb24a"
+    },
+    {
+      "input": "16",
+      "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "input_path": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "input_file_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "symbol": "w18_confirmation_scope",
+      "full_definition_tokens_equal": true,
+      "token_sha256": "be692051a4dcdce3fe59700e8b10b2f4626ef04f5338aef10dc07f42b37397ee"
+    }
+  ],
+  "added_wrapper_sha256": "85cf62956ce1bb9cfb349517c449d35af44b41b941f1a8950e9ea90550e48f96",
+  "removing_exact_addition_restores_before_file_bytes": true,
+  "before_confirmation_query": {
+    "commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+    "path": "backend/services/src/legacy_import/confirmation/query.rs",
+    "sha256": "bef88d9b168dc767b18394d1d18b1e194fc707a94dfaad71ad2133697b8b5f2f"
+  },
+  "facts": [
+    "Only the new wrapper and its export were added to workbench route surface; all existing dto/view.rs bytes are unchanged.",
+    "Wrapper forwards WorkItemType, business_object_type and owner_role unchanged to handler_route and propagates its typed Result via ?; it returns only existing handler_key/destination_workspace_id.",
+    "The three original route functions are full-definition token equal to both phase00 and phase16.",
+    "Original phase00 authorized projection copied real WorkItemView route fields. Current successful authorization calls this wrapper before action projection; route validation failures propagate instead of becoming fixed W18 values.",
+    "Current raw/read-only projections retain the original W18 constants; no additional query, clock, ID or write is introduced by the wrapper."
+  ],
+  "cargo_invoked": false,
+  "database_runtime": "真实数据库运行未验证"
+}

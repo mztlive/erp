@@ -1,0 +1,1834 @@
+{
+  "before_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "after_state": "frozen source commit; each reviewed file verified against actual Git blob",
+  "tree": "/private/tmp/erp-domain-crate-17-cutover",
+  "capture_utc": "2026-09-07T06:35:16.569114+00:00",
+  "files": {
+    "backend/apps/web-api/src/core/errors.rs": {
+      "after_sha256": "2d3549238c7f7464126fa53292922bd2ec65f6d7eda0241d0e789c873f784117",
+      "before_sha256": "e275addbd6b9a5166ff4d38b2dbd24a6309721867a233999af6162631a032220",
+      "after_commit_blob_sha256": "2d3549238c7f7464126fa53292922bd2ec65f6d7eda0241d0e789c873f784117",
+      "after_commit_blob_oid": "bcff46a7965ac67429ba74d2d377e482b6fbcb4c",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/errors.rs": {
+      "after_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "before_sha256": null,
+      "after_commit_blob_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "after_commit_blob_oid": "a08a69e7f6743699c1fc0975e9c8bcbcd3b8149d",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-read-models/src/errors.rs": {
+      "after_sha256": "e68e829cec4e6a60b866fcafa29dff20e6511cc8a84cb8c720d461712df9228b",
+      "before_sha256": null,
+      "after_commit_blob_sha256": "e68e829cec4e6a60b866fcafa29dff20e6511cc8a84cb8c720d461712df9228b",
+      "after_commit_blob_oid": "60ede8acfb3e20b2af0094e839f43b92a4eff641",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-workflow/src/error.rs": {
+      "after_sha256": "4ee5b991a9fcc41a7727b1d47c65469c6d3417a3faace7d15bf3eda4ffc200bf",
+      "before_sha256": "63fe39952aca61e1b56d288cc4522da37e36e7c68bde54a4c6f240548745ac83",
+      "after_commit_blob_sha256": "4ee5b991a9fcc41a7727b1d47c65469c6d3417a3faace7d15bf3eda4ffc200bf",
+      "after_commit_blob_oid": "b0d76c5df2cc2c84f02565fb8098f3781f08db52",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-identity/src/error.rs": {
+      "after_sha256": "7974e7aa2bdaef74c6fb1614d750ef0615bdb10a70799485fe724bcda884447f",
+      "before_sha256": "7974e7aa2bdaef74c6fb1614d750ef0615bdb10a70799485fe724bcda884447f",
+      "after_commit_blob_sha256": "7974e7aa2bdaef74c6fb1614d750ef0615bdb10a70799485fe724bcda884447f",
+      "after_commit_blob_oid": "3a46e15ad0a271991cb8104e41cc085a5a0391f7",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-audit/src/error.rs": {
+      "after_sha256": "9bf95b3b77f3fe6bea036cbf88d22458cd83834602f59640453cd4bafa21c6e6",
+      "before_sha256": "9bf95b3b77f3fe6bea036cbf88d22458cd83834602f59640453cd4bafa21c6e6",
+      "after_commit_blob_sha256": "9bf95b3b77f3fe6bea036cbf88d22458cd83834602f59640453cd4bafa21c6e6",
+      "after_commit_blob_oid": "be02225a984a03a67f222f6474df4c964acdb046",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-support/src/error.rs": {
+      "after_sha256": "ed0d4c09340a0c299fbbb451c14ece5b0f965ac0fa31f64e6194f71ab5352eae",
+      "before_sha256": "ed0d4c09340a0c299fbbb451c14ece5b0f965ac0fa31f64e6194f71ab5352eae",
+      "after_commit_blob_sha256": "ed0d4c09340a0c299fbbb451c14ece5b0f965ac0fa31f64e6194f71ab5352eae",
+      "after_commit_blob_oid": "90ab0f932f68305d63554fad2866904bcd9846a2",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-party/src/error.rs": {
+      "after_sha256": "42fdb27bc2004be87a55fbb4e1f0917cd93e79c0b3e11a327e52fd7d97691c02",
+      "before_sha256": "4499f2d60481c8111eb76199f4a30e852e5e51c155ea976cecade430656c5ac9",
+      "after_commit_blob_sha256": "42fdb27bc2004be87a55fbb4e1f0917cd93e79c0b3e11a327e52fd7d97691c02",
+      "after_commit_blob_oid": "f06666beb84a31a416742937150fc1f3f8737aee",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-customer/src/error.rs": {
+      "after_sha256": "b529d1fd80f3d968af3542e90f2a069a271146a354a53133dfade716ba50f2d3",
+      "before_sha256": "a657047362ae8356db09d993383d6351fda76c813364f4409347df94b84f7509",
+      "after_commit_blob_sha256": "b529d1fd80f3d968af3542e90f2a069a271146a354a53133dfade716ba50f2d3",
+      "after_commit_blob_oid": "acc41517cca6c101c42c732c00d8a2f0610ea650",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-supplier/src/error.rs": {
+      "after_sha256": "274dbaa2aded291a8dfed64d6028d2a90827754f5c617ccde92050b4f36c7eb4",
+      "before_sha256": "4d1ca57254ce89b4c32d7a1329678a6122d592ea8b2b262023a396bd0a9b7d29",
+      "after_commit_blob_sha256": "274dbaa2aded291a8dfed64d6028d2a90827754f5c617ccde92050b4f36c7eb4",
+      "after_commit_blob_oid": "7e739e9aaa84d39daee9dea429fae1a648e33b22",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-catalog/src/error.rs": {
+      "after_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "before_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "after_commit_blob_sha256": "42cf6c10cfaf4d865ef5fcf3a46b112003f3607c94457025454490bc98888163",
+      "after_commit_blob_oid": "49f65993aa44fb3796278bda6cc11b60879bef7a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-warehouse/src/error.rs": {
+      "after_sha256": "3985661b95f1adc79c2348c05f7276bb4f5e5469a31d4b2ddc59dae265a34ff8",
+      "before_sha256": "3985661b95f1adc79c2348c05f7276bb4f5e5469a31d4b2ddc59dae265a34ff8",
+      "after_commit_blob_sha256": "3985661b95f1adc79c2348c05f7276bb4f5e5469a31d4b2ddc59dae265a34ff8",
+      "after_commit_blob_oid": "79ac75566f5688ae012f505d6b49e19d45fd0437",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-contract/src/error.rs": {
+      "after_sha256": "b07c526b918aa2ba0fdff40adbf9509b37db7d706b4cd240de838282a4607ae6",
+      "before_sha256": "a9b5de798c468cff80c4ce8dc9cae9fe921bef018002a6fba35e27cbb43660ba",
+      "after_commit_blob_sha256": "b07c526b918aa2ba0fdff40adbf9509b37db7d706b4cd240de838282a4607ae6",
+      "after_commit_blob_oid": "561688ec125c08785fc6743a1a0008e79773ef98",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-inventory/src/error.rs": {
+      "after_sha256": "ab3a8058f4887af7d66bd3941d2000eaa0af039bac997e989a4c1e169e05de4e",
+      "before_sha256": "ab3a8058f4887af7d66bd3941d2000eaa0af039bac997e989a4c1e169e05de4e",
+      "after_commit_blob_sha256": "ab3a8058f4887af7d66bd3941d2000eaa0af039bac997e989a4c1e169e05de4e",
+      "after_commit_blob_oid": "864d91ed342fc5dbad0841d2d2df261234be53ba",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-finance/src/error.rs": {
+      "after_sha256": "bd052c25b16b397f8243ce44aaeaebb5741387f869c523e604cf150c3b22aeed",
+      "before_sha256": "bd052c25b16b397f8243ce44aaeaebb5741387f869c523e604cf150c3b22aeed",
+      "after_commit_blob_sha256": "bd052c25b16b397f8243ce44aaeaebb5741387f869c523e604cf150c3b22aeed",
+      "after_commit_blob_oid": "e5449a7c29d7836a6be2aa258b59317f3f772b63",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-sales/src/error.rs": {
+      "after_sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "before_sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "after_commit_blob_sha256": "8cc3b8e2b408c1cb5b5987f2b65052c5df73fc4a9a887a3393c6d9fccef726c0",
+      "after_commit_blob_oid": "6533153003454e33f1920d0aeae26ca9e9cc5175",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-integration/src/error.rs": {
+      "after_sha256": "8eb5955c34c2108c12d22b1771513a9093e2c21673a64b764e699bb24ace22e4",
+      "before_sha256": "8eb5955c34c2108c12d22b1771513a9093e2c21673a64b764e699bb24ace22e4",
+      "after_commit_blob_sha256": "8eb5955c34c2108c12d22b1771513a9093e2c21673a64b764e699bb24ace22e4",
+      "after_commit_blob_oid": "503928bbc1550e31d54c1d23aed2655b5595927e",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-supply/src/error.rs": {
+      "after_sha256": "bfe93b0f43ffec5e31cd8d22efcdd2ec27c682335b768607d760c3f38ce35d84",
+      "before_sha256": "2e14a0522ac794cc50dc328d7113144bd624f0193bab2d30fa5b18c831329f53",
+      "after_commit_blob_sha256": "bfe93b0f43ffec5e31cd8d22efcdd2ec27c682335b768607d760c3f38ce35d84",
+      "after_commit_blob_oid": "a5f681682445a397bd386f1536fbcc09075206b1",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-returns/src/error.rs": {
+      "after_sha256": "6e99f26c4213f3c6f56f057dc561e4a184b62c29b5506c5b188f64f28404c304",
+      "before_sha256": "6e99f26c4213f3c6f56f057dc561e4a184b62c29b5506c5b188f64f28404c304",
+      "after_commit_blob_sha256": "6e99f26c4213f3c6f56f057dc561e4a184b62c29b5506c5b188f64f28404c304",
+      "after_commit_blob_oid": "c16c0b7ab6da46a3fbfd601d34b103699361f58f",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-fulfillment/src/error.rs": {
+      "after_sha256": "186bbe5f29d55bd501fa11b3af7a1c2ba96a78173b5790b8a366286214b364f5",
+      "before_sha256": "186bbe5f29d55bd501fa11b3af7a1c2ba96a78173b5790b8a366286214b364f5",
+      "after_commit_blob_sha256": "186bbe5f29d55bd501fa11b3af7a1c2ba96a78173b5790b8a366286214b364f5",
+      "after_commit_blob_oid": "c65188930288a8880493c5647016b420fecab79b",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-procurement/src/error.rs": {
+      "after_sha256": "9fc4778d0de589640b90a2abc71d1973a027e6563aff2175c5fcb7b4c4e34030",
+      "before_sha256": "e4947dab3d586d693043dadacc5faf78c77a9e3e6b9d19ea9f150b768906b8f7",
+      "after_commit_blob_sha256": "9fc4778d0de589640b90a2abc71d1973a027e6563aff2175c5fcb7b4c4e34030",
+      "after_commit_blob_oid": "a756365c15e65e13c807f0c99351a622bdc6821a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-import/src/error.rs": {
+      "after_sha256": "83109d7571c047d221defc66d399c23a1d28540291063a11b3660d8ea6402b35",
+      "before_sha256": "83109d7571c047d221defc66d399c23a1d28540291063a11b3660d8ea6402b35",
+      "after_commit_blob_sha256": "83109d7571c047d221defc66d399c23a1d28540291063a11b3660d8ea6402b35",
+      "after_commit_blob_oid": "2eb86bd452788b00b6ce48c73105bbcb2d1987dc",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-party/src/lib.rs": {
+      "after_sha256": "f84ad5d2a43d3e29ac93ffba584ca59f0dd871b9f7f8e9f9c861d5aed22cc2e1",
+      "before_sha256": "6e1110a4cd500ce2c45032ce80e540e3f25f6a6c3e3ca03df1174580dbbe41ce",
+      "after_commit_blob_sha256": "f84ad5d2a43d3e29ac93ffba584ca59f0dd871b9f7f8e9f9c861d5aed22cc2e1",
+      "after_commit_blob_oid": "47241122e662253504bf308df2ede8f7fc03ffd0",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-supplier/src/lib.rs": {
+      "after_sha256": "fb7383c84538b8085420551841fef71a027bd15b82ee72b0a84f628fa3afe266",
+      "before_sha256": "6a0cef3823bba54106c9b542dec62a0ee45e7e89ad722873ff6709c05dfc6f0e",
+      "after_commit_blob_sha256": "fb7383c84538b8085420551841fef71a027bd15b82ee72b0a84f628fa3afe266",
+      "after_commit_blob_oid": "f27675f9d59f664cbd7c6ecf48795426276535a9",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-supply/src/lib.rs": {
+      "after_sha256": "21887504998f695933002ef427c0e6a4f02cfd25c6f7f2b321a75ea05fd5b77e",
+      "before_sha256": "a58b646f11edeb19447bd1b5cf96ea71422cb3f9e6f4ebef72f14b0fac0a8be4",
+      "after_commit_blob_sha256": "21887504998f695933002ef427c0e6a4f02cfd25c6f7f2b321a75ea05fd5b77e",
+      "after_commit_blob_oid": "6519ce772d7f9f0385bd0fb217236816baf9d29a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-contract/src/lib.rs": {
+      "after_sha256": "c88ace5dc2197471ead6974fac54f6a6d141b430a60d647b125909967830044d",
+      "before_sha256": "7e627e394b6ee14f14327df1dba9cb88936aaa8e87057d0519d644069e914a65",
+      "after_commit_blob_sha256": "c88ace5dc2197471ead6974fac54f6a6d141b430a60d647b125909967830044d",
+      "after_commit_blob_oid": "f9880566fc947cf98c6acd552a2f67db818eea23",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-procurement/src/lib.rs": {
+      "after_sha256": "e28bc50f3e36b4712539b4abe38de78530a96626c001dc1f89cac43c59173ca7",
+      "before_sha256": "3b90a1c8aae4986d8050fe40afa88f8d02fba43b9e6dc9085eeab0116e81f1c5",
+      "after_commit_blob_sha256": "e28bc50f3e36b4712539b4abe38de78530a96626c001dc1f89cac43c59173ca7",
+      "after_commit_blob_oid": "a002180b2425e581d13007b948034ddc88f45a5a",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-customer/src/lib.rs": {
+      "after_sha256": "185917435bd205e4b7c5fa015a762a49b4859ac5f8982b490b1c03ec6334b1bc",
+      "before_sha256": "957d8c384f1b56c83d08e4b1543d4392b599ed663a22ca9d5b5a1e183e3bdf8d",
+      "after_commit_blob_sha256": "185917435bd205e4b7c5fa015a762a49b4859ac5f8982b490b1c03ec6334b1bc",
+      "after_commit_blob_oid": "fddb67d4e03b75dc97ca0b9f7ce37935c3f3e75b",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-workflow/src/lib.rs": {
+      "after_sha256": "a68951875c894951ca47f21fad1638e2347f0d4aa3db9a4868762458b41e42f1",
+      "before_sha256": "bc9fca35ebcab69fad15746b947a97ffb01b7f196f152019529cc019bd89d6ba",
+      "after_commit_blob_sha256": "a68951875c894951ca47f21fad1638e2347f0d4aa3db9a4868762458b41e42f1",
+      "after_commit_blob_oid": "492026942c7a36b48ccc1a715751ab1ce0b22f8f",
+      "after_commit_blob_verified": true
+    },
+    "backend/apps/web-api/src/core/errors/cutover_tests.rs": {
+      "after_sha256": "79dfe539a7aa772f670acc90f306c7510c8652e3d7328c803a678dd0b0dd7d37",
+      "before_sha256": null,
+      "after_commit_blob_sha256": "79dfe539a7aa772f670acc90f306c7510c8652e3d7328c803a678dd0b0dd7d37",
+      "after_commit_blob_oid": "4a0a958e222c93457f04faaeadf7e4d8167aaf11",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-processes/src/lib.rs": {
+      "after_sha256": "986007ac53a12374f1bb68546e54eb589897d7faea34dc580327bd7ecfb0926e",
+      "before_sha256": "ec338d979a712624e763f66a544c282a71e21b7e821cc7c23cd70a900ecc06ed",
+      "after_commit_blob_sha256": "986007ac53a12374f1bb68546e54eb589897d7faea34dc580327bd7ecfb0926e",
+      "after_commit_blob_oid": "c834489a4d14beb76f710d0ae4ca65bc27d412c0",
+      "after_commit_blob_verified": true
+    },
+    "backend/crates/erp-read-models/src/lib.rs": {
+      "after_sha256": "2aeeeb50a50dcccbd42d7b01ca51501698945c8cfa873e8d282e93a1cebc1413",
+      "before_sha256": "dfce87e446592453b8181b613fc533ae0061b64f40975b1a8da8d7678c85b071",
+      "after_commit_blob_sha256": "2aeeeb50a50dcccbd42d7b01ca51501698945c8cfa873e8d282e93a1cebc1413",
+      "after_commit_blob_oid": "00d0b81cdab8da4fcd724caf248c337d6c10b2ee",
+      "after_commit_blob_verified": true
+    }
+  },
+  "exact_token_checks": [
+    {
+      "name": "HTTP::into_response",
+      "equal": true,
+      "before_tokens_sha256": "a391c030ce1db92f758c660c39c0d1addb226130916304ee6136639814c72283",
+      "after_tokens_sha256": "a391c030ce1db92f758c660c39c0d1addb226130916304ee6136639814c72283"
+    },
+    {
+      "name": "HTTP::http_status",
+      "equal": true,
+      "before_tokens_sha256": "e2746c1fed1469349cba0c193229a5c98347fa8c515ef62bd955d548d6b2de08",
+      "after_tokens_sha256": "e2746c1fed1469349cba0c193229a5c98347fa8c515ef62bd955d548d6b2de08"
+    },
+    {
+      "name": "HTTP::error_code",
+      "equal": true,
+      "before_tokens_sha256": "9268a80734d08a11a9c243def1bad328e66724d703b1c263d226cf33dc91533c",
+      "after_tokens_sha256": "9268a80734d08a11a9c243def1bad328e66724d703b1c263d226cf33dc91533c"
+    },
+    {
+      "name": "HTTP::user_message",
+      "equal": true,
+      "before_tokens_sha256": "8390dcb66c1252037c66053ff729f58acb37d0e55d1b4687471f4087f48d4430",
+      "after_tokens_sha256": "8390dcb66c1252037c66053ff729f58acb37d0e55d1b4687471f4087f48d4430"
+    },
+    {
+      "name": "HTTP::field_errors",
+      "equal": true,
+      "before_tokens_sha256": "19c1ff9db264e19c67eb2985455cacf4282eda1c38edbe0fbece1e5322487f1e",
+      "after_tokens_sha256": "19c1ff9db264e19c67eb2985455cacf4282eda1c38edbe0fbece1e5322487f1e"
+    },
+    {
+      "name": "HTTP::retryable",
+      "equal": true,
+      "before_tokens_sha256": "92d58d670742e9232be82ccb3abd7de6dbe3aa337b13cfa036f36c7669cd4aaf",
+      "after_tokens_sha256": "92d58d670742e9232be82ccb3abd7de6dbe3aa337b13cfa036f36c7669cd4aaf"
+    },
+    {
+      "name": "HTTP::user_message_or",
+      "equal": true,
+      "before_tokens_sha256": "aff05e42406b3285795f1534031c20a8ad46bac673d4357fbb33c18e293eb5d0",
+      "after_tokens_sha256": "aff05e42406b3285795f1534031c20a8ad46bac673d4357fbb33c18e293eb5d0"
+    },
+    {
+      "name": "HTTP::user_message_is_safe",
+      "equal": true,
+      "before_tokens_sha256": "5467f7c7f08ccae555a980df6b2bc8c0cd72fd51ba3396e87916a51dca95d541",
+      "after_tokens_sha256": "5467f7c7f08ccae555a980df6b2bc8c0cd72fd51ba3396e87916a51dca95d541"
+    },
+    {
+      "name": "HTTP::is_internal_code_token",
+      "equal": true,
+      "before_tokens_sha256": "40c48f22daeef47b268b4f3326d04073d997301f8293e3d781acb011a8839b26",
+      "after_tokens_sha256": "40c48f22daeef47b268b4f3326d04073d997301f8293e3d781acb011a8839b26"
+    },
+    {
+      "name": "HTTP::Error declaration",
+      "equal": true,
+      "before_tokens_sha256": "7e7b06a95035189e94b6ad9e403e67dbc5cbbcfd0242c214643974550b9abee7",
+      "after_tokens_sha256": "7e7b06a95035189e94b6ad9e403e67dbc5cbbcfd0242c214643974550b9abee7"
+    },
+    {
+      "name": "HTTP::From<String>",
+      "equal": true,
+      "before_tokens_sha256": "b2dcb1f7510ed80b53e5b57198f9fdb4ec210bfed34f9576d413d60d8d77309a",
+      "after_tokens_sha256": "b2dcb1f7510ed80b53e5b57198f9fdb4ec210bfed34f9576d413d60d8d77309a"
+    },
+    {
+      "name": "HTTP::From<&str>",
+      "equal": true,
+      "before_tokens_sha256": "42fd5201fa1e010d800605d1621163382086cd96d259304e5fd04884a1e44849",
+      "after_tokens_sha256": "42fd5201fa1e010d800605d1621163382086cd96d259304e5fd04884a1e44849"
+    },
+    {
+      "name": "HTTP::From<std::io::Error>",
+      "equal": true,
+      "before_tokens_sha256": "f9bc8532b1d829298b2c5c1df54730c1345ade37757f38c6e6adc89eca7ebb78",
+      "after_tokens_sha256": "f9bc8532b1d829298b2c5c1df54730c1345ade37757f38c6e6adc89eca7ebb78"
+    },
+    {
+      "name": "erp-processes::Error declaration",
+      "equal": true,
+      "before_tokens_sha256": "2956e4f7704a11fc87fbfa0d162258905db4a2287d3d9de9c36f5b7eef0cbf2d",
+      "after_tokens_sha256": "2956e4f7704a11fc87fbfa0d162258905db4a2287d3d9de9c36f5b7eef0cbf2d"
+    },
+    {
+      "name": "erp-processes::from_approval_code",
+      "equal": true,
+      "before_tokens_sha256": "caafaba2194262f45564e2431e8853d3088e700832593f714cc53defef85775a",
+      "after_tokens_sha256": "caafaba2194262f45564e2431e8853d3088e700832593f714cc53defef85775a"
+    },
+    {
+      "name": "erp-processes::code",
+      "equal": true,
+      "before_tokens_sha256": "b3569c07e833b8c46c29caa0ab10ece065c985e7c8fed26573ec3964a838b4b1",
+      "after_tokens_sha256": "b3569c07e833b8c46c29caa0ab10ece065c985e7c8fed26573ec3964a838b4b1"
+    },
+    {
+      "name": "erp-processes::From<validator>",
+      "equal": true,
+      "before_tokens_sha256": "144ae197adbda99500f1fa1f63f6578f21fb97a46cd28ceefcc74866dc7eb86a",
+      "after_tokens_sha256": "144ae197adbda99500f1fa1f63f6578f21fb97a46cd28ceefcc74866dc7eb86a"
+    },
+    {
+      "name": "erp-processes::command_may_have_committed",
+      "equal": true,
+      "before_tokens_sha256": "e5bf20d181a955d3b0d73bbcf183d6601852be58266404181d2db3c0fb638e5f",
+      "after_tokens_sha256": "e5bf20d181a955d3b0d73bbcf183d6601852be58266404181d2db3c0fb638e5f"
+    },
+    {
+      "name": "erp-read-models::Error declaration",
+      "equal": true,
+      "before_tokens_sha256": "2956e4f7704a11fc87fbfa0d162258905db4a2287d3d9de9c36f5b7eef0cbf2d",
+      "after_tokens_sha256": "2956e4f7704a11fc87fbfa0d162258905db4a2287d3d9de9c36f5b7eef0cbf2d"
+    },
+    {
+      "name": "erp-read-models::from_approval_code",
+      "equal": true,
+      "before_tokens_sha256": "caafaba2194262f45564e2431e8853d3088e700832593f714cc53defef85775a",
+      "after_tokens_sha256": "caafaba2194262f45564e2431e8853d3088e700832593f714cc53defef85775a"
+    },
+    {
+      "name": "erp-read-models::code",
+      "equal": true,
+      "before_tokens_sha256": "b3569c07e833b8c46c29caa0ab10ece065c985e7c8fed26573ec3964a838b4b1",
+      "after_tokens_sha256": "b3569c07e833b8c46c29caa0ab10ece065c985e7c8fed26573ec3964a838b4b1"
+    },
+    {
+      "name": "erp-read-models::From<validator>",
+      "equal": true,
+      "before_tokens_sha256": "144ae197adbda99500f1fa1f63f6578f21fb97a46cd28ceefcc74866dc7eb86a",
+      "after_tokens_sha256": "144ae197adbda99500f1fa1f63f6578f21fb97a46cd28ceefcc74866dc7eb86a"
+    },
+    {
+      "name": "Workflow::ErrorCode declaration from old Services",
+      "equal": true,
+      "before_tokens_sha256": "37d8f7023a510b89adbaf33dd10037f26a65451baa47fd6b7f09bb7042d03260",
+      "after_tokens_sha256": "37d8f7023a510b89adbaf33dd10037f26a65451baa47fd6b7f09bb7042d03260"
+    },
+    {
+      "name": "Workflow::ErrorCode::as_str",
+      "equal": true,
+      "before_tokens_sha256": "c814373c5fcabb99196464ec749e5860100b20dde08834190f34e0c8e8e70c13",
+      "after_tokens_sha256": "c814373c5fcabb99196464ec749e5860100b20dde08834190f34e0c8e8e70c13"
+    },
+    {
+      "name": "Workflow::ErrorCode::class",
+      "equal": true,
+      "before_tokens_sha256": "67a8fba137066a5e2a9f785a15762f1fda3a08b0704f3d1fc729518c369a7340",
+      "after_tokens_sha256": "67a8fba137066a5e2a9f785a15762f1fda3a08b0704f3d1fc729518c369a7340"
+    },
+    {
+      "name": "Workflow::ErrorCode::retryable",
+      "equal": true,
+      "before_tokens_sha256": "509d4fbd13994ce37996fa107d8f9f40911c7fb762518771684a9f302bae413f",
+      "after_tokens_sha256": "509d4fbd13994ce37996fa107d8f9f40911c7fb762518771684a9f302bae413f"
+    },
+    {
+      "name": "erp_identity::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "3a61298627946b3add789997b937f4b6a8e8eb806b4a35e1d0042ef008c1f7f3",
+      "after_tokens_sha256": "3a61298627946b3add789997b937f4b6a8e8eb806b4a35e1d0042ef008c1f7f3"
+    },
+    {
+      "name": "erp_audit::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_workflow::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "57c3bf9059b47b65c7a1fa4f1e4cd776ceca800dcd3d696dd131631f58e4f52c",
+      "after_tokens_sha256": "57c3bf9059b47b65c7a1fa4f1e4cd776ceca800dcd3d696dd131631f58e4f52c"
+    },
+    {
+      "name": "erp_support::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_party::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_customer::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_supplier::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_catalog::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_warehouse::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_contract::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_inventory::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_finance::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_sales::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_integration::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_supply::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_returns::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_fulfillment::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_procurement::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "erp_import::Error declaration unchanged",
+      "equal": true,
+      "before_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2",
+      "after_tokens_sha256": "a3649ef5e34d652e5942c73beb878315fe3c4e5073b632680ae32e749b0edba2"
+    },
+    {
+      "name": "17 duplicate index messages union matches frozen Services",
+      "equal": true,
+      "before": {
+        "uk_parties_party_no": "主体编号已存在",
+        "uk_parties_credit_code": "统一社会信用代码已存在",
+        "uk_party_bank_accounts_bank_account_no": "银行账户编号已存在",
+        "uk_party_bank_accounts_party_hmac": "该主体下银行账号已存在",
+        "uk_supplier_accounts_party": "该主体已绑定供应商角色",
+        "uk_supplier_accounts_supplier_no": "供应商编号已存在",
+        "uk_supplier_offerings_supplier_sku": "该供应商 SKU 已登记供给",
+        "uk_contracts_contract_no": "合同编号已存在",
+        "uk_purchase_orders_creation_basis": "该采购创建依据已生成采购单",
+        "uk_customer_accounts_party": "该主体已绑定客户角色",
+        "uk_customer_accounts_customer_no": "客户编号已存在",
+        "uk_procurement_confirmation_lines_confirmation_line": "该采购确认已有相同分行序号，请刷新后重试",
+        "uk_procurement_confirmation_lines_active_confirmation_line": "该采购确认已有相同分行序号，请刷新后重试",
+        "uk_procurement_responsibility_active_selector": "同一采购责任选择器只能有一条启用规则",
+        "uk_work_items_open_fulfillment_object": "该履约对象已存在开放任务，请刷新后重试",
+        "uk_work_items_open_customer_acceptance_object": "该销售单已存在开放客户验收任务，请刷新后重试",
+        "uk_product_publication_revisions_publication_revision": "该发布修订序号已被占用，请刷新后重试"
+      },
+      "after": {
+        "uk_parties_party_no": "主体编号已存在",
+        "uk_parties_credit_code": "统一社会信用代码已存在",
+        "uk_party_bank_accounts_bank_account_no": "银行账户编号已存在",
+        "uk_party_bank_accounts_party_hmac": "该主体下银行账号已存在",
+        "uk_supplier_accounts_party": "该主体已绑定供应商角色",
+        "uk_supplier_accounts_supplier_no": "供应商编号已存在",
+        "uk_supplier_offerings_supplier_sku": "该供应商 SKU 已登记供给",
+        "uk_contracts_contract_no": "合同编号已存在",
+        "uk_purchase_orders_creation_basis": "该采购创建依据已生成采购单",
+        "uk_procurement_responsibility_active_selector": "同一采购责任选择器只能有一条启用规则",
+        "uk_customer_accounts_party": "该主体已绑定客户角色",
+        "uk_customer_accounts_customer_no": "客户编号已存在",
+        "uk_work_items_open_fulfillment_object": "该履约对象已存在开放任务，请刷新后重试",
+        "uk_work_items_open_customer_acceptance_object": "该销售单已存在开放客户验收任务，请刷新后重试",
+        "uk_procurement_confirmation_lines_confirmation_line": "该采购确认已有相同分行序号，请刷新后重试",
+        "uk_procurement_confirmation_lines_active_confirmation_line": "该采购确认已有相同分行序号，请刷新后重试",
+        "uk_product_publication_revisions_publication_revision": "该发布修订序号已被占用，请刷新后重试"
+      }
+    },
+    {
+      "name": "Workflow::ErrorCode complete impl including ALL",
+      "equal": true,
+      "before_tokens_sha256": "d8baec437723610d2088abe069124526b73ee1eca864cd8994072e9f71a76970",
+      "after_tokens_sha256": "d8baec437723610d2088abe069124526b73ee1eca864cd8994072e9f71a76970"
+    },
+    {
+      "name": "Workflow::ErrorCode Display",
+      "equal": true,
+      "before_tokens_sha256": "59a7bb3ee20337a091f98b95451d02b911dfc1e050138a9841ab025c7bafaf43",
+      "after_tokens_sha256": "59a7bb3ee20337a091f98b95451d02b911dfc1e050138a9841ab025c7bafaf43"
+    },
+    {
+      "name": "HTTP::TECHNICAL_MESSAGE_TERMS",
+      "equal": true,
+      "before_tokens_sha256": "3de79695853cd30b54fbf716d7ce9041ba2bce7085ac1ae2cff9c3065830f5f3",
+      "after_tokens_sha256": "3de79695853cd30b54fbf716d7ce9041ba2bce7085ac1ae2cff9c3065830f5f3"
+    },
+    {
+      "name": "HTTP::USER_ACTION_MARKERS",
+      "equal": true,
+      "before_tokens_sha256": "ead77cd0695cb627f904fd68f508c13df2ecb05cf34d3e601626c021b87145fd",
+      "after_tokens_sha256": "ead77cd0695cb627f904fd68f508c13df2ecb05cf34d3e601626c021b87145fd"
+    },
+    {
+      "name": "erp-processes::From<application_core>",
+      "equal": true,
+      "before_tokens_sha256": "68d99e3419aeec3f639882b8ac246af9f0abc6705b040dc3e7f352bca6e2f8f4",
+      "after_tokens_sha256": "68d99e3419aeec3f639882b8ac246af9f0abc6705b040dc3e7f352bca6e2f8f4"
+    },
+    {
+      "name": "erp-processes actual local Error/Result export",
+      "equal": true
+    },
+    {
+      "name": "erp-read-models::From<application_core>",
+      "equal": true,
+      "before_tokens_sha256": "68d99e3419aeec3f639882b8ac246af9f0abc6705b040dc3e7f352bca6e2f8f4",
+      "after_tokens_sha256": "68d99e3419aeec3f639882b8ac246af9f0abc6705b040dc3e7f352bca6e2f8f4"
+    },
+    {
+      "name": "erp-read-models actual local Error/Result export",
+      "equal": true
+    },
+    {
+      "name": "Process and ReadModel exhaustive macro payload moves",
+      "equal": true,
+      "before_tokens_sha256": "6cb48d9d1647be45f6946a972fe20b3a2ef47ef88374abbcf32916ee6ac199a9",
+      "after_tokens_sha256": "6cb48d9d1647be45f6946a972fe20b3a2ef47ef88374abbcf32916ee6ac199a9"
+    },
+    {
+      "name": "ReadModel has no command recovery helper",
+      "equal": true
+    },
+    {
+      "name": "Old workflow-to-Service code converter was identity for all 21 variants",
+      "equal": true,
+      "variants": [
+        [
+          "ApprovalPolicyNotRegistered",
+          "ApprovalPolicyNotRegistered"
+        ],
+        [
+          "ApprovalProcessNotConfigured",
+          "ApprovalProcessNotConfigured"
+        ],
+        [
+          "ApprovalDraftSourceNotAvailable",
+          "ApprovalDraftSourceNotAvailable"
+        ],
+        [
+          "ApprovalDefinitionNotDraft",
+          "ApprovalDefinitionNotDraft"
+        ],
+        [
+          "ApprovalDefinitionVersionConflict",
+          "ApprovalDefinitionVersionConflict"
+        ],
+        [
+          "ApprovalDefinitionInvalid",
+          "ApprovalDefinitionInvalid"
+        ],
+        [
+          "ApprovalDefinitionBindingCorrupted",
+          "ApprovalDefinitionBindingCorrupted"
+        ],
+        [
+          "ApprovalAlreadyStarted",
+          "ApprovalAlreadyStarted"
+        ],
+        [
+          "ApprovalTaskNotOpen",
+          "ApprovalTaskNotOpen"
+        ],
+        [
+          "ApprovalTaskNotAssignedToActor",
+          "ApprovalTaskNotAssignedToActor"
+        ],
+        [
+          "ApprovalTaskVersionConflict",
+          "ApprovalTaskVersionConflict"
+        ],
+        [
+          "ApprovalInstanceVersionConflict",
+          "ApprovalInstanceVersionConflict"
+        ],
+        [
+          "ApprovalExecutionVersionConflict",
+          "ApprovalExecutionVersionConflict"
+        ],
+        [
+          "ApprovalSubjectVersionConflict",
+          "ApprovalSubjectVersionConflict"
+        ],
+        [
+          "ApprovalRejectReasonRequired",
+          "ApprovalRejectReasonRequired"
+        ],
+        [
+          "ApprovalInstanceBlocked",
+          "ApprovalInstanceBlocked"
+        ],
+        [
+          "ApprovalResumeNotAllowedForBlocker",
+          "ApprovalResumeNotAllowedForBlocker"
+        ],
+        [
+          "ApprovalCurrentApproverNotRecovered",
+          "ApprovalCurrentApproverNotRecovered"
+        ],
+        [
+          "ApprovalBlockedCancelNotAllowed",
+          "ApprovalBlockedCancelNotAllowed"
+        ],
+        [
+          "ApprovalGenericWorkItemMutationForbidden",
+          "ApprovalGenericWorkItemMutationForbidden"
+        ],
+        [
+          "ApprovalIdempotencyPayloadConflict",
+          "ApprovalIdempotencyPayloadConflict"
+        ]
+      ]
+    },
+    {
+      "name": "All nineteen old payload conversions are preserved by new exhaustive macro",
+      "equal": true
+    },
+    {
+      "name": "erp_party::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_supplier::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_supply::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_contract::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_procurement::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_customer::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "erp_workflow::From<persistence_core> unchanged",
+      "equal": true,
+      "before_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749",
+      "after_tokens_sha256": "c7734d3b377039067478aae4a76593578dbe9ae09cd9bb3703e8a7f3347d7749"
+    },
+    {
+      "name": "Historical names have no active index/repository producer",
+      "equal": true
+    },
+    {
+      "name": "Original Service inline test::optimistic_locking_error_maps_to_conflict",
+      "equal": true,
+      "before_tokens_sha256": "0769105609c7334fa454cb125cbeb71a49689d9795e820d1a8065aa55838c91f",
+      "after_tokens_sha256": "0769105609c7334fa454cb125cbeb71a49689d9795e820d1a8065aa55838c91f"
+    },
+    {
+      "name": "Original Service inline test::duplicate_key_error_maps_to_conflict",
+      "equal": true,
+      "before_tokens_sha256": "8e1e3cf78d3399fa47b83b2a4fa6b055afc9ccb4cb3d94086fe3601956686562",
+      "after_tokens_sha256": "8e1e3cf78d3399fa47b83b2a4fa6b055afc9ccb4cb3d94086fe3601956686562"
+    },
+    {
+      "name": "Original Service inline test::known_party_duplicate_index_maps_to_field_message",
+      "equal": true,
+      "before_tokens_sha256": "db4f3b4d6128704764fa094c62ad07a3ddc4c5f30148dde7d40763fc28b3fd57",
+      "after_tokens_sha256": "db4f3b4d6128704764fa094c62ad07a3ddc4c5f30148dde7d40763fc28b3fd57"
+    },
+    {
+      "name": "Original Service inline test::contract_number_duplicate_index_maps_to_contract_message",
+      "equal": true,
+      "before_tokens_sha256": "e15afbcb9a54456fcbf3ccdde03181dc8075462fe9f522c78240532f00a98a3b",
+      "after_tokens_sha256": "e15afbcb9a54456fcbf3ccdde03181dc8075462fe9f522c78240532f00a98a3b"
+    },
+    {
+      "name": "Original Service inline test::fulfillment_open_task_duplicate_maps_to_refresh_message",
+      "equal": true,
+      "before_tokens_sha256": "11c01c8ebb64e98a8f501cac550d928dcdc01dcc6f41a58d99ea6676b702eca4",
+      "after_tokens_sha256": "11c01c8ebb64e98a8f501cac550d928dcdc01dcc6f41a58d99ea6676b702eca4"
+    },
+    {
+      "name": "Original Service inline test::customer_acceptance_open_task_duplicate_maps_to_refresh_message",
+      "equal": true,
+      "before_tokens_sha256": "5867cfd857d03550be7690e14dff23167a558a19894c8bd9985c79175bf81ea7",
+      "after_tokens_sha256": "5867cfd857d03550be7690e14dff23167a558a19894c8bd9985c79175bf81ea7"
+    },
+    {
+      "name": "Original Service inline test::publication_revision_duplicate_maps_to_refresh_message",
+      "equal": true,
+      "before_tokens_sha256": "c2de13869a53974f3fa99dcc98243f008091dad8531b9ea4eda5719ed060949b",
+      "after_tokens_sha256": "c2de13869a53974f3fa99dcc98243f008091dad8531b9ea4eda5719ed060949b"
+    },
+    {
+      "name": "Original Service inline test::transient_transaction_error_maps_to_conflict",
+      "equal": true,
+      "before_tokens_sha256": "6f14d893a35ae4285e1cec32e71a42b6a1baa1f465037e637bac9f4948d73c53",
+      "after_tokens_sha256": "6f14d893a35ae4285e1cec32e71a42b6a1baa1f465037e637bac9f4948d73c53"
+    },
+    {
+      "name": "Original Service inline test::receipt_duplicate_keeps_source_and_existing_conflict_wire_message",
+      "equal": true,
+      "before_tokens_sha256": "82543ad5f67794f628bdca22d548a4441f079a47d0ccf9e988833196a6078400",
+      "after_tokens_sha256": "82543ad5f67794f628bdca22d548a4441f079a47d0ccf9e988833196a6078400"
+    },
+    {
+      "name": "Original Service inline test::other_database_error_remains_repository_error",
+      "equal": true,
+      "before_tokens_sha256": "663ed03c8cbbd82f881f495ee8d0158752d237121dbd101ec34f982b8e490fb8",
+      "after_tokens_sha256": "663ed03c8cbbd82f881f495ee8d0158752d237121dbd101ec34f982b8e490fb8"
+    },
+    {
+      "name": "Original Service inline test::unknown_commit_outcome_has_dedicated_service_semantics",
+      "equal": true,
+      "before_tokens_sha256": "a462d359b3ed731e5509b5b618d9f83cca9874bc7308eb636c17369195651d38",
+      "after_tokens_sha256": "a462d359b3ed731e5509b5b618d9f83cca9874bc7308eb636c17369195651d38"
+    },
+    {
+      "name": "Original Service inline test::approval_policy_not_registered_is_internal",
+      "equal": true,
+      "before_tokens_sha256": "fc7037d17e323c8ab8607ff10d78afdac01cb88df64a5c3c023bc59e0bd253bb",
+      "after_tokens_sha256": "fc7037d17e323c8ab8607ff10d78afdac01cb88df64a5c3c023bc59e0bd253bb"
+    },
+    {
+      "name": "Original Service inline test::contract_unprocessable_codes_are_business_logic_not_validation",
+      "equal": true,
+      "before_tokens_sha256": "2d0f64817eb0cdf4401536f1f2c9080bea15d6e7ccc3e7fc36902f6bc8f76a10",
+      "after_tokens_sha256": "2d0f64817eb0cdf4401536f1f2c9080bea15d6e7ccc3e7fc36902f6bc8f76a10"
+    },
+    {
+      "name": "Original Service inline test::approval_stable_codes_are_exhaustive",
+      "equal": true,
+      "before_tokens_sha256": "905770d9b1fd6e2c1d0cbcd2d6042ec52d375a32df7cefc7142316828b7ab3d8",
+      "after_tokens_sha256": "905770d9b1fd6e2c1d0cbcd2d6042ec52d375a32df7cefc7142316828b7ab3d8"
+    }
+  ],
+  "all_exact_checks_equal": true,
+  "providers": [
+    {
+      "provider": "erp_identity",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "Rbac",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_audit",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_workflow",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "Rbac",
+        "OutcomeUnknown",
+        "RepositoryError",
+        "Coded"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_support",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_party",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_customer",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_supplier",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_catalog",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_warehouse",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_contract",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_inventory",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_finance",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_sales",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_integration",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_supply",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_returns",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_fulfillment",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_procurement",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    },
+    {
+      "provider": "erp_import",
+      "variants": [
+        "Internal",
+        "NotFound",
+        "ValidationError",
+        "BusinessLogicError",
+        "ConflictError",
+        "ReceiptDuplicate",
+        "TransientTransaction",
+        "Forbidden",
+        "Unauthenticated",
+        "Logic",
+        "OutcomeUnknown",
+        "RepositoryError"
+      ],
+      "http_from_present": true,
+      "process_from_present": true,
+      "readmodel_from_present": true
+    }
+  ],
+  "helpers": [
+    {
+      "provider": "erp_party",
+      "mapping": {
+        "uk_parties_party_no": "主体编号已存在",
+        "uk_parties_credit_code": "统一社会信用代码已存在",
+        "uk_party_bank_accounts_bank_account_no": "银行账户编号已存在",
+        "uk_party_bank_accounts_party_hmac": "该主体下银行账号已存在"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_supplier",
+      "mapping": {
+        "uk_supplier_accounts_party": "该主体已绑定供应商角色",
+        "uk_supplier_accounts_supplier_no": "供应商编号已存在"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_supply",
+      "mapping": {
+        "uk_supplier_offerings_supplier_sku": "该供应商 SKU 已登记供给"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_contract",
+      "mapping": {
+        "uk_contracts_contract_no": "合同编号已存在"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_procurement",
+      "mapping": {
+        "uk_purchase_orders_creation_basis": "该采购创建依据已生成采购单",
+        "uk_procurement_responsibility_active_selector": "同一采购责任选择器只能有一条启用规则"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_customer",
+      "mapping": {
+        "uk_customer_accounts_party": "该主体已绑定客户角色",
+        "uk_customer_accounts_customer_no": "客户编号已存在"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    },
+    {
+      "provider": "erp_workflow",
+      "mapping": {
+        "uk_work_items_open_fulfillment_object": "该履约对象已存在开放任务，请刷新后重试",
+        "uk_work_items_open_customer_acceptance_object": "该销售单已存在开放客户验收任务，请刷新后重试"
+      },
+      "formatter_calls_unique_helper": true,
+      "fallback_original": true,
+      "crate_root_reexport": true,
+      "exact_match_without_normalization": true
+    }
+  ],
+  "http_common_macro_variants": [
+    "ValidationError",
+    "NotFound",
+    "ConflictError",
+    "ReceiptDuplicate",
+    "TransientTransaction",
+    "BusinessLogicError",
+    "Forbidden",
+    "Unauthenticated",
+    "Logic",
+    "Internal",
+    "OutcomeUnknown",
+    "RepositoryError"
+  ],
+  "historical_names": [
+    "uk_procurement_confirmation_lines_confirmation_line",
+    "uk_procurement_confirmation_lines_active_confirmation_line",
+    "uk_product_publication_revisions_publication_revision"
+  ],
+  "http_test_definitions": {
+    "all_nineteen_domain_common_variants_keep_http_contract": 228,
+    "process_and_read_model_common_variants_keep_http_contract": 24,
+    "rbac_errors_remain_internal_at_every_real_provider": 4,
+    "all_workflow_codes_keep_http_contract_across_three_boundaries": 63,
+    "duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks": 75,
+    "historical_repository_wrappers_are_special_only_at_application_boundaries": 63,
+    "other_application_repository_wrappers_remain_internal": 26,
+    "direct_persistence_non_duplicate_errors_keep_http_contract": 4,
+    "validator_fields_are_only_exposed_for_direct_http_validation": 3,
+    "rate_limit_variants_keep_body_status_and_retry_after": 4
+  },
+  "http_response_cases_per_complete_test_execution": 494,
+  "http_tests_use_actual_into_response": true,
+  "runtime_evidence": "Root sealed logs observed: 3655 passed / 0 failed / 68 ignored; all 10 actual HTTP golden tests and 3 Import projection tests passed. Reviewer did not execute Cargo/DB.",
+  "findings": [],
+  "old_to_new_payload_checks": [
+    {
+      "provider": "erp_identity",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_audit",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_workflow",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_support",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_party",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_customer",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_supplier",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_catalog",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_warehouse",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_contract",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_inventory",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_finance",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_sales",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_integration",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_supply",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_returns",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_fulfillment",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_procurement",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    },
+    {
+      "provider": "erp_import",
+      "old_payload_moves_are_identity": true,
+      "coded_identity": true,
+      "after_macro_exact_extras": true
+    }
+  ],
+  "original_service_tests_retained": [
+    {
+      "name": "optimistic_locking_error_maps_to_conflict",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "duplicate_key_error_maps_to_conflict",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "known_party_duplicate_index_maps_to_field_message",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "contract_number_duplicate_index_maps_to_contract_message",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "fulfillment_open_task_duplicate_maps_to_refresh_message",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "customer_acceptance_open_task_duplicate_maps_to_refresh_message",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "publication_revision_duplicate_maps_to_refresh_message",
+      "after_path": "backend/apps/web-api/src/core/errors.rs"
+    },
+    {
+      "name": "transient_transaction_error_maps_to_conflict",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "receipt_duplicate_keeps_source_and_existing_conflict_wire_message",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "other_database_error_remains_repository_error",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "unknown_commit_outcome_has_dedicated_service_semantics",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "approval_policy_not_registered_is_internal",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "contract_unprocessable_codes_are_business_logic_not_validation",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    },
+    {
+      "name": "approval_stable_codes_are_exhaustive",
+      "after_path": "backend/crates/erp-processes/src/errors.rs"
+    }
+  ],
+  "historical_name_search": {
+    "command": [
+      "rg",
+      "-n",
+      "--glob",
+      "*.rs",
+      "uk_procurement_confirmation_lines_confirmation_line|uk_procurement_confirmation_lines_active_confirmation_line|uk_product_publication_revisions_publication_revision",
+      "backend/crates",
+      "backend/apps/web-api/src"
+    ],
+    "exit": 0,
+    "stdout": "backend/apps/web-api/src/core/errors/cutover_tests.rs:466:        \"uk_procurement_confirmation_lines_confirmation_line\",\nbackend/apps/web-api/src/core/errors/cutover_tests.rs:470:        \"uk_procurement_confirmation_lines_active_confirmation_line\",\nbackend/apps/web-api/src/core/errors/cutover_tests.rs:486:        \"uk_product_publication_revisions_publication_revision\",\nbackend/apps/web-api/src/core/errors.rs:346:        \"uk_procurement_confirmation_lines_confirmation_line\"\nbackend/apps/web-api/src/core/errors.rs:347:        | \"uk_procurement_confirmation_lines_active_confirmation_line\" => {\nbackend/apps/web-api/src/core/errors.rs:350:        \"uk_product_publication_revisions_publication_revision\" => {\nbackend/apps/web-api/src/core/errors.rs:834:            duplicate_index_conflict_message(Some(\"uk_product_publication_revisions_publication_revision\"));\nbackend/crates/erp-read-models/src/errors.rs:136:        Some(\"uk_procurement_confirmation_lines_confirmation_line\")\nbackend/crates/erp-read-models/src/errors.rs:137:            | Some(\"uk_procurement_confirmation_lines_active_confirmation_line\")\nbackend/crates/erp-read-models/src/errors.rs:138:            | Some(\"uk_product_publication_revisions_publication_revision\")\nbackend/crates/erp-read-models/src/errors.rs:224:            \"uk_procurement_confirmation_lines_confirmation_line\",\nbackend/crates/erp-read-models/src/errors.rs:225:            \"uk_procurement_confirmation_lines_active_confirmation_line\",\nbackend/crates/erp-read-models/src/errors.rs:226:            \"uk_product_publication_revisions_publication_revision\",\nbackend/crates/erp-read-models/src/errors.rs:242:            \"uk_product_publication_revisions_publication_revision_extra\",\nbackend/crates/erp-processes/src/errors.rs:136:        Some(\"uk_procurement_confirmation_lines_confirmation_line\")\nbackend/crates/erp-processes/src/errors.rs:137:            | Some(\"uk_procurement_confirmation_lines_active_confirmation_line\")\nbackend/crates/erp-processes/src/errors.rs:138:            | Some(\"uk_product_publication_revisions_publication_revision\")\nbackend/crates/erp-processes/src/errors.rs:351:            \"uk_procurement_confirmation_lines_confirmation_line\",\nbackend/crates/erp-processes/src/errors.rs:352:            \"uk_procurement_confirmation_lines_active_confirmation_line\",\nbackend/crates/erp-processes/src/errors.rs:353:            \"uk_product_publication_revisions_publication_revision\",\nbackend/crates/erp-processes/src/errors.rs:369:            \"uk_product_publication_revisions_publication_revision_extra\",\n",
+    "stderr": "",
+    "exact_string_occurrences": [
+      {
+        "path": "backend/apps/web-api/src/core/errors/cutover_tests.rs",
+        "line": 466,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors/cutover_tests.rs",
+        "line": 470,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors/cutover_tests.rs",
+        "line": 486,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "line": 346,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "HTTP_only_historical_message_owner"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "line": 347,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "HTTP_only_historical_message_owner"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "line": 350,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "HTTP_only_historical_message_owner"
+      },
+      {
+        "path": "backend/apps/web-api/src/core/errors.rs",
+        "line": 834,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 136,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 137,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 138,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 224,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 225,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/errors.rs",
+        "line": 226,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 136,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 137,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 138,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "application_exact_typed_carrier_discriminator"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 351,
+        "name": "uk_procurement_confirmation_lines_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 352,
+        "name": "uk_procurement_confirmation_lines_active_confirmation_line",
+        "classification": "inline_test_fixture"
+      },
+      {
+        "path": "backend/crates/erp-processes/src/errors.rs",
+        "line": 353,
+        "name": "uk_product_publication_revisions_publication_revision",
+        "classification": "inline_test_fixture"
+      }
+    ]
+  },
+  "index_order_review": {
+    "path": "/private/tmp/cutover17-index-sequence-review.json",
+    "sha256": "ce175486c31602a0ae1473db1c320304b6ea7884185f0f3f8361cb7c9dd69150",
+    "status": "independent actual-source check satisfied",
+    "baseline_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+    "input16_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+    "intentional_change": "stage17 intentionally repairs inherited startup index order drift; all four actual entry roots flatten to stage00 collection/reconcile operation sequence",
+    "baseline_groups": 30,
+    "collection_create_count": 158,
+    "flattened_operation_count": 161,
+    "reconcile_count": 3,
+    "entry_roots": [
+      {
+        "path": "backend/apps/web-api/src/indexes.rs",
+        "call_count": 27,
+        "domain_count": 19,
+        "equals_stage00_order": true
+      },
+      {
+        "path": "backend/apps/cli/src/indexes.rs",
+        "call_count": 27,
+        "domain_count": 19,
+        "equals_stage00_order": true
+      },
+      {
+        "path": "backend/crates/erp-processes/src/test_indexes.rs",
+        "call_count": 27,
+        "domain_count": 19,
+        "equals_stage00_order": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/test_indexes.rs",
+        "call_count": 27,
+        "domain_count": 19,
+        "equals_stage00_order": true
+      }
+    ],
+    "index_model_builders_equal": 158,
+    "mongo_provider_builder_helpers_equal": 95,
+    "inherited_first_difference": {
+      "zero_based_position": 2,
+      "stage00": [
+        "create_indexes",
+        "audit_logs",
+        "audit_log_indexes"
+      ],
+      "input16": [
+        "create_indexes",
+        "casbin_rules",
+        "casbin_indexes"
+      ]
+    },
+    "real_database_verified": false,
+    "second_independent_review": {
+      "path": "/private/tmp/cutover17-index-order-review.json",
+      "sha256": "9f787cd29b0d21b8ca2c4c6447cb1fc41219479423cc990d9cafdc678261f632",
+      "checks": [
+        {
+          "stage": "before00",
+          "operation_count": 161,
+          "operation_collection_builder_order_equal": true
+        },
+        {
+          "stage": "after17_web",
+          "operation_count": 161,
+          "operation_collection_builder_order_equal": true
+        },
+        {
+          "stage": "after17_cli",
+          "operation_count": 161,
+          "operation_collection_builder_order_equal": true
+        },
+        {
+          "stage": "after17_process_test",
+          "operation_count": 161,
+          "operation_collection_builder_order_equal": true
+        },
+        {
+          "stage": "after17_readmodel_test",
+          "operation_count": 161,
+          "operation_collection_builder_order_equal": true
+        }
+      ],
+      "prior_partial_129_count_superseded": "Initial helper pattern omitted trailing-comma calls, a tail await without question mark, and two reconcile names. Archived partial-count report is not complete-sequence evidence. Current resolver requires every awaited operation in every ensure body to match."
+    },
+    "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b"
+  },
+  "after_head_at_capture": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "source_commit_binding": {
+    "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "file_count": 32,
+    "all_existing_reviewed_file_hashes_match_actual_commit_blobs": true,
+    "bound_at_utc": "2026-09-07T07:04:37.979496+00:00"
+  },
+  "review_scripts": [
+    {
+      "path": "/private/tmp/audit-cutover17-boundary-errors.py",
+      "sha256": "d59b9f731b1a3d56c6d3a739dbd2a4a86e66c496f45289ae5bee3c56826578af"
+    },
+    {
+      "path": "/private/tmp/audit-commerce15-scope.py",
+      "sha256": "17feb86e1a4ca7f9bafba9b3144f35f7aa38c4992b722abc00a6d2a393cdb9cc"
+    },
+    {
+      "path": "/private/tmp/aggregate-cutover17-boundary-error-review.py",
+      "sha256": "8158124e07438b39097980ef3596ee829ef575550f73666abe1de056bdcf41cf"
+    }
+  ],
+  "startup_and_compensation_subreview": {
+    "path": "/private/tmp/cutover17-startup-compensation-review.json",
+    "sha256": "df161d401d17d853746144beed447b251233c6c7032ee1d44c2deab361e417b7",
+    "production_symbols": 52,
+    "all_symbols_semantics_preserved": true,
+    "original_tests_statically_preserved": 32,
+    "asset_compensation_references": 11,
+    "files_recorded": 82,
+    "documentation_notes": [],
+    "cargo_executed": false,
+    "database_verified": false,
+    "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "actual_blob_binding": "/tmp/cutover17-startup-final-blob-binding.json",
+    "unique_source_paths_verified": 107
+  },
+  "intentional_contract_adjustments": [
+    "Remove redundant Services ErrorCode enum and identity converter; use sole workflow type.",
+    "Carry only three historical DuplicateKey errors typed through Process/RM RepositoryError until HTTP final compatibility message; no receipt recovery eligibility added.",
+    "Restore stage00 index registration order from inherited stage16 domain-grouped drift; no IndexModel definition change."
+  ],
+  "remaining_acceptance_evidence": [],
+  "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "initial_after_head_at_capture": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "root_gate_observation": {
+    "observation_kind": "Reviewer read root-provided sealed execution logs; reviewer did not run Cargo",
+    "reported_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "logs": [
+      {
+        "kind": "lib-tests",
+        "path": "/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 18s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "clippy",
+        "path": "/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.31s"
+        ],
+        "future_compatibility_advisory_present": true
+      },
+      {
+        "kind": "check",
+        "path": "/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "root_reported_exit_code": 0,
+        "finished_lines": [
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.54s"
+        ],
+        "future_compatibility_advisory_present": true
+      }
+    ],
+    "library_aggregate": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "actual_http_golden_test_lines": [
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ],
+    "http_golden_test_functions_passed": 10,
+    "http_response_cases_from_reviewed_definition": 494,
+    "actual_import_projection_test_lines": [
+      "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+      "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+      "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok"
+    ],
+    "reviewer_executed_cargo": false,
+    "real_database_verified": false
+  },
+  "binding_script": {
+    "path": "/private/tmp/bind-cutover17-b-reviews.py",
+    "sha256": "c8d8c6733b5845f58ea640387d9cb7a3082cee3a73d940861ce36b0db31f95f7"
+  },
+  "import_projection_supplement": {
+    "path": "/private/tmp/cutover17-import-projection-review.json",
+    "sha256": "35412928e199e1b553a8b132c694e32074ba1ea255b2adc9591725cb1220bcf1",
+    "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "supplemental_files": 11,
+    "direct_provider_files": 3,
+    "complete_token_checks": 32,
+    "all_checks_satisfied": true
+  }
+}

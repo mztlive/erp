@@ -1,0 +1,1498 @@
+{
+  "phase": "17",
+  "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "raw_artifacts_modified": false,
+  "review_kind": "source-bound independent reviews and executed pure inline tests",
+  "comparisons": {
+    "step": {
+      "raw_scan_exit_code": 1,
+      "counts": {
+        "changed": 1,
+        "missing": 2,
+        "added": 0,
+        "needs_review": 48
+      },
+      "raw_status": "drift_detected",
+      "captured_contracts_equal": false,
+      "items": [
+        {
+          "raw_list": "changed",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "intentional_correction_of_inherited_import_enum_boundary",
+          "evidence": "parser-review.json",
+          "evidence_ref": "step_schema_differences.ImportBusinessConfirmationWorkItemView"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "intentional_correction_of_inherited_import_enum_boundary",
+          "evidence": "parser-review.json",
+          "evidence_ref": "step_schema_differences.ImportWorkItemStatus"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "intentional_correction_of_inherited_import_enum_boundary",
+          "evidence": "parser-review.json",
+          "evidence_ref": "step_schema_differences.ImportWorkItemType"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.UserID"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.Account"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 2,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 3,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.IdempotencyKey"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 4,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandScope"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 5,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandDigest"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 6,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ParticipantId"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 7,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ElectronicRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 8,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ServiceRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 9,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ServiceLocationFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 10,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_list"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 11,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_owner"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 12,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_procurement_responsibility_active_selector"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 13,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ContentHmac"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 14,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 15,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_type_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 16,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_fulfillment_queue"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 17,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_sales_invoice_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 18,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_object_type"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 19,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_fulfillment_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 20,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_customer_acceptance_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 21,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_payment_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 22,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_approval_execution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 23,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.UserID"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 24,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.Account"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 25,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 26,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.IdempotencyKey"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 27,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandScope"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 28,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.CommandDigest"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 29,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ParticipantId"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 30,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ElectronicRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 31,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ServiceRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 32,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ServiceLocationFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 33,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_list"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 34,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_owner"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 35,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_procurement_responsibility_active_selector"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 36,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.step.ContentHmac"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 37,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 38,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_type_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 39,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_fulfillment_queue"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 40,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_sales_invoice_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 41,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_object_type"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 42,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_fulfillment_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 43,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_customer_acceptance_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 44,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_payment_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 45,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_approval_execution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 46,
+          "raw_status_retained": true,
+          "review_status": "reviewed_migration_lineage_and_actual_production_calls",
+          "evidence": [
+            "transaction-review.json",
+            "process-result.json",
+            "funds-result.json",
+            "adapters-implementation-evidence.json",
+            "startup-compensation-review.json",
+            "probe-equivalence-audit.json"
+          ],
+          "prior_phase_evidence": [
+            "../01/transaction-contract.json",
+            "../02/transaction-contract.json",
+            "../03/transaction-contract.json",
+            "../04/transaction-contract.json",
+            "../05/transaction-contract.json",
+            "../06/transaction-contract.json",
+            "../07/transaction-contract.json",
+            "../08/transaction-contract.json",
+            "../09/transaction-contract.json",
+            "../10/transaction-contract.json",
+            "../11/transaction-contract.json",
+            "../12/transaction-contract.json",
+            "../13/transaction-contract.json",
+            "../14/transaction-contract.json",
+            "../15/transaction-contract.json",
+            "../16/transaction-contract.json"
+          ],
+          "note": "Cumulative hashes span prior stages; use their committed contracts plus final provider/call-order reviews. No database runtime claim."
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 47,
+          "raw_status_retained": true,
+          "review_status": "reviewed_migration_lineage_and_actual_production_calls",
+          "evidence": [
+            "transaction-review.json",
+            "process-result.json",
+            "funds-result.json",
+            "adapters-implementation-evidence.json",
+            "startup-compensation-review.json",
+            "probe-equivalence-audit.json"
+          ],
+          "prior_phase_evidence": [
+            "../01/transaction-contract.json",
+            "../02/transaction-contract.json",
+            "../03/transaction-contract.json",
+            "../04/transaction-contract.json",
+            "../05/transaction-contract.json",
+            "../06/transaction-contract.json",
+            "../07/transaction-contract.json",
+            "../08/transaction-contract.json",
+            "../09/transaction-contract.json",
+            "../10/transaction-contract.json",
+            "../11/transaction-contract.json",
+            "../12/transaction-contract.json",
+            "../13/transaction-contract.json",
+            "../14/transaction-contract.json",
+            "../15/transaction-contract.json",
+            "../16/transaction-contract.json"
+          ],
+          "note": "Cumulative hashes span prior stages; use their committed contracts plus final provider/call-order reviews. No database runtime claim."
+        }
+      ]
+    },
+    "cumulative": {
+      "raw_scan_exit_code": 1,
+      "counts": {
+        "changed": 10,
+        "missing": 24,
+        "added": 14,
+        "needs_review": 65
+      },
+      "raw_status": "drift_detected",
+      "captured_contracts_equal": false,
+      "items": [
+        {
+          "raw_list": "changed",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.DispatchOutcome"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.ImportExecutionResult"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 2,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.SupplierDetailView"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 3,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.WorkItemConflict"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 4,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.WorkItemFields"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 5,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.WorkItemHttpView"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 6,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.WorkItemMutationOutcome"
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 7,
+          "raw_status_retained": true,
+          "review_status": "reviewed_actual_error_provider_and_http_mapping",
+          "evidence": [
+            "boundary-error-review.json",
+            "http-error-expectations.json",
+            "b-source-binding.json"
+          ],
+          "note": "Resolve scoped ErrorCode/ErrorClass/Error implementations; retain all 21 workflow codes and actual IntoResponse cases, not terminal-symbol matching."
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 8,
+          "raw_status_retained": true,
+          "review_status": "reviewed_actual_error_provider_and_http_mapping",
+          "evidence": [
+            "boundary-error-review.json",
+            "http-error-expectations.json",
+            "b-source-binding.json"
+          ],
+          "note": "Resolve scoped ErrorCode/ErrorClass/Error implementations; retain all 21 workflow codes and actual IntoResponse cases, not terminal-symbol matching."
+        },
+        {
+          "raw_list": "changed",
+          "raw_index": 9,
+          "raw_status_retained": true,
+          "review_status": "reviewed_actual_error_provider_and_http_mapping",
+          "evidence": [
+            "boundary-error-review.json",
+            "http-error-expectations.json",
+            "b-source-binding.json"
+          ],
+          "note": "Resolve scoped ErrorCode/ErrorClass/Error implementations; retain all 21 workflow codes and actual IntoResponse cases, not terminal-symbol matching."
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing_collection_resolution.accounts"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing_collection_resolution.roles"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 2,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_accounts_kind_active_created"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 3,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_audit_events_actor_created"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 4,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_audit_events_created"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 5,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_audit_events_object_created"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 6,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_audit_events_request_id"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 7,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_audit_logs_active_created"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 8,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_casbin_ptype_value0"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 9,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_casbin_ptype_value1"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 10,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_data_scopes_scope_type"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 11,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_permissions_disabled"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 12,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_roles_active_enabled"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 13,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.idx_user_roles_user_effective"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 14,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_accounts_account"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 15,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_accounts_id"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 16,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_audit_events_id"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 17,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_audit_logs_id"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 18,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_data_scopes_subject_scope"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 19,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_permissions_resource_action"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 20,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_roles_id"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 21,
+          "raw_status_retained": true,
+          "review_status": "existing_index_hidden_by_indexes_rs_path_predicate",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.missing20_real_provider_resolution.uk_user_roles_active"
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 22,
+          "raw_status_retained": true,
+          "review_status": "reviewed_actual_error_provider_and_http_mapping",
+          "evidence": [
+            "boundary-error-review.json",
+            "http-error-expectations.json",
+            "b-source-binding.json"
+          ],
+          "note": "Resolve scoped ErrorCode/ErrorClass/Error implementations; retain all 21 workflow codes and actual IntoResponse cases, not terminal-symbol matching."
+        },
+        {
+          "raw_list": "missing",
+          "raw_index": 23,
+          "raw_status_retained": true,
+          "review_status": "reviewed_actual_error_provider_and_http_mapping",
+          "evidence": [
+            "boundary-error-review.json",
+            "http-error-expectations.json",
+            "b-source-binding.json"
+          ],
+          "note": "Resolve scoped ErrorCode/ErrorClass/Error implementations; retain all 21 workflow codes and actual IntoResponse cases, not terminal-symbol matching."
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_new_capture_visibility",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_new_capture_visibility",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 2,
+          "raw_status_retained": true,
+          "review_status": "document_id_false_positive_not_collection",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 3,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.AddressTypeFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 4,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.EffectiveRecordStatusFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 5,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.HttpWorkItemConflict"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 6,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.ImportJobStatus"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 7,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyAddressFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 8,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyBankAccountFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 9,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyContactFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 10,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyStatusFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 11,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyTaxProfileFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 12,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.SalesBusinessTypeFact"
+        },
+        {
+          "raw_list": "added",
+          "raw_index": 13,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.SupplierFailureClass"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 0,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.UserID"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 1,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.Account"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 2,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.IdempotencyKey"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 3,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandScope"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 4,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandDigest"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 5,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ParticipantId"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 6,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_casbin_ptype_value0"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 7,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_casbin_ptype_value1"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 8,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_list"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 9,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_owner"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 10,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_procurement_responsibility_active_selector"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 11,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 12,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_type_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 13,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_fulfillment_queue"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 14,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_sales_invoice_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 15,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_object_type"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 16,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_fulfillment_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 17,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_customer_acceptance_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 18,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_payment_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 19,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_approval_execution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 20,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 21,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ContentHmac"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 22,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ElectronicRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 23,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ServiceRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 24,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ServiceLocationFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 25,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.UserID"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 26,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.Account"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 27,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 28,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.IdempotencyKey"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 29,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandScope"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 30,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.CommandDigest"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 31,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ParticipantId"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 32,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ElectronicRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 33,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ServiceRecipientFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 34,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ServiceLocationFingerprint"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 35,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_list"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 36,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_procurement_responsibility_owner"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 37,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_procurement_responsibility_active_selector"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 38,
+          "raw_status_retained": true,
+          "review_status": "tuple_newtype_current_definition_verified",
+          "evidence": "parser-review.json",
+          "evidence_ref": "tuple_definitions.cumulative.ContentHmac"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 39,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 40,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_document_approval_owner_type_page"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 41,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.idx_work_items_fulfillment_queue"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 42,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_sales_invoice_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 43,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_object_type"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 44,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_fulfillment_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 45,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_customer_acceptance_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 46,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_open_payment_execution_object"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 47,
+          "raw_status_retained": true,
+          "review_status": "actual_collection_keys_unique_and_partial_source_resolved",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.resolved_parser_index_definitions.uk_work_items_approval_execution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 48,
+          "raw_status_retained": true,
+          "review_status": "reviewed_migration_lineage_and_actual_production_calls",
+          "evidence": [
+            "transaction-review.json",
+            "process-result.json",
+            "funds-result.json",
+            "adapters-implementation-evidence.json",
+            "startup-compensation-review.json",
+            "probe-equivalence-audit.json"
+          ],
+          "prior_phase_evidence": [
+            "../01/transaction-contract.json",
+            "../02/transaction-contract.json",
+            "../03/transaction-contract.json",
+            "../04/transaction-contract.json",
+            "../05/transaction-contract.json",
+            "../06/transaction-contract.json",
+            "../07/transaction-contract.json",
+            "../08/transaction-contract.json",
+            "../09/transaction-contract.json",
+            "../10/transaction-contract.json",
+            "../11/transaction-contract.json",
+            "../12/transaction-contract.json",
+            "../13/transaction-contract.json",
+            "../14/transaction-contract.json",
+            "../15/transaction-contract.json",
+            "../16/transaction-contract.json"
+          ],
+          "note": "Cumulative hashes span prior stages; use their committed contracts plus final provider/call-order reviews. No database runtime claim."
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 49,
+          "raw_status_retained": true,
+          "review_status": "reviewed_migration_lineage_and_actual_production_calls",
+          "evidence": [
+            "transaction-review.json",
+            "process-result.json",
+            "funds-result.json",
+            "adapters-implementation-evidence.json",
+            "startup-compensation-review.json",
+            "probe-equivalence-audit.json"
+          ],
+          "prior_phase_evidence": [
+            "../01/transaction-contract.json",
+            "../02/transaction-contract.json",
+            "../03/transaction-contract.json",
+            "../04/transaction-contract.json",
+            "../05/transaction-contract.json",
+            "../06/transaction-contract.json",
+            "../07/transaction-contract.json",
+            "../08/transaction-contract.json",
+            "../09/transaction-contract.json",
+            "../10/transaction-contract.json",
+            "../11/transaction-contract.json",
+            "../12/transaction-contract.json",
+            "../13/transaction-contract.json",
+            "../14/transaction-contract.json",
+            "../15/transaction-contract.json",
+            "../16/transaction-contract.json"
+          ],
+          "note": "Cumulative hashes span prior stages; use their committed contracts plus final provider/call-order reviews. No database runtime claim."
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 50,
+          "raw_status_retained": true,
+          "review_status": "reviewed_migration_lineage_and_actual_production_calls",
+          "evidence": [
+            "transaction-review.json",
+            "process-result.json",
+            "funds-result.json",
+            "adapters-implementation-evidence.json",
+            "startup-compensation-review.json",
+            "probe-equivalence-audit.json"
+          ],
+          "prior_phase_evidence": [
+            "../01/transaction-contract.json",
+            "../02/transaction-contract.json",
+            "../03/transaction-contract.json",
+            "../04/transaction-contract.json",
+            "../05/transaction-contract.json",
+            "../06/transaction-contract.json",
+            "../07/transaction-contract.json",
+            "../08/transaction-contract.json",
+            "../09/transaction-contract.json",
+            "../10/transaction-contract.json",
+            "../11/transaction-contract.json",
+            "../12/transaction-contract.json",
+            "../13/transaction-contract.json",
+            "../14/transaction-contract.json",
+            "../15/transaction-contract.json",
+            "../16/transaction-contract.json"
+          ],
+          "note": "Cumulative hashes span prior stages; use their committed contracts plus final provider/call-order reviews. No database runtime claim."
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 51,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_new_capture_visibility",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 52,
+          "raw_status_retained": true,
+          "review_status": "existing_collection_new_capture_visibility",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 53,
+          "raw_status_retained": true,
+          "review_status": "document_id_false_positive_not_collection",
+          "evidence": "parser-review.json",
+          "evidence_ref": "index_review.collection_resolution"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 54,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.AddressTypeFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 55,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.EffectiveRecordStatusFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 56,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.HttpWorkItemConflict"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 57,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.ImportJobStatus"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 58,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyAddressFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 59,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyBankAccountFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 60,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyContactFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 61,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyStatusFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 62,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.PartyTaxProfileFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 63,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.SalesBusinessTypeFact"
+        },
+        {
+          "raw_list": "needs_review",
+          "raw_index": 64,
+          "raw_status_retained": true,
+          "review_status": "actual_type_ownership_or_internal_shape_change_preserved_source_contract_reviewed",
+          "evidence": "parser-review.json",
+          "evidence_ref": "cumulative_schema.SupplierFailureClass"
+        }
+      ]
+    }
+  },
+  "reviewed_public_contracts_preserved": true,
+  "intentional_step_repairs": [
+    "Restore original global startup index operation order from phase00",
+    "Restore Import composite responses to actual workflow task type/status and authorized dynamic route"
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

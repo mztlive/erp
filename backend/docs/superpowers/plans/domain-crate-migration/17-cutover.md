@@ -1,25 +1,27 @@
-# 阶段 17：最终切换与编译收益验收
+# 阶段 17：最终切换与逻辑迁移验收
 
 ## 1. 阶段元数据
 
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 17 |
-| 状态 | 执行中 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | 治理/范围核验/最终验收，不创建空业务 crate |
 | 执行负责人 | Codex；唯一共享注册集成负责人，分片所有权按实际输入证据登记 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 输入/输出提交 | 输入 `a537414eb8f78c43ebc383a3457a45c437dececc`；实现 `39c55021d8bb1d030eade4afb3e135e4b5a8a18b`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
 
-移除旧业务 crate 的活动依赖和生产实现，并通过结构与耗时双重验收。
+完成逻辑正确的领域迁移，删除旧 entities/database/services 的生产源码、manifest、workspace 注册与全部活动依赖，完成入口装配及业务合同验证。
+
+按 2026-09-07 用户指令，编译指标测量已停止，性能验收后置，不作为本轮完成条件。依赖结构和编译正确性仍须通过，不得将性能后置记为性能达标。
 
 ## 3. 前置条件
 
-- [阶段 16](16-supply.md) 已验收，证据与提交完整。
+- [阶段 16](16-supply.md) 本地门禁通过，代码及证据提交完整。
 - 先阅读 [README](README.md)、公共执行合同及本阶段完整内容。
 - 对照 [source-map.tsv](source-map.tsv) 的 phase=17 行、[source-symbols.tsv](source-symbols.tsv) 和本节之后的符号拆分表核验当前输入；当前清单默认归属文件数为 7，其源文件哈希只是编制快照，不是迁移已完成证明。
 - 前序阶段已改变公共类型时，以前序验收提交为实际输入，登记相应路径/签名变化；禁止自动重生成清单来隐藏未经审核的漂移。
@@ -37,7 +39,7 @@
 
 ## 5. 范围内与范围外事项
 
-旧三层生产入口/manifest、最终装配、脚本/CI/Docker 路径与完整编译收益；历史 tests/ 档案保留原样且不进入 Cargo。
+旧三层生产入口/manifest、最终装配、脚本/CI/Docker 路径与逻辑合同核验；历史 tests/ 档案保留原样且不进入 Cargo。编译耗时、Fresh/Dirty 传播和改善率验收后置。
 
 范围内文件由本阶段符号表、phase=17 的全量文件清单、必要调用方和已登记的注册文件构成。范围外包括新业务、数据回填、依赖版本升级、生产配置/凭据、发布推送，以及既有集成测试源码。
 
@@ -78,7 +80,7 @@
 - Web、CLI及两个组合crate的原ignore库测试分别登记阶段00原逐集合索引顺序。只复用领域公开索引，不移动或运行历史tests。
 - 索引组合根使用27个调用保留19领域的原30组索引操作；身份账号/角色、审计日志、身份授权索引按原交错位置执行，workflow/support/finance子组不得以领域聚合入口重排。单个集合内的索引键、选项与创建调用不变。
 - 导入确认的三个复合响应归Process，直接使用workflow唯一定义的任务类型与状态；投影必须保留实际关联任务值，禁止将所有类型固定成IMPORT_BUSINESS_CONFIRMATION。
-- 测量脚本、完整Cargo事实采集、环境记录与独立阈值判定脚本属于最终共享门禁；原00固定生成的事务字段保留历史原件并另附真实性勘误。
+- 已有测量工具及探针修正保留；不继续采样或判定性能阈值。原00固定生成的事务字段保留历史原件并另附真实性勘误。
 
 ## 7. 目标依赖合同
 
@@ -88,21 +90,21 @@
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 从 metadata 检查 19 个有实现业务域、3 个基础、2 个组合及保留技术 crate。processes/read-models 中对旧三层的临时依赖必须先替换为目标 API，不能直接删除 manifest 后放任调用方失败。
+1. [x] 从 metadata 检查 19 个有实现业务域、3 个基础、2 个组合及保留技术 crate。processes/read-models 中对旧三层的临时依赖已替换为目标 API。
 
-2. [ ] 按 source-map.tsv、阶段 01 的仓储类型清单与各阶段符号拆分表逐项核销生产实现。删除旧 entities/database/services 的 src 和 Cargo.toml；仅保留原 tests/ 档案，不改写、不移动、不运行历史集成测试。
+2. [x] 按 source-map.tsv、阶段 01 的仓储类型清单与各阶段符号拆分表核销生产实现。旧 entities/database/services 的 src 和 Cargo.toml 已删除；原 tests/ 档案保留，不改写、不移动、不运行历史集成测试。
 
-3. [ ] 更新 Cargo.lock、AppState、CLI、全局错误映射、索引初始化与后台 worker 装配；活动源码不再引用旧crate。历史迁移记录的源路径可保留，不计入活动依赖。
+3. [x] 更新 Cargo.lock、AppState、CLI、全局错误映射、索引初始化与后台 worker 装配；活动源码不再引用旧crate。历史迁移记录的源路径保留，不计入活动依赖。
 
-4. [ ] 更新 Dockerfile 的 COPY、构建与开发脚本、CI 和有效运行说明；不得执行发布/推送/远程部署。保持稳定版 release 与本地 nightly/Cranelift 的既有配置边界。
+4. [x] 更新 Dockerfile 的 COPY、构建与开发脚本、CI 和有效运行说明；未执行发布/推送/远程部署。保持稳定版 release 与本地 nightly/Cranelift 的既有配置边界。
 
-5. [ ] 确认 check-domain-boundaries.sh 覆盖旧 Service 原始查询规则以及新领域依赖规则后再移除旧 Service 检查；保持 BPM 纯度、权限漂移和全部现有行为门禁。
+5. [x] 确认 check-domain-boundaries.sh 覆盖旧 Service 原始查询规则以及新领域依赖规则后移除旧 Service 检查；BPM 纯度、权限漂移和全部现有行为门禁通过。
 
-6. [ ] 在阶段 00 对照 worktree 与最终 worktree，用独立预热 target 完成三个领域×check/build×五次样本；相同语义补丁、工具链、profile/features/负载和存储。只比较成功有效样本。
+6. [x] 核验最终业务合同、同 Executor 调用路径、写入顺序、错误传播、索引顺序与公开响应；修复前序索引组重排和导入确认复合响应的偏差。
 
-7. [ ] 验收 Sales 改动不编译 Finance、Finance 改动不编译 Sales，其他无依赖领域保持 Fresh；check/build 各至少两组中位数改善 30%，任何场景回退不超过 10%。入口和真实依赖组合层的重编译/链接按事实记录。
+7. [x] 执行本轮完整质量门禁，归档实际命令、退出码、原始比较结果及逐项复核证据；原始扫描 exit1 不得改写为扫描器直接通过。
 
-8. [ ] 耗时不达标时分析 timings、代码生成/单态化、宏、build.rs、features 与入口 fan-in，在已有范围内继续修正；不得把 18 个阶段写成完成来替代指标。填写所有证据和阶段提交，最后更新 README 状态。
+8. [x] 停止编译指标测量并恢复测量补丁，登记性能验收后置；填写阶段提交和证据，README 与 manifest 状态统一为「本地门禁通过」。后续性能事项必须另按 compile-measurement.md 执行，不纳入本轮完成清单。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -121,7 +123,7 @@ cargo check -p web-api -p cli --locked
 
 - 依赖：普通领域互不直接依赖，无旧三层或 dev 回边；根 crate 是装配层。
 - 行为：所有纯内联测试、HTTP/DTO/错误/权限、JSON/BSON/索引对比通过；真实数据库运行未验证如实记录。
-- 性能：完整原始日志、五次样本、中位数、改善率、Fresh/Dirty 和版本环境齐备；无修改业务单元重编译数为 0。
+- 性能：本轮后置；已停止测量且源码已恢复，不声明任何性能阈值通过。
 
 纯测试必须验证行为、数据形态或失败语义；不以源码字符串包含检查替代领域行为断言。既有 include_str! 结构检查可以保留并更新正确路径。
 
@@ -139,7 +141,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 git diff --check
 ```
 
-公共门禁全部通过才允许进入“本地门禁通过”；填完证据并形成完整阶段提交后进入“已验收”。不得把未执行命令标为通过。
+公共门禁全部通过、证据归档并形成完整阶段提交后，执行者最高登记“本地门禁通过”，不得自行登记人工“已验收”。不得把未执行命令标为通过。
 
 ## 11. 事务与持久化验收边界
 
@@ -149,7 +151,7 @@ git diff --check
 
 ## 12. 暂停条件
 
-仍有旧生产源或 facade；丢失历史测试档案；性能/结构任一未达标；用忽略规则或改变构建环境制造提速；质量门禁未通过。
+仍有旧生产源或 facade；丢失历史测试档案；实际依赖结构不符合合同；质量门禁未通过；以关闭规则、扩大 allowlist 或篡改证据制造通过。性能后置不阻断本轮逻辑迁移。
 
 此外，任何业务/HTTP/权限/数据库/幂等行为变化、测试无法证明关键行为、来源不明的重叠修改或无法复用 Executor 都必须暂停。先保留失败证据并标记“阻塞”，不得关闭规则、扩大债务基线或跳过失败测试。
 
@@ -165,19 +167,24 @@ git diff --check
 - 第 8 节任务已完成；第 6 节及全量清单已核销，混合文件无遗漏符号或第二实现。
 - 本阶段依赖约束及旧引用清零通过；必需入口、内联测试与公开错误映射均接入新实现。
 - 第 10 节门禁与第 11 节范围内验证通过；第 15 节证据齐全，状态和提交一致。
-- 适用的编译复测已完成并记录真实结果；最终性能阈值按阶段 17 判定，文档编制不构成阶段验收。
+- 已停止编译指标测量并记录性能后置；不以文档状态代替实际质量门禁、代码提交或旧三层清零证据。
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据文件 |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 阶段16 `a537414e`；专用切换 worktree；实现 `39c55021` | input.json、files.tsv |
+| 文件与符号 | 阶段17清单7行已核销，全部141个仓储准备路径缺失且最终目标存在；跨域事实、写入和适配器归属已复核 | source-clearance.json、workflow-facts-implementation.json、process-result.json、adapters-implementation-evidence.json |
+| 依赖 | 34成员；19领域、3基础、2组合；normal/build/dev无旧三层和禁止依赖边 | metadata.json、domain-dependencies.json、boundary.log |
+| 旧实现清零 | 旧三层3个src及3个manifest缺失，活动源码、注册和依赖为0；31个历史测试逐字不变 | legacy-final-audit.json、historical-tests.json |
+| 测试 | 33个库目标；3655 passed、0 failed、68 ignored，比阶段16新增61项通过 | test-summary.json、unit-tests.log |
+| 协议与数据 | 10个HTTP测试覆盖494组实际响应；21错误码、17索引提示；4个组合根的161项索引操作顺序与00一致；导入确认保留真实关联任务值及动态路由 | http-error-expectations.json、index-sequence-review.json、import-projection-review.json、permissions.log |
+| 契约扫描 | 16→17：changed1/missing2/added0/needs48；00→17：changed10/missing24/added14/needs65；均保留原始exit1并附逐项复核 | contract-comparison.json、missing-drift-report.json、cumulative/、contract-review.json、parser-review.json |
+| 事务合同 | 源码调用链及内联测试核验同Executor、顺序、首错、幂等恢复和I/O分离；真实数据库运行未验证 | transaction-contract.json、transaction-review.json、boundary-error-review.json、startup-compensation-review.json |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/domain/permissions/diff均exit0；旧Service检查删除前已通过并由新规则承接；516个第三方完整锁定项不变 | quality-gates.log、dependency-lock.json |
+| 编译指标 | 按用户指令停止，性能验收后置；候选与基线源码已恢复，不声明性能阈值通过 | compile-deferred.json |
+| 阶段提交 | 实现 `39c55021d8bb1d030eade4afb3e135e4b5a8a18b`；证据提交以本文件Git记录为准；执行人Codex，2026-09-07 | input.json |
+
+表内证据文件均位于仓库根 `.domain-migration-evidence/17/`。只读扫描存在解析范围限制，必须结合 `contract-review.json` 的逐项处置与独立源码复核使用；原始比较产物不改写。真实数据库运行未验证，性能验收后置，状态最高登记「本地门禁通过」。
+
+18阶段执行证据的只读核验结果归档于 `.domain-migration-evidence/final-execution.json`；该结果绑定已落库的阶段代码与证据，不表示人工验收。

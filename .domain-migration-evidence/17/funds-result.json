@@ -1,0 +1,2786 @@
+{
+  "schema": "cutover17-funds-evidence-v1",
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "worktree": "/private/tmp/erp-domain-crate-17-cutover",
+  "capture_utc": "2026-09-07T06:29:44.635820+00:00",
+  "original_files": [
+    {
+      "path": "backend/services/src/work_item/amount.rs",
+      "sha256": "0239dde376ceb5a334223fe26823a06ddd39994cb8274403070624e81b92f27e",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief.rs",
+      "sha256": "aec303b64ad6f26214de935bb080efcbeb3c955259a926521ec118302da87e68",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief/account.rs",
+      "sha256": "798009596ae8aaf4c01c2b3ea85edf23f2f1ac01d48dcd6bf28d1a774b2851fa",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief/mapping.rs",
+      "sha256": "7fae8a0301c78d4b74253e2891b6c851614f1c61d497324bf43609826f76bc14",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+      "sha256": "5112d2fa9aad3b47550f1a7edc454b5d222d438a41470a7d08fd55f4f0af90f3",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+      "sha256": "8f3518386b0191fee1095efa78f76f771696217358df8ba21ed8407f87d62a08",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+      "sha256": "0d2da180c878a24712971d6d8fdf77e8d63a75d324340e1b89aa1e6a33212926",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief.rs",
+      "sha256": "785601218d61d9bf3644cff9e43d4a74794be488e348919c54197399e1abcd62",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+      "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+      "sha256": "76ac8bccf83164b496ea6afbd0c504c1af68cb15c578651401a46d5701262c6c",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "sha256": "02561c66b367e759e5e764b41a77636a94c99119084e7c69c7d44ba221ee1b3f",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+      "sha256": "ae290bf088398a211406f3bc2ad33410d0a93fe585d5540ac2a6525e87f34105",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+      "sha256": "885ad74f87a5131c697fcad2d8e6af0f30d4e49664ddc5cd8374f5f0ec0eed16",
+      "input_blob_bytes_equal": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+      "sha256": "5f2b2e33100d3babd655780842838bf5a44b8455eec9469b30084529f26ae145",
+      "input_blob_bytes_equal": true
+    }
+  ],
+  "original_function_disposition": [
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::non_empty",
+        "line": 6,
+        "body_token_sha256": "d920f64b5fdfed4c61aaeb7accab497ed5420aa0ee69cebef5638b53ed4b3488"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "symbol": "erp_read_models::workbench::brief::non_empty",
+        "line": 203,
+        "body_token_sha256": "d920f64b5fdfed4c61aaeb7accab497ed5420aa0ee69cebef5638b53ed4b3488"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::format_yuan",
+        "line": 12,
+        "body_token_sha256": "400830fa0a89742f1dae1a59084781ed59b546abe66e81d00e186c6b2c653f02"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "erp_read_models::workbench::presentation::format_yuan",
+        "line": 279,
+        "body_token_sha256": "400830fa0a89742f1dae1a59084781ed59b546abe66e81d00e186c6b2c653f02"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::purchase_review_impact_summary",
+        "line": 24,
+        "body_token_sha256": "074900383c532ec953835c883f9b8218f22b4fa38a8ca0678609956273784741"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "erp_read_models::workbench::presentation::purchase_review_impact_summary",
+        "line": 114,
+        "body_token_sha256": "159a511da97985fafefa76973e54bd2a30ce85b49f8e0ad2359a602d29412798"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::group_int",
+        "line": 47,
+        "body_token_sha256": "248a8c6bb0861eb07f1a7dcf253ec9cf938d38ef47c92dab144cd08cc332a9b1"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "symbol": "erp_read_models::workbench::presentation::group_int",
+        "line": 290,
+        "body_token_sha256": "248a8c6bb0861eb07f1a7dcf253ec9cf938d38ef47c92dab144cd08cc332a9b1"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::tests::format_yuan_groups_thousands_and_keeps_nonzero_fraction",
+        "line": 67,
+        "body_token_sha256": "a21f0f7d7a4aee91c5f77f7a7c643f6fccf81014450649bb296362d4c3e64758"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "erp_read_models::workbench::authority::amount::tests::format_yuan_groups_thousands_and_keeps_nonzero_fraction",
+        "line": 10,
+        "body_token_sha256": "a21f0f7d7a4aee91c5f77f7a7c643f6fccf81014450649bb296362d4c3e64758"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::tests::purchase_review_impact_appends_scale_and_prepay_gate",
+        "line": 75,
+        "body_token_sha256": "bf10ea68f2e3f447dad11b66ddc3c722256be5998794a0efea2196673488fd20"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "erp_read_models::workbench::authority::amount::tests::purchase_review_impact_appends_scale_and_prepay_gate",
+        "line": 18,
+        "body_token_sha256": "bf10ea68f2e3f447dad11b66ddc3c722256be5998794a0efea2196673488fd20"
+      },
+      "disposition": "existing_unique_helper_or_original_test",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_receivable_account_facts",
+        "line": 15,
+        "body_token_sha256": "1c9a2f008d0a30cf17ad7aa604f5c685774db8544b5f898dc3d909a2b74291e9"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_receivable_account_facts",
+        "line": 14,
+        "body_token_sha256": "eb11fc43abb0e3be7318cc1a370135ba4f95ad233096848e3797d1c51935b5cb"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_payable_account_facts",
+        "line": 61,
+        "body_token_sha256": "c4ef534fb8247884d702a62533bc2601a4ee917d6b8840a7164a2310fef26c67"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_payable_account_facts",
+        "line": 48,
+        "body_token_sha256": "43a1a88c4186c32881f9a1186949258546745c5baf62eec4ba63409efc7bc8ae"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/mapping.rs",
+        "symbol": "backend::services::work_item::funds_document_brief::mapping::payable_account_fact",
+        "line": 9,
+        "body_token_sha256": "8f44ac51401b91d55c1163c8b927fafcf250a3da018e2aea8a66925af97c86ff"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::payable_account_fact",
+        "line": 35,
+        "body_token_sha256": "ea1a114e16be50bfe446d1c53a30a8f8d1d19f74775bcfc2790985780a7a1c12"
+      },
+      "disposition": "unique_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_supplier_payment_facts",
+        "line": 14,
+        "body_token_sha256": "7ba3c234f32309bd9dbeae402a3650d87b01a777e4330bd87a87570ccdac4cbc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_supplier_payment_facts",
+        "line": 14,
+        "body_token_sha256": "f8c55dbcc3cee81f2fe0e1942dc5301eb60668b9d1870927855ea64563047e3e"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_supplier_refund_facts",
+        "line": 56,
+        "body_token_sha256": "0bb32c20e1100c087a326749d036b90a3e587343ec7e72255fa71a670ffe7bff"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_supplier_refund_facts",
+        "line": 49,
+        "body_token_sha256": "bed15ac95b47fdc464a1d5d2caf6b72f9d0b892231eaabb597d398a54d8e7e15"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_payment_reversal_facts",
+        "line": 118,
+        "body_token_sha256": "cc2bfcf7915cb74797c105ae942f30463ef392ecffc6b087fb66b504d15701c1"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_payment_reversal_facts",
+        "line": 96,
+        "body_token_sha256": "d7e0710ce0f34759b5c91dd128d3c5a2ef084ecd2a920627c4680e7ffd76742e"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_created_by_from_audit",
+        "line": 23,
+        "body_token_sha256": "a98dd81e3e0b83b83d5d99e65bb6df3d41c2d5fd220b0f53c993fc67514d6e9b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_created_by_from_audit",
+        "line": 19,
+        "body_token_sha256": "3cbcc69e8865737e7aa5f81dd7de2dcca9d1910b87b3ea6a21640e2a8552b8aa"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_supplier_names",
+        "line": 50,
+        "body_token_sha256": "0d7cc2199339e12a14bf57b38dd1427921fce6d52bd8651654f7896358b95e5d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_supplier_names",
+        "line": 40,
+        "body_token_sha256": "0d7cc2199339e12a14bf57b38dd1427921fce6d52bd8651654f7896358b95e5d"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_purchase_numbers",
+        "line": 63,
+        "body_token_sha256": "cc82c04fbf03f7d70b4dc4cb5c91d1f582eb91023da0448c141f24fd62a157c2"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_purchase_numbers",
+        "line": 53,
+        "body_token_sha256": "3f5f78092a3c2265d6da3452ba766e02518b24c33d08e7f8b6bd8708bdbe8f1b"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::party_legal_names",
+        "line": 83,
+        "body_token_sha256": "561e14e87aabd3b163ac891e1f2a1b58f81e5cbe0fcbd7d72c7e95cd9c1c79eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::party_legal_names",
+        "line": 71,
+        "body_token_sha256": "561e14e87aabd3b163ac891e1f2a1b58f81e5cbe0fcbd7d72c7e95cd9c1c79eb"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::legal_names_for_parties",
+        "line": 95,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::legal_names_for_parties",
+        "line": 94,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::customer_display_names",
+        "line": 126,
+        "body_token_sha256": "6623d375bc10841fbf588ab14fab68fe7112f76c20a1e6a68273591fce563f40"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::customer_display_names",
+        "line": 125,
+        "body_token_sha256": "6623d375bc10841fbf588ab14fab68fe7112f76c20a1e6a68273591fce563f40"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::supplier_display_names",
+        "line": 157,
+        "body_token_sha256": "77c75d284c2bab3095cfb654b7c99a426e4fadb8a878de3793fa580def1ab99b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::supplier_display_names",
+        "line": 156,
+        "body_token_sha256": "77c75d284c2bab3095cfb654b7c99a426e4fadb8a878de3793fa580def1ab99b"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::receivable_voucher_revision_ids",
+        "line": 188,
+        "body_token_sha256": "7e9321378cb620fcc5b8da487165bec3fbb52d751473cec93897a46b61226d00"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::receivable_voucher_revision_ids",
+        "line": 187,
+        "body_token_sha256": "0113c26132aeef227fbeb14bd601e0ffc7b598a19e2f3dad8e0a4ebc06529fa7"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::customer_receipt_origins",
+        "line": 214,
+        "body_token_sha256": "494219710df10d8b0e7c980bde27ebd27ea6bae0e1cfd5fd465de07c1933178d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::customer_receipt_origins",
+        "line": 11,
+        "body_token_sha256": "5ac1e2332c9fe82674bf3781519f2d5884987e18c71cc14e6906cacedabdec9f"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::receivable_entry_origins",
+        "line": 241,
+        "body_token_sha256": "57f5077577e7fa84dcf233639a73ff08da4371e7c022be82ca78b6c2a81f525e"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::receivable_entry_origins",
+        "line": 25,
+        "body_token_sha256": "db0e344fd59252a8e038fab79609dd79e861045db455ff7550f4a20a0cdfbcf9"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::supplier_payment_origins",
+        "line": 286,
+        "body_token_sha256": "299a4724033c5372d73a2ceb3fe8ef935ba0616c032d9d7d7e846417b6c33b82"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::supplier_payment_origins",
+        "line": 52,
+        "body_token_sha256": "7ce72fe203c9c288d8473e186dbbd68a01455fcf94e8e123954e9225d55f9e78"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_entry_origins",
+        "line": 317,
+        "body_token_sha256": "2e0a42c02f4440c59999f7c1ba9ca3403b759685a1ee616382244e89ac548d86"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_entry_origins",
+        "line": 70,
+        "body_token_sha256": "ab0aa3a89a4305cf2b65d1f2c51beb3e87db939acd5c588c5a5dd467162378e5"
+      },
+      "disposition": "unique_query_or_origin_recipe",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_customer_receipt_facts",
+        "line": 14,
+        "body_token_sha256": "8060661d024b038d08c2ec22b9c17ced31315c8491f316263e26cd1fea9b07c0"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_customer_receipt_facts",
+        "line": 14,
+        "body_token_sha256": "163c902bb433cb259ec130dc0afb3239505197ec3fded34f957ae5cf78669f3e"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_customer_refund_facts",
+        "line": 61,
+        "body_token_sha256": "aa080a122411fcc01ab971fd5a6daf21a2c54139f737cc58919c6cfcecad9215"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_customer_refund_facts",
+        "line": 54,
+        "body_token_sha256": "02ca458987404b82ae848f057c8f1e594069e36d8796c032dc101e66010eb6fb"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_receipt_reversal_facts",
+        "line": 128,
+        "body_token_sha256": "6fc9392b1eae154ae7d59b4d54881a9b846f0077919f8085b8fa24de83eba32b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_receipt_reversal_facts",
+        "line": 106,
+        "body_token_sha256": "af84f44f284a97bb1e3522039fdbf5dd7ecd7baef9dd45770828cc23336793d9"
+      },
+      "disposition": "command_recipe_shared_sources_authority_mapper",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::apply_party_names",
+        "line": 32,
+        "body_token_sha256": "8ea19f21681bd537dd5fdea8fb002f13e8da6061550e8cd45ed567ac01d6aa9f"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::apply_party_names",
+        "line": 32,
+        "body_token_sha256": "8ea19f21681bd537dd5fdea8fb002f13e8da6061550e8cd45ed567ac01d6aa9f"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::apply_party_names_with",
+        "line": 47,
+        "body_token_sha256": "bba2a65fa7a9f356943a9f4719d291468855cda0f5b621334382d1784a077049"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::apply_party_names_with",
+        "line": 47,
+        "body_token_sha256": "bba2a65fa7a9f356943a9f4719d291468855cda0f5b621334382d1784a077049"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_account_names",
+        "line": 77,
+        "body_token_sha256": "e1545eb7389a7069924992df804504754bcf845e18fc3d7e4577e7e4a2187341"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_account_names",
+        "line": 77,
+        "body_token_sha256": "e1545eb7389a7069924992df804504754bcf845e18fc3d7e4577e7e4a2187341"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::account_ids_for_lookup",
+        "line": 103,
+        "body_token_sha256": "c51d06213b717765e3b463893a99ca6ec2967ecd454b895b2faa5aea11ac5cb6"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::account_ids_for_lookup",
+        "line": 103,
+        "body_token_sha256": "c51d06213b717765e3b463893a99ca6ec2967ecd454b895b2faa5aea11ac5cb6"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::submitter_section",
+        "line": 129,
+        "body_token_sha256": "505a07d8a8b2696ac5c5953c7f94473b8293629ad5a3dc0ddc612302450ce47d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::submitter_section",
+        "line": 129,
+        "body_token_sha256": "505a07d8a8b2696ac5c5953c7f94473b8293629ad5a3dc0ddc612302450ce47d"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::apply_submitter_name",
+        "line": 144,
+        "body_token_sha256": "78c7755c0afa97e19a56c70d6b614782840746b454d87f5db2e65924eecfcf6d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::apply_submitter_name",
+        "line": 144,
+        "body_token_sha256": "78c7755c0afa97e19a56c70d6b614782840746b454d87f5db2e65924eecfcf6d"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::is_account_id",
+        "line": 177,
+        "body_token_sha256": "492723187ba55d1f7db80a6bc7e7a3c27435c6fc401bb8126f324d6db8e3599b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::is_account_id",
+        "line": 177,
+        "body_token_sha256": "492723187ba55d1f7db80a6bc7e7a3c27435c6fc401bb8126f324d6db8e3599b"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::owner_ids_are_unique_and_skip_unassigned",
+        "line": 190,
+        "body_token_sha256": "c95aa004d4bea7cd1c1a931fd9fcea32869fd26601cec736f98c9012c529f19f"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::owner_ids_are_unique_and_skip_unassigned",
+        "line": 190,
+        "body_token_sha256": "c95aa004d4bea7cd1c1a931fd9fcea32869fd26601cec736f98c9012c529f19f"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_ids_join_the_same_account_lookup",
+        "line": 206,
+        "body_token_sha256": "32b68719899732fd65fd04516e7547d9c86df542e30f861bc9037a4e76df0900"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_ids_join_the_same_account_lookup",
+        "line": 206,
+        "body_token_sha256": "32b68719899732fd65fd04516e7547d9c86df542e30f861bc9037a4e76df0900"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::resolved_submitter_ids_become_names",
+        "line": 216,
+        "body_token_sha256": "a1509b64bf3053fa2d44afc590da160ffd208d8c79f66b5f433f2cdf37b2b8f6"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::resolved_submitter_ids_become_names",
+        "line": 216,
+        "body_token_sha256": "a1509b64bf3053fa2d44afc590da160ffd208d8c79f66b5f433f2cdf37b2b8f6"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::unresolved_submitter_ids_are_dropped_rather_than_shown",
+        "line": 224,
+        "body_token_sha256": "5b93c005d63e1ccc81d5e1a219f20d9ba20927731e2c26a52caa385beb97e0bf"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::unresolved_submitter_ids_are_dropped_rather_than_shown",
+        "line": 224,
+        "body_token_sha256": "5b93c005d63e1ccc81d5e1a219f20d9ba20927731e2c26a52caa385beb97e0bf"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_names_already_resolved_are_left_alone",
+        "line": 232,
+        "body_token_sha256": "d7a0e94abf4704e7e882f7f303e3b1d2027862252b0057ce7418f440ecd7cb0c"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_names_already_resolved_are_left_alone",
+        "line": 232,
+        "body_token_sha256": "d7a0e94abf4704e7e882f7f303e3b1d2027862252b0057ce7418f440ecd7cb0c"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::account_ids_are_hex_of_object_id_or_system_length",
+        "line": 239,
+        "body_token_sha256": "277f63189f1904658f3c862634ac0ae085108605bd10f6b49df74be2217470dc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::account_ids_are_hex_of_object_id_or_system_length",
+        "line": 239,
+        "body_token_sha256": "277f63189f1904658f3c862634ac0ae085108605bd10f6b49df74be2217470dc"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::section",
+        "line": 246,
+        "body_token_sha256": "631876154d180066400191e5fd8b6414b50378caa64f6d0f82ce23cb561e411c"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::section",
+        "line": 246,
+        "body_token_sha256": "631876154d180066400191e5fd8b6414b50378caa64f6d0f82ce23cb561e411c"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::dummy_view",
+        "line": 255,
+        "body_token_sha256": "1d3aa4be88e52e9f4bb386fdf2c37d2f46efd251a2ef24e5699023c7fcd3a6eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::dummy_view",
+        "line": 255,
+        "body_token_sha256": "1d3aa4be88e52e9f4bb386fdf2c37d2f46efd251a2ef24e5699023c7fcd3a6eb"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receivable_account_facts",
+        "line": 29,
+        "body_token_sha256": "b139c97870a3667ddbd0c850c3b208400f9f440a6a7c32a3d4a330985c567204"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receivable_account_facts",
+        "line": 28,
+        "body_token_sha256": "e9bf1eccddcb6c02b6a24edcd3670ba074b4c91e30e4fe3bd3d9be383c555830"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payable_account_facts",
+        "line": 220,
+        "body_token_sha256": "008daabd90d82ca5233b73d0694256814c011b389c848309c8e0f294152e7c01"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payable_account_facts",
+        "line": 217,
+        "body_token_sha256": "eca8f1a145d5fd29cbbd2af436364c195b03209efc8f414312e15b3b26ca9f35"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payable_account_fact",
+        "line": 26,
+        "body_token_sha256": "a618e469460e0e96cbec4feac116a9dc96656bb2e8ce9dab6b6fcce8a6dd10d9"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payable_account_fact",
+        "line": 30,
+        "body_token_sha256": "bbd4aa38136781ba6ad640b16bacb2ec85fcebde892c49cae598905d7e16a19d"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payable_brief_source",
+        "line": 45,
+        "body_token_sha256": "11082c4f7e6c59e944875bb9d3cb10da7ff4823bb11577c3c3790ad90b64e090"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payable_brief_source",
+        "line": 45,
+        "body_token_sha256": "11082c4f7e6c59e944875bb9d3cb10da7ff4823bb11577c3c3790ad90b64e090"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receipt_brief_source",
+        "line": 95,
+        "body_token_sha256": "155b1384b01ca40c2ef9ad41c55507513476420646a61de425920f352465ce81"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receipt_brief_source",
+        "line": 95,
+        "body_token_sha256": "155b1384b01ca40c2ef9ad41c55507513476420646a61de425920f352465ce81"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::voucher_account_line",
+        "line": 159,
+        "body_token_sha256": "8ca31a3058b9e92a04d5ad2179b066d5abb9e9a6bee6204fc2f3f84f84dacb9a"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::voucher_account_line",
+        "line": 159,
+        "body_token_sha256": "8ca31a3058b9e92a04d5ad2179b066d5abb9e9a6bee6204fc2f3f84f84dacb9a"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::invoice_tax_profile_label",
+        "line": 188,
+        "body_token_sha256": "4920055cb8cc57834c7ec6f93dbe4c7832c68e671fb1a7bf85ce2c579230a98e"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::invoice_tax_profile_label",
+        "line": 188,
+        "body_token_sha256": "4920055cb8cc57834c7ec6f93dbe4c7832c68e671fb1a7bf85ce2c579230a98e"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receipt_brief_lines",
+        "line": 208,
+        "body_token_sha256": "3b6491b09ed36669ee4448a4d8253b5131fa2e01fa4579672827197a07133155"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receipt_brief_lines",
+        "line": 208,
+        "body_token_sha256": "3b6491b09ed36669ee4448a4d8253b5131fa2e01fa4579672827197a07133155"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payment_brief_lines",
+        "line": 246,
+        "body_token_sha256": "748cec4ce3dc2d7fb11583efefc1cda348d7808db2828f3c85b255e11538b821"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payment_brief_lines",
+        "line": 246,
+        "body_token_sha256": "748cec4ce3dc2d7fb11583efefc1cda348d7808db2828f3c85b255e11538b821"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::append_funds_origin",
+        "line": 284,
+        "body_token_sha256": "ebd74e93a982004db53e6bdfe9a802f47da5ecc4f7635aaadb055aca61187634"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::append_funds_origin",
+        "line": 284,
+        "body_token_sha256": "ebd74e93a982004db53e6bdfe9a802f47da5ecc4f7635aaadb055aca61187634"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::amount_reason_brief",
+        "line": 345,
+        "body_token_sha256": "dbfc619447965d5a4740daba50e2a43dd40887b66e433e480d2fb300915f88a7"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::amount_reason_brief",
+        "line": 345,
+        "body_token_sha256": "dbfc619447965d5a4740daba50e2a43dd40887b66e433e480d2fb300915f88a7"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount",
+        "line": 373,
+        "body_token_sha256": "759a7ddb644bf663c7c4590fa84025867aef3fe7126fe429f97bce4f45bc4a3f"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount",
+        "line": 563,
+        "body_token_sha256": "759a7ddb644bf663c7c4590fa84025867aef3fe7126fe429f97bce4f45bc4a3f"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::receipt_list_summary_joins_counterparty_amount_and_first_line",
+        "line": 378,
+        "body_token_sha256": "37ffa349b3bc9c859a066b23542de10c6dbdf70f466697948828f87a2fc26187"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::receipt_list_summary_joins_counterparty_amount_and_first_line",
+        "line": 568,
+        "body_token_sha256": "37ffa349b3bc9c859a066b23542de10c6dbdf70f466697948828f87a2fc26187"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount_reason_brief_keeps_amount_and_reason",
+        "line": 396,
+        "body_token_sha256": "55572752f74d3f190039172ff4d27d2805934696530b1673439941b6926dac07"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount_reason_brief_keeps_amount_and_reason",
+        "line": 586,
+        "body_token_sha256": "55572752f74d3f190039172ff4d27d2805934696530b1673439941b6926dac07"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::funds_origin_adds_original_document_allocation_impact_and_evidence",
+        "line": 408,
+        "body_token_sha256": "5a99bf550794a79be66da786d95bb459e3e2c82b0fba52e70dde6f1627050d0b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::funds_origin_adds_original_document_allocation_impact_and_evidence",
+        "line": 598,
+        "body_token_sha256": "5a99bf550794a79be66da786d95bb459e3e2c82b0fba52e70dde6f1627050d0b"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::invoice_tax_profile_label_fails_closed_when_current_profile_is_missing",
+        "line": 445,
+        "body_token_sha256": "8ddaf47ee839ac4cdb97d57df2013495f82536c5b4c0c1e01368facd6b86d730"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::invoice_tax_profile_label_fails_closed_when_current_profile_is_missing",
+        "line": 635,
+        "body_token_sha256": "8ddaf47ee839ac4cdb97d57df2013495f82536c5b4c0c1e01368facd6b86d730"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_payment_facts",
+        "line": 31,
+        "body_token_sha256": "5dd27e45a51c0c2686c74c23ecacd1ca8f8189824e2ee13f305e7dd41f4603d5"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_payment_facts",
+        "line": 30,
+        "body_token_sha256": "855b1e3dafa69f112ef85ba11a05841511204c97ea7a70f27b24d70bd4499487"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_refund_facts",
+        "line": 127,
+        "body_token_sha256": "04cba6a03e516e4aac21a74b39af35cf6bea6c1df386fc418dda85b992a2dbaa"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_refund_facts",
+        "line": 121,
+        "body_token_sha256": "117a5df70c655e1ed96fead033e101c8152a69d1ff02e0c887229908f00d9c3b"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payment_reversal_facts",
+        "line": 220,
+        "body_token_sha256": "e93f6eaea3ede984e0d820986dd531fa289a757eedfb56472d8945468af52efc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payment_reversal_facts",
+        "line": 209,
+        "body_token_sha256": "76211d95b7d59a998e7f7f1a888b2f6f00d200a16dbef46fd20ffd425a36ab50"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_created_by_from_audit",
+        "line": 42,
+        "body_token_sha256": "a98dd81e3e0b83b83d5d99e65bb6df3d41c2d5fd220b0f53c993fc67514d6e9b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_created_by_from_audit",
+        "line": 41,
+        "body_token_sha256": "f1b68c4c6ce2fd19b8a457b6b69d1ca8c3892e07a2108933b1db525024634e1b"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_supplier_names",
+        "line": 69,
+        "body_token_sha256": "0d7cc2199339e12a14bf57b38dd1427921fce6d52bd8651654f7896358b95e5d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_supplier_names",
+        "line": 53,
+        "body_token_sha256": "1a3e0ce2c81e7b777afc8459338f1dd29669374edde905d56f8fa0640d0a1ecc"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_purchase_numbers",
+        "line": 82,
+        "body_token_sha256": "cc82c04fbf03f7d70b4dc4cb5c91d1f582eb91023da0448c141f24fd62a157c2"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_purchase_numbers",
+        "line": 64,
+        "body_token_sha256": "b2044fe317c7cf1e0a772ac3d390a6d210c45cdcf959a5b973a60587430ae1e6"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_due_dates",
+        "line": 102,
+        "body_token_sha256": "7b06d1d85e11738e0c6ef7d91b775d76c2a0c9027ed230680c3ecc4c9c345136"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_due_dates",
+        "line": 75,
+        "body_token_sha256": "7b06d1d85e11738e0c6ef7d91b775d76c2a0c9027ed230680c3ecc4c9c345136"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::party_legal_names",
+        "line": 129,
+        "body_token_sha256": "561e14e87aabd3b163ac891e1f2a1b58f81e5cbe0fcbd7d72c7e95cd9c1c79eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::party_legal_names",
+        "line": 102,
+        "body_token_sha256": "05b7e7f4771dfa68da5e679bdeabaf8d7de6e6f47129fc33f37fc34f941f281a"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::legal_names_for_parties",
+        "line": 152,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::legal_names_for_parties",
+        "line": 94,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "disposition": "removed_duplicate_shared_actual_implementation",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_display_names",
+        "line": 193,
+        "body_token_sha256": "6623d375bc10841fbf588ab14fab68fe7112f76c20a1e6a68273591fce563f40"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_display_names",
+        "line": 121,
+        "body_token_sha256": "435ad20b19580b327bf80e8e20514ac259d8dcc1039be0358e63eda6f023beff"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_display_names",
+        "line": 234,
+        "body_token_sha256": "77c75d284c2bab3095cfb654b7c99a426e4fadb8a878de3793fa580def1ab99b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_display_names",
+        "line": 142,
+        "body_token_sha256": "7324b3e4c8c426f7a89acccd03543afddfa1c1da760157b9c4d970d14fb8ea8a"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::sales_order_numbers",
+        "line": 275,
+        "body_token_sha256": "f0f62c2335f08d3b49eae6701690cd129dd265a57bf2045697a18567b414e376"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::sales_order_numbers",
+        "line": 163,
+        "body_token_sha256": "27930a7cef27bac3f12cdbe8513add35a9f9a4514c82dd1115dc1c5d734a0eb1"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_revision_briefs",
+        "line": 304,
+        "body_token_sha256": "cf2ff1aada25ae1e7e24a751eabb498d5aeb91f7652a6fa0e8d00a43943e89dc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_revision_briefs",
+        "line": 191,
+        "body_token_sha256": "da6bd66a33ef4146365e440009fc1c8e11b1ed3750d8ed45d7eeb73d3823156f"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::current_tax_profile_nos",
+        "line": 416,
+        "body_token_sha256": "ba3ef372cd72782b971b8200f41609a33076a2427eac49ef6ff996774a331f8d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::current_tax_profile_nos",
+        "line": 302,
+        "body_token_sha256": "ba3ef372cd72782b971b8200f41609a33076a2427eac49ef6ff996774a331f8d"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_due_dates",
+        "line": 449,
+        "body_token_sha256": "4d8a1c87ec61293480b766a4da069b3bb7ae3cb9cf2b8f215325b7f7f4ce0405"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_due_dates",
+        "line": 335,
+        "body_token_sha256": "4d8a1c87ec61293480b766a4da069b3bb7ae3cb9cf2b8f215325b7f7f4ce0405"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receipt_allocation_lines",
+        "line": 476,
+        "body_token_sha256": "41b3cd7e093f1b68a5535d10c1f986c5b658c3b55544f2eaa797d2dc0067de1b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receipt_allocation_lines",
+        "line": 362,
+        "body_token_sha256": "a2e0f01805e16c021ad72d3268295ebcc987f7cee60946b76b4f0d3793a547e8"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_receipt_origins",
+        "line": 547,
+        "body_token_sha256": "09ef2adaa55de31f48e3bbb0e246cc54de0ea7470840410823a817b1952e2c03"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_receipt_origins",
+        "line": 431,
+        "body_token_sha256": "c353d081f1b389f62474783a2aa89106f7b2556a6fec54b36f81368799f3fc42"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_entry_origins",
+        "line": 600,
+        "body_token_sha256": "828d612751bf5dc97fe18bf27c4e57aa55a1afbc78882ad1b72fd132a743c26c"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_entry_origins",
+        "line": 460,
+        "body_token_sha256": "4ef408855161420476380e6c348b6da6dde92f6d4e6701af8e670611a0ada382"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_payment_origins",
+        "line": 685,
+        "body_token_sha256": "9b6d198076d2d7a8f530be56d4d8fda1c89e54d33d8a739ba814f4a7c45fc4cb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_payment_origins",
+        "line": 518,
+        "body_token_sha256": "42fe575f1288198f9a9315b727511fe02d7e527ce27729cf476351abc43af4c2"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_entry_origins",
+        "line": 741,
+        "body_token_sha256": "25cd945a42996f7d54a85d6aa2e8491714b84a60e0a130ea80c9a2405a276bf3"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_entry_origins",
+        "line": 551,
+        "body_token_sha256": "e749fd2446407611c4f9981dc0371ce6e98f25bf184f7816ae7d71d95e153648"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payment_allocation_lines",
+        "line": 807,
+        "body_token_sha256": "f3c781387e31ff238716de9c8492b873f73ea9a434e504b448a7e2c1ddceadf5"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payment_allocation_lines",
+        "line": 593,
+        "body_token_sha256": "23870931b6da34a7d08221888718b276853196846d88a687416ea6da1f9b7a47"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_receipt_facts",
+        "line": 32,
+        "body_token_sha256": "14aaeb64b19c0f81153283797019e1f4e1a89acc36f766ff688dff65b5f74090"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_receipt_facts",
+        "line": 33,
+        "body_token_sha256": "06fa4116476af4f47026adcea6b6802b425376e63199dec30e6ef0cecce91cca"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_refund_facts",
+        "line": 96,
+        "body_token_sha256": "5bdf94f0a1ab946740aa6c94c984e136b12731dcfcd19a7ce923137bb3e009eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_refund_facts",
+        "line": 92,
+        "body_token_sha256": "62c6651c426e0ff78a1d5fbbe7119390441fd468d74709c3ca6ec6a8b84927e2"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receipt_reversal_facts",
+        "line": 196,
+        "body_token_sha256": "d580f9404479774c7242a3ff917699a117bd77a0e1b5a6cdc4ab473704da84f8"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receipt_reversal_facts",
+        "line": 187,
+        "body_token_sha256": "a9ee270934950410437323de6c202b208fa5ae571fdeebba2ed94272b6dae0e2"
+      },
+      "disposition": "same_display_leaf",
+      "body_tokens_equal": false
+    }
+  ],
+  "funds_recipe_prefix_checks": [
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_receivable_account_facts",
+        "line": 15,
+        "body_token_sha256": "1c9a2f008d0a30cf17ad7aa604f5c685774db8544b5f898dc3d909a2b74291e9"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_receivable_account_facts",
+        "line": 14,
+        "body_token_sha256": "eb11fc43abb0e3be7318cc1a370135ba4f95ad233096848e3797d1c51935b5cb"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::ReceivableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.receivable_accounts().list_active_by_ids(&ids,executor).await?;ifaccounts.is_empty(){returnOk(());}letparty_ids=accounts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letvoucher_revisions=self.receivable_voucher_revision_ids(&accounts,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::ReceivableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.receivable_accounts().list_active_by_ids(&ids,executor).await?;ifaccounts.is_empty(){returnOk(());}letparty_ids=accounts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letvoucher_revisions=self.receivable_voucher_revision_ids(&accounts,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/account.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_payable_account_facts",
+        "line": 61,
+        "body_token_sha256": "c4ef534fb8247884d702a62533bc2601a4ee917d6b8840a7164a2310fef26c67"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_payable_account_facts",
+        "line": 48,
+        "body_token_sha256": "43a1a88c4186c32881f9a1186949258546745c5baf62eec4ba63409efc7bc8ae"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::PayableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.payable_accounts().list_active_by_ids(&ids,executor).await?;letsupplier_names=self.payable_supplier_names(&accounts,executor).await?;letpurchase_nos=self.payable_purchase_numbers(&accounts,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::PayableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.payable_accounts().list_active_by_ids(&ids,executor).await?;letsupplier_names=self.payable_supplier_names(&accounts,executor).await?;letpurchase_nos=self.payable_purchase_numbers(&accounts,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_customer_receipt_facts",
+        "line": 14,
+        "body_token_sha256": "8060661d024b038d08c2ec22b9c17ced31315c8491f316263e26cd1fea9b07c0"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_customer_receipt_facts",
+        "line": 14,
+        "body_token_sha256": "163c902bb433cb259ec130dc0afb3239505197ec3fded34f957ae5cf78669f3e"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::CustomerReceipt);ifids.is_empty(){returnOk(());}letreceipts=self.db.customer_receipts().list_active_by_ids(&ids,executor).await?;ifreceipts.is_empty(){returnOk(());}letcreated_by=self.load_created_by_from_audit(\"customer_receipt\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letparty_ids=receipts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::CustomerReceipt);ifids.is_empty(){returnOk(());}letreceipts=self.db.customer_receipts().list_active_by_ids(&ids,executor).await?;ifreceipts.is_empty(){returnOk(());}letcreated_by=self.load_created_by_from_audit(\"customer_receipt\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letparty_ids=receipts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_customer_refund_facts",
+        "line": 61,
+        "body_token_sha256": "aa080a122411fcc01ab971fd5a6daf21a2c54139f737cc58919c6cfcecad9215"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_customer_refund_facts",
+        "line": 54,
+        "body_token_sha256": "02ca458987404b82ae848f057c8f1e594069e36d8796c032dc101e66010eb6fb"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::CustomerRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.customer_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"customer_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letcustomer_ids=refunds.iter().map(|refund|refund.customer_id.to_string()).collect::<Vec<_>>();letcustomer_names=self.customer_display_names(&customer_ids,executor).await?;letreceipt_ids=refunds.iter().filter_map(|refund|refund.original_receipt_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letreceipt_origins=self.customer_receipt_origins(&receipt_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|{refund.original_receivable_entry_id.as_ref().map(ToString::to_string)}).collect::<Vec<_>>();letentry_origins=self.receivable_entry_origins(&entry_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::CustomerRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.customer_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"customer_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letcustomer_ids=refunds.iter().map(|refund|refund.customer_id.to_string()).collect::<Vec<_>>();letcustomer_names=self.customer_display_names(&customer_ids,executor).await?;letreceipt_ids=refunds.iter().filter_map(|refund|refund.original_receipt_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letreceipt_origins=self.customer_receipt_origins(&receipt_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|{refund.original_receivable_entry_id.as_ref().map(ToString::to_string)}).collect::<Vec<_>>();letentry_origins=self.receivable_entry_origins(&entry_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/receipt.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_receipt_reversal_facts",
+        "line": 128,
+        "body_token_sha256": "6fc9392b1eae154ae7d59b4d54881a9b846f0077919f8085b8fa24de83eba32b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_receipt_reversal_facts",
+        "line": 106,
+        "body_token_sha256": "af84f44f284a97bb1e3522039fdbf5dd7ecd7baef9dd45770828cc23336793d9"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::ReceiptReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.receipt_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"receipt_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letreceipt_ids=reversals.iter().map(|reversal|reversal.original_customer_receipt_id.to_string()).collect::<Vec<_>>();letorigins=self.customer_receipt_origins(&receipt_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::ReceiptReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.receipt_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"receipt_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letreceipt_ids=reversals.iter().map(|reversal|reversal.original_customer_receipt_id.to_string()).collect::<Vec<_>>();letorigins=self.customer_receipt_origins(&receipt_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_supplier_payment_facts",
+        "line": 14,
+        "body_token_sha256": "7ba3c234f32309bd9dbeae402a3650d87b01a777e4330bd87a87570ccdac4cbc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_supplier_payment_facts",
+        "line": 14,
+        "body_token_sha256": "f8c55dbcc3cee81f2fe0e1942dc5301eb60668b9d1870927855ea64563047e3e"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::SupplierPayment);ifids.is_empty(){returnOk(());}letpayments=self.db.supplier_payments().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_payment\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=payments.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::SupplierPayment);ifids.is_empty(){returnOk(());}letpayments=self.db.supplier_payments().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_payment\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=payments.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_supplier_refund_facts",
+        "line": 56,
+        "body_token_sha256": "0bb32c20e1100c087a326749d036b90a3e587343ec7e72255fa71a670ffe7bff"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_supplier_refund_facts",
+        "line": 49,
+        "body_token_sha256": "bed15ac95b47fdc464a1d5d2caf6b72f9d0b892231eaabb597d398a54d8e7e15"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::SupplierRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.supplier_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=refunds.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letpayment_ids=refunds.iter().filter_map(|refund|refund.original_payment_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letpayment_origins=self.supplier_payment_origins(&payment_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|refund.original_payable_entry_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letentry_origins=self.payable_entry_origins(&entry_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::SupplierRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.supplier_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=refunds.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letpayment_ids=refunds.iter().filter_map(|refund|refund.original_payment_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letpayment_origins=self.supplier_payment_origins(&payment_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|refund.original_payable_entry_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letentry_origins=self.payable_entry_origins(&entry_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/payment.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::load_payment_reversal_facts",
+        "line": 118,
+        "body_token_sha256": "cc2bfcf7915cb74797c105ae942f30463ef392ecffc6b087fb66b504d15701c1"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_payment_reversal_facts",
+        "line": 96,
+        "body_token_sha256": "d7e0710ce0f34759b5c91dd128d3c5a2ef084ecd2a920627c4680e7ffd76742e"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::PaymentReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.payment_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"payment_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letpayment_ids=reversals.iter().map(|reversal|reversal.original_supplier_payment_id.to_string()).collect::<Vec<_>>();letorigins=self.supplier_payment_origins(&payment_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::PaymentReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.payment_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"payment_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letpayment_ids=reversals.iter().map(|reversal|reversal.original_supplier_payment_id.to_string()).collect::<Vec<_>>();letorigins=self.supplier_payment_origins(&payment_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receivable_account_facts",
+        "line": 29,
+        "body_token_sha256": "b139c97870a3667ddbd0c850c3b208400f9f440a6a7c32a3d4a330985c567204"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receivable_account_facts",
+        "line": 28,
+        "body_token_sha256": "e9bf1eccddcb6c02b6a24edcd3670ba074b4c91e30e4fe3bd3d9be383c555830"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::ReceivableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.receivable_accounts().list_active_by_ids(&ids,executor).await?;ifaccounts.is_empty(){returnOk(());}letsales_order_ids=accounts.iter().map(|item|item.sales_order_id.to_string()).collect::<Vec<_>>();letsales_nos=self.sales_order_numbers(&sales_order_ids,executor).await?;letparty_ids=accounts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letrevision_briefs=self.receivable_account_revision_briefs(&accounts,executor).await?;lettax_profile_nos=self.current_tax_profile_nos(&accounts.iter().map(|account|account.counterparty_party_id.clone()).collect::<Vec<_>>(),executor,).await?;letdue_dates=self.receivable_account_due_dates(&accounts,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::ReceivableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.receivable_accounts().list_active_by_ids(&ids,executor).await?;ifaccounts.is_empty(){returnOk(());}letsales_order_ids=accounts.iter().map(|item|item.sales_order_id.to_string()).collect::<Vec<_>>();letsales_nos=self.sales_order_numbers(&sales_order_ids,executor).await?;letparty_ids=accounts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letrevision_briefs=self.receivable_account_revision_briefs(&accounts,executor).await?;lettax_profile_nos=self.current_tax_profile_nos(&accounts.iter().map(|account|account.counterparty_party_id.clone()).collect::<Vec<_>>(),executor,).await?;letdue_dates=self.receivable_account_due_dates(&accounts,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payable_account_facts",
+        "line": 220,
+        "body_token_sha256": "008daabd90d82ca5233b73d0694256814c011b389c848309c8e0f294152e7c01"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payable_account_facts",
+        "line": 217,
+        "body_token_sha256": "eca8f1a145d5fd29cbbd2af436364c195b03209efc8f414312e15b3b26ca9f35"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::PayableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.payable_accounts().list_active_by_ids(&ids,executor).await?;letsupplier_names=self.payable_supplier_names(&accounts,executor).await?;letpurchase_nos=self.payable_purchase_numbers(&accounts,executor).await?;letdue_dates=self.payable_due_dates(&accounts,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::PayableAccount);ifids.is_empty(){returnOk(());}letaccounts=self.db.payable_accounts().list_active_by_ids(&ids,executor).await?;letsupplier_names=self.payable_supplier_names(&accounts,executor).await?;letpurchase_nos=self.payable_purchase_numbers(&accounts,executor).await?;letdue_dates=self.payable_due_dates(&accounts,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_receipt_facts",
+        "line": 32,
+        "body_token_sha256": "14aaeb64b19c0f81153283797019e1f4e1a89acc36f766ff688dff65b5f74090"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_receipt_facts",
+        "line": 33,
+        "body_token_sha256": "06fa4116476af4f47026adcea6b6802b425376e63199dec30e6ef0cecce91cca"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::CustomerReceipt);ifids.is_empty(){returnOk(());}letreceipts=self.db.customer_receipts().list_active_by_ids(&ids,executor).await?;ifreceipts.is_empty(){returnOk(());}letcreated_by=self.load_created_by_from_audit(\"customer_receipt\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letparty_ids=receipts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letallocation_lines=self.receipt_allocation_lines(&receipts,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::CustomerReceipt);ifids.is_empty(){returnOk(());}letreceipts=self.db.customer_receipts().list_active_by_ids(&ids,executor).await?;ifreceipts.is_empty(){returnOk(());}letcreated_by=self.load_created_by_from_audit(\"customer_receipt\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letparty_ids=receipts.iter().map(|item|item.counterparty_party_id.to_string()).collect::<Vec<_>>();letparty_names=self.party_legal_names(&party_ids,executor).await?;letallocation_lines=self.receipt_allocation_lines(&receipts,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_refund_facts",
+        "line": 96,
+        "body_token_sha256": "5bdf94f0a1ab946740aa6c94c984e136b12731dcfcd19a7ce923137bb3e009eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_customer_refund_facts",
+        "line": 92,
+        "body_token_sha256": "62c6651c426e0ff78a1d5fbbe7119390441fd468d74709c3ca6ec6a8b84927e2"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::CustomerRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.customer_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"customer_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letcustomer_ids=refunds.iter().map(|refund|refund.customer_id.to_string()).collect::<Vec<_>>();letcustomer_names=self.customer_display_names(&customer_ids,executor).await?;letreceipt_ids=refunds.iter().filter_map(|refund|refund.original_receipt_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letreceipt_origins=self.customer_receipt_origins(&receipt_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|{refund.original_receivable_entry_id.as_ref().map(ToString::to_string)}).collect::<Vec<_>>();letentry_origins=self.receivable_entry_origins(&entry_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::CustomerRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.customer_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"customer_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letcustomer_ids=refunds.iter().map(|refund|refund.customer_id.to_string()).collect::<Vec<_>>();letcustomer_names=self.customer_display_names(&customer_ids,executor).await?;letreceipt_ids=refunds.iter().filter_map(|refund|refund.original_receipt_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letreceipt_origins=self.customer_receipt_origins(&receipt_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|{refund.original_receivable_entry_id.as_ref().map(ToString::to_string)}).collect::<Vec<_>>();letentry_origins=self.receivable_entry_origins(&entry_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receipt_reversal_facts",
+        "line": 196,
+        "body_token_sha256": "d580f9404479774c7242a3ff917699a117bd77a0e1b5a6cdc4ab473704da84f8"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_receipt_reversal_facts",
+        "line": 187,
+        "body_token_sha256": "a9ee270934950410437323de6c202b208fa5ae571fdeebba2ed94272b6dae0e2"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::ReceiptReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.receipt_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"receipt_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letreceipt_ids=reversals.iter().map(|reversal|reversal.original_customer_receipt_id.to_string()).collect::<Vec<_>>();letorigins=self.customer_receipt_origins(&receipt_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::ReceiptReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.receipt_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"receipt_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letreceipt_ids=reversals.iter().map(|reversal|reversal.original_customer_receipt_id.to_string()).collect::<Vec<_>>();letorigins=self.customer_receipt_origins(&receipt_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_payment_facts",
+        "line": 31,
+        "body_token_sha256": "5dd27e45a51c0c2686c74c23ecacd1ca8f8189824e2ee13f305e7dd41f4603d5"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_payment_facts",
+        "line": 30,
+        "body_token_sha256": "855b1e3dafa69f112ef85ba11a05841511204c97ea7a70f27b24d70bd4499487"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::SupplierPayment);ifids.is_empty(){returnOk(());}letpayments=self.db.supplier_payments().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_payment\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=payments.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letallocation_lines=self.payment_allocation_lines(&payments,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::SupplierPayment);ifids.is_empty(){returnOk(());}letpayments=self.db.supplier_payments().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_payment\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=payments.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letallocation_lines=self.payment_allocation_lines(&payments,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_refund_facts",
+        "line": 127,
+        "body_token_sha256": "04cba6a03e516e4aac21a74b39af35cf6bea6c1df386fc418dda85b992a2dbaa"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_supplier_refund_facts",
+        "line": 121,
+        "body_token_sha256": "117a5df70c655e1ed96fead033e101c8152a69d1ff02e0c887229908f00d9c3b"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::SupplierRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.supplier_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=refunds.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letpayment_ids=refunds.iter().filter_map(|refund|refund.original_payment_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letpayment_origins=self.supplier_payment_origins(&payment_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|refund.original_payable_entry_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letentry_origins=self.payable_entry_origins(&entry_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::SupplierRefund);ifids.is_empty(){returnOk(());}letrefunds=self.db.supplier_refunds().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"supplier_refund\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letsupplier_ids=refunds.iter().map(|item|item.supplier_id.to_string()).collect::<Vec<_>>();letsupplier_names=self.supplier_display_names(&supplier_ids,executor).await?;letpayment_ids=refunds.iter().filter_map(|refund|refund.original_payment_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letpayment_origins=self.supplier_payment_origins(&payment_ids,executor).await?;letentry_ids=refunds.iter().filter_map(|refund|refund.original_payable_entry_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();letentry_origins=self.payable_entry_origins(&entry_ids,executor).await?;"
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payment_reversal_facts",
+        "line": 220,
+        "body_token_sha256": "e93f6eaea3ede984e0d820986dd531fa289a757eedfb56472d8945468af52efc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::load_payment_reversal_facts",
+        "line": 209,
+        "body_token_sha256": "76211d95b7d59a998e7f7f1a888b2f6f00d200a16dbef46fd20ffd425a36ab50"
+      },
+      "pre_mapping_source_arguments_guards_order_tokens_equal": true,
+      "before_prefix": "{letids=object_ids(keys,ObjectKind::PaymentReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.payment_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"payment_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letpayment_ids=reversals.iter().map(|reversal|reversal.original_supplier_payment_id.to_string()).collect::<Vec<_>>();letorigins=self.supplier_payment_origins(&payment_ids,executor).await?;",
+      "after_prefix": "{letids=object_ids(keys,ObjectKind::PaymentReversal);ifids.is_empty(){returnOk(());}letreversals=self.db.payment_reversals().list_active_by_ids(&ids,executor).await?;letcreated_by=self.load_created_by_from_audit(\"payment_reversal\",&ids.iter().cloned().collect::<HashSet<_>>(),executor,).await?;letpayment_ids=reversals.iter().map(|reversal|reversal.original_supplier_payment_id.to_string()).collect::<Vec<_>>();letorigins=self.supplier_payment_origins(&payment_ids,executor).await?;"
+    }
+  ],
+  "atomic_source_checks": [
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_receivable_accounts",
+        "line": 9,
+        "body_token_sha256": "3c3e1e89a6f78d13b51563b9bf5bea190876246b74d336849b100d4a2688dba1"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "receivable_accounts",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_payable_accounts",
+        "line": 21,
+        "body_token_sha256": "1f56ffcc12c147ba407840f276af68d6add0cb4d9a02adfe37f70009a84ae22f"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "payable_accounts",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_customer_receipts",
+        "line": 33,
+        "body_token_sha256": "4016cb539393bcc71e6f7ef4fc3b9cd99a68bf085d3a504bd596cbbd843f9dfd"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "customer_receipts",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_supplier_payments",
+        "line": 45,
+        "body_token_sha256": "3685dfe40b31f786932bd327df1a9560450b0ecbd31e425e04bc6d8bdefdc38c"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "supplier_payments",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_customer_refunds",
+        "line": 57,
+        "body_token_sha256": "2618dc395c61a85c33a58a24cc15c52e810aefaa7a3edcfb0f850cd7b00982d9"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "customer_refunds",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_supplier_refunds",
+        "line": 69,
+        "body_token_sha256": "146c4886df88fedd77d2ae17ec17c82ad554561cd6ae966cca5fdba55aabd468"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "supplier_refunds",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_receipt_reversals",
+        "line": 81,
+        "body_token_sha256": "68111a79400d9a755ae527e60f13576e1aa93d4cc9fb8f4e9a9489b0a4e58703"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "receipt_reversals",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_payment_reversals",
+        "line": 93,
+        "body_token_sha256": "45fae30490c0978edc7385def396630a3d409b41dce39ccfcb6cacf321136542"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "payment_reversals",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_receivable_entries",
+        "line": 105,
+        "body_token_sha256": "a5d6b3993c5dcd1cadfcea31774090ff09df053f536421cc6b00c97297600bd0"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "receivable_entries",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_payable_entries",
+        "line": 117,
+        "body_token_sha256": "4509a2d787b247d41f352fed78d362c2da96a706e1f8d7cd37172c7e7fc0adc4"
+      },
+      "exact_single_query_body": true,
+      "collection_accessor": "payable_entries",
+      "forwards_same_executor": true,
+      "extra_empty_guard": false
+    }
+  ],
+  "query_helper_checks": [
+    {
+      "name": "payable_supplier_names",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_supplier_names",
+        "line": 50,
+        "body_token_sha256": "0d7cc2199339e12a14bf57b38dd1427921fce6d52bd8651654f7896358b95e5d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_supplier_names",
+        "line": 40,
+        "body_token_sha256": "0d7cc2199339e12a14bf57b38dd1427921fce6d52bd8651654f7896358b95e5d"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "payable_purchase_numbers",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_purchase_numbers",
+        "line": 63,
+        "body_token_sha256": "cc82c04fbf03f7d70b4dc4cb5c91d1f582eb91023da0448c141f24fd62a157c2"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_purchase_numbers",
+        "line": 53,
+        "body_token_sha256": "3f5f78092a3c2265d6da3452ba766e02518b24c33d08e7f8b6bd8708bdbe8f1b"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "party_legal_names",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::party_legal_names",
+        "line": 83,
+        "body_token_sha256": "561e14e87aabd3b163ac891e1f2a1b58f81e5cbe0fcbd7d72c7e95cd9c1c79eb"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::party_legal_names",
+        "line": 71,
+        "body_token_sha256": "561e14e87aabd3b163ac891e1f2a1b58f81e5cbe0fcbd7d72c7e95cd9c1c79eb"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "legal_names_for_parties",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::legal_names_for_parties",
+        "line": 95,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::legal_names_for_parties",
+        "line": 94,
+        "body_token_sha256": "4f7c220bd28377f51b98006b29f26160c4d032679eb633d55b3dcf4a70de1131"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "customer_display_names",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::customer_display_names",
+        "line": 126,
+        "body_token_sha256": "6623d375bc10841fbf588ab14fab68fe7112f76c20a1e6a68273591fce563f40"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::customer_display_names",
+        "line": 125,
+        "body_token_sha256": "6623d375bc10841fbf588ab14fab68fe7112f76c20a1e6a68273591fce563f40"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "supplier_display_names",
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::supplier_display_names",
+        "line": 157,
+        "body_token_sha256": "77c75d284c2bab3095cfb654b7c99a426e4fadb8a878de3793fa580def1ab99b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::supplier_display_names",
+        "line": 156,
+        "body_token_sha256": "77c75d284c2bab3095cfb654b7c99a426e4fadb8a878de3793fa580def1ab99b"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "payable_due_dates",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_due_dates",
+        "line": 102,
+        "body_token_sha256": "7b06d1d85e11738e0c6ef7d91b775d76c2a0c9027ed230680c3ecc4c9c345136"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_due_dates",
+        "line": 75,
+        "body_token_sha256": "7b06d1d85e11738e0c6ef7d91b775d76c2a0c9027ed230680c3ecc4c9c345136"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "sales_order_numbers",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::sales_order_numbers",
+        "line": 275,
+        "body_token_sha256": "f0f62c2335f08d3b49eae6701690cd129dd265a57bf2045697a18567b414e376"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::sales_order_numbers",
+        "line": 163,
+        "body_token_sha256": "27930a7cef27bac3f12cdbe8513add35a9f9a4514c82dd1115dc1c5d734a0eb1"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "current_tax_profile_nos",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::current_tax_profile_nos",
+        "line": 416,
+        "body_token_sha256": "ba3ef372cd72782b971b8200f41609a33076a2427eac49ef6ff996774a331f8d"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::current_tax_profile_nos",
+        "line": 302,
+        "body_token_sha256": "ba3ef372cd72782b971b8200f41609a33076a2427eac49ef6ff996774a331f8d"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "receivable_account_due_dates",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_due_dates",
+        "line": 449,
+        "body_token_sha256": "4d8a1c87ec61293480b766a4da069b3bb7ae3cb9cf2b8f215325b7f7f4ce0405"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_due_dates",
+        "line": 335,
+        "body_token_sha256": "4d8a1c87ec61293480b766a4da069b3bb7ae3cb9cf2b8f215325b7f7f4ce0405"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "receipt_allocation_lines",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receipt_allocation_lines",
+        "line": 476,
+        "body_token_sha256": "41b3cd7e093f1b68a5535d10c1f986c5b658c3b55544f2eaa797d2dc0067de1b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receipt_allocation_lines",
+        "line": 362,
+        "body_token_sha256": "a2e0f01805e16c021ad72d3268295ebcc987f7cee60946b76b4f0d3793a547e8"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    },
+    {
+      "name": "payment_allocation_lines",
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payment_allocation_lines",
+        "line": 807,
+        "body_token_sha256": "f3c781387e31ff238716de9c8492b873f73ea9a434e504b448a7e2c1ddceadf5"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payment_allocation_lines",
+        "line": 593,
+        "body_token_sha256": "23870931b6da34a7d08221888718b276853196846d88a687416ea6da1f9b7a47"
+      },
+      "tokens_equal_after_actual_source_expansion": true
+    }
+  ],
+  "rich_origin_splits": [
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_receipt_origins",
+        "line": 547,
+        "body_token_sha256": "09ef2adaa55de31f48e3bbb0e246cc54de0ea7470840410823a817b1952e2c03"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::customer_receipt_origins",
+        "line": 431,
+        "body_token_sha256": "c353d081f1b389f62474783a2aa89106f7b2556a6fec54b36f81368799f3fc42"
+      },
+      "pure_projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receipt_origins_from_rows",
+        "line": 367,
+        "body_token_sha256": "7efde716d1be6e78583e6a470e9a613010e4f2d8f6e855054ec5b7c82e000a1a"
+      },
+      "rich_projection_tokens_equal": true,
+      "recipe_prefix_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_payment_origins",
+        "line": 685,
+        "body_token_sha256": "9b6d198076d2d7a8f530be56d4d8fda1c89e54d33d8a739ba814f4a7c45fc4cb"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::supplier_payment_origins",
+        "line": 518,
+        "body_token_sha256": "42fe575f1288198f9a9315b727511fe02d7e527ce27729cf476351abc43af4c2"
+      },
+      "pure_projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payment_origins_from_rows",
+        "line": 404,
+        "body_token_sha256": "eb26f5b84ab5191efaa2ed7fa4b7018283a4f9910b00e51da688cbdb3605127e"
+      },
+      "rich_projection_tokens_equal": true,
+      "recipe_prefix_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_entry_origins",
+        "line": 600,
+        "body_token_sha256": "828d612751bf5dc97fe18bf27c4e57aa55a1afbc78882ad1b72fd132a743c26c"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_entry_origins",
+        "line": 460,
+        "body_token_sha256": "4ef408855161420476380e6c348b6da6dde92f6d4e6701af8e670611a0ada382"
+      },
+      "pure_projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::receivable_origins_from_rows",
+        "line": 440,
+        "body_token_sha256": "4e4cb6f4ecd9798d47e33af8f76ac8cb6f1db7837f5431b130c3023f19d900f8"
+      },
+      "rich_projection_tokens_equal": true,
+      "recipe_prefix_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_entry_origins",
+        "line": 741,
+        "body_token_sha256": "25cd945a42996f7d54a85d6aa2e8491714b84a60e0a130ea80c9a2405a276bf3"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "symbol": "erp_read_models::workbench::WorkbenchReadService::payable_entry_origins",
+        "line": 551,
+        "body_token_sha256": "e749fd2446407611c4f9981dc0371ce6e98f25bf184f7816ae7d71d95e153648"
+      },
+      "pure_projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::payable_origins_from_rows",
+        "line": 485,
+        "body_token_sha256": "c133e5937e3f7ecded4673a1c03c716f63bcec16824809041753b10cafb5441b"
+      },
+      "rich_projection_tokens_equal": true,
+      "recipe_prefix_tokens_equal": true
+    }
+  ],
+  "command_origin_splits": [
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::customer_receipt_origins",
+        "line": 214,
+        "body_token_sha256": "494219710df10d8b0e7c980bde27ebd27ea6bae0e1cfd5fd465de07c1933178d"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::customer_receipt_origins",
+        "line": 11,
+        "body_token_sha256": "5ac1e2332c9fe82674bf3781519f2d5884987e18c71cc14e6906cacedabdec9f"
+      },
+      "projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::origins::receipt_counterparties",
+        "line": 90,
+        "body_token_sha256": "fa74c1489f9569d3c7962dea5d2691ea8f2e23224f02668cd96797e19baea91a"
+      },
+      "recipe_prefix_tokens_equal": true,
+      "projection_equal_after_consumed_row_to_borrowed_row_id_clone": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::supplier_payment_origins",
+        "line": 286,
+        "body_token_sha256": "299a4724033c5372d73a2ceb3fe8ef935ba0616c032d9d7d7e846417b6c33b82"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::supplier_payment_origins",
+        "line": 52,
+        "body_token_sha256": "7ce72fe203c9c288d8473e186dbbd68a01455fcf94e8e123954e9225d55f9e78"
+      },
+      "projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::origins::payment_counterparties",
+        "line": 124,
+        "body_token_sha256": "f22c4fcaef2bb6067ee9ec3dbf33e9c412164d12f879cd10092fb91491839a66"
+      },
+      "recipe_prefix_tokens_equal": true,
+      "projection_equal_after_consumed_row_to_borrowed_row_id_clone": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::receivable_entry_origins",
+        "line": 241,
+        "body_token_sha256": "57f5077577e7fa84dcf233639a73ff08da4371e7c022be82ca78b6c2a81f525e"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::receivable_entry_origins",
+        "line": 25,
+        "body_token_sha256": "db0e344fd59252a8e038fab79609dd79e861045db455ff7550f4a20a0cdfbcf9"
+      },
+      "projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::origins::receivable_entry_counterparties",
+        "line": 106,
+        "body_token_sha256": "b3dc1dcc136910345e13aba57cba9fc7afe41f91b1b39b2f70f4aac1b4eab1ca"
+      },
+      "recipe_prefix_tokens_equal": true,
+      "projection_equal_after_consumed_row_to_borrowed_row_id_clone": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+        "symbol": "services::work_item::ProcessObjectFacts::payable_entry_origins",
+        "line": 317,
+        "body_token_sha256": "2e0a42c02f4440c59999f7c1ba9ca3403b759685a1ee616382244e89ac548d86"
+      },
+      "recipe": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::payable_entry_origins",
+        "line": 70,
+        "body_token_sha256": "ab0aa3a89a4305cf2b65d1f2c51beb3e87db939acd5c588c5a5dd467162378e5"
+      },
+      "projection": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::origins::payable_entry_counterparties",
+        "line": 140,
+        "body_token_sha256": "20421b3e06db29144b4b0b2dea6097cd8aae9cf026ff084a76f05836a9346fbd"
+      },
+      "recipe_prefix_tokens_equal": true,
+      "projection_equal_after_consumed_row_to_borrowed_row_id_clone": true
+    }
+  ],
+  "audit_first_actor_split": {
+    "before": {
+      "path": "backend/services/src/work_item/funds_document_brief/query.rs",
+      "symbol": "services::work_item::ProcessObjectFacts::load_created_by_from_audit",
+      "line": 23,
+      "body_token_sha256": "a98dd81e3e0b83b83d5d99e65bb6df3d41c2d5fd220b0f53c993fc67514d6e9b"
+    },
+    "recipe": {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+      "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::load_created_by_from_audit",
+      "line": 19,
+      "body_token_sha256": "3cbcc69e8865737e7aa5f81dd7de2dcca9d1910b87b3ea6a21640e2a8552b8aa"
+    },
+    "projection": {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+      "symbol": "erp_read_models::workbench::authority::funds::query::first_created_by",
+      "line": 205,
+      "body_token_sha256": "4256e91766b952f7440cea3283d1b9e62deb67065831fa9eb22fea1e51a56625"
+    },
+    "query_prefix_equal": true,
+    "original_first_actor_loop": "=HashMap::new();forauditinaudits{ifletSome(resource_id)=audit.resource_id.as_deref(){created_by.entry(resource_id.to_string()).or_insert_with(||audit.actor_id.clone());}}Ok(created_by)}",
+    "actual_first_actor_loop": "{letmutcreated_by=HashMap::new();for(resource_id,actor_id)inaudits{ifletSome(resource_id)=resource_id{created_by.entry(resource_id.to_string()).or_insert_with(||actor_id.to_string());}}created_by}",
+    "semantic_rule": "same order; ignore missing resource; first actor retained including empty string; borrow then clone replaces ownership move only"
+  },
+  "original_tests": [
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::tests::format_yuan_groups_thousands_and_keeps_nonzero_fraction",
+        "line": 67,
+        "body_token_sha256": "a21f0f7d7a4aee91c5f77f7a7c643f6fccf81014450649bb296362d4c3e64758"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "erp_read_models::workbench::authority::amount::tests::format_yuan_groups_thousands_and_keeps_nonzero_fraction",
+        "line": 10,
+        "body_token_sha256": "a21f0f7d7a4aee91c5f77f7a7c643f6fccf81014450649bb296362d4c3e64758"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/services/src/work_item/amount.rs",
+        "symbol": "backend::services::work_item::amount::tests::purchase_review_impact_appends_scale_and_prepay_gate",
+        "line": 75,
+        "body_token_sha256": "bf10ea68f2e3f447dad11b66ddc3c722256be5998794a0efea2196673488fd20"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "symbol": "erp_read_models::workbench::authority::amount::tests::purchase_review_impact_appends_scale_and_prepay_gate",
+        "line": 18,
+        "body_token_sha256": "bf10ea68f2e3f447dad11b66ddc3c722256be5998794a0efea2196673488fd20"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::owner_ids_are_unique_and_skip_unassigned",
+        "line": 190,
+        "body_token_sha256": "c95aa004d4bea7cd1c1a931fd9fcea32869fd26601cec736f98c9012c529f19f"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::owner_ids_are_unique_and_skip_unassigned",
+        "line": 190,
+        "body_token_sha256": "c95aa004d4bea7cd1c1a931fd9fcea32869fd26601cec736f98c9012c529f19f"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_ids_join_the_same_account_lookup",
+        "line": 206,
+        "body_token_sha256": "32b68719899732fd65fd04516e7547d9c86df542e30f861bc9037a4e76df0900"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_ids_join_the_same_account_lookup",
+        "line": 206,
+        "body_token_sha256": "32b68719899732fd65fd04516e7547d9c86df542e30f861bc9037a4e76df0900"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::resolved_submitter_ids_become_names",
+        "line": 216,
+        "body_token_sha256": "a1509b64bf3053fa2d44afc590da160ffd208d8c79f66b5f433f2cdf37b2b8f6"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::resolved_submitter_ids_become_names",
+        "line": 216,
+        "body_token_sha256": "a1509b64bf3053fa2d44afc590da160ffd208d8c79f66b5f433f2cdf37b2b8f6"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::unresolved_submitter_ids_are_dropped_rather_than_shown",
+        "line": 224,
+        "body_token_sha256": "5b93c005d63e1ccc81d5e1a219f20d9ba20927731e2c26a52caa385beb97e0bf"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::unresolved_submitter_ids_are_dropped_rather_than_shown",
+        "line": 224,
+        "body_token_sha256": "5b93c005d63e1ccc81d5e1a219f20d9ba20927731e2c26a52caa385beb97e0bf"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_names_already_resolved_are_left_alone",
+        "line": 232,
+        "body_token_sha256": "d7a0e94abf4704e7e882f7f303e3b1d2027862252b0057ce7418f440ecd7cb0c"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::submitter_names_already_resolved_are_left_alone",
+        "line": 232,
+        "body_token_sha256": "d7a0e94abf4704e7e882f7f303e3b1d2027862252b0057ce7418f440ecd7cb0c"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::account_ids_are_hex_of_object_id_or_system_length",
+        "line": 239,
+        "body_token_sha256": "277f63189f1904658f3c862634ac0ae085108605bd10f6b49df74be2217470dc"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "symbol": "erp_read_models::workbench::party_names::tests::account_ids_are_hex_of_object_id_or_system_length",
+        "line": 239,
+        "body_token_sha256": "277f63189f1904658f3c862634ac0ae085108605bd10f6b49df74be2217470dc"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::receipt_list_summary_joins_counterparty_amount_and_first_line",
+        "line": 378,
+        "body_token_sha256": "37ffa349b3bc9c859a066b23542de10c6dbdf70f466697948828f87a2fc26187"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::receipt_list_summary_joins_counterparty_amount_and_first_line",
+        "line": 568,
+        "body_token_sha256": "37ffa349b3bc9c859a066b23542de10c6dbdf70f466697948828f87a2fc26187"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount_reason_brief_keeps_amount_and_reason",
+        "line": 396,
+        "body_token_sha256": "55572752f74d3f190039172ff4d27d2805934696530b1673439941b6926dac07"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::amount_reason_brief_keeps_amount_and_reason",
+        "line": 586,
+        "body_token_sha256": "55572752f74d3f190039172ff4d27d2805934696530b1673439941b6926dac07"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::funds_origin_adds_original_document_allocation_impact_and_evidence",
+        "line": 408,
+        "body_token_sha256": "5a99bf550794a79be66da786d95bb459e3e2c82b0fba52e70dde6f1627050d0b"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::funds_origin_adds_original_document_allocation_impact_and_evidence",
+        "line": 598,
+        "body_token_sha256": "5a99bf550794a79be66da786d95bb459e3e2c82b0fba52e70dde6f1627050d0b"
+      },
+      "body_tokens_equal": true
+    },
+    {
+      "before": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::invoice_tax_profile_label_fails_closed_when_current_profile_is_missing",
+        "line": 445,
+        "body_token_sha256": "8ddaf47ee839ac4cdb97d57df2013495f82536c5b4c0c1e01368facd6b86d730"
+      },
+      "after": {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::invoice_tax_profile_label_fails_closed_when_current_profile_is_missing",
+        "line": 635,
+        "body_token_sha256": "8ddaf47ee839ac4cdb97d57df2013495f82536c5b4c0c1e01368facd6b86d730"
+      },
+      "body_tokens_equal": true
+    }
+  ],
+  "new_production_mapper_tests": [
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+      "symbol": "erp_read_models::workbench::authority::funds::query::tests::first_created_by_keeps_first_actor_and_ignores_missing_resource",
+      "line": 221,
+      "body_token_sha256": "67a5a2911e0a5a70af03fe283ee4627b7e0d48be46ee0241bb0a1ef22c499ed0"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::origin_maps_keep_distinct_membership_for_a_nameless_receipt",
+      "line": 665,
+      "body_token_sha256": "7e4494f4bbf37b2a603bba8f6627d220da3e1acf0988bc6f7a510064059ea1d9"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::customer_refund_authority_can_fall_back_past_nameless_rich_origin",
+      "line": 676,
+      "body_token_sha256": "ea712724511c054ba4feb78930689a59d3178dc86c29099a867635c3ead0a6c0"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::supplier_refund_display_keeps_missing_supplier_while_authority_uses_origin",
+      "line": 734,
+      "body_token_sha256": "29c857f17234a8e407fbc4e4e8df82cfcd856cb920350ba29313f79c045500da"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "symbol": "erp_read_models::workbench::funds_document_brief::mapping::tests::voucher_display_impact_does_not_replace_command_revision_predicate",
+      "line": 772,
+      "body_token_sha256": "1a535ce6b05aea87c9db3701ad258f16deb1094cd4a76c7b1be7618f6b7afbee"
+    }
+  ],
+  "owned_after_hashes": [
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+      "sha256": "5b4dd2c72e4efbb04a500cbfc2bbd814c61888814704bde3ff710262563f263c"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+      "sha256": "257fe262cf22be78bbf5442352c9299a613ccb9c0bb566af00c688e368d37afe"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+      "sha256": "380cd66a27f2c03a19fb82057a2f2826821383dd68b6b31b740cf831a11c8941"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mod.rs",
+      "sha256": "6ef1e042bb4748814ac026c0750f394b20632efc58f363bcd105bc03b683d26b"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+      "sha256": "38914a2983acc228cb8da2200673dc9946dbd21822eb05bb7496dc2a91040e8f"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+      "sha256": "b6332aaa5803fbd50c027f7dc4539248a5eecb55c446060537cf3583a75fefd5"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+      "sha256": "1e69b308f40ac48cd9936ebe8a8039917fa9cebdc0e5fbf381662334a92d0c7d"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+      "sha256": "75954c6133a63064b9dbcfdefc6e5580179fbed6293e7d36ba6fd57dcf69c3ed"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+      "sha256": "298e0f4d0b27532608c46bbb0c74cb12c5ce88895c1ce362d43217ee51eb9414"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief.rs",
+      "sha256": "0433e4a08dbe52e03668f2867e1714327e17735ff448dfbdce85dd45c1e07376"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+      "sha256": "7f19e5341ede407d38cba7d5b3758bd018b454ce2d404f451c6b3c4dee57c597"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+      "sha256": "4c664dd47320ac722efe94ef816d79fc1ada232c7fd4493005f836b34f8eef35"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+      "sha256": "d98e7fd903c4e8509912cca175e1ef64a4864c9bcf941b4b69824efb8aee40e0"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+      "sha256": "12652a3dc83eeb9f1109ffd8c1dc5fb353e5b47b26f47a22a2629ff7e955f6a5"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+      "sha256": "4b220990a828c8bf443fc25c245cdd60f5cafe034e0a34a81f13c421012031d9"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+      "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a"
+    }
+  ],
+  "support_after_hashes": [
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+      "sha256": "413a1dc359b755776cfc8dd89e72acb3558dcba9969209eb8ab918379b8ec061"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/brief.rs",
+      "sha256": "e593e9d9dae5c10d71c9c6f42067c78bb136b9a1d63c2c97d37d3ad27d4bd1ac"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+      "sha256": "fb940e20b1c2744f44212dadf5a5e3fd31df6a015bc84f5b0445d66717d881fa"
+    }
+  ],
+  "static_issues": [],
+  "boundary": {
+    "cargo_run": false,
+    "mongo_run": false,
+    "tests_executed_here": false,
+    "ERP_TEST_MONGO_URI": "unset",
+    "runtime_executor_pointer_and_error_injection": "not executed here; static actual production source bodies show same executor and await?; root owns unified gates",
+    "old_source_deletion": "finance_persistence owner; this worker did not delete or modify old input files"
+  },
+  "authority_mapping_contract": [
+    {
+      "kind": "ReceivableAccount",
+      "root": "account.sales_order_id",
+      "creator": "account.stable.created_by",
+      "label": "应收子账 {account_seq}",
+      "counterparty": "party current legal name",
+      "impact": "command revision flags; display vouchers.contains entry differs",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::receivable_account_fact",
+        "line": 20,
+        "body_token_sha256": "23d931c92a2e3633649667970e7d10bd8a691ed96caed26ffff73533634bc3cb"
+      }
+    },
+    {
+      "kind": "PayableAccount",
+      "root": "account.source_document_id",
+      "creator": "account.stable.created_by",
+      "label": "采购应付 {purchase_no}; missing no: 采购应付",
+      "counterparty": "supplier current legal name or supplier_no",
+      "impact": "未付金额 + exact format_yuan(open_total)",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::payable_account_fact",
+        "line": 35,
+        "body_token_sha256": "ea1a114e16be50bfe446d1c53a30a8f8d1d19f74775bcfc2790985780a7a1c12"
+      }
+    },
+    {
+      "kind": "CustomerReceipt",
+      "root": "receipt.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "回款单 {receipt_no}",
+      "counterparty": "party current legal name",
+      "impact": "不审批则回款不能过账、不能核销应收",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::customer_receipt_fact",
+        "line": 54,
+        "body_token_sha256": "1b5a9437d0d14e33dc68e050cb7cac94bfa7a8509d76f6a5fc5647983f248181"
+      }
+    },
+    {
+      "kind": "SupplierPayment",
+      "root": "payment.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "供应商付款 {payment_no}",
+      "counterparty": "supplier current legal name or supplier_no",
+      "impact": "付款已登记并过账；纠错须走付款冲正或供应商退款",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::supplier_payment_fact",
+        "line": 69,
+        "body_token_sha256": "26eef2b79af1f21ed9c34d7e474adbb6bd7041a951ce5015e5ebfded844c7529"
+      }
+    },
+    {
+      "kind": "CustomerRefund",
+      "root": "refund.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "客户退款 {refund_no}",
+      "counterparty": "customer name then command receipt origin then command entry origin",
+      "impact": "不审批则客户退款不能过账",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::customer_refund_fact",
+        "line": 84,
+        "body_token_sha256": "53bef9522ac0c54eddcd362027a6ea2765655bc7ec5ccf545384e574f1791ee1"
+      }
+    },
+    {
+      "kind": "SupplierRefund",
+      "root": "refund.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "供应商退款 {refund_no}",
+      "counterparty": "supplier name then command payment origin then command entry origin; display supplier only",
+      "impact": "不审批则供应商退款不能过账",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::supplier_refund_fact",
+        "line": 111,
+        "body_token_sha256": "4d3436a1782ae0a5889b283fa29c7eca9efe7df31261b3fbf067611c5a85543f"
+      }
+    },
+    {
+      "kind": "ReceiptReversal",
+      "root": "reversal.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "回款冲正 {reversal_no}",
+      "counterparty": "command receipt origin",
+      "impact": "不审批则回款冲正不能过账",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::receipt_reversal_fact",
+        "line": 138,
+        "body_token_sha256": "806924bcf8b7310beac120bf327654d7eea60892e3390f1a87eb7dc9bb00d42e"
+      }
+    },
+    {
+      "kind": "PaymentReversal",
+      "root": "reversal.base.id",
+      "creator": "create audit first actor or empty",
+      "label": "付款冲正 {reversal_no}",
+      "counterparty": "command payment origin",
+      "impact": "不审批则付款冲正不能过账",
+      "subject_versions": "workflow ObjectFact::new unrestricted; no with_subject_versions call",
+      "actual_mapper": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "symbol": "erp_read_models::workbench::authority::funds::mapping::payment_reversal_fact",
+        "line": 155,
+        "body_token_sha256": "c30549b8bf79389496bd3ad703d3f03af70b620ff3dfb959ec47cda5a870f8a9"
+      }
+    }
+  ],
+  "actual_shared_external_sources": [
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_purchase_orders",
+        "line": 20,
+        "body_token_sha256": "d12aebc34e5f4ae94fcd4b5842d19b5b9e2ff1133b0e75e43356033b2cd04b51"
+      },
+      "exact_same_executor_single_query_without_empty_guard": true
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_sales_orders",
+        "line": 12,
+        "body_token_sha256": "b9dcc066a79e8affbd44c38524287eacafac53d4e7ee93f48ba4de6fbdc76695"
+      },
+      "exact_same_executor_single_query_without_empty_guard": true
+    },
+    {
+      "source": {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "symbol": "erp_read_models::workbench::authority::WorkItemFactsReader::read_sales_revisions",
+        "line": 32,
+        "body_token_sha256": "b2535944295d0a41455ee2b4e0a3ba0e11900de52b7d874d852b70e4a4c0b019"
+      },
+      "exact_same_executor_single_query_without_empty_guard": true
+    }
+  ],
+  "voucher_rich_query_check": {
+    "before": {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+      "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_revision_briefs",
+      "line": 304,
+      "body_token_sha256": "cf2ff1aada25ae1e7e24a751eabb498d5aeb91f7652a6fa0e8d00a43943e89dc"
+    },
+    "after": {
+      "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+      "symbol": "erp_read_models::workbench::WorkbenchReadService::receivable_account_revision_briefs",
+      "line": 191,
+      "body_token_sha256": "da6bd66a33ef4146365e440009fc1c8e11b1ed3750d8ed45d7eeb73d3823156f"
+    },
+    "queries_through_voucher_lines_same_tokens": true,
+    "voucher_line_expansion_and_sort_truncate_loop_same_tokens": true,
+    "initial_flag_classifier": "unique authority::funds::mapping::voucher_revision_ids called from both command and rich recipe; rich then retains original entry().or_default() extension; command set is separate field"
+  },
+  "after_hashes_stable_at_end": true,
+  "static_validation_complete": true,
+  "four_display_differences": [
+    {
+      "case": "nameless_origin",
+      "command": "filter_map omits row without name",
+      "display": "retains FundsOriginBrief row with None counterparty"
+    },
+    {
+      "case": "customer_refund_two_origins",
+      "command": "missing named primary can fall back to entry name",
+      "display": "existing primary brief wins even when its name is None"
+    },
+    {
+      "case": "supplier_refund_missing_supplier",
+      "command": "falls back to named origin",
+      "display": "explicit None stays None"
+    },
+    {
+      "case": "voucher_line_without_revision_flags",
+      "command": "flags-only predicate false",
+      "display": "voucher line can add brief and display impact; authority set stays separate"
+    }
+  ],
+  "source_binding": {
+    "status": "bound",
+    "bound_at_utc": "2026-09-07T07:00:47.426446+00:00",
+    "files": [
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/amount.rs",
+        "sha256": "5b4dd2c72e4efbb04a500cbfc2bbd814c61888814704bde3ff710262563f263c",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/accounts.rs",
+        "sha256": "257fe262cf22be78bbf5442352c9299a613ccb9c0bb566af00c688e368d37afe",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mapping.rs",
+        "sha256": "380cd66a27f2c03a19fb82057a2f2826821383dd68b6b31b740cf831a11c8941",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/mod.rs",
+        "sha256": "6ef1e042bb4748814ac026c0750f394b20632efc58f363bcd105bc03b683d26b",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/origins.rs",
+        "sha256": "38914a2983acc228cb8da2200673dc9946dbd21822eb05bb7496dc2a91040e8f",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/payments.rs",
+        "sha256": "b6332aaa5803fbd50c027f7dc4539248a5eecb55c446060537cf3583a75fefd5",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/query.rs",
+        "sha256": "1e69b308f40ac48cd9936ebe8a8039917fa9cebdc0e5fbf381662334a92d0c7d",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/receipts.rs",
+        "sha256": "75954c6133a63064b9dbcfdefc6e5580179fbed6293e7d36ba6fd57dcf69c3ed",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/funds/sources.rs",
+        "sha256": "298e0f4d0b27532608c46bbb0c74cb12c5ce88895c1ce362d43217ee51eb9414",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief.rs",
+        "sha256": "0433e4a08dbe52e03668f2867e1714327e17735ff448dfbdce85dd45c1e07376",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/account.rs",
+        "sha256": "7f19e5341ede407d38cba7d5b3758bd018b454ce2d404f451c6b3c4dee57c597",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs",
+        "sha256": "4c664dd47320ac722efe94ef816d79fc1ada232c7fd4493005f836b34f8eef35",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs",
+        "sha256": "d98e7fd903c4e8509912cca175e1ef64a4864c9bcf941b4b69824efb8aee40e0",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs",
+        "sha256": "12652a3dc83eeb9f1109ffd8c1dc5fb353e5b47b26f47a22a2629ff7e955f6a5",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs",
+        "sha256": "4b220990a828c8bf443fc25c245cdd60f5cafe034e0a34a81f13c421012031d9",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/party_names.rs",
+        "sha256": "bdbd82db828b804b413333d1beaad4c2f1aea5c0fef0a2ff046e06ba9f11973a",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/presentation.rs",
+        "sha256": "413a1dc359b755776cfc8dd89e72acb3558dcba9969209eb8ab918379b8ec061",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/brief.rs",
+        "sha256": "e593e9d9dae5c10d71c9c6f42067c78bb136b9a1d63c2c97d37d3ad27d4bd1ac",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      },
+      {
+        "path": "backend/crates/erp-read-models/src/workbench/authority/sources.rs",
+        "sha256": "fb940e20b1c2744f44212dadf5a5e3fd31df6a015bc84f5b0445d66717d881fa",
+        "current_equals_reviewed_source_equals_commit_blob": true
+      }
+    ],
+    "file_count": 19,
+    "semantic_rereview_required": false,
+    "reason": "All 19 reviewed source files remain byte equal to prior evidence and frozen commit blobs."
+  }
+}

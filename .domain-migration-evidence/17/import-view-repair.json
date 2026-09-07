@@ -1,0 +1,897 @@
+{
+  "schema": "cutover17-import-work-item-view-repair-v1",
+  "status": "sealed_actual_source_blobs_verified_root_gates_passed",
+  "phase00_source_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+  "frozen16_source_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+  "accepted17_input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "after_source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "captured_head": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "worktree": "/private/tmp/erp-domain-crate-17-cutover",
+  "ownership": "Explicit supplemental authorized scope: three compound Import response DTOs, exact consumer imports/exports, authorized task route wrapper in actual workbench; no domain rule or shared error edits",
+  "inherited_drift": {
+    "phase00": "Response work_item_type and status use unique Workflow enums; authorized handler/destination copied from real WorkItemView created by unique handler_route; raw/read-only use W18 constants.",
+    "frozen16": "ImportWorkItemType singleton plus helper ignoring its WorkItemType argument collapses non-confirmation links; separate ImportWorkItemStatus copies status; authorized projection replaces real task route with W18 constants.",
+    "repair": "Move three real compound DTOs and original entity From into Process import_apply::dto; direct Workflow type/status. On successful authorization use narrow wrapper of unchanged original handler_route table, returning only handler/destination; restore original route validation errors through exact RM->Process Error From. Raw/read-only fixed W18 retained.",
+    "not_claimed_namespace_only": true
+  },
+  "moved_dto": [
+    "ImportBusinessConfirmationWorkItemView",
+    "LegacyImportConfirmationView",
+    "CompleteImportBusinessConfirmationResult"
+  ],
+  "removed_unused_enums": [
+    "ImportWorkItemType",
+    "ImportWorkItemStatus"
+  ],
+  "removed_helpers": [
+    "import_work_item_type",
+    "import_work_item_status"
+  ],
+  "files": [
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "after_sha256": "21e2e6221479a26bae3eb6bcabdf5273b69934fb831f628cd8de21112569b15e",
+      "before_local_sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e",
+      "before16_sha256": "4a590b1cb55bbad242a0b0ad117c5acd340273ad03b8b01b390faaa700787b2e",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "65c3cf25166eba56350b6b33aad6a8ec84904e98",
+        "sha256": "21e2e6221479a26bae3eb6bcabdf5273b69934fb831f628cd8de21112569b15e",
+        "bytes": 43608,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-import/src/lib.rs",
+      "after_sha256": "b14d0b20be43568c19cc77770cbdf133a7902d908d99624cbd891a479e66bad3",
+      "before_local_sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77",
+      "before16_sha256": "2e5551dba5bfdcf5d057baad267cf7e695b0548e2dc0df96128754314f9d9d77",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "1d839c6b8ba2d6faca15a811dc38ad0e92ffb7f0",
+        "sha256": "b14d0b20be43568c19cc77770cbdf133a7902d908d99624cbd891a479e66bad3",
+        "bytes": 2238,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/mod.rs",
+      "after_sha256": "373c1d5bd0e04643f932476792a6112f0d62a7b65ac3d337c41c84cb5279711a",
+      "before_local_sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451",
+      "before16_sha256": "1245c9dd429ecd8a81a6e253d6592685370770cd0ba60e05b042664bcc8bd451",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "b8d63c036386beb8a0a8af8cffcb0a457a6f4cfa",
+        "sha256": "373c1d5bd0e04643f932476792a6112f0d62a7b65ac3d337c41c84cb5279711a",
+        "bytes": 1409,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_query.rs",
+      "after_sha256": "510676eebca8a1e0aabc777c564fbb90c2f7c966a6bb847a68577c2bbaa2c9c1",
+      "before_local_sha256": "544cfc42b4361b87fd5ac689e1c386cf882bb23e107477d9b11ce0d03f2e8369",
+      "before16_sha256": "18406287a39d3cb988aeab28b907948e1fd75a91fb7c82a253216dd03fc5f441",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "c7ab2dfe9e3767f643704178f04031e33282b8bf",
+        "sha256": "510676eebca8a1e0aabc777c564fbb90c2f7c966a6bb847a68577c2bbaa2c9c1",
+        "bytes": 8755,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/create_confirmation.rs",
+      "after_sha256": "55cf19f645a764c8b2fb979c51941d15d7d2e5104c41ca184a996956b608a026",
+      "before_local_sha256": "084d59615ae9c723d476ca11fcbb32dfdc57757d9b988057f1ed3f4ad99626ae",
+      "before16_sha256": "c54fb0f5e4c6cc40d2fcc9d40348d172f65ca7dc206308d75fc4cdb85815ef3c",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "fa7e57800abf5d7b156ab57e56429b33430df51a",
+        "sha256": "55cf19f645a764c8b2fb979c51941d15d7d2e5104c41ca184a996956b608a026",
+        "bytes": 13771,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/complete.rs",
+      "after_sha256": "bb31afc99b620e5e092cf34626cbf29423231379498b3dd032c2f7acd0230d83",
+      "before_local_sha256": "c02c9c83c9e25a7f8b0d6342d0dde62d1a50b5e7a6bf181656c206909c74a36d",
+      "before16_sha256": "c486f6aba8acbc9864c555036e0c247a3f87ac9c3df66300cf7af0980930b895",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "5cec8323c1d70624d24361f13d063da6433657c8",
+        "sha256": "bb31afc99b620e5e092cf34626cbf29423231379498b3dd032c2f7acd0230d83",
+        "bytes": 19265,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/apps/web-api/src/core/handler/legacy_import/mod.rs",
+      "after_sha256": "cb666480707c4ba454ad0c887a35c9c265523cd66d242d4ae3b9e49396c35c23",
+      "before_local_sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9",
+      "before16_sha256": "dc506834bad7848662564d6b4c8a11657b4f7f68460285428076d8d72d350fe9",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "d5765d19c109ed63105b70f00689f60c3dabd219",
+        "sha256": "cb666480707c4ba454ad0c887a35c9c265523cd66d242d4ae3b9e49396c35c23",
+        "bytes": 9068,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/dto.rs",
+      "after_sha256": "6ea61d64ac2a955933e2a54a8f3f271af1dec1322bb2ff554c69b42d8aced7df",
+      "before_local_sha256": null,
+      "before16_sha256": null,
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "8297810348c4bba27075915b38d9a8906a7ddee4",
+        "sha256": "6ea61d64ac2a955933e2a54a8f3f271af1dec1322bb2ff554c69b42d8aced7df",
+        "bytes": 4660,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-read-models/src/workbench/dto/view.rs",
+      "after_sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+      "before_local_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "before16_sha256": "5327a4ec0b2962c356939d8901ef55832578f3f9255d60fb6e304f5bcf692396",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "6955029dd04d4cd8a874009a8f5378ec77119f3a",
+        "sha256": "22c40eb45e947b03d53031cf2f668a60258adf5d09455a7bf1406f2d0a43c0d8",
+        "bytes": 19967,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-read-models/src/workbench/mod.rs",
+      "after_sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+      "before_local_sha256": "0e23660bc926a228fd7b67351b4bbd9bf63d4a96a9b4078405bd58a4694056e1",
+      "before16_sha256": "46b01a9a017ed1b398420aa29c0a6446e6295f8f088857352808062f3a6a904d",
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "aa2d34f0c0387440fa77d00c5531ac9051d43858",
+        "sha256": "b1281b70c3ace831859df3367d3c006dbcbf356bf02529b3efeaf86188b4a07c",
+        "bytes": 1250,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs",
+      "after_sha256": "1a9e23afdfd2de9078646d6adea09287cb3ac1a4bf180e3453527c8935f64894",
+      "before_local_sha256": "d78774fc236a8c0937734e07d48359df867767e4540e4ab5886afe760c20afdc",
+      "before16_sha256": null,
+      "independently_generated_expected_bytes_equal": true,
+      "frozen_git_blob": {
+        "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "git_blob_oid": "566a0e8f2025d58278248c21489f335f11815707",
+        "sha256": "1a9e23afdfd2de9078646d6adea09287cb3ac1a4bf180e3453527c8935f64894",
+        "bytes": 6012,
+        "prior_evidence_hash_equal": true,
+        "actual_worktree_equal": true
+      }
+    }
+  ],
+  "checks": [
+    {
+      "check": "00_full_DTO_ImportBusinessConfirmationWorkItemView",
+      "before_sha256": "4251b19045be05d907e7d4c88b1a456d07568323e6e6eec8f5333c8a74d45fd9",
+      "after_sha256": "4251b19045be05d907e7d4c88b1a456d07568323e6e6eec8f5333c8a74d45fd9",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_DTO_restore_unique_workflow_provider_ImportBusinessConfirmationWorkItemView",
+      "before_sha256": "4251b19045be05d907e7d4c88b1a456d07568323e6e6eec8f5333c8a74d45fd9",
+      "after_sha256": "4251b19045be05d907e7d4c88b1a456d07568323e6e6eec8f5333c8a74d45fd9",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_full_DTO_LegacyImportConfirmationView",
+      "before_sha256": "cbf39687ec5e812135d32983aae53f33d02babd3f2e68adf62fd37748d4ce805",
+      "after_sha256": "cbf39687ec5e812135d32983aae53f33d02babd3f2e68adf62fd37748d4ce805",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_DTO_restore_unique_workflow_provider_LegacyImportConfirmationView",
+      "before_sha256": "cbf39687ec5e812135d32983aae53f33d02babd3f2e68adf62fd37748d4ce805",
+      "after_sha256": "cbf39687ec5e812135d32983aae53f33d02babd3f2e68adf62fd37748d4ce805",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_full_DTO_CompleteImportBusinessConfirmationResult",
+      "before_sha256": "67160d64dd0b998afeb488363c185b552b0e298c1582d2c3ba2772699e4175f5",
+      "after_sha256": "67160d64dd0b998afeb488363c185b552b0e298c1582d2c3ba2772699e4175f5",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_DTO_restore_unique_workflow_provider_CompleteImportBusinessConfirmationResult",
+      "before_sha256": "67160d64dd0b998afeb488363c185b552b0e298c1582d2c3ba2772699e4175f5",
+      "after_sha256": "67160d64dd0b998afeb488363c185b552b0e298c1582d2c3ba2772699e4175f5",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "original_00_entity_From_body_and_docs",
+      "before_sha256": "a3593e83b44e7f820216f77d0bcc33b45cee2b9f55abbb2e43d61e9bab4af6c2",
+      "after_sha256": "a3593e83b44e7f820216f77d0bcc33b45cee2b9f55abbb2e43d61e9bab4af6c2",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "original_16_entity_From_body_and_docs",
+      "before_sha256": "a3593e83b44e7f820216f77d0bcc33b45cee2b9f55abbb2e43d61e9bab4af6c2",
+      "after_sha256": "a3593e83b44e7f820216f77d0bcc33b45cee2b9f55abbb2e43d61e9bab4af6c2",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_work_item_view",
+      "before_sha256": "2e1fcf4ee2384d154044aebda33415ef8111c44a9146e191b254c23abb0ce2f8",
+      "after_sha256": "2e1fcf4ee2384d154044aebda33415ef8111c44a9146e191b254c23abb0ce2f8",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_read_only_work_item_view",
+      "before_sha256": "0daca782500dc7b95e99d7b6d04d23bf35eff0ed0bd022d61ef64a2174791adf",
+      "after_sha256": "0daca782500dc7b95e99d7b6d04d23bf35eff0ed0bd022d61ef64a2174791adf",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_append_confirmation_actions",
+      "before_sha256": "0ccb6cb5b607462e4d920bab1c81003512ea57b794d271971e49b624bb561027",
+      "after_sha256": "0ccb6cb5b607462e4d920bab1c81003512ea57b794d271971e49b624bb561027",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_work_item_action_code",
+      "before_sha256": "dfb55aaccddcdf5e5d991d4644e2e4a58cc2285ae1ec3111bdc87a25819f05f6",
+      "after_sha256": "dfb55aaccddcdf5e5d991d4644e2e4a58cc2285ae1ec3111bdc87a25819f05f6",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_processing_state_code",
+      "before_sha256": "76336000b5e4dc154952c6f91e41128f5c5d18a9e83180a1052a0656abbf9880",
+      "after_sha256": "76336000b5e4dc154952c6f91e41128f5c5d18a9e83180a1052a0656abbf9880",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_original_projection_or_action_confirmation_view",
+      "before_sha256": "5c401b242ba65542ecb9f76f746c0f80b2861ae414d7b4b318d4a77377902cc3",
+      "after_sha256": "5c401b242ba65542ecb9f76f746c0f80b2861ae414d7b4b318d4a77377902cc3",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_unique_route_rule_handler_route",
+      "before_sha256": "5a0c19a0a242800d3478d38bf34a06a55230ff478aceb078b8ba58a0b8930ecd",
+      "after_sha256": "5a0c19a0a242800d3478d38bf34a06a55230ff478aceb078b8ba58a0b8930ecd",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_unique_route_rule_handler_route",
+      "before_sha256": "5a0c19a0a242800d3478d38bf34a06a55230ff478aceb078b8ba58a0b8930ecd",
+      "after_sha256": "5a0c19a0a242800d3478d38bf34a06a55230ff478aceb078b8ba58a0b8930ecd",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_unique_route_rule_document_approval_route",
+      "before_sha256": "f780567d9a4c3c192408ee7a1b1ff71cf9d247025cdcfe225b6f6ff42e35ed78",
+      "after_sha256": "f780567d9a4c3c192408ee7a1b1ff71cf9d247025cdcfe225b6f6ff42e35ed78",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_unique_route_rule_document_approval_route",
+      "before_sha256": "f780567d9a4c3c192408ee7a1b1ff71cf9d247025cdcfe225b6f6ff42e35ed78",
+      "after_sha256": "f780567d9a4c3c192408ee7a1b1ff71cf9d247025cdcfe225b6f6ff42e35ed78",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_unique_route_rule_w18_confirmation_scope",
+      "before_sha256": "a573a8946ddb10ab62427c590f21ad12d48f2110985a9bbe31c0c3bb7facc945",
+      "after_sha256": "a573a8946ddb10ab62427c590f21ad12d48f2110985a9bbe31c0c3bb7facc945",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "16_unique_route_rule_w18_confirmation_scope",
+      "before_sha256": "a573a8946ddb10ab62427c590f21ad12d48f2110985a9bbe31c0c3bb7facc945",
+      "after_sha256": "a573a8946ddb10ab62427c590f21ad12d48f2110985a9bbe31c0c3bb7facc945",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "pre_repair_full_command_body_create_confirmation.rs",
+      "before_sha256": "e9e2d5057a0607638ded7159de769fa573787281b0a1d550be6f47205bb3593c",
+      "after_sha256": "e9e2d5057a0607638ded7159de769fa573787281b0a1d550be6f47205bb3593c",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "pre_repair_full_command_body_complete.rs",
+      "before_sha256": "4eff96f44abc3bbdda397b96bf8dd2620c03805f551455e07bca00753c792a4a",
+      "after_sha256": "4eff96f44abc3bbdda397b96bf8dd2620c03805f551455e07bca00753c792a4a",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "confirmation_list_only_success_projection_can_return_original_route_error",
+      "before_sha256": "a38dd1314ea8f49214750d9dcc6bda69d2c5ad489f4a89ddda8a7a527f4e4d72",
+      "after_sha256": "a38dd1314ea8f49214750d9dcc6bda69d2c5ad489f4a89ddda8a7a527f4e4d72",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_unique_workflow_enum_WorkItemType",
+      "before_sha256": "daebe2d412a1018f6e000f2dcc992d4b55285cf4bc14f6f9fd39f44a863af8c1",
+      "after_sha256": "daebe2d412a1018f6e000f2dcc992d4b55285cf4bc14f6f9fd39f44a863af8c1",
+      "full_definition_tokens_equal": true
+    },
+    {
+      "check": "00_unique_workflow_enum_WorkItemStatus",
+      "before_sha256": "355599010b03006e6df6483a3ce307142537cf22f18cb28ad3a6a51a3e9b0dc2",
+      "after_sha256": "355599010b03006e6df6483a3ce307142537cf22f18cb28ad3a6a51a3e9b0dc2",
+      "full_definition_tokens_equal": true
+    }
+  ],
+  "counts": {
+    "changed_and_new_files": 11,
+    "complete_definition_token_checks": 25,
+    "original_test_definitions_in_import_domain_and_process": 108,
+    "after_test_definitions_in_import_domain_and_process": 111,
+    "new_projection_tests": 3
+  },
+  "original_tests": [
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "sort_whitelist_rejects_unknown_fields_and_directions"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "batch_list_params_normalize_paging_filters_and_sort_defaults"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "list_params_reject_unbounded_page_size"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "create_batch_request_rejects_empty_rows"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "create_batch_request_rejects_illegal_inner_row"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "prepared_confirmation_enforces_action_reason_matrix"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "prepared_execution_enforces_trial_reason_matrix"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "background_job_no_is_prefixed_and_unique"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "import_execution_command_uses_frozen_wire_shape"
+    },
+    {
+      "file": "backend/crates/erp-import/src/dto/legacy_import.rs",
+      "name": "import_execution_command_rejects_unknown_fields_and_numeric_versions"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/apply_result_set.rs",
+      "name": "accepts_all_outcomes_with_exact_field_shapes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/apply_result_set.rs",
+      "name": "rejects_duplicate_ids_and_conflicting_outcomes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/apply_result_set.rs",
+      "name": "rejects_missing_and_forbidden_fields"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/apply_result_set.rs",
+      "name": "rejects_empty_set"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/apply_result_set.rs",
+      "name": "accepts_max_len_and_rejects_over_limit"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/import_row_factory.rs",
+      "name": "trims_and_rejects_blank_or_duplicate_rows"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/import_row_factory.rs",
+      "name": "same_key_across_object_types_is_distinct"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "new_trims_and_normalizes_text_fields"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "new_rejects_empty_and_overlong_required_fields"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "new_rejects_inconsistent_counts"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "update_counts_enforces_sum_invariant"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "status_pipeline_transitions_and_terminal_states"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "status_machine_directed_edges"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "confirmation_and_application_rules_are_owned_by_batch"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "asset_attachments_and_summaries"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_batch.rs",
+      "name": "status_serde_uses_stable_codes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "new_trims_and_starts_pending"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "new_rejects_empty_and_overlong_fields"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "confirm_scope_records_decision_and_audit"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "reject_requires_reason_code"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "completed_confirmation_cannot_be_decided_again"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "pending_confirmation_invalidates_with_replacement"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "status_machine_is_directed"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "status_and_decision_serde_use_stable_codes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "scope_registry_derives_roles_and_required_matrix"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "matrix_rules_own_snapshot_version_and_next_decision"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_confirmation.rs",
+      "name": "matrix_confirmation_rejects_incomplete_or_returned_scopes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "new_trims_and_starts_all_pending"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "new_rejects_empty_and_overlong_fields"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "invalid_row_requires_error_code_and_blocks_mapping"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "full_pipeline_to_imported"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "failed_row_can_be_prepared_for_retry_without_reverting_mapping"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "imported_and_skipped_rows_cannot_be_prepared_for_retry"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "prepare_for_import_advances_pending_row_and_requires_identity"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "prepare_for_import_rejects_invalid_or_conflicting_rows"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "import_status_counts_are_deterministic"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "import_requires_mapping_first"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "conflict_blocks_import_until_re_run"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "skip_and_fail_require_error_code"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "status_machines_are_directed"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/legacy_import_row.rs",
+      "name": "status_serde_uses_stable_codes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/mod.rs",
+      "name": "command_identity_is_stable_and_hides_raw_key"
+    },
+    {
+      "file": "backend/crates/erp-import/src/entity/legacy_import/mod.rs",
+      "name": "command_identity_distinguishes_field_boundaries"
+    },
+    {
+      "file": "backend/crates/erp-import/src/error.rs",
+      "name": "import_unique_conflicts_keep_original_messages"
+    },
+    {
+      "file": "backend/crates/erp-import/src/error.rs",
+      "name": "optimistic_lock_maps_to_conflict_refresh_message"
+    },
+    {
+      "file": "backend/crates/erp-import/src/indexes/legacy_import.rs",
+      "name": "batch_identity_and_reimport_warning_indexes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/indexes/legacy_import.rs",
+      "name": "row_identity_queue_and_ttl_diagnostic_indexes"
+    },
+    {
+      "file": "backend/crates/erp-import/src/indexes/legacy_import.rs",
+      "name": "confirmation_scope_trial_and_work_item_are_unique"
+    },
+    {
+      "file": "backend/crates/erp-import/src/ports/bulk_job.rs",
+      "name": "fail_closed_bulk_job_port_does_not_invent_job_identity"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/bson_roundtrip.rs",
+      "name": "bson_roundtrip_preserves_batch"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/bson_roundtrip.rs",
+      "name": "bson_roundtrip_preserves_confirmation"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/bson_roundtrip.rs",
+      "name": "bson_roundtrip_preserves_row"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/apply_scope.rs",
+      "name": "unique_row_ids_dedups_empty_and_repeats"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/apply_scope.rs",
+      "name": "missing_row_ids_preserves_request_order_and_reports_unknown"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/apply_scope.rs",
+      "name": "pending_outside_filter_excludes_requested_ids_and_soft_deleted"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/apply_scope.rs",
+      "name": "apply_row_scope_empty_ids_skip_database"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/apply_scope.rs",
+      "name": "apply_row_scope_reports_missing_soft_deleted_and_pending_outside"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/failed_retry.rs",
+      "name": "failed_retry_filter_pins_batch_status_and_not_deleted"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/failed_retry.rs",
+      "name": "failed_retry_sort_is_stable_by_created_at_then_id"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/mod.rs",
+      "name": "batch_filter_applies_optional_fields_and_deleted_filter"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/mod.rs",
+      "name": "sort_doc_whitelists_known_fields_and_defaults_otherwise"
+    },
+    {
+      "file": "backend/crates/erp-import/src/repository/legacy_import/supersede_batch.rs",
+      "name": "invalidated_filter_pins_current_replacement_round"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "request_rejects_missing_and_forbidden_outcome_fields"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "request_rejects_duplicate_and_conflicting_ids_before_lookup"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "unknown_ids_fail_closed"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "collect_skips_terminal_rows_and_only_returns_migrated_deltas"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "collect_fail_closed_does_not_return_deltas_when_later_row_is_illegal"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "customer_targets_deduplicate_mixed_types_and_missing_parties"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "customer_targets_scale_to_large_batch_with_shared_targets"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/batch.rs",
+      "name": "persist_rolls_back_when_later_row_cas_fails"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "create_command_rejects_client_owned_task_fields"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "same_batch_confirmation_scopes_use_distinct_server_responsibility_keys"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "completion_requires_exact_task_subject_batch_and_current_owner"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "domain_actions_require_pending_fact_and_process_responsibility"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "unauthorized_projection_masks_current_owner_and_has_no_actions"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "return_for_fix_is_rejected_without_successor"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "last_confirmation_prepares_batch_without_starting_application"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "replaced_work_item_ids_batch_single_query_semantics"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "superseded_closable_skips_closed_and_fails_closed_on_missing"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_tests.rs",
+      "name": "idempotency_receipt_rejects_same_key_with_different_command"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/create_batch.rs",
+      "name": "empty_optional_fields_report_no_missing_label"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/create_batch.rs",
+      "name": "all_present_reports_no_missing_label"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/create_batch.rs",
+      "name": "partial_missing_reports_first_label_in_input_order"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/create_batch.rs",
+      "name": "duplicate_ids_report_first_occurrence_label"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "start_apply_is_the_only_action_that_starts_background_job"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "cancel_pending_preserves_processed_results_and_stops_only_remaining_items"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_preserves_imported_and_skipped_rows_and_returns_ready"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_with_no_failed_rows_fails_closed"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_leaves_pending_rows_untouched_and_counts_large_batch"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_counts_large_failed_batch_in_single_pass"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_only_subset_preserves_committed_success_counts"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "retry_failed_subset_mismatch_fails_closed"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "execution_receipt_is_stable_and_rejects_request_reuse"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/execution.rs",
+      "name": "execution_receipt_replay_allows_later_background_progress"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/factories.rs",
+      "name": "work_item_pins_type_org_subject_and_all_scopes"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/factories.rs",
+      "name": "workflow_action_maps_both_decisions"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/port_failure_tests.rs",
+      "name": "write_port_failure_does_not_return_advanced_confirmation_or_work_item"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/supersede.rs",
+      "name": "missing_work_item_fails_closed_without_partial_close_set"
+    }
+  ],
+  "new_projection_tests": [
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs",
+      "name": "raw_and_read_only_views_preserve_actual_linked_task_type"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs",
+      "name": "authorized_projection_keeps_actual_type_status_and_existing_action_rules"
+    },
+    {
+      "file": "backend/crates/erp-processes/src/import_apply/confirmation_query/tests.rs",
+      "name": "authorized_projection_uses_registered_destinations_and_preserves_route_errors"
+    }
+  ],
+  "preserved_execution_contract": [
+    "No change to list validation/normalization or confirmation query/filter/page fields",
+    "Same task prefetch, factory creation, per-row authorization await and Forbidden/NotFound read-only fallback",
+    "No extra database, RBAC, repository or transaction call; route wrapper is the existing pure mapper",
+    "Create and complete entire implementation bodies unchanged from before repair after import block",
+    "No new task-type guard or action eligibility rule; original append_confirmation_actions identical00",
+    "Complete DTO field order/derive/serde and entity From identical00; only original workflow provider restored",
+    "Original route table, document approval route and W18 scope mapping unchanged00 and16, including error strings",
+    "Raw/read-only projections exactly00, including owner hiding, blockers, fixed W18 destination",
+    "Existing requests/domain DTOs remain erp_import; HTTP output type imports consume actual Process DTO; no facade or Cargo dependency added"
+  ],
+  "verification": {
+    "targeted_rustfmt": "passed for supplemental files only",
+    "source_expected_comparison": "all supplemental files equal deterministic generated expected bytes",
+    "cargo_clippy_tests": "Not executed by G. Root sealed check/strict Clippy/lib passed; actual logs and 3655/0/68 aggregate recorded in source_freeze.",
+    "database": "not run",
+    "parser_raw_or_allowlist": "not modified",
+    "new_projection_tests": "All 3 new tests observed ... ok in root sealed library log"
+  },
+  "evidence_scripts": [
+    "/private/tmp/cutover17-import-view-migrate.py",
+    "/private/tmp/cutover17-import-route-repair.py",
+    "/private/tmp/cutover17-import-view-evidence.py"
+  ],
+  "source_freeze": {
+    "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+    "capture_utc": "2026-09-07T07:01:18.408314+00:00",
+    "method": "Single git cat-file --batch for only declared after paths; verify blob bytes equal actual worktree and previously recorded SHA256 before binding",
+    "unique_source_blobs_checked": 254,
+    "all_prior_after_sha256_equal": true,
+    "all_actual_worktree_bytes_equal_frozen_blobs": true,
+    "root_gate_observations": [
+      {
+        "kind": "lib-tests",
+        "path": "/private/tmp/erp-cutover17-lib-tests-sealed.log",
+        "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+        "bytes": 388932,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_package_test_summaries": 33,
+        "aggregate": {
+          "passed": 3655,
+          "failed": 0,
+          "ignored": 68
+        }
+      },
+      {
+        "kind": "clippy",
+        "path": "/private/tmp/erp-cutover17-clippy-sealed.log",
+        "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+        "bytes": 925,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_completion": "Finished dev profile",
+        "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+      },
+      {
+        "kind": "check",
+        "path": "/private/tmp/erp-cutover17-check-sealed.log",
+        "sha256": "90380e0beeef1e7c0b8674e4011583d27231dd2726b97657a713241706df7266",
+        "bytes": 1023,
+        "execution_owner": "root",
+        "root_reported_exit_code": 0,
+        "source_commit_reported_by_root": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+        "observed_by_G": "Existing root-produced log read and hashed; no gate rerun",
+        "observed_completion": "Finished dev profile",
+        "toolchain_future_compat_note": "proc-macro-error2 v2.0.1 future-incompatibility note; no project warning or failure"
+      }
+    ],
+    "root_reported_format_pass": true,
+    "new_import_projection_tests_observed": [
+      {
+        "name": "raw_and_read_only_views_preserve_actual_linked_task_type",
+        "actual_log_line": "test import_apply::confirmation_query::tests::raw_and_read_only_views_preserve_actual_linked_task_type ... ok",
+        "result": "passed"
+      },
+      {
+        "name": "authorized_projection_keeps_actual_type_status_and_existing_action_rules",
+        "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_keeps_actual_type_status_and_existing_action_rules ... ok",
+        "result": "passed"
+      },
+      {
+        "name": "authorized_projection_uses_registered_destinations_and_preserves_route_errors",
+        "actual_log_line": "test import_apply::confirmation_query::tests::authorized_projection_uses_registered_destinations_and_preserves_route_errors ... ok",
+        "result": "passed"
+      }
+    ],
+    "execution_limits": "G did not run Cargo/Clippy/library tests, DB, heavy scans or modify repo source. Gate executions and exit status are root-owned; aggregate and named passing tests independently read from actual sealed logs."
+  }
+}

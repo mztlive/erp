@@ -1,0 +1,11 @@
+test_completion_is_separate_from_structure (__main__.selftest.<locals>.ExecutionTests.test_completion_is_separate_from_structure) ... ok
+test_gate_log_requires_actual_exit (__main__.selftest.<locals>.ExecutionTests.test_gate_log_requires_actual_exit) ... ok
+test_modes_remain_explicit_and_exclusive (__main__.selftest.<locals>.ExecutionTests.test_modes_remain_explicit_and_exclusive) ... ok
+test_real_git_evidence_and_negative_records (__main__.selftest.<locals>.ExecutionTests.test_real_git_evidence_and_negative_records) ... ok
+test_scope_rows_are_not_generic_exemptions (__main__.selftest.<locals>.ExecutionTests.test_scope_rows_are_not_generic_exemptions) ... ok
+test_sections_and_executed_tasks (__main__.selftest.<locals>.ExecutionTests.test_sections_and_executed_tasks) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.151s
+
+OK

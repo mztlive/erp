@@ -3,8 +3,11 @@
   "input_head": "a537414eb8f78c43ebc383a3457a45c437dececc",
   "integrator": "Codex",
   "branch": "chore/domain-crate-17-cutover",
-  "status": "执行中",
+  "status": "本地门禁通过",
   "preceding_phase_evidence": ".domain-migration-evidence/16",
   "real_database_verified": false,
-  "disclaimer": "真实数据库运行未验证"
+  "disclaimer": "真实数据库运行未验证",
+  "output_code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "performance_status": "deferred_by_user",
+  "review_kind": "源码合同复核与纯内联门禁；非人工阶段验收"
 }

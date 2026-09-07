@@ -1,0 +1,359 @@
+{
+  "source_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "scope": "Real From and IntoResponse golden expectations; no MongoDB/application execution",
+  "source_bindings": [
+    {
+      "path": "backend/apps/web-api/src/core/errors/cutover_tests.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "4a0a958e222c93457f04faaeadf7e4d8167aaf11",
+      "sha256": "79dfe539a7aa772f670acc90f306c7510c8652e3d7328c803a678dd0b0dd7d37",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/errors.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "bcff46a7965ac67429ba74d2d377e482b6fbcb4c",
+      "sha256": "2d3549238c7f7464126fa53292922bd2ec65f6d7eda0241d0e789c873f784117",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/response.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "f32899bf7dbdabca5b4134c8c05be5558469601f",
+      "sha256": "877356c5e95e6a3cf07e0ba2dc66caa354cdfbaca7df1a902a4e07dbce082bc1",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/rate_limit.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "42c0b3d2eb2982a9b72afd58206a80566f4af7e9",
+      "sha256": "9b6028a2281b5187b05c30c48b63d76b5698bc9eab547fb99fa29fa343b423e4",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/errors.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "a08a69e7f6743699c1fc0975e9c8bcbcd3b8149d",
+      "sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "actual_worktree_matches_blob": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/errors.rs",
+      "commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob": "60ede8acfb3e20b2af0094e839f43b92a4eff641",
+      "sha256": "e68e829cec4e6a60b866fcafa29dff20e6511cc8a84cb8c720d461712df9228b",
+      "actual_worktree_matches_blob": true
+    }
+  ],
+  "test_function_count": 10,
+  "response_case_count": 494,
+  "case_count_basis": "Explicit matrix cardinalities in frozen source; Rust lib harness reports 10 test functions, not 494 separately named tests",
+  "tests": [
+    {
+      "name": "all_nineteen_domain_common_variants_keep_http_contract",
+      "response_cases": 228,
+      "line": 202,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "process_and_read_model_common_variants_keep_http_contract",
+      "response_cases": 24,
+      "line": 233,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "rbac_errors_remain_internal_at_every_real_provider",
+      "response_cases": 4,
+      "line": 245,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "all_workflow_codes_keep_http_contract_across_three_boundaries",
+      "response_cases": 63,
+      "line": 399,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks",
+      "response_cases": 75,
+      "line": 495,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "historical_repository_wrappers_are_special_only_at_application_boundaries",
+      "response_cases": 63,
+      "line": 543,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "other_application_repository_wrappers_remain_internal",
+      "response_cases": 26,
+      "line": 621,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "direct_persistence_non_duplicate_errors_keep_http_contract",
+      "response_cases": 4,
+      "line": 659,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "validator_fields_are_only_exposed_for_direct_http_validation",
+      "response_cases": 3,
+      "line": 694,
+      "passed_in_root_log": true
+    },
+    {
+      "name": "rate_limit_variants_keep_body_status_and_retry_after",
+      "response_cases": 4,
+      "line": 723,
+      "passed_in_root_log": true
+    }
+  ],
+  "assertions": [
+    "actual HTTP status",
+    "full JSON equality: status,errorMessage,code,retryable,data:null,success:false and exact fieldErrors presence/content",
+    "Content-Type application/json",
+    "Retry-After exact value or absence"
+  ],
+  "approval_golden": [
+    {
+      "variant": "ApprovalPolicyNotRegistered",
+      "code": "APPROVAL_POLICY_NOT_REGISTERED",
+      "status": 500,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalProcessNotConfigured",
+      "code": "APPROVAL_PROCESS_NOT_CONFIGURED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalDraftSourceNotAvailable",
+      "code": "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalDefinitionNotDraft",
+      "code": "APPROVAL_DEFINITION_NOT_DRAFT",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalDefinitionVersionConflict",
+      "code": "APPROVAL_DEFINITION_VERSION_CONFLICT",
+      "status": 409,
+      "retryable": true
+    },
+    {
+      "variant": "ApprovalDefinitionInvalid",
+      "code": "APPROVAL_DEFINITION_INVALID",
+      "status": 422,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalDefinitionBindingCorrupted",
+      "code": "APPROVAL_DEFINITION_BINDING_CORRUPTED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalAlreadyStarted",
+      "code": "APPROVAL_ALREADY_STARTED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalTaskNotOpen",
+      "code": "APPROVAL_TASK_NOT_OPEN",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalTaskNotAssignedToActor",
+      "code": "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR",
+      "status": 403,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalTaskVersionConflict",
+      "code": "APPROVAL_TASK_VERSION_CONFLICT",
+      "status": 409,
+      "retryable": true
+    },
+    {
+      "variant": "ApprovalInstanceVersionConflict",
+      "code": "APPROVAL_INSTANCE_VERSION_CONFLICT",
+      "status": 409,
+      "retryable": true
+    },
+    {
+      "variant": "ApprovalExecutionVersionConflict",
+      "code": "APPROVAL_EXECUTION_VERSION_CONFLICT",
+      "status": 409,
+      "retryable": true
+    },
+    {
+      "variant": "ApprovalSubjectVersionConflict",
+      "code": "APPROVAL_SUBJECT_VERSION_CONFLICT",
+      "status": 409,
+      "retryable": true
+    },
+    {
+      "variant": "ApprovalRejectReasonRequired",
+      "code": "APPROVAL_REJECT_REASON_REQUIRED",
+      "status": 422,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalInstanceBlocked",
+      "code": "APPROVAL_INSTANCE_BLOCKED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalResumeNotAllowedForBlocker",
+      "code": "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalCurrentApproverNotRecovered",
+      "code": "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalBlockedCancelNotAllowed",
+      "code": "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalGenericWorkItemMutationForbidden",
+      "code": "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
+      "status": 409,
+      "retryable": false
+    },
+    {
+      "variant": "ApprovalIdempotencyPayloadConflict",
+      "code": "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT",
+      "status": 409,
+      "retryable": false
+    }
+  ],
+  "index_golden": [
+    {
+      "index": "uk_parties_party_no",
+      "message": "主体编号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_parties_credit_code",
+      "message": "统一社会信用代码已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_party_bank_accounts_bank_account_no",
+      "message": "银行账户编号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_party_bank_accounts_party_hmac",
+      "message": "该主体下银行账号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_supplier_accounts_party",
+      "message": "该主体已绑定供应商角色，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_supplier_accounts_supplier_no",
+      "message": "供应商编号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_supplier_offerings_supplier_sku",
+      "message": "该供应商 SKU 已登记供给，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_contracts_contract_no",
+      "message": "合同编号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_purchase_orders_creation_basis",
+      "message": "该采购创建依据已生成采购单，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_customer_accounts_party",
+      "message": "该主体已绑定客户角色，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_customer_accounts_customer_no",
+      "message": "客户编号已存在，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_procurement_confirmation_lines_confirmation_line",
+      "message": "该采购确认已有相同分行序号，请刷新后重试"
+    },
+    {
+      "index": "uk_procurement_confirmation_lines_active_confirmation_line",
+      "message": "该采购确认已有相同分行序号，请刷新后重试"
+    },
+    {
+      "index": "uk_procurement_responsibility_active_selector",
+      "message": "同一采购责任选择器只能有一条启用规则，请核对当前资料后再操作"
+    },
+    {
+      "index": "uk_work_items_open_fulfillment_object",
+      "message": "该履约对象已存在开放任务，请刷新后重试"
+    },
+    {
+      "index": "uk_work_items_open_customer_acceptance_object",
+      "message": "该销售单已存在开放客户验收任务，请刷新后重试"
+    },
+    {
+      "index": "uk_product_publication_revisions_publication_revision",
+      "message": "该发布修订序号已被占用，请刷新后重试"
+    }
+  ],
+  "historical_index_positions": [
+    11,
+    12,
+    16
+  ],
+  "repository_wrapper_contract": "Only the three exact historical DuplicateKey names map to 409 at Process/RM HTTP boundaries; direct domain RepositoryError and other/similar-name/wrapped optimistic/unknown errors remain 500",
+  "execution": {
+    "path": "/private/tmp/erp-cutover17-lib-tests-sealed.log",
+    "sha256": "2fb05cc9803e1b527afb67067c28f606d2d785c58965ea75a9e89cd30fa54753",
+    "totals": {
+      "passed": 3655,
+      "failed": 0,
+      "ignored": 68
+    },
+    "lib_results_count": 33,
+    "executor": "root integrator",
+    "exit_code_reported_by_executor": 0,
+    "matching_test_lines": [
+      "test service::customer::profile::validation::compile_probe_equivalence_tests::contact_required_value_preserves_none_empty_and_unicode ... ok",
+      "test compile_probe_equivalence_tests::zero_amount_parse_spelling_preserves_value_json_and_decimal128_wire ... ok",
+      "test compile_probe_equivalence_tests::former_zero_literal_probe_changes_scale_json_and_decimal128_wire ... ok",
+      "test service::sales_order::command::identity::compile_probe_equivalence_tests::complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes ... ok",
+      "test core::errors::cutover_tests::direct_persistence_non_duplicate_errors_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::rbac_errors_remain_internal_at_every_real_provider ... ok",
+      "test core::errors::cutover_tests::rate_limit_variants_keep_body_status_and_retry_after ... ok",
+      "test core::errors::cutover_tests::validator_fields_are_only_exposed_for_direct_http_validation ... ok",
+      "test core::errors::cutover_tests::process_and_read_model_common_variants_keep_http_contract ... ok",
+      "test core::errors::cutover_tests::other_application_repository_wrappers_remain_internal ... ok",
+      "test core::errors::cutover_tests::all_workflow_codes_keep_http_contract_across_three_boundaries ... ok",
+      "test core::errors::cutover_tests::historical_repository_wrappers_are_special_only_at_application_boundaries ... ok",
+      "test core::errors::cutover_tests::duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks ... ok",
+      "test core::errors::cutover_tests::all_nineteen_domain_common_variants_keep_http_contract ... ok"
+    ]
+  },
+  "strict_clippy": {
+    "path": "/private/tmp/erp-cutover17-clippy-sealed.log",
+    "sha256": "afe2e2111e7e30fdd3ecf2a38664b90e9f5b2b23e63940cb0020a2fca5cd7481",
+    "exit_code_reported_by_executor": 0,
+    "finished_dev_profile_present": true,
+    "executor": "root integrator"
+  },
+  "original_http_tests_preserved": true
+}

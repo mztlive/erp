@@ -1,0 +1,666 @@
+{
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "tree": "/private/tmp/erp-domain-crate-17-cutover",
+  "snapshot": "/private/tmp/cutover17-readmodels-before",
+  "files": [
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/mod.rs",
+      "relative_path": "catalog_center/mod.rs",
+      "before_sha256": "e698933e9e36b91f2194303df409629fd05b912ec946706ec8519698d8a89c4b",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 2
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/catalog_center/tests.rs",
+      "relative_path": "catalog_center/tests.rs",
+      "before_sha256": "f8e8b784dd1f554800365edd8ff3f26e0e5f0f763ffceb890c68c955c6c83a47",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 87
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 125
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 136
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 139
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/customer_center/service.rs",
+      "relative_path": "customer_center/service.rs",
+      "before_sha256": "fab8ac38580c55002867b5e0b015aeca47beabb1ac503b0d113b8d4f6f378a03",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/account.rs",
+      "relative_path": "finance/payable/account.rs",
+      "before_sha256": "18b95a0e12b8fd403f50f20f67a201dd957fecf181b762cc55ced5a3b97cf3bb",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 23
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/display.rs",
+      "relative_path": "finance/payable/display.rs",
+      "before_sha256": "84f2ce7c0456a7f5e77ad7b51adb1dba26b9d603140a34d6010a3ab475eecc4c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 22
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/mapping.rs",
+      "relative_path": "finance/payable/mapping.rs",
+      "before_sha256": "af92e9678a12b7a0a37c9545e790783da1529ccb0d07f09d9c0fa874ec06c733",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/payable/payment.rs",
+      "relative_path": "finance/payable/payment.rs",
+      "before_sha256": "2bfaf2fa09b2a60d018cb820e119417a8fbdaff0818b4c4e38dfae73bb0a4d02",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 27
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/account.rs",
+      "relative_path": "finance/receivable/account.rs",
+      "before_sha256": "5c44822631e9578220876cee9e1fc62801d899e82cc85c2bd6678fb88df8970a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 34
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/customer_receipt.rs",
+      "relative_path": "finance/receivable/customer_receipt.rs",
+      "before_sha256": "09a8f38a651ae35d56a1491e4c7e30eb95e6f5da6f6eac0683c15f469ae35db3",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 151
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/separation.rs",
+      "relative_path": "finance/receivable/separation.rs",
+      "before_sha256": "46a680c125285c002cc398ff73e0ba9070cb59bf0199b08f89670594da76c347",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/finance/receivable/snapshot.rs",
+      "relative_path": "finance/receivable/snapshot.rs",
+      "before_sha256": "26d6b2ec975b52e9d982791d80ba6cc282a20da975ac47f90248b8a3b5589618",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/acceptance_eligibility.rs",
+      "relative_path": "fulfillment_center/acceptance_eligibility.rs",
+      "before_sha256": "ff9aef95ed3faa303222806acd5d208c1ff30c279ffe6f717421e90bc0c1155f",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/mod.rs",
+      "relative_path": "fulfillment_center/mod.rs",
+      "before_sha256": "d4b5c2dd1d22a00d48d1b237ecbd1747737bec886aee95856833f3155f17b26c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/fulfillment_center/repository.rs",
+      "relative_path": "fulfillment_center/repository.rs",
+      "before_sha256": "d3568391843fc79659fa222fd720c30c45b22df8066b42c60c02c080ebb95382",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 8
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "relative_path": "integration_center/error_task.rs",
+      "before_sha256": "f5945fc689cef6a10a5003eb96080665f444e68b964fe8c1e4ae44dfc9219a67",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 11
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "relative_path": "integration_center/reconciliation_difference.rs",
+      "before_sha256": "3991a18b220af63c8aa206d5cbef96aa2e2c997a345a4cc2c97fcfc5845a9bbf",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 15
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/approval_query.rs",
+      "relative_path": "purchase_center/approval_query.rs",
+      "before_sha256": "7311febb9e7bfe19493449ef0c8a723615b925ad5415d63197b320e8cdda1117",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 19
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 240
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 253
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/change/query.rs",
+      "relative_path": "purchase_center/change/query.rs",
+      "before_sha256": "18115845d16f02671b55035842c5b879056be3ef0faa193597977a4c05b6c707",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 9
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 90
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/creation_basis/mapping.rs",
+      "relative_path": "purchase_center/creation_basis/mapping.rs",
+      "before_sha256": "64d3e00b31dad6b3096124f92630bcb79b600e1c03e09980d1577be1e647516e",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/creation_basis/query.rs",
+      "relative_path": "purchase_center/creation_basis/query.rs",
+      "before_sha256": "ac9bb23ebeb78db583f92298b0c9995683c4279d4db304244c416d9e51ed8495",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 17
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/query.rs",
+      "relative_path": "purchase_center/procurement_responsibility/query.rs",
+      "before_sha256": "e4aa7648cdb71ef851064cb85c134145e013d71e0f5e12b8c0a1649f5ad2e521",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 6
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/repository/isolation_tests.rs",
+      "relative_path": "purchase_center/procurement_responsibility/repository/isolation_tests.rs",
+      "before_sha256": "c0b85d06da4a91b1905b6e57ffded318e45b4353805566e502a5c6a337f7b2ee",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 1
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/procurement_responsibility/repository/rule_list_isolation_tests.rs",
+      "relative_path": "purchase_center/procurement_responsibility/repository/rule_list_isolation_tests.rs",
+      "before_sha256": "357bd1f075a29c673ab202e9ec218844617cc65b518884771936ca6487673827",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 1
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/query.rs",
+      "relative_path": "purchase_center/query.rs",
+      "before_sha256": "5b8c6b4a7df3b3f7ed3347656262a81ff3f1e8df7c4b0c8d386c14be5a3342fa",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 15
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 242
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs",
+      "relative_path": "purchase_center/repository/basis_sources.rs",
+      "before_sha256": "932c2fda2e8c6dbece4ab6684f11591144d020b90d3143d94f9e7dbea54f4333",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 18
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/center_facts.rs",
+      "relative_path": "purchase_center/repository/center_facts.rs",
+      "before_sha256": "4404d967a80119521ca13ac77a8bc7fb5ccbf89449c6ade4485f1bc759117572",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 261
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/coverage.rs",
+      "relative_path": "purchase_center/repository/coverage.rs",
+      "before_sha256": "0e678c148643322e76e414d44f8677a0952c986158d0317dba7cdc7514cb8b17",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 167
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/coverage_service.rs",
+      "relative_path": "purchase_center/repository/coverage_service.rs",
+      "before_sha256": "6556b10fa21113d6494af3040b1012046e58be5dc0c37eedc35c5e0084c50488",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/creation_basis.rs",
+      "relative_path": "purchase_center/repository/creation_basis.rs",
+      "before_sha256": "01283ce57bb9d8cf99c518149e1fa1b50f4268779030cd9d8b263cbca5ccbb03",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 192
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/list_facts.rs",
+      "relative_path": "purchase_center/repository/list_facts.rs",
+      "before_sha256": "6385e80c40d5a9a432a03800b4f2ad3b7e766944714c7b554a595b2aba22cae7",
+      "edits": [
+        {
+          "old": "database::ensure_indexes",
+          "new": "crate::test_indexes::ensure_indexes",
+          "before_line": 357
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "relative_path": "returns_center/customer_refund.rs",
+      "before_sha256": "530a8f5c3461a5e9df0a1dc5c757ce3f1ea64bf542316d1edc2746b11e8d05e2",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 123
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/dto.rs",
+      "relative_path": "returns_center/dto.rs",
+      "before_sha256": "b3443aa0b7c021bedc14f0dbcd1db5fc7365874273abfe8f6ca9f5aa74bdb09d",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 17
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/payment_reversal.rs",
+      "relative_path": "returns_center/payment_reversal.rs",
+      "before_sha256": "22abe5e7ac8fe091693d18fcf4ecbe39b529cae193f339df08162be4953bb5dd",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "relative_path": "returns_center/purchase_return.rs",
+      "before_sha256": "c4706241854c235cc10f9162643b02b1a8b7ccccd0abda54bd6fea15090c7f33",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/receipt_reversal.rs",
+      "relative_path": "returns_center/receipt_reversal.rs",
+      "before_sha256": "3b9ce5c052251ca70c221f75cd46757c0ec7d4d8125b7ca79997d69914f9f5ef",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/sales_return.rs",
+      "relative_path": "returns_center/sales_return.rs",
+      "before_sha256": "563b94581be6c97acb8aca99092c57ab1e027a5cd455be42db14d828592c7954",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/returns_center/supplier_refund.rs",
+      "relative_path": "returns_center/supplier_refund.rs",
+      "before_sha256": "656f395d24dd2ab4f71a4c59b46511b9408f41928963b9a7090efcad5f315098",
+      "edits": [
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 5
+        },
+        {
+          "old": "crate::errors::",
+          "new": "crate::",
+          "before_line": 52
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/approval_query.rs",
+      "relative_path": "sales_center/order/approval_query.rs",
+      "before_sha256": "d59515770ccfdec093f0504dca9f286ae8acb3147b3cdcd9d7688d0fe3cef08c",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 22
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 59
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/mod.rs",
+      "relative_path": "sales_center/order/mod.rs",
+      "before_sha256": "bca1147c688ce3721eaad2e57fc87b6255a96a2e6e711f062d8d0d14a025b18a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/order/query.rs",
+      "relative_path": "sales_center/order/query.rs",
+      "before_sha256": "1ca3f88154b4be4bc41dca21a17bdaa8e984daba48efdc1f80f8db6c613819ef",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 32
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/sales_center/review/query.rs",
+      "relative_path": "sales_center/review/query.rs",
+      "before_sha256": "612464912564e91f352be3c8bb7a48357f8b6f25654c0c3e2786f74ac55bab80",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 9
+        },
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 42
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_access.rs",
+      "relative_path": "supplier_center/fulfillment_access.rs",
+      "before_sha256": "96bbeda8a9fd86eb1d614d1d5fa2bd2c31d9c500180c851011279b29f8a85864",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 5
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/fulfillment_detail.rs",
+      "relative_path": "supplier_center/fulfillment_detail.rs",
+      "before_sha256": "c86627e8daab09da8fcdf0d02fbc15f5aa0d1c488e7556a73308f304a22ea46a",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 21
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/offering/mod.rs",
+      "relative_path": "supplier_center/offering/mod.rs",
+      "before_sha256": "a68b128355e1609bfd04117edc2b33c367468169d4cac0dc4824938f3b05da79",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/settlement/query.rs",
+      "relative_path": "supplier_center/settlement/query.rs",
+      "before_sha256": "24ad428ff7add4e36851b90509b8d0ce9945394440397ed13395d36c69ae4c00",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 19
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/settlement/tests.rs",
+      "relative_path": "supplier_center/settlement/tests.rs",
+      "before_sha256": "b6849ebd4216c8488c9b1ef970c20035ad542657e9f86798ec48aa2ead92a417",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 12
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/context.rs",
+      "relative_path": "supplier_center/supplier_api/context.rs",
+      "before_sha256": "139fffc45989220992d8bfc4942276e77282ff35f4a61ce51898c5db9c973ea2",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 14
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/jobs.rs",
+      "relative_path": "supplier_center/supplier_api/jobs.rs",
+      "before_sha256": "aa49a8d1508056b723881955df22faa8b9ef41342f43c2650c547842f7c2bed0",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 6
+        }
+      ]
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/supplier_center/supplier_api/query.rs",
+      "relative_path": "supplier_center/supplier_api/query.rs",
+      "before_sha256": "5177e2a98d1c43db4f2c9f5c6b26bb6a1ab1c4dafaf73cab369f596c6970f683",
+      "edits": [
+        {
+          "old": "services::",
+          "new": "crate::",
+          "before_line": 14
+        }
+      ]
+    }
+  ],
+  "scope": "Non-workbench read models consumers only; lib/errors/test_indexes/Cargo roots excluded"
+}

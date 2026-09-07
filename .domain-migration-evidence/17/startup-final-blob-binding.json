@@ -1,0 +1,1081 @@
+{
+  "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "verified_at_utc": "2026-09-07T07:08:42.536865+00:00",
+  "unique_source_paths": 107,
+  "main_after_paths": 76,
+  "index_after_records": 52,
+  "records": [
+    {
+      "path": "backend/apps/cli/src/error.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1e372d3fef711bfc186fe7fdf06f03280f6637a5",
+      "commit_blob_sha256": "46555a54a75ab6e4798e291a5a6805b591edbd2322ac30b332310765c843e1d4",
+      "working_tree_sha256": "46555a54a75ab6e4798e291a5a6805b591edbd2322ac30b332310765c843e1d4",
+      "previous_recorded_sha256": "46555a54a75ab6e4798e291a5a6805b591edbd2322ac30b332310765c843e1d4",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/cli/src/indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "53b0681c21f1c6be02d3908f058bac85d00078ab",
+      "commit_blob_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "working_tree_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "previous_recorded_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/cli/src/main.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "7e2df09b681691d342c7bff23a0537a9cba909f3",
+      "commit_blob_sha256": "041d059d75c4d884955c6e9fc099a489834ae467a4e0ea23d8c06eb380d78a2a",
+      "working_tree_sha256": "041d059d75c4d884955c6e9fc099a489834ae467a4e0ea23d8c06eb380d78a2a",
+      "previous_recorded_sha256": "041d059d75c4d884955c6e9fc099a489834ae467a4e0ea23d8c06eb380d78a2a",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/cli/src/runtime.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d0b372f2b27ef5958125dd284c0288273bee536a",
+      "commit_blob_sha256": "620d3e0735e8cab3799a3d2bd9ebf7c84f5cccb5ff3125a009b033c2c5c62981",
+      "working_tree_sha256": "620d3e0735e8cab3799a3d2bd9ebf7c84f5cccb5ff3125a009b033c2c5c62981",
+      "previous_recorded_sha256": "620d3e0735e8cab3799a3d2bd9ebf7c84f5cccb5ff3125a009b033c2c5c62981",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/app_state.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "0f1df15d9eff633fe7cb84b9ac9a9a9245c0d39b",
+      "commit_blob_sha256": "deb91d3318253fbad8a587e2bb99ab470ab4548d15db460b289e6b06cab274e1",
+      "working_tree_sha256": "deb91d3318253fbad8a587e2bb99ab470ab4548d15db460b289e6b06cab274e1",
+      "previous_recorded_sha256": "deb91d3318253fbad8a587e2bb99ab470ab4548d15db460b289e6b06cab274e1",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/approval_instance/error.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d3bd49fe8f31e16612a1ab822691cbca9f5b12c9",
+      "commit_blob_sha256": "c95b0df27ed96517d8f0146f082cc4012058f8d1d90989526c69e5a85ac7cc8c",
+      "working_tree_sha256": "c95b0df27ed96517d8f0146f082cc4012058f8d1d90989526c69e5a85ac7cc8c",
+      "previous_recorded_sha256": "c95b0df27ed96517d8f0146f082cc4012058f8d1d90989526c69e5a85ac7cc8c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/approval_instance/http.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "9e7790deab177b2d7a4db9640ea4270e8ed28be3",
+      "commit_blob_sha256": "15f372f27132bcfe288cc466f7ff680704ace2934bead2709d395562edf5fdf5",
+      "working_tree_sha256": "15f372f27132bcfe288cc466f7ff680704ace2934bead2709d395562edf5fdf5",
+      "previous_recorded_sha256": "15f372f27132bcfe288cc466f7ff680704ace2934bead2709d395562edf5fdf5",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/approval_instance/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "8e0eb0c6b02b7e21b44cc209341ff38ad17c765b",
+      "commit_blob_sha256": "bcbb5c27018ad006f01eea276e0477539f6aa85d4bc2ea38ea8b1090463d7b0c",
+      "working_tree_sha256": "bcbb5c27018ad006f01eea276e0477539f6aa85d4bc2ea38ea8b1090463d7b0c",
+      "previous_recorded_sha256": "bcbb5c27018ad006f01eea276e0477539f6aa85d4bc2ea38ea8b1090463d7b0c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/catalog/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1d4c9090daa27575fca78ff9109c57ea5fd16a21",
+      "commit_blob_sha256": "e7dc1b22402b4964331f4159dba8383cc90d49bfcf7c271247402d04f7b917ea",
+      "working_tree_sha256": "e7dc1b22402b4964331f4159dba8383cc90d49bfcf7c271247402d04f7b917ea",
+      "previous_recorded_sha256": "e7dc1b22402b4964331f4159dba8383cc90d49bfcf7c271247402d04f7b917ea",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/catalog/product.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "ef846c07083777fc6a752ce28c341c337c548719",
+      "commit_blob_sha256": "d5cc8c86a26a284deda7db110389943d227a5e9ce54af82fb4346e2b76b5b217",
+      "working_tree_sha256": "d5cc8c86a26a284deda7db110389943d227a5e9ce54af82fb4346e2b76b5b217",
+      "previous_recorded_sha256": "d5cc8c86a26a284deda7db110389943d227a5e9ce54af82fb4346e2b76b5b217",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/contract/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "5f92dad9906874a7dc789751ee695bb058096fd1",
+      "commit_blob_sha256": "90c61830eb8d925124f16870e177f47745a1be0bc78bef7c3a081ddbb14713b8",
+      "working_tree_sha256": "90c61830eb8d925124f16870e177f47745a1be0bc78bef7c3a081ddbb14713b8",
+      "previous_recorded_sha256": "90c61830eb8d925124f16870e177f47745a1be0bc78bef7c3a081ddbb14713b8",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/file_asset/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "913d4096d5125fb5fb8f69aae874509f9c6ac95b",
+      "commit_blob_sha256": "fc71136b68507a172915ed0417d49ed13efc52ffb79df20c888c6d53724bcda6",
+      "working_tree_sha256": "fc71136b68507a172915ed0417d49ed13efc52ffb79df20c888c6d53724bcda6",
+      "previous_recorded_sha256": "fc71136b68507a172915ed0417d49ed13efc52ffb79df20c888c6d53724bcda6",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/fulfillment/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "7b87a99aa962e07bdf0fc02e6cc53e350f052b6e",
+      "commit_blob_sha256": "bb5b43cbc3b63f5daba2cc5fb162b07e17bb01f0f9daa4c511b1308adf4e793c",
+      "working_tree_sha256": "bb5b43cbc3b63f5daba2cc5fb162b07e17bb01f0f9daa4c511b1308adf4e793c",
+      "previous_recorded_sha256": "bb5b43cbc3b63f5daba2cc5fb162b07e17bb01f0f9daa4c511b1308adf4e793c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/payable/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "48968cd941b797b3f7baa9acaf8dd0791dc29cc7",
+      "commit_blob_sha256": "3a435e5d899a7cc8930384e112e4d96af367b096f5ddcc4e6f00e4846c0a2072",
+      "working_tree_sha256": "3a435e5d899a7cc8930384e112e4d96af367b096f5ddcc4e6f00e4846c0a2072",
+      "previous_recorded_sha256": "3a435e5d899a7cc8930384e112e4d96af367b096f5ddcc4e6f00e4846c0a2072",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/supplier/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "76b4bb8a99fe36a500a3cbd4d195ab6f50dea2ee",
+      "commit_blob_sha256": "e761159b582ba4f3cfac98d5b50f502a4b1ca9be0c9633d365e9063cf6609209",
+      "working_tree_sha256": "e761159b582ba4f3cfac98d5b50f502a4b1ca9be0c9633d365e9063cf6609209",
+      "previous_recorded_sha256": "e761159b582ba4f3cfac98d5b50f502a4b1ca9be0c9633d365e9063cf6609209",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/handler/work_item/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "497f3de843d08c07900c3a2ae7a41cb21195cea3",
+      "commit_blob_sha256": "dce88fe14edd55ca58ac0504104146d8d255d8a8ec551b5466a5964ef11391e4",
+      "working_tree_sha256": "dce88fe14edd55ca58ac0504104146d8d255d8a8ec551b5466a5964ef11391e4",
+      "previous_recorded_sha256": "dce88fe14edd55ca58ac0504104146d8d255d8a8ec551b5466a5964ef11391e4",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/core/response.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f32899bf7dbdabca5b4134c8c05be5558469601f",
+      "commit_blob_sha256": "877356c5e95e6a3cf07e0ba2dc66caa354cdfbaca7df1a902a4e07dbce082bc1",
+      "working_tree_sha256": "877356c5e95e6a3cf07e0ba2dc66caa354cdfbaca7df1a902a4e07dbce082bc1",
+      "previous_recorded_sha256": "877356c5e95e6a3cf07e0ba2dc66caa354cdfbaca7df1a902a4e07dbce082bc1",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "53b0681c21f1c6be02d3908f058bac85d00078ab",
+      "commit_blob_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "working_tree_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "previous_recorded_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/apps/web-api/src/main.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "355f988d6b047acdabda6d263454d864660d4099",
+      "commit_blob_sha256": "ebad5d1b62ab1c45ca1c8bcb1ad1163e66f3dcb185594fda33df13d1140c3a20",
+      "working_tree_sha256": "ebad5d1b62ab1c45ca1c8bcb1ad1163e66f3dcb185594fda33df13d1140c3a20",
+      "previous_recorded_sha256": "ebad5d1b62ab1c45ca1c8bcb1ad1163e66f3dcb185594fda33df13d1140c3a20",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-audit/src/indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1c20b110e44b67453aafe5ef2797266261a981b2",
+      "commit_blob_sha256": "5383551e5e9a1aac01578e5c982b2257a75b282f65d961b62b9b0a254c93d67b",
+      "working_tree_sha256": "5383551e5e9a1aac01578e5c982b2257a75b282f65d961b62b9b0a254c93d67b",
+      "previous_recorded_sha256": "5383551e5e9a1aac01578e5c982b2257a75b282f65d961b62b9b0a254c93d67b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/indexes/catalog.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "da65ed56c1aafa209267e7cb9bdb0bfaffc7b36c",
+      "commit_blob_sha256": "941879f526338dd3de2bf059d63a31464a88b2cb91588a757beeeed68013872c",
+      "working_tree_sha256": "941879f526338dd3de2bf059d63a31464a88b2cb91588a757beeeed68013872c",
+      "previous_recorded_sha256": "941879f526338dd3de2bf059d63a31464a88b2cb91588a757beeeed68013872c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "fccc4481a63448dd02d1153a8c46ebeac30d066c",
+      "commit_blob_sha256": "8031be644486ae57fcde79e12cb81113fd4bf496ad75ce2d6414980cbd04bec6",
+      "working_tree_sha256": "8031be644486ae57fcde79e12cb81113fd4bf496ad75ce2d6414980cbd04bec6",
+      "previous_recorded_sha256": "8031be644486ae57fcde79e12cb81113fd4bf496ad75ce2d6414980cbd04bec6",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-catalog/src/repository/extensions/catalog.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "99e0ef7791426c08cf589f5a902ece1fe9b90272",
+      "commit_blob_sha256": "fc8973a89405690c1398355bf76c7e333316546db5dc7f13b1b4efdf8ce329d7",
+      "working_tree_sha256": "fc8973a89405690c1398355bf76c7e333316546db5dc7f13b1b4efdf8ce329d7",
+      "previous_recorded_sha256": "fc8973a89405690c1398355bf76c7e333316546db5dc7f13b1b4efdf8ce329d7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-contract/src/indexes/contract.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "ac07469dd60bb0aa1f8f9544495ab538fb60605f",
+      "commit_blob_sha256": "8a43a5c99f0eea50527bd7533718292024cbc294660499c147afae4214a1bd3e",
+      "working_tree_sha256": "8a43a5c99f0eea50527bd7533718292024cbc294660499c147afae4214a1bd3e",
+      "previous_recorded_sha256": "8a43a5c99f0eea50527bd7533718292024cbc294660499c147afae4214a1bd3e",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-contract/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f80ed36e365b986f0b8581e469388c3b7486c431",
+      "commit_blob_sha256": "dd2eac95653bf7005989b47d02c00250b19a63de100914a4c909b792fa05b484",
+      "working_tree_sha256": "dd2eac95653bf7005989b47d02c00250b19a63de100914a4c909b792fa05b484",
+      "previous_recorded_sha256": "dd2eac95653bf7005989b47d02c00250b19a63de100914a4c909b792fa05b484",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-contract/src/repository/extensions/contract.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "574496dd62d35d073b566284fe62f6b0d7281ab5",
+      "commit_blob_sha256": "674f40a59e91efb85909891adb3877448e5192206927613486ad114937fc8755",
+      "working_tree_sha256": "674f40a59e91efb85909891adb3877448e5192206927613486ad114937fc8755",
+      "previous_recorded_sha256": "674f40a59e91efb85909891adb3877448e5192206927613486ad114937fc8755",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-customer/src/indexes/customer.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1253336bf844f37823b5ab99f1abe8539bec3aca",
+      "commit_blob_sha256": "8ad0c6f7bec860ed46d85c4043748d5d907804bec280a569ecef3061a8fd0d6c",
+      "working_tree_sha256": "8ad0c6f7bec860ed46d85c4043748d5d907804bec280a569ecef3061a8fd0d6c",
+      "previous_recorded_sha256": "8ad0c6f7bec860ed46d85c4043748d5d907804bec280a569ecef3061a8fd0d6c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-customer/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2a492935fb7e4f344c6aa8c48ad5e509f040abd8",
+      "commit_blob_sha256": "7527fe50427766d8f705e5a82a3b289c5de4414ad2e61ccb58da941c6dcb220e",
+      "working_tree_sha256": "7527fe50427766d8f705e5a82a3b289c5de4414ad2e61ccb58da941c6dcb220e",
+      "previous_recorded_sha256": "7527fe50427766d8f705e5a82a3b289c5de4414ad2e61ccb58da941c6dcb220e",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-customer/src/repository/extensions/customer.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "480a1251697c4ddf3683c95160029bb682f234c0",
+      "commit_blob_sha256": "31fc79e5463913b60bd691449c5b522b21f54d9d59fce4ec2b952ddd8c75b356",
+      "working_tree_sha256": "31fc79e5463913b60bd691449c5b522b21f54d9d59fce4ec2b952ddd8c75b356",
+      "previous_recorded_sha256": "31fc79e5463913b60bd691449c5b522b21f54d9d59fce4ec2b952ddd8c75b356",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/indexes/cost.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "7264d98ccabe61797ce74ba80bc0fba20da32614",
+      "commit_blob_sha256": "4095449e533088185776459dbfab704a9f539b1b45584311543635774316fbfe",
+      "working_tree_sha256": "4095449e533088185776459dbfab704a9f539b1b45584311543635774316fbfe",
+      "previous_recorded_sha256": "4095449e533088185776459dbfab704a9f539b1b45584311543635774316fbfe",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f712431fabded6145e3680aedc867b03d25c62a0",
+      "commit_blob_sha256": "5c842aed976201015689d3e909c7205fed6f950c4ee51d8bf648f6e0a4d42ba7",
+      "working_tree_sha256": "5c842aed976201015689d3e909c7205fed6f950c4ee51d8bf648f6e0a4d42ba7",
+      "previous_recorded_sha256": "5c842aed976201015689d3e909c7205fed6f950c4ee51d8bf648f6e0a4d42ba7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/indexes/payable.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "82b482ed74d3b62e8602356d30fd4de1f83a8a8e",
+      "commit_blob_sha256": "c15e34c466089ee02ac9a5d606fed9a87c48303b6469eb37fcf7b052e145483c",
+      "working_tree_sha256": "c15e34c466089ee02ac9a5d606fed9a87c48303b6469eb37fcf7b052e145483c",
+      "previous_recorded_sha256": "c15e34c466089ee02ac9a5d606fed9a87c48303b6469eb37fcf7b052e145483c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/indexes/receivable.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "3fa5c3848867a1b59f0c69b671c5d2b62a043a40",
+      "commit_blob_sha256": "87c5cc4420d1b1b7101255cf93798afe393b7083d9016e732a3310a254492f6c",
+      "working_tree_sha256": "87c5cc4420d1b1b7101255cf93798afe393b7083d9016e732a3310a254492f6c",
+      "previous_recorded_sha256": "87c5cc4420d1b1b7101255cf93798afe393b7083d9016e732a3310a254492f6c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/repository/extensions/cost.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "663edd447b70a96145712445a58bc698df0c75c6",
+      "commit_blob_sha256": "b14f4b3742792c1e2ecc7a86709724b4dcd8d47319578995ec467c74b6477cf7",
+      "working_tree_sha256": "b14f4b3742792c1e2ecc7a86709724b4dcd8d47319578995ec467c74b6477cf7",
+      "previous_recorded_sha256": "b14f4b3742792c1e2ecc7a86709724b4dcd8d47319578995ec467c74b6477cf7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/repository/extensions/payable.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "4b21c19c4e983c87b48b6485bc6205ac7ea1186a",
+      "commit_blob_sha256": "69019d013766528c4495b1b2ac5858da066d47f5ffdd9e128fcdfb48f1f150d1",
+      "working_tree_sha256": "69019d013766528c4495b1b2ac5858da066d47f5ffdd9e128fcdfb48f1f150d1",
+      "previous_recorded_sha256": "69019d013766528c4495b1b2ac5858da066d47f5ffdd9e128fcdfb48f1f150d1",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-finance/src/repository/extensions/receivable.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "90fda55131036be0bc0ac2e8cb9eb29495fab91e",
+      "commit_blob_sha256": "cae42598473485654ab1c9aa75e455e858abc4068c6cc90ad31d26f607c3b36b",
+      "working_tree_sha256": "cae42598473485654ab1c9aa75e455e858abc4068c6cc90ad31d26f607c3b36b",
+      "previous_recorded_sha256": "cae42598473485654ab1c9aa75e455e858abc4068c6cc90ad31d26f607c3b36b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/indexes/fulfillment.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "085c73920116a6e1789d15d11776b8ea3687b985",
+      "commit_blob_sha256": "72456f6adb4e0e0e70915847fba9d973388342b57262308ddbc7ae307ffe8379",
+      "working_tree_sha256": "72456f6adb4e0e0e70915847fba9d973388342b57262308ddbc7ae307ffe8379",
+      "previous_recorded_sha256": "72456f6adb4e0e0e70915847fba9d973388342b57262308ddbc7ae307ffe8379",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "9a590785f3fe66c9155eb81d4a12effdb21ed696",
+      "commit_blob_sha256": "a7f02fc863c9d10460666911a5d6b3f2170542f8c752457b98b3bc41f05502a7",
+      "working_tree_sha256": "a7f02fc863c9d10460666911a5d6b3f2170542f8c752457b98b3bc41f05502a7",
+      "previous_recorded_sha256": "a7f02fc863c9d10460666911a5d6b3f2170542f8c752457b98b3bc41f05502a7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-fulfillment/src/repository/extensions/fulfillment.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "4427352f9034b05f57a0873dd1b9d355ff7ef110",
+      "commit_blob_sha256": "f18ba90b8d83a14c3c5c95976de0787df2950e6f83312353c0da10a34c2eff7b",
+      "working_tree_sha256": "f18ba90b8d83a14c3c5c95976de0787df2950e6f83312353c0da10a34c2eff7b",
+      "previous_recorded_sha256": "f18ba90b8d83a14c3c5c95976de0787df2950e6f83312353c0da10a34c2eff7b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-identity/src/indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "8e78e6eb75a5c872f648a0f85b11b7235c7dda74",
+      "commit_blob_sha256": "dd1b373f1818c11662fdb89da22b076fc1d8fc017fc1ac225589b8aa1693c9c5",
+      "working_tree_sha256": "dd1b373f1818c11662fdb89da22b076fc1d8fc017fc1ac225589b8aa1693c9c5",
+      "previous_recorded_sha256": "dd1b373f1818c11662fdb89da22b076fc1d8fc017fc1ac225589b8aa1693c9c5",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-identity/src/repository/casbin_adapter.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "a44cf395337f74cc9a25046fe07149ae27790e4b",
+      "commit_blob_sha256": "2672e294e4d3983dee2f7540eb5026775ac8a95e890307ac243ea54b10d83409",
+      "working_tree_sha256": "2672e294e4d3983dee2f7540eb5026775ac8a95e890307ac243ea54b10d83409",
+      "previous_recorded_sha256": "2672e294e4d3983dee2f7540eb5026775ac8a95e890307ac243ea54b10d83409",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-identity/src/repository/extensions/access_control.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "05a7c90af3ed045b911a6f89848a6c6cc5c54696",
+      "commit_blob_sha256": "34f7f84a984b71f9ff1f078dfaee0888485f85d9134cfd72cec77a9c150651d6",
+      "working_tree_sha256": "34f7f84a984b71f9ff1f078dfaee0888485f85d9134cfd72cec77a9c150651d6",
+      "previous_recorded_sha256": "34f7f84a984b71f9ff1f078dfaee0888485f85d9134cfd72cec77a9c150651d6",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-import/src/indexes/legacy_import.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "ad9f2fea24b330852ca9cc98edef3954ecae4fdc",
+      "commit_blob_sha256": "6763db3aee23ff6c428af4bb702ed77135dd27624299d4297653773c57e348f8",
+      "working_tree_sha256": "6763db3aee23ff6c428af4bb702ed77135dd27624299d4297653773c57e348f8",
+      "previous_recorded_sha256": "6763db3aee23ff6c428af4bb702ed77135dd27624299d4297653773c57e348f8",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-import/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "a34e1c7303de682a2ee9a9a1922f0309574947d2",
+      "commit_blob_sha256": "b15f88cdf58723a0f1ed70801842d7282e6b9d008ea39d480ba8227696c6b5ec",
+      "working_tree_sha256": "b15f88cdf58723a0f1ed70801842d7282e6b9d008ea39d480ba8227696c6b5ec",
+      "previous_recorded_sha256": "b15f88cdf58723a0f1ed70801842d7282e6b9d008ea39d480ba8227696c6b5ec",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-import/src/repository/extensions/legacy_import.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "062f1249317680a05eeb8647c93e7d9047da7578",
+      "commit_blob_sha256": "7d5eb304faaa5e4f01d31b2c7ab7c6222a4ecb665c730e75ae91cfb221a75ec8",
+      "working_tree_sha256": "7d5eb304faaa5e4f01d31b2c7ab7c6222a4ecb665c730e75ae91cfb221a75ec8",
+      "previous_recorded_sha256": "7d5eb304faaa5e4f01d31b2c7ab7c6222a4ecb665c730e75ae91cfb221a75ec8",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-integration/src/indexes/integration_ops.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "076d026bc67f947b33eaed0534287d66229f65a6",
+      "commit_blob_sha256": "f89ed3ff401eeec32331d3dc2ccbd1c5fc7492c2c109a83582d5d842f61474b2",
+      "working_tree_sha256": "f89ed3ff401eeec32331d3dc2ccbd1c5fc7492c2c109a83582d5d842f61474b2",
+      "previous_recorded_sha256": "f89ed3ff401eeec32331d3dc2ccbd1c5fc7492c2c109a83582d5d842f61474b2",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-integration/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1ad9f718e1dcbbcfe55df3c99f58402f5cfcbced",
+      "commit_blob_sha256": "55c57830d68374a7cf5d42a41f8601ec59169bf54b92f4be4738b0c39e4ef103",
+      "working_tree_sha256": "55c57830d68374a7cf5d42a41f8601ec59169bf54b92f4be4738b0c39e4ef103",
+      "previous_recorded_sha256": "55c57830d68374a7cf5d42a41f8601ec59169bf54b92f4be4738b0c39e4ef103",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-integration/src/repository/extensions.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "8e01d18b835bb522cc83930b346214340a86623d",
+      "commit_blob_sha256": "a347a0ef13cdc2baee33830565d6e78896f1d29991ac842363dfbbbba15e6568",
+      "working_tree_sha256": "a347a0ef13cdc2baee33830565d6e78896f1d29991ac842363dfbbbba15e6568",
+      "previous_recorded_sha256": "a347a0ef13cdc2baee33830565d6e78896f1d29991ac842363dfbbbba15e6568",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/indexes/inventory.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "e8c7b8c6b397e0caad43008a40374dfd442412eb",
+      "commit_blob_sha256": "e8a34573b71a03b63c5ce410a368599417ce6297929a846803daaadec94703be",
+      "working_tree_sha256": "e8a34573b71a03b63c5ce410a368599417ce6297929a846803daaadec94703be",
+      "previous_recorded_sha256": "e8a34573b71a03b63c5ce410a368599417ce6297929a846803daaadec94703be",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "5d277f3ee2a7f8ac83bdc240b3f658e5f46622aa",
+      "commit_blob_sha256": "2dfb528099d89c7330d8630d807ae35f75d830035268e96905f02ef7de98903c",
+      "working_tree_sha256": "2dfb528099d89c7330d8630d807ae35f75d830035268e96905f02ef7de98903c",
+      "previous_recorded_sha256": "2dfb528099d89c7330d8630d807ae35f75d830035268e96905f02ef7de98903c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-inventory/src/repository/extensions/inventory.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "021092f276fb7f470ce9e664d19da01059f7adfa",
+      "commit_blob_sha256": "52fff9b4cd45c7445cda37b7e1390134336c11ecffeea79a243042052cfe10e3",
+      "working_tree_sha256": "52fff9b4cd45c7445cda37b7e1390134336c11ecffeea79a243042052cfe10e3",
+      "previous_recorded_sha256": "52fff9b4cd45c7445cda37b7e1390134336c11ecffeea79a243042052cfe10e3",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-party/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d74c681395c30cacca3a04423a120a3ed40556f7",
+      "commit_blob_sha256": "1ebb3244dbb31ebc8236fe06846200d36803367d73e1d945f654074d82c4df5b",
+      "working_tree_sha256": "1ebb3244dbb31ebc8236fe06846200d36803367d73e1d945f654074d82c4df5b",
+      "previous_recorded_sha256": "1ebb3244dbb31ebc8236fe06846200d36803367d73e1d945f654074d82c4df5b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-party/src/indexes/party.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "0d0a5024f83df86724908fe9a7f8679c22fd1045",
+      "commit_blob_sha256": "0f5c824ecab98f3b8a48ca6e0d1337bbfc70e8ea4db7b86b3740fe0baeeea4e5",
+      "working_tree_sha256": "0f5c824ecab98f3b8a48ca6e0d1337bbfc70e8ea4db7b86b3740fe0baeeea4e5",
+      "previous_recorded_sha256": "0f5c824ecab98f3b8a48ca6e0d1337bbfc70e8ea4db7b86b3740fe0baeeea4e5",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-party/src/repository/extensions/party.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "81aae097a7cf54acf2f43f23c26f0c79162b704e",
+      "commit_blob_sha256": "708effb12926f0b2b7fd8573864617baab24580c60f5ce83686ef83bde2ca123",
+      "working_tree_sha256": "708effb12926f0b2b7fd8573864617baab24580c60f5ce83686ef83bde2ca123",
+      "previous_recorded_sha256": "708effb12926f0b2b7fd8573864617baab24580c60f5ce83686ef83bde2ca123",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/identity.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "28875f7e0cbc2b5599d8cec1d14384f464c2a214",
+      "commit_blob_sha256": "a275adc12d3895c71eee5d9072c4419b45ecd306e36a85ea1c304c83d40b5af7",
+      "working_tree_sha256": "a275adc12d3895c71eee5d9072c4419b45ecd306e36a85ea1c304c83d40b5af7",
+      "previous_recorded_sha256": "a275adc12d3895c71eee5d9072c4419b45ecd306e36a85ea1c304c83d40b5af7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/support_audit.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "200210c08aa9b51e0f9839aca26c7aac2827b755",
+      "commit_blob_sha256": "51aae492e7bcccbf73ea39c192122e4089c3f0fe6b6d1f347ea71ee75ee153de",
+      "working_tree_sha256": "51aae492e7bcccbf73ea39c192122e4089c3f0fe6b6d1f347ea71ee75ee153de",
+      "previous_recorded_sha256": "51aae492e7bcccbf73ea39c192122e4089c3f0fe6b6d1f347ea71ee75ee153de",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/support_documents.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2436ed48e886c952e3209ce6ff1a12fe4ea82160",
+      "commit_blob_sha256": "c68f9b952ac623e29727f06378ffd7f871708e05eb19828f20570aa4bd1c36fc",
+      "working_tree_sha256": "c68f9b952ac623e29727f06378ffd7f871708e05eb19828f20570aa4bd1c36fc",
+      "previous_recorded_sha256": "c68f9b952ac623e29727f06378ffd7f871708e05eb19828f20570aa4bd1c36fc",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/workflow/authorization.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2490e938a52b4b6e081d38f462adcc4f0e112771",
+      "commit_blob_sha256": "2a26535fbb1403152944d0a951ab2588ca084747ab7eeb0eef6bc02dafbd3cdc",
+      "working_tree_sha256": "2a26535fbb1403152944d0a951ab2588ca084747ab7eeb0eef6bc02dafbd3cdc",
+      "previous_recorded_sha256": "2a26535fbb1403152944d0a951ab2588ca084747ab7eeb0eef6bc02dafbd3cdc",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/adapters/workflow/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "5f7185d7e0e5656912904cea3d6ba3598a59105c",
+      "commit_blob_sha256": "d75552bdd8f06027703f2c4342ed14bc9ede710547e9929b4baf997305b06b09",
+      "working_tree_sha256": "d75552bdd8f06027703f2c4342ed14bc9ede710547e9929b4baf997305b06b09",
+      "previous_recorded_sha256": "d75552bdd8f06027703f2c4342ed14bc9ede710547e9929b4baf997305b06b09",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/errors.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "a08a69e7f6743699c1fc0975e9c8bcbcd3b8149d",
+      "commit_blob_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "working_tree_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "previous_recorded_sha256": "5e83a431a3fb40660a22e32821e4ba85ae4996dd890ec06316655b3f436608bc",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-processes/src/test_indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "53b0681c21f1c6be02d3908f058bac85d00078ab",
+      "commit_blob_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "working_tree_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "previous_recorded_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-procurement/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "684e4bf0d9d6adca608a3db6e163d7e0530c166f",
+      "commit_blob_sha256": "bdf79a885376c477b42281bc7b7f128ff64c34095d5c87f78fa25c4165a33864",
+      "working_tree_sha256": "bdf79a885376c477b42281bc7b7f128ff64c34095d5c87f78fa25c4165a33864",
+      "previous_recorded_sha256": "bdf79a885376c477b42281bc7b7f128ff64c34095d5c87f78fa25c4165a33864",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "633e26058e4d56052e5618629120ae8824274688",
+      "commit_blob_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "working_tree_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "previous_recorded_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-procurement/src/indexes/purchase_order.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f9d9acf288dab288d02ec60e59da8a759fc69acb",
+      "commit_blob_sha256": "6c9f3ee4bd79d3e6881a1a83408e6796259359e0e11f49de0ee1d402c0e30650",
+      "working_tree_sha256": "6c9f3ee4bd79d3e6881a1a83408e6796259359e0e11f49de0ee1d402c0e30650",
+      "previous_recorded_sha256": "6c9f3ee4bd79d3e6881a1a83408e6796259359e0e11f49de0ee1d402c0e30650",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-procurement/src/repository/extensions/procurement_responsibility.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "4425b169e9506ce9fbf0bbeb7f8798490f53695c",
+      "commit_blob_sha256": "5de30e38d9cb7792dca3de8a9b3f185ff5d5a1f3669ec6f59094bbfeb646092b",
+      "working_tree_sha256": "5de30e38d9cb7792dca3de8a9b3f185ff5d5a1f3669ec6f59094bbfeb646092b",
+      "previous_recorded_sha256": "5de30e38d9cb7792dca3de8a9b3f185ff5d5a1f3669ec6f59094bbfeb646092b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-procurement/src/repository/extensions/purchase_order.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "52f803a9b6bd6b7317f6d4f7f3ace57e90dcf762",
+      "commit_blob_sha256": "04136566958163f54c089e29af019a857a33c7e1f74a44d8fff5279f27f4f8fa",
+      "working_tree_sha256": "04136566958163f54c089e29af019a857a33c7e1f74a44d8fff5279f27f4f8fa",
+      "previous_recorded_sha256": "04136566958163f54c089e29af019a857a33c7e1f74a44d8fff5279f27f4f8fa",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/test_indexes.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "53b0681c21f1c6be02d3908f058bac85d00078ab",
+      "commit_blob_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "working_tree_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "previous_recorded_sha256": "66a10320e93980ae8164af7e3fb2a161244580d805d99f8f6ad4657998b8dfe0",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-returns/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "626252d1a00a58010fc5325b5bc5d4488228b85f",
+      "commit_blob_sha256": "bc0b42777b02354e1db022f2b48bf03752d577af7035b92f78448c483aeabfbf",
+      "working_tree_sha256": "bc0b42777b02354e1db022f2b48bf03752d577af7035b92f78448c483aeabfbf",
+      "previous_recorded_sha256": "bc0b42777b02354e1db022f2b48bf03752d577af7035b92f78448c483aeabfbf",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-returns/src/indexes/returns.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "a8af9188b7c9a85c8b449d2fa2857e1f6d05ee6b",
+      "commit_blob_sha256": "9cf53d1cb99da2b5e4da88fbc67c7ab8d778d6bf64ab17ce77db1638d3d6ae15",
+      "working_tree_sha256": "9cf53d1cb99da2b5e4da88fbc67c7ab8d778d6bf64ab17ce77db1638d3d6ae15",
+      "previous_recorded_sha256": "9cf53d1cb99da2b5e4da88fbc67c7ab8d778d6bf64ab17ce77db1638d3d6ae15",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-returns/src/repository/extensions/returns.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2f4995b7e15ed3bdfd4099848042e8aa800b61d2",
+      "commit_blob_sha256": "ffeedeaf2c96618572ba78fc657cbafead89667fe6e75d42c5700b9ddfdeff62",
+      "working_tree_sha256": "ffeedeaf2c96618572ba78fc657cbafead89667fe6e75d42c5700b9ddfdeff62",
+      "previous_recorded_sha256": "ffeedeaf2c96618572ba78fc657cbafead89667fe6e75d42c5700b9ddfdeff62",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "43aea56362c48810d506ed6b0385e74722f7eec4",
+      "commit_blob_sha256": "92658a86aaafc14709383b1f69ee00678320bf430b047848d75fcda4e9c1b96d",
+      "working_tree_sha256": "92658a86aaafc14709383b1f69ee00678320bf430b047848d75fcda4e9c1b96d",
+      "previous_recorded_sha256": "92658a86aaafc14709383b1f69ee00678320bf430b047848d75fcda4e9c1b96d",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/indexes/sales_order.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "167c600178f9017bbb6a35a2a0855c644fca968f",
+      "commit_blob_sha256": "db16be5e6c17f152dba2f6c16255e64843b8a5a1ef04250047e56f5d50564fc2",
+      "working_tree_sha256": "db16be5e6c17f152dba2f6c16255e64843b8a5a1ef04250047e56f5d50564fc2",
+      "previous_recorded_sha256": "db16be5e6c17f152dba2f6c16255e64843b8a5a1ef04250047e56f5d50564fc2",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/indexes/sales_review.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "4954f75ae51bfc4d914bc1d5d593b44b65b03ef3",
+      "commit_blob_sha256": "aa582fa885344a16bef845adb8e6475a12f8fb73160a294971ac0c4964be4ebe",
+      "working_tree_sha256": "aa582fa885344a16bef845adb8e6475a12f8fb73160a294971ac0c4964be4ebe",
+      "previous_recorded_sha256": "aa582fa885344a16bef845adb8e6475a12f8fb73160a294971ac0c4964be4ebe",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/repository/extensions/sales_order.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "0a98e3749f4730ba08a610cc29d9d02215849a90",
+      "commit_blob_sha256": "818c4af67ebd17861b529abe4e0e5f957327db67e329aa0ff7f71714a4e91227",
+      "working_tree_sha256": "818c4af67ebd17861b529abe4e0e5f957327db67e329aa0ff7f71714a4e91227",
+      "previous_recorded_sha256": "818c4af67ebd17861b529abe4e0e5f957327db67e329aa0ff7f71714a4e91227",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-sales/src/repository/extensions/sales_review.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "9a453f8fb9a8fb8a0602b0e325d55bca85f6e23d",
+      "commit_blob_sha256": "40132ff2f9f26d8bac1d367d135cfb925c2a856a33faba309f7332c2ba2abeae",
+      "working_tree_sha256": "40132ff2f9f26d8bac1d367d135cfb925c2a856a33faba309f7332c2ba2abeae",
+      "previous_recorded_sha256": "40132ff2f9f26d8bac1d367d135cfb925c2a856a33faba309f7332c2ba2abeae",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supplier/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "6af912a951e78cc4f065e61b7e81ffb51c76db3a",
+      "commit_blob_sha256": "426cb93bbe16791e29f99f55c1ddb977467393db5966763545f599e399f6f6b5",
+      "working_tree_sha256": "426cb93bbe16791e29f99f55c1ddb977467393db5966763545f599e399f6f6b5",
+      "previous_recorded_sha256": "426cb93bbe16791e29f99f55c1ddb977467393db5966763545f599e399f6f6b5",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supplier/src/indexes/supplier.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "12cb2a3be9479e9b40e192a4ec0241e1e235d910",
+      "commit_blob_sha256": "35d732d0e017f8eb8565563ca5be284335417ffa21db4561e73ba4aa44810495",
+      "working_tree_sha256": "35d732d0e017f8eb8565563ca5be284335417ffa21db4561e73ba4aa44810495",
+      "previous_recorded_sha256": "35d732d0e017f8eb8565563ca5be284335417ffa21db4561e73ba4aa44810495",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supplier/src/repository/extensions/supplier.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "7cfb226e05cf9afe8bd5b64b354d9ee6ccdf5ba7",
+      "commit_blob_sha256": "d2b0bfbaa6e8cee9035511f61c1dcde89e6cb9b5f616eef1900325fe664ed749",
+      "working_tree_sha256": "d2b0bfbaa6e8cee9035511f61c1dcde89e6cb9b5f616eef1900325fe664ed749",
+      "previous_recorded_sha256": "d2b0bfbaa6e8cee9035511f61c1dcde89e6cb9b5f616eef1900325fe664ed749",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "6cd2e80a2c77cde7dd9ef36f450866cd1f28375b",
+      "commit_blob_sha256": "090add2baa843987f300824d5f70fa581ec57ca693b427384f714e85f032e30c",
+      "working_tree_sha256": "090add2baa843987f300824d5f70fa581ec57ca693b427384f714e85f032e30c",
+      "previous_recorded_sha256": "090add2baa843987f300824d5f70fa581ec57ca693b427384f714e85f032e30c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/indexes/supplier_api.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "30432b482d9cfbece31f7406e7127084924e53d4",
+      "commit_blob_sha256": "445e5f4114e2f5a740b614e2f07b88def312eec985802c765d720b3aec049b8b",
+      "working_tree_sha256": "445e5f4114e2f5a740b614e2f07b88def312eec985802c765d720b3aec049b8b",
+      "previous_recorded_sha256": "445e5f4114e2f5a740b614e2f07b88def312eec985802c765d720b3aec049b8b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/indexes/supplier_fulfillment.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d6321926baf4bf712035beba35073ade1b3431d6",
+      "commit_blob_sha256": "4a1b5c5ea0a266e6f21c0aa158d0d9af8be7330becafb05da264aeb3ccbf6a5c",
+      "working_tree_sha256": "4a1b5c5ea0a266e6f21c0aa158d0d9af8be7330becafb05da264aeb3ccbf6a5c",
+      "previous_recorded_sha256": "4a1b5c5ea0a266e6f21c0aa158d0d9af8be7330becafb05da264aeb3ccbf6a5c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/indexes/supplier_offering.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "7a33719ed6aaab3b6a4db3c171b84456cb9a61d6",
+      "commit_blob_sha256": "9d1d89fda5ca475d22a64e1ec498dcffb5ea5e6f4e65a3b6b359e0ec749d06f3",
+      "working_tree_sha256": "9d1d89fda5ca475d22a64e1ec498dcffb5ea5e6f4e65a3b6b359e0ec749d06f3",
+      "previous_recorded_sha256": "9d1d89fda5ca475d22a64e1ec498dcffb5ea5e6f4e65a3b6b359e0ec749d06f3",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/indexes/supplier_settlement.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "b443a1cff4915661265447c0760545f26d14c251",
+      "commit_blob_sha256": "75c5168994c784e3a716540360f5608b008dfa1ba62a500717e074f5b7dbde17",
+      "working_tree_sha256": "75c5168994c784e3a716540360f5608b008dfa1ba62a500717e074f5b7dbde17",
+      "previous_recorded_sha256": "75c5168994c784e3a716540360f5608b008dfa1ba62a500717e074f5b7dbde17",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_api.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "203cbda6cbe364582494aff1a1a8e06a7ef6975d",
+      "commit_blob_sha256": "59840cb582aa8e30e551fedf02b4c37c072be58dbf05646fa6fdde7386922b8c",
+      "working_tree_sha256": "59840cb582aa8e30e551fedf02b4c37c072be58dbf05646fa6fdde7386922b8c",
+      "previous_recorded_sha256": "59840cb582aa8e30e551fedf02b4c37c072be58dbf05646fa6fdde7386922b8c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_fulfillment.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d28b46f231b6c6e5e4a5e4a3e48c70df6549a3aa",
+      "commit_blob_sha256": "932b4cb958e3dae7b65310e045b54be46986b91376af41baf5c8e10fdeef7433",
+      "working_tree_sha256": "932b4cb958e3dae7b65310e045b54be46986b91376af41baf5c8e10fdeef7433",
+      "previous_recorded_sha256": "932b4cb958e3dae7b65310e045b54be46986b91376af41baf5c8e10fdeef7433",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_offering.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "1edbba9ef2c49a4ba73aea469b54797bdba00af6",
+      "commit_blob_sha256": "494200814c2a36dd9e0b805fcc24b8a698c6844ad186e9a43a7d6295f528520b",
+      "working_tree_sha256": "494200814c2a36dd9e0b805fcc24b8a698c6844ad186e9a43a7d6295f528520b",
+      "previous_recorded_sha256": "494200814c2a36dd9e0b805fcc24b8a698c6844ad186e9a43a7d6295f528520b",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-supply/src/repository/extensions/supplier_settlement.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "4dde70dae5135c9cf4b3e81824b2d5e4fde02cb5",
+      "commit_blob_sha256": "10dc3df825785b8ce274509af5afc85e1d41d636a220156ab2849f532bd387f9",
+      "working_tree_sha256": "10dc3df825785b8ce274509af5afc85e1d41d636a220156ab2849f532bd387f9",
+      "previous_recorded_sha256": "10dc3df825785b8ce274509af5afc85e1d41d636a220156ab2849f532bd387f9",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/indexes/bulk_job.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f05dff867dadac009bde2b9b81e3ecb1719af168",
+      "commit_blob_sha256": "e9a1f955061b60d0f8e4fa3eb17d3a008a8727bf79b7c559cce1b700f460af81",
+      "working_tree_sha256": "e9a1f955061b60d0f8e4fa3eb17d3a008a8727bf79b7c559cce1b700f460af81",
+      "previous_recorded_sha256": "e9a1f955061b60d0f8e4fa3eb17d3a008a8727bf79b7c559cce1b700f460af81",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/indexes/file_asset.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "42c497eadf539dfa42ff62396a10421cb0d2b9da",
+      "commit_blob_sha256": "7d6d2cca1c844e0e2af829661792f4b02391b9b2f931ae4a40f3e3ef0d8f6ccb",
+      "working_tree_sha256": "7d6d2cca1c844e0e2af829661792f4b02391b9b2f931ae4a40f3e3ef0d8f6ccb",
+      "previous_recorded_sha256": "7d6d2cca1c844e0e2af829661792f4b02391b9b2f931ae4a40f3e3ef0d8f6ccb",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "48d151ec000a61d8473ba31032f65cc763441a13",
+      "commit_blob_sha256": "9b97b55f8cdd36e352f8fb70015f1012ab8928ef113e5d65ae501d127189b7bb",
+      "working_tree_sha256": "9b97b55f8cdd36e352f8fb70015f1012ab8928ef113e5d65ae501d127189b7bb",
+      "previous_recorded_sha256": "9b97b55f8cdd36e352f8fb70015f1012ab8928ef113e5d65ae501d127189b7bb",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/indexes/source_registry.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "95627ef60a6668d5a637619ec1a5dc2c90490f66",
+      "commit_blob_sha256": "dd01be1bb3c095149bff1877b3547083622ed0503b7efa859e2ed8ac1eb12f94",
+      "working_tree_sha256": "dd01be1bb3c095149bff1877b3547083622ed0503b7efa859e2ed8ac1eb12f94",
+      "previous_recorded_sha256": "dd01be1bb3c095149bff1877b3547083622ed0503b7efa859e2ed8ac1eb12f94",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/repository/extensions/bulk_job.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "11bd3e63576f72a7658fd6ac44166fe737cecb31",
+      "commit_blob_sha256": "ffea250356cfafdf8f651e5acfb699dc1d1410f1a0c011faf076c3bb8598c1d8",
+      "working_tree_sha256": "ffea250356cfafdf8f651e5acfb699dc1d1410f1a0c011faf076c3bb8598c1d8",
+      "previous_recorded_sha256": "ffea250356cfafdf8f651e5acfb699dc1d1410f1a0c011faf076c3bb8598c1d8",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/repository/extensions/file_asset.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "592157bb31ddfd05c45c3125470e87398474a08a",
+      "commit_blob_sha256": "0ceed4ea625e433978623e4296d43b5753156638aa843b9af41c4941c6ec6161",
+      "working_tree_sha256": "0ceed4ea625e433978623e4296d43b5753156638aa843b9af41c4941c6ec6161",
+      "previous_recorded_sha256": "0ceed4ea625e433978623e4296d43b5753156638aa843b9af41c4941c6ec6161",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/repository/extensions/source_registry.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2f94334cfe004fca4a3a050701f1f36ad08d3471",
+      "commit_blob_sha256": "a11fd9684fa68cecbd75c3e522aeef6b0d43b61d919c1eb8c50020f9f5110585",
+      "working_tree_sha256": "a11fd9684fa68cecbd75c3e522aeef6b0d43b61d919c1eb8c50020f9f5110585",
+      "previous_recorded_sha256": "a11fd9684fa68cecbd75c3e522aeef6b0d43b61d919c1eb8c50020f9f5110585",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-warehouse/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "19256de174d7e342d0acc2bcd7a26148e29cbde2",
+      "commit_blob_sha256": "a44b65a3b40e7686d2e6b6cb8f3bfd2b226913a2e5002ec2c3b41f9290c82d7c",
+      "working_tree_sha256": "a44b65a3b40e7686d2e6b6cb8f3bfd2b226913a2e5002ec2c3b41f9290c82d7c",
+      "previous_recorded_sha256": "a44b65a3b40e7686d2e6b6cb8f3bfd2b226913a2e5002ec2c3b41f9290c82d7c",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-warehouse/src/indexes/warehouse.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "61c0ebfb6516af6f8cbbb36e032bf68375cd56a6",
+      "commit_blob_sha256": "8c80ebfdbd87f9fe27cb3d606fb3a8bed73e2472aa7045aeb506abbe5b370b28",
+      "working_tree_sha256": "8c80ebfdbd87f9fe27cb3d606fb3a8bed73e2472aa7045aeb506abbe5b370b28",
+      "previous_recorded_sha256": "8c80ebfdbd87f9fe27cb3d606fb3a8bed73e2472aa7045aeb506abbe5b370b28",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-warehouse/src/repository/extensions/warehouse.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "2e6504566cebe4f0e3cb2c23d932c2cbf58a3c5b",
+      "commit_blob_sha256": "55e649bdf434c7baa225785a68c7f94b646ddbaab33f7eebb2a1340c4a19f498",
+      "working_tree_sha256": "55e649bdf434c7baa225785a68c7f94b646ddbaab33f7eebb2a1340c4a19f498",
+      "previous_recorded_sha256": "55e649bdf434c7baa225785a68c7f94b646ddbaab33f7eebb2a1340c4a19f498",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/error.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "b0d76c5df2cc2c84f02565fb8098f3781f08db52",
+      "commit_blob_sha256": "4ee5b991a9fcc41a7727b1d47c65469c6d3417a3faace7d15bf3eda4ffc200bf",
+      "working_tree_sha256": "4ee5b991a9fcc41a7727b1d47c65469c6d3417a3faace7d15bf3eda4ffc200bf",
+      "previous_recorded_sha256": "4ee5b991a9fcc41a7727b1d47c65469c6d3417a3faace7d15bf3eda4ffc200bf",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/approval_integration.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "62c014c0162d7859dd215b5e3e0012f0a78ee64d",
+      "commit_blob_sha256": "a06bdeb03d0c0a5e8fe6eb7365358fac4951fa3c81500fc059b0d6993e0c443f",
+      "working_tree_sha256": "a06bdeb03d0c0a5e8fe6eb7365358fac4951fa3c81500fc059b0d6993e0c443f",
+      "previous_recorded_sha256": "a06bdeb03d0c0a5e8fe6eb7365358fac4951fa3c81500fc059b0d6993e0c443f",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/bpm.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "6f9112c5d1407ec94a13e743daeeb543dfa3cdc2",
+      "commit_blob_sha256": "ab222dce574ad9f6f6a090e765a3414255d93fa82754df67cd132d5e3b01a485",
+      "working_tree_sha256": "ab222dce574ad9f6f6a090e765a3414255d93fa82754df67cd132d5e3b01a485",
+      "previous_recorded_sha256": "ab222dce574ad9f6f6a090e765a3414255d93fa82754df67cd132d5e3b01a485",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/document_registry.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "3241f66a6530161f0ef4b965cac274f6a6ab12ae",
+      "commit_blob_sha256": "280df3ca4f93fbce40265aea4d79a14cad6763c4e5be97f8ee84504868d3f036",
+      "working_tree_sha256": "280df3ca4f93fbce40265aea4d79a14cad6763c4e5be97f8ee84504868d3f036",
+      "previous_recorded_sha256": "280df3ca4f93fbce40265aea4d79a14cad6763c4e5be97f8ee84504868d3f036",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "0c39646b2cf7c48f6d28d81925252d92a5a0140a",
+      "commit_blob_sha256": "85ac0298c9f1d7e18528009d7beaa1d42e0136347bcfc3fde3d7e1bdd85cdfeb",
+      "working_tree_sha256": "85ac0298c9f1d7e18528009d7beaa1d42e0136347bcfc3fde3d7e1bdd85cdfeb",
+      "previous_recorded_sha256": "85ac0298c9f1d7e18528009d7beaa1d42e0136347bcfc3fde3d7e1bdd85cdfeb",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "3f4ee2825caefbb69b2b4f78ce2ac1d202b0688e",
+      "commit_blob_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "working_tree_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "previous_recorded_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/repository/extensions/approval_integration.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "8b15aa3c8d3344f19d7f51ee871ab15794e5ac65",
+      "commit_blob_sha256": "eb5e01d3c0db4db1d24bbcca40ffc00c050198e4eb69d4098842f135aea3e924",
+      "working_tree_sha256": "eb5e01d3c0db4db1d24bbcca40ffc00c050198e4eb69d4098842f135aea3e924",
+      "previous_recorded_sha256": "eb5e01d3c0db4db1d24bbcca40ffc00c050198e4eb69d4098842f135aea3e924",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/repository/extensions/bpm.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "f21cbf107ee9dcb4cff38e65f56323dbcb7dcb4d",
+      "commit_blob_sha256": "9f0217c857993a710aee62b9b3945306fe76ef967749a053c8e4ba6c05cad58f",
+      "working_tree_sha256": "9f0217c857993a710aee62b9b3945306fe76ef967749a053c8e4ba6c05cad58f",
+      "previous_recorded_sha256": "9f0217c857993a710aee62b9b3945306fe76ef967749a053c8e4ba6c05cad58f",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/repository/extensions/document_registry.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "0fc2fd1430ebe14f9f1a345d68bbdce7f5f7d8c5",
+      "commit_blob_sha256": "5d59ed5e70168db3886c5ce2e550f7be0e860cff16887e7868158464290bf6b6",
+      "working_tree_sha256": "5d59ed5e70168db3886c5ce2e550f7be0e860cff16887e7868158464290bf6b6",
+      "previous_recorded_sha256": "5d59ed5e70168db3886c5ce2e550f7be0e860cff16887e7868158464290bf6b6",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+      "after_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "git_blob_oid": "d4a0665b777a17bce68ec2e31668a54957f3c3da",
+      "commit_blob_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+      "working_tree_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+      "previous_recorded_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+      "matches_previous_recorded_sha256": true,
+      "verified": true
+    }
+  ],
+  "hash_drifts": [],
+  "scope": "Existing startup/index/constant-provider manifests only; no source scan; git cat-file batch reads actual commit blobs; current file SHA matched each blob."
+}
