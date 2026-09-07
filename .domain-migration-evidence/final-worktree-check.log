@@ -1,0 +1,21 @@
+    Blocking waiting for file lock on build directory
+    Checking erp-identity v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-identity)
+    Checking erp-party v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-party)
+    Checking erp-workflow v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-workflow)
+    Checking erp-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-support)
+    Checking erp-finance v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-finance)
+    Checking erp-procurement v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-procurement)
+    Checking erp-supplier v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-supplier)
+    Checking erp-contract v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-contract)
+    Checking erp-supply v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-supply)
+    Checking erp-import v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-import)
+    Checking erp-customer v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-customer)
+    Checking erp-sales v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-sales)
+    Checking test-support v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/test-support)
+    Checking erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
+    Checking erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
+    Checking web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
+    Checking cli v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 02s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`

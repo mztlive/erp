@@ -1,0 +1,25 @@
+{
+  "target_commit": "97ffe90e85dc52072f22fc7562378b15187bf538",
+  "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+  "backfill_paths": 527,
+  "all_backfill_paths_byte_verified": true,
+  "unchanged_existing_paths_checked": 5696,
+  "unrelated_file_changes": [],
+  "head_unchanged": true,
+  "branch_unchanged": true,
+  "index_byte_identical": true,
+  "source_bound_files_verified": 1908,
+  "legacy_roots_absent": true,
+  "historical_tests_unchanged": true,
+  "performance": "deferred_by_user",
+  "real_database_verified": false,
+  "user_worktree_check": {
+    "command": "cargo check --workspace --locked",
+    "cwd": "/Users/huangjiajiang/Development/erp/backend",
+    "exit_code": 0,
+    "log": "final-worktree-check.log",
+    "log_sha256": "88ca7e641e80447cbbdf0b9e892efa165c5685557e7bbb33f200e0ea056c5417"
+  },
+  "post_check_source_files_verified": 1908,
+  "post_check_index_byte_identical": true
+}
