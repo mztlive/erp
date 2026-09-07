@@ -3579,4 +3579,3 @@ test core::routes::public::tests::login_policy_keeps_high_emergency_global_fuse 
 test core::handler::auth::login::tests::token_payload_should_keep_account_kind ... ok
 
 test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
-

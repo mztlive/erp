@@ -1,0 +1,32 @@
+[
+  {
+    "path": "compile/final-finance-build/noop/timings.html",
+    "verbatim_archive": "compile/final-finance-build/noop/timings.html.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  },
+  {
+    "path": "compile/final-finance-check/noop/timings.html",
+    "verbatim_archive": "compile/final-finance-check/noop/timings.html.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  },
+  {
+    "path": "compile/baseline-finance-check/noop/timings.html",
+    "verbatim_archive": "compile/baseline-finance-check/noop/timings.html.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  },
+  {
+    "path": "compile/baseline-finance-build/noop/timings.html",
+    "verbatim_archive": "compile/baseline-finance-build/noop/timings.html.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  },
+  {
+    "path": "preflight/unit-tests.log",
+    "verbatim_archive": "preflight/unit-tests.log.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  },
+  {
+    "path": "unit-tests.log",
+    "verbatim_archive": "unit-tests.log.raw.gz",
+    "normalization": "只去除行尾空白及末尾空行；原始字节保留在 gzip 附件"
+  }
+]
