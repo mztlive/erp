@@ -1,0 +1,238 @@
+M	backend/Cargo.lock
+M	backend/Cargo.toml
+M	backend/apps/web-api/Cargo.toml
+M	backend/apps/web-api/src/core/errors.rs
+M	backend/apps/web-api/src/core/handler/fulfillment/mod.rs
+M	backend/apps/web-api/src/core/handler/sales_order/mod.rs
+M	backend/apps/web-api/src/core/handler/sales_review/mod.rs
+M	backend/crates/erp-finance/src/entity/receivable/mod.rs
+A	backend/crates/erp-finance/src/entity/receivable/money_progress_facts.rs
+M	backend/crates/erp-finance/src/repository/receivable.rs
+A	backend/crates/erp-finance/src/repository/receivable/money_progress.rs
+M	backend/crates/erp-finance/src/service/receivable.rs
+A	backend/crates/erp-finance/src/service/receivable/receipt_reversal.rs
+A	backend/crates/erp-finance/src/service/receivable/sales_change.rs
+M	backend/crates/erp-processes/Cargo.toml
+M	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs
+M	backend/crates/erp-processes/src/approval_dispatch/object_read.rs
+M	backend/crates/erp-processes/src/approval_dispatch/sales_subject.rs
+M	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs
+M	backend/crates/erp-processes/src/finance_posting/cost/mod.rs
+M	backend/crates/erp-processes/src/finance_posting/receivable/account.rs
+M	backend/crates/erp-processes/src/finance_posting/receivable/card_funds_register.rs
+M	backend/crates/erp-processes/src/finance_posting/receivable/customer_receipt.rs
+M	backend/crates/erp-processes/src/finance_posting/receivable/invoice_posting.rs
+M	backend/crates/erp-processes/src/finance_posting/receivable/red_invoice.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/commit.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/mod.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/post.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs
+A	backend/crates/erp-processes/src/fulfillment_execution/mod.rs
+M	backend/crates/erp-processes/src/inventory_adjustment/start_tests.rs
+M	backend/crates/erp-processes/src/lib.rs
+R080	backend/services/src/sales_order/adapter.rs	backend/crates/erp-processes/src/order_to_cash/adapter.rs
+A	backend/crates/erp-processes/src/order_to_cash/adapters/catalog.rs
+A	backend/crates/erp-processes/src/order_to_cash/adapters/finance.rs
+A	backend/crates/erp-processes/src/order_to_cash/adapters/mod.rs
+R097	backend/services/src/sales_order/cancel_approval.rs	backend/crates/erp-processes/src/order_to_cash/cancel_approval.rs
+R087	backend/services/src/sales_order/command/cancel.rs	backend/crates/erp-processes/src/order_to_cash/command/cancel.rs
+R081	backend/services/src/sales_order/command/create.rs	backend/crates/erp-processes/src/order_to_cash/command/create.rs
+R088	backend/services/src/sales_order/command/goods_service_cutover_tests.rs	backend/crates/erp-processes/src/order_to_cash/command/goods_service_cutover_tests.rs
+R052	backend/services/src/sales_order/command/identity.rs	backend/crates/erp-processes/src/order_to_cash/command/identity.rs
+A	backend/crates/erp-processes/src/order_to_cash/command/mod.rs
+A	backend/crates/erp-processes/src/order_to_cash/command/save.rs
+R079	backend/services/src/sales_order/command/submit.rs	backend/crates/erp-processes/src/order_to_cash/command/submit.rs
+R078	backend/services/src/sales_order/command/void.rs	backend/crates/erp-processes/src/order_to_cash/command/void.rs
+R051	backend/services/src/sales_order/draft_working_copy.rs	backend/crates/erp-processes/src/order_to_cash/draft_working_copy.rs
+A	backend/crates/erp-processes/src/order_to_cash/formalization_posting.rs
+A	backend/crates/erp-processes/src/order_to_cash/formalization_root.rs
+R065	backend/services/src/sales_order/formalize.rs	backend/crates/erp-processes/src/order_to_cash/formalize.rs
+M	backend/crates/erp-processes/src/order_to_cash/mod.rs
+A	backend/crates/erp-processes/src/order_to_cash/procurement.rs
+A	backend/crates/erp-processes/src/order_to_cash/progress.rs
+R089	backend/services/src/sales_order/start_approval.rs	backend/crates/erp-processes/src/order_to_cash/start_approval.rs
+M	backend/crates/erp-processes/src/reverse_flow/mod.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal.rs
+R077	backend/services/src/sales_review/adapter.rs	backend/crates/erp-processes/src/sales_change/adapter.rs
+R096	backend/services/src/sales_review/cancel_approval.rs	backend/crates/erp-processes/src/sales_change/cancel_approval.rs
+A	backend/crates/erp-processes/src/sales_change/commands.rs
+M	backend/crates/erp-processes/src/sales_change/mod.rs
+M	backend/crates/erp-processes/src/sales_change/posting.rs
+R095	backend/services/src/sales_review/start_approval.rs	backend/crates/erp-processes/src/sales_change/start_approval.rs
+M	backend/crates/erp-read-models/Cargo.toml
+M	backend/crates/erp-read-models/src/customer_center/repository/related.rs
+M	backend/crates/erp-read-models/src/customer_center/service.rs
+M	backend/crates/erp-read-models/src/finance/receivable/account.rs
+M	backend/crates/erp-read-models/src/finance/receivable/snapshot.rs
+M	backend/crates/erp-read-models/src/fulfillment_queue/repository.rs
+M	backend/crates/erp-read-models/src/lib.rs
+A	backend/crates/erp-read-models/src/sales_center/mod.rs
+A	backend/crates/erp-read-models/src/sales_center/order/adapter.rs
+R097	backend/services/src/sales_order/approval_query.rs	backend/crates/erp-read-models/src/sales_center/order/approval_query.rs
+A	backend/crates/erp-read-models/src/sales_center/order/dto.rs
+A	backend/crates/erp-read-models/src/sales_center/order/mod.rs
+R076	backend/services/src/sales_order/query.rs	backend/crates/erp-read-models/src/sales_center/order/query.rs
+R099	backend/services/src/sales_order/status.rs	backend/crates/erp-read-models/src/sales_center/order/status.rs
+A	backend/crates/erp-read-models/src/sales_center/review/dto.rs
+A	backend/crates/erp-read-models/src/sales_center/review/mod.rs
+A	backend/crates/erp-read-models/src/sales_center/review/projection.rs
+A	backend/crates/erp-read-models/src/sales_center/review/query.rs
+M	backend/crates/erp-read-models/src/workbench/change_order_brief.rs
+M	backend/crates/erp-read-models/src/workbench/fulfillment_operation_brief.rs
+M	backend/crates/erp-read-models/src/workbench/funds_document_brief/mapping.rs
+M	backend/crates/erp-read-models/src/workbench/funds_document_brief/query.rs
+M	backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs
+M	backend/crates/erp-read-models/src/workbench/sales_order_brief.rs
+A	backend/crates/erp-sales/Cargo.toml
+A	backend/crates/erp-sales/src/dto/mod.rs
+R064	backend/services/src/sales_order/dto.rs	backend/crates/erp-sales/src/dto/sales_order/mod.rs
+R070	backend/services/src/sales_review/dto.rs	backend/crates/erp-sales/src/dto/sales_review/mod.rs
+A	backend/crates/erp-sales/src/entity/mod.rs
+R100	backend/entities/src/sales_order/amount_validation.rs	backend/crates/erp-sales/src/entity/sales_order/amount_validation.rs
+R094	backend/entities/src/sales_order/approval_quantity.rs	backend/crates/erp-sales/src/entity/sales_order/approval_quantity.rs
+R100	backend/entities/src/sales_order/closure.rs	backend/crates/erp-sales/src/entity/sales_order/closure.rs
+R100	backend/entities/src/sales_order/content_hash.rs	backend/crates/erp-sales/src/entity/sales_order/content_hash.rs
+R098	backend/entities/src/sales_order/draft_working_copy.rs	backend/crates/erp-sales/src/entity/sales_order/draft_working_copy.rs
+R100	backend/entities/src/sales_order/entity/line.rs	backend/crates/erp-sales/src/entity/sales_order/entity/line.rs
+R100	backend/entities/src/sales_order/entity/mod.rs	backend/crates/erp-sales/src/entity/sales_order/entity/mod.rs
+R100	backend/entities/src/sales_order/entity/order.rs	backend/crates/erp-sales/src/entity/sales_order/entity/order.rs
+R100	backend/entities/src/sales_order/entity/status.rs	backend/crates/erp-sales/src/entity/sales_order/entity/status.rs
+R095	backend/entities/src/sales_order/entity/tests.rs	backend/crates/erp-sales/src/entity/sales_order/entity/tests.rs
+R099	backend/entities/src/sales_order/formal_revision.rs	backend/crates/erp-sales/src/entity/sales_order/formal_revision.rs
+R097	backend/entities/src/sales_order/mod.rs	backend/crates/erp-sales/src/entity/sales_order/mod.rs
+R100	backend/entities/src/sales_order/procurement.rs	backend/crates/erp-sales/src/entity/sales_order/procurement.rs
+R098	backend/entities/src/sales_order/revision.rs	backend/crates/erp-sales/src/entity/sales_order/revision.rs
+R100	backend/entities/src/sales_order/snapshot.rs	backend/crates/erp-sales/src/entity/sales_order/snapshot.rs
+R099	backend/entities/src/sales_order/submission.rs	backend/crates/erp-sales/src/entity/sales_order/submission.rs
+R100	backend/entities/src/sales_order/submission_from_working_copy.rs	backend/crates/erp-sales/src/entity/sales_order/submission_from_working_copy.rs
+R100	backend/entities/src/sales_order/types.rs	backend/crates/erp-sales/src/entity/sales_order/types.rs
+R100	backend/entities/src/sales_order/working_copy.rs	backend/crates/erp-sales/src/entity/sales_order/working_copy.rs
+R100	backend/entities/src/sales_order/working_copy_line.rs	backend/crates/erp-sales/src/entity/sales_order/working_copy_line.rs
+R100	backend/entities/src/sales_order/working_copy_test_support.rs	backend/crates/erp-sales/src/entity/sales_order/working_copy_test_support.rs
+R100	backend/entities/src/sales_order/working_copy_types.rs	backend/crates/erp-sales/src/entity/sales_order/working_copy_types.rs
+R094	backend/entities/src/sales_review/formal_revision.rs	backend/crates/erp-sales/src/entity/sales_review/formal_revision.rs
+R100	backend/entities/src/sales_review/mod.rs	backend/crates/erp-sales/src/entity/sales_review/mod.rs
+R100	backend/entities/src/sales_review/sales_change_order.rs	backend/crates/erp-sales/src/entity/sales_review/sales_change_order.rs
+R096	backend/entities/src/sales_review/sales_change_submission.rs	backend/crates/erp-sales/src/entity/sales_review/sales_change_submission.rs
+R100	backend/entities/src/sales_review/snapshot.rs	backend/crates/erp-sales/src/entity/sales_review/snapshot.rs
+R089	backend/entities/src/sales_review/types.rs	backend/crates/erp-sales/src/entity/sales_review/types.rs
+A	backend/crates/erp-sales/src/error.rs
+A	backend/crates/erp-sales/src/indexes/mod.rs
+R100	backend/database/src/indexes/sales_order.rs	backend/crates/erp-sales/src/indexes/sales_order.rs
+R100	backend/database/src/indexes/sales_review.rs	backend/crates/erp-sales/src/indexes/sales_review.rs
+A	backend/crates/erp-sales/src/lib.rs
+A	backend/crates/erp-sales/src/ports/mod.rs
+A	backend/crates/erp-sales/src/ports/sales_order.rs
+A	backend/crates/erp-sales/src/ports/sales_review.rs
+A	backend/crates/erp-sales/src/repository/extensions/mod.rs
+R100	backend/database/src/repository/extensions/sales_order.rs	backend/crates/erp-sales/src/repository/extensions/sales_order.rs
+R100	backend/database/src/repository/extensions/sales_review.rs	backend/crates/erp-sales/src/repository/extensions/sales_review.rs
+A	backend/crates/erp-sales/src/repository/mod.rs
+A	backend/crates/erp-sales/src/repository/owned/mod.rs
+R082	backend/database/src/repository/owned/sales_change_order.rs	backend/crates/erp-sales/src/repository/owned/sales_change_order.rs
+R082	backend/database/src/repository/owned/sales_change_submission.rs	backend/crates/erp-sales/src/repository/owned/sales_change_submission.rs
+R081	backend/database/src/repository/owned/sales_change_submission_line.rs	backend/crates/erp-sales/src/repository/owned/sales_change_submission_line.rs
+R084	backend/database/src/repository/owned/sales_order.rs	backend/crates/erp-sales/src/repository/owned/sales_order.rs
+R080	backend/database/src/repository/owned/sales_order_goods_service_line_revision.rs	backend/crates/erp-sales/src/repository/owned/sales_order_goods_service_line_revision.rs
+R083	backend/database/src/repository/owned/sales_order_line.rs	backend/crates/erp-sales/src/repository/owned/sales_order_line.rs
+R082	backend/database/src/repository/owned/sales_order_revision.rs	backend/crates/erp-sales/src/repository/owned/sales_order_revision.rs
+R082	backend/database/src/repository/owned/sales_order_revision_line.rs	backend/crates/erp-sales/src/repository/owned/sales_order_revision_line.rs
+R082	backend/database/src/repository/owned/sales_order_submission.rs	backend/crates/erp-sales/src/repository/owned/sales_order_submission.rs
+R081	backend/database/src/repository/owned/sales_order_submission_line.rs	backend/crates/erp-sales/src/repository/owned/sales_order_submission_line.rs
+R081	backend/database/src/repository/owned/sales_order_voucher_line_revision.rs	backend/crates/erp-sales/src/repository/owned/sales_order_voucher_line_revision.rs
+R082	backend/database/src/repository/owned/sales_order_working_copy.rs	backend/crates/erp-sales/src/repository/owned/sales_order_working_copy.rs
+R082	backend/database/src/repository/owned/sales_order_working_copy_line.rs	backend/crates/erp-sales/src/repository/owned/sales_order_working_copy_line.rs
+R098	backend/database/src/repository/sales_order/mod.rs	backend/crates/erp-sales/src/repository/sales_order/mod.rs
+R094	backend/database/src/repository/sales_order/order.rs	backend/crates/erp-sales/src/repository/sales_order/order.rs
+R099	backend/database/src/repository/sales_order/revision.rs	backend/crates/erp-sales/src/repository/sales_order/revision.rs
+R098	backend/database/src/repository/sales_order/submission.rs	backend/crates/erp-sales/src/repository/sales_order/submission.rs
+R098	backend/database/src/repository/sales_order/working_copy.rs	backend/crates/erp-sales/src/repository/sales_order/working_copy.rs
+R098	backend/database/src/repository/sales_review.rs	backend/crates/erp-sales/src/repository/sales_review.rs
+A	backend/crates/erp-sales/src/repository/serialization_contract.rs
+A	backend/crates/erp-sales/src/service/mod.rs
+R100	backend/services/src/sales_order/command/card_projection_input_tests.rs	backend/crates/erp-sales/src/service/sales_order/command/card_projection_input_tests.rs
+A	backend/crates/erp-sales/src/service/sales_order/command/identity.rs
+A	backend/crates/erp-sales/src/service/sales_order/command/mod.rs
+A	backend/crates/erp-sales/src/service/sales_order/draft_working_copy.rs
+A	backend/crates/erp-sales/src/service/sales_order/formalize.rs
+A	backend/crates/erp-sales/src/service/sales_order/lifecycle.rs
+R097	backend/services/src/sales_order/mapper.rs	backend/crates/erp-sales/src/service/sales_order/mapper.rs
+A	backend/crates/erp-sales/src/service/sales_order/mod.rs
+A	backend/crates/erp-sales/src/service/sales_order/procurement.rs
+A	backend/crates/erp-sales/src/service/sales_order/progress.rs
+A	backend/crates/erp-sales/src/service/sales_order/query.rs
+R074	backend/services/src/sales_order/command/sellable.rs	backend/crates/erp-sales/src/service/sales_order/sellable.rs
+A	backend/crates/erp-sales/src/service/sales_review/command_source.rs
+A	backend/crates/erp-sales/src/service/sales_review/create.rs
+A	backend/crates/erp-sales/src/service/sales_review/effective.rs
+A	backend/crates/erp-sales/src/service/sales_review/formalization.rs
+A	backend/crates/erp-sales/src/service/sales_review/mod.rs
+A	backend/crates/erp-sales/src/service/sales_review/query.rs
+A	backend/crates/erp-sales/src/service/sales_review/state.rs
+A	backend/crates/erp-sales/src/service/sales_review/submission.rs
+A	backend/crates/erp-sales/src/service/sales_review/void.rs
+M	backend/database/Cargo.toml
+M	backend/database/src/indexes/mod.rs
+M	backend/database/src/repository/extensions/mod.rs
+M	backend/database/src/repository/fulfillment/mod.rs
+M	backend/database/src/repository/mod.rs
+M	backend/database/src/repository/owned/mod.rs
+M	backend/database/src/repository/purchase_order/center_facts.rs
+M	backend/database/src/repository/purchase_order/coverage.rs
+M	backend/database/src/repository/purchase_order/list_facts.rs
+M	backend/entities/Cargo.toml
+M	backend/entities/src/fulfillment/acceptance_eligibility.rs
+M	backend/entities/src/lib.rs
+M	backend/entities/src/purchase_order/coverage.rs
+M	backend/entities/src/purchase_order/creation_basis.rs
+M	backend/entities/src/purchase_order/draft_edit.rs
+M	backend/entities/src/purchase_order/sourcing_plan/plan.rs
+M	backend/entities/src/purchase_order/sourcing_plan/stock.rs
+M	backend/entities/src/purchase_order/sourcing_plan/tests.rs
+M	backend/services/Cargo.toml
+M	backend/services/src/errors.rs
+M	backend/services/src/fulfillment/acceptance_eligibility.rs
+M	backend/services/src/fulfillment/customer_acceptance.rs
+M	backend/services/src/fulfillment/customer_acceptance_posting.rs
+M	backend/services/src/fulfillment/customer_acceptance_task.rs
+M	backend/services/src/fulfillment/document_number.rs
+M	backend/services/src/fulfillment/mod.rs
+M	backend/services/src/fulfillment/task.rs
+M	backend/services/src/lib.rs
+M	backend/services/src/procurement_responsibility/mod.rs
+M	backend/services/src/procurement_responsibility/resolver.rs
+M	backend/services/src/purchase_order/adapter.rs
+M	backend/services/src/purchase_order/allocation_maintenance.rs
+M	backend/services/src/purchase_order/change/effect.rs
+M	backend/services/src/purchase_order/change/mapping.rs
+M	backend/services/src/purchase_order/change/submit.rs
+M	backend/services/src/purchase_order/change_adapter.rs
+M	backend/services/src/purchase_order/coverage.rs
+M	backend/services/src/purchase_order/create_submit.rs
+M	backend/services/src/purchase_order/creation_basis/create.rs
+M	backend/services/src/purchase_order/creation_basis/mapping.rs
+M	backend/services/src/purchase_order/creation_basis/query.rs
+M	backend/services/src/purchase_order/draft_edit.rs
+M	backend/services/src/purchase_order/mod.rs
+M	backend/services/src/purchase_order/procurement_task_sync.rs
+M	backend/services/src/purchase_order/sourcing_create.rs
+M	backend/services/src/purchase_order/submission.rs
+M	backend/services/src/purchase_order/void_order.rs
+M	backend/services/src/returns/customer_refund.rs
+M	backend/services/src/returns/mod.rs
+M	backend/services/src/returns/offset_batch.rs
+M	backend/services/src/returns/receipt_reversal.rs
+D	backend/services/src/sales_order/command/mod.rs
+D	backend/services/src/sales_order/command/save.rs
+D	backend/services/src/sales_order/mod.rs
+D	backend/services/src/sales_order/procurement.rs
+D	backend/services/src/sales_order/progress.rs
+D	backend/services/src/sales_review/formalization.rs
+D	backend/services/src/sales_review/mod.rs
+D	backend/services/src/sales_review/sales_change_order.rs
+D	backend/services/src/sales_review/sourcing.rs
+M	backend/services/src/work_item/change_order_brief.rs
+M	backend/services/src/work_item/fulfillment_operation_brief.rs
+M	backend/services/src/work_item/funds_document_brief/query.rs
+M	backend/services/src/work_item/sales_order_brief.rs

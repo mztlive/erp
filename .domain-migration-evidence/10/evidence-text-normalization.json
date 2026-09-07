@@ -1,0 +1,47 @@
+{
+  "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
+  "files": [
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "c98084e74056a05854b5e12ad40e2338211026980658da9c9cbc9dd64347f4de",
+      "normalized_sha256": "c7c17ad7e9bb036d0f97850d24e28b80a5b179f1bbb77e6db607fa9cd621c67a"
+    },
+    {
+      "path": "compile/baseline-sales-check/noop/timings.html",
+      "raw_attachment": "compile/baseline-sales-check/noop/timings.html.raw.gz",
+      "raw_sha256": "ca92c08af5c8f36d7b6c68336b01f42be3321fc9601772b6701965de1edafa25",
+      "normalized_sha256": "5fd539e970dbf9fc49700812ba4099bbf65507c7f967b9cbc5ea16106e2a946b"
+    },
+    {
+      "path": "compile/baseline-sales-build/noop/timings.html",
+      "raw_attachment": "compile/baseline-sales-build/noop/timings.html.raw.gz",
+      "raw_sha256": "382a1c3f12eb940497a710ad555ffc578eafbd4fafebf4c31b459f0ab23b7c15",
+      "normalized_sha256": "2866e39e042736a0a9a025c878cf32fb1d1e57bfdeb6bc2e44841669be4f38ba"
+    },
+    {
+      "path": "compile/final-finance-check/noop/timings.html",
+      "raw_attachment": "compile/final-finance-check/noop/timings.html.raw.gz",
+      "raw_sha256": "189f7beb24c0613a7fc5da9bb97493d3ab075adf267406b0bb4f2f3df14f48ca",
+      "normalized_sha256": "d71a621f5f9b91b020c47d7c7f642584082264617fed787cfc5b3061bbb68ec3"
+    },
+    {
+      "path": "compile/final-sales-check/noop/timings.html",
+      "raw_attachment": "compile/final-sales-check/noop/timings.html.raw.gz",
+      "raw_sha256": "a17ec6eb230bcc4d11c0de5111065fcd1758bb97bcf5040ada911f0e5bfedbc8",
+      "normalized_sha256": "09923d9ae9059d798196e116de0c1af23ca5224841f3d09e9e24f99204b4b938"
+    },
+    {
+      "path": "compile/final-finance-build/noop/timings.html",
+      "raw_attachment": "compile/final-finance-build/noop/timings.html.raw.gz",
+      "raw_sha256": "67f5e2e8575b6e859d7df50031142572e3fd16847079c406e5820b6eb48e872a",
+      "normalized_sha256": "cd250c773cc36d43492d0a8b4f081bf26ae37788dc9cde39d7b1a4802d027edd"
+    },
+    {
+      "path": "compile/final-sales-build/noop/timings.html",
+      "raw_attachment": "compile/final-sales-build/noop/timings.html.raw.gz",
+      "raw_sha256": "392e25d7ad8b4e54ddc72f703656c2c0a518dc69d6f4ea3ff3a11958399b615b",
+      "normalized_sha256": "1f5b1d69d5de680ed0efbcabaddb5d857843c27efb6a9bbdfa6d605a495437d1"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "phase": "10",
+  "code_commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+  "kinds": [
+    "normal",
+    "build",
+    "dev"
+  ],
+  "business_closure": [
+    "erp-core",
+    "erp-sales"
+  ],
+  "forbidden_business_dependencies": [],
+  "evidence": "metadata.json"
+}

@@ -2,7 +2,7 @@
 
 ## 1. 目标与入口
 
-本计划用于把当前 backend 的 entities/database/services 生产代码迁移为领域 crate，缩小日常增量编译范围。执行模式为逐阶段硬切；阶段 00–09 已达「本地门禁通过」，10–17 未开始。
+本计划用于把当前 backend 的 entities/database/services 生产代码迁移为领域 crate，缩小日常增量编译范围。执行模式为逐阶段硬切；阶段 00–10 已达「本地门禁通过」，11–17 未开始。
 
 - 架构约束：[设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)。
 - 执行入口：[00 基线与执行治理](00-baseline.md)；开始前必须阅读[公共执行合同](execution-contract.md)。
@@ -49,7 +49,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | 07 | [导入任务](07-import.md) | erp-import | 本地门禁通过 |
 | 08 | [库存](08-inventory.md) | erp-inventory | 本地门禁通过 |
 | 09 | [财务](09-finance.md) | erp-finance | 本地门禁通过 |
-| 10 | [销售](10-sales.md) | erp-sales | 未开始 |
+| 10 | [销售](10-sales.md) | erp-sales | 本地门禁通过 |
 | 11 | [采购](11-procurement.md) | erp-procurement | 未开始 |
 | 12 | [履约](12-fulfillment.md) | erp-fulfillment | 未开始 |
 | 13 | [退货与逆向流程](13-returns.md) | erp-returns | 未开始 |

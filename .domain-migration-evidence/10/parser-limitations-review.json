@@ -1,0 +1,59 @@
+{
+  "raw_items": 46,
+  "sources": [
+    {
+      "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "before_sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+      "after_sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/application-core/src/command.rs",
+      "before_sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+      "after_sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/bpm/src/model/command_identity.rs",
+      "before_sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+      "after_sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/bpm/src/model/mod.rs",
+      "before_sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+      "after_sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "before_sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "after_sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "after_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "before_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "after_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "before_sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "after_sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "byte_identical": true
+    },
+    {
+      "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "before_sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "after_sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "byte_identical": true
+    }
+  ]
+}

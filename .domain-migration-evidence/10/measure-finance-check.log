@@ -1,0 +1,27 @@
+{
+  "scenario": "finance",
+  "mode": "check",
+  "revision": "candidate",
+  "commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+  "valid_samples": 5,
+  "seconds": [
+    4.294459333061241,
+    4.2130257920362055,
+    4.259703915915452,
+    4.254901500069536,
+    4.234303666045889
+  ],
+  "median_seconds": 4.254901500069536,
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "measurement_passed": true,
+  "selected_package": "erp-finance",
+  "probe_path": "crates/erp-finance/src/service/receivable/mapping.rs",
+  "warmup_untimed": true,
+  "restore_self_test": {
+    "passed": true,
+    "temporary_workspace": true,
+    "simulated_failure_restored": true,
+    "recovery_json_restore": true
+  }
+}

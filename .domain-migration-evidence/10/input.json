@@ -1,0 +1,14 @@
+{
+  "phase": "10",
+  "input_head": "abf36f41d741dc243f689c877af44f6196eff62b",
+  "integrator": "Codex",
+  "branch": "chore/domain-crate-10-sales",
+  "status": "本地门禁通过",
+  "source_baseline_worktree": "/private/tmp/erp-domain-crate-09-finance",
+  "preceding_phase_evidence": ".domain-migration-evidence/09",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "output_code_commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+  "review_kind": "源码合同复核与纯内联门禁；非人工阶段验收",
+  "performance_evidence": "compile/phase-summary.json"
+}

@@ -1,0 +1,41 @@
+{
+  "phase": "10",
+  "code_commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 48,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "reason": "tuple/newtype及动态索引绑定的词法解析限制",
+      "evidence": "parser-limitations-review.json",
+      "result": "涉及9个文件before/after逐字节相同"
+    },
+    {
+      "raw_items": 2,
+      "reason": "4个幂等与19个事务符号拆分",
+      "evidence": "semantic-review.md",
+      "result": "展开真实生产调用链复核原校验、ID、取时、写序、Executor与错误传播，未发现生产差异"
+    }
+  ],
+  "executed_behavior_evidence": {
+    "candidate_test_total": 3351,
+    "original_test_total": 3329,
+    "failed": 0,
+    "ignored": 68,
+    "historical_test_files_byte_identical": 31,
+    "executor_identity": "真实生产Port/helper的非零大小Executor替身",
+    "suites": [
+      "erp_sales::service::sales_order::progress::tests",
+      "erp_processes::order_to_cash::formalization_posting::tests",
+      "erp_processes::fulfillment_execution::customer_acceptance::completion::tests",
+      "erp_processes::reverse_flow::receipt_reversal::tests"
+    ]
+  },
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

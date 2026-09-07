@@ -1,0 +1,10 @@
+{
+  "id": "sales",
+  "path": "crates/erp-sales/src/service/sales_order/command/identity.rs",
+  "package": "erp-sales",
+  "symbol": "sales_submission_fingerprint",
+  "before": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(payload)))",
+  "after": "let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))\n        .map_err(|error| Error::Internal(format!(\"销售提交命令序列化失败: {error}\")))?;\n    Ok(hex::encode(Sha256::digest(&payload)))",
+  "equivalence": "对同一 payload 字节计算相同摘要；传 Vec 与借用 Vec 的输入字节一致；审批绑定方法另行拆出，纯指纹算法保留在 erp-sales",
+  "sha256_before": "b166441bbef3f84d325296080193642869b6022a6368138b6859cabb8b7ae96c"
+}

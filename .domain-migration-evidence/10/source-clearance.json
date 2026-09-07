@@ -1,0 +1,353 @@
+{
+  "phase": "10",
+  "source_count": 69,
+  "remaining_old_sources": [],
+  "all_old_sources_removed": true,
+  "sources": [
+    {
+      "source": "database/src/indexes/sales_order.rs",
+      "planned_target": "crates/erp-sales/src/indexes/sales_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/indexes/sales_review.rs",
+      "planned_target": "crates/erp-sales/src/indexes/sales_review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/sales_order.rs",
+      "planned_target": "crates/erp-sales/src/repository/extensions/sales_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/sales_review.rs",
+      "planned_target": "crates/erp-sales/src/repository/extensions/sales_review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_order/mod.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_order/order.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_order/order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_order/revision.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_order/revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_order/submission.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_order/submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_order/working_copy.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_order/working_copy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/sales_review.rs",
+      "planned_target": "crates/erp-sales/src/repository/sales_review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/amount_validation.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/amount_validation.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/approval_quantity.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/approval_quantity.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/closure.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/closure.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/content_hash.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/content_hash.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/draft_working_copy.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/draft_working_copy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/entity/line.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/entity/line.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/entity/mod.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/entity/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/entity/order.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/entity/order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/entity/status.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/entity/status.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/entity/tests.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/entity/tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/formal_revision.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/formal_revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/mod.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/procurement.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/procurement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/revision.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/snapshot.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/snapshot.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/submission.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/submission_from_working_copy.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/submission_from_working_copy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/types.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/types.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/working_copy.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/working_copy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/working_copy_line.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/working_copy_line.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/working_copy_test_support.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/working_copy_test_support.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_order/working_copy_types.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_order/working_copy_types.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/formal_revision.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/formal_revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/mod.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/sales_change_order.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/sales_change_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/sales_change_submission.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/sales_change_submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/snapshot.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/snapshot.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/sales_review/types.rs",
+      "planned_target": "crates/erp-sales/src/entity/sales_review/types.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/adapter.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/adapter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/approval_query.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/approval_query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/cancel_approval.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/cancel_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/cancel.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/cancel.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/card_projection_input_tests.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/card_projection_input_tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/create.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/create.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/goods_service_cutover_tests.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/goods_service_cutover_tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/identity.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/identity.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/mod.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/save.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/save.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/sellable.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/sellable.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/submit.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/submit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/command/void.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/command/void.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/draft_working_copy.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/draft_working_copy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/dto.rs",
+      "planned_target": "crates/erp-sales/src/dto/sales_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/formalize.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/formalize.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/mapper.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/mapper.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/mod.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/procurement.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/procurement.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/progress.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/progress.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/query.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/start_approval.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/start_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_order/status.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_order/status.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/adapter.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/adapter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/cancel_approval.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/cancel_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/dto.rs",
+      "planned_target": "crates/erp-sales/src/dto/sales_review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/formalization.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/formalization.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/mod.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/sales_change_order.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/sales_change_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/sourcing.rs",
+      "planned_target": "",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/sales_review/start_approval.rs",
+      "planned_target": "crates/erp-sales/src/service/sales_review/start_approval.rs",
+      "old_source_exists": false
+    }
+  ]
+}

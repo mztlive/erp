@@ -1,0 +1,10 @@
+{
+  "source_path": "/private/tmp/erp-domain-crate-10-sales/backend/crates/erp-sales/src/service/sales_order/command/identity.rs",
+  "source_rel": "crates/erp-sales/src/service/sales_order/command/identity.rs",
+  "sha256": "b166441bbef3f84d325296080193642869b6022a6368138b6859cabb8b7ae96c",
+  "mode": 420,
+  "backup_file": "source-backup",
+  "pid": 33400,
+  "created_at": "2026-09-07T02:54:34.868763+00:00",
+  "before_present": true
+}

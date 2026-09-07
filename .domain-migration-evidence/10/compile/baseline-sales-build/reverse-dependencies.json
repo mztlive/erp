@@ -1,0 +1,12 @@
+{
+  "package": "services",
+  "reverse_closure": [
+    "cli",
+    "services",
+    "web-api"
+  ],
+  "direct_dependents": [
+    "cli",
+    "web-api"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "package": "erp-finance",
+  "reverse_closure": [
+    "cli",
+    "database",
+    "erp-finance",
+    "erp-processes",
+    "erp-read-models",
+    "services",
+    "web-api"
+  ],
+  "direct_dependents": [
+    "database",
+    "erp-processes",
+    "erp-read-models",
+    "services",
+    "web-api"
+  ]
+}
