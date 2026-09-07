@@ -40,8 +40,25 @@ const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
+    ensure_accounts_and_roles(db).await?;
+    ensure_authorization(db).await
+}
+
+/// 创建账号与角色索引，供启动根在审计日志索引之前调用。
+///
+/// # 错误
+/// 第一个索引创建失败时返回原持久化错误，不继续创建后续集合索引。
+pub async fn ensure_accounts_and_roles(db: &Database) -> Result<()> {
     create_indexes(db, ACCOUNTS, account_indexes()).await?;
     create_indexes(db, ROLES, role_indexes()).await?;
+    Ok(())
+}
+
+/// 创建身份授权与审计事件索引，供启动根在审计日志索引之后调用。
+///
+/// # 错误
+/// 按原集合顺序返回第一个持久化错误。
+pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
     create_indexes(db, PERMISSIONS, permission_indexes()).await?;
     create_indexes(db, USER_ROLES, user_role_indexes()).await?;

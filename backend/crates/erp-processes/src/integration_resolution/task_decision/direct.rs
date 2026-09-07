@@ -3,6 +3,7 @@ use super::super::IntegrationResolutionProcess;
 use super::guard::command_identity;
 use super::{store_receipt, DIRECT_DECISION_AUDIT};
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_integration::dto::{
     DirectReconciliationCommand, DirectReconciliationResult, DirectReconciliationStatus,
@@ -14,7 +15,6 @@ use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
-use services::{Error, Result};
 
 /// 无任务直接决定的真实 provider；关联闸门属于流程、本域写入属于 integration。
 struct DirectCommand<'a> {

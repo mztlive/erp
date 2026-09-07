@@ -52,7 +52,7 @@ mod tests {
         CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
     };
 
-    use services::Error;
+    use crate::Error;
 
     use super::{checked_command_view, customer_status_blockers, CustomerAccountStatus};
 

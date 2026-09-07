@@ -782,7 +782,7 @@ pub async fn customer_acceptance_eligible(
     let sales_order_id = params
         .sales_order_id
         .clone()
-        .ok_or_else(|| services::Error::ValidationError("sales_order_id 不能为空".to_string()))?;
+        .ok_or_else(|| erp_processes::Error::ValidationError("sales_order_id 不能为空".to_string()))?;
     let view = erp_read_models::fulfillment_center::FulfillmentReadService::new(state.db())
         .acceptance_eligibility(sales_order_id.as_ref())
         .await?;

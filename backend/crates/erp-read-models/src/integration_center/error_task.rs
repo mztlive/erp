@@ -1,4 +1,5 @@
 use super::IntegrationCenterReadService;
+use crate::{Error, Result};
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
     error_terminal_policy, project_error_actions, ErrorActionProjection, IntegrationErrorTask,
@@ -8,7 +9,6 @@ use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::service::evidence::{blocker_view, domain_kinds, error_evidence_policy};
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 
 impl IntegrationCenterReadService {
     /// 查询集成错误任务详情。

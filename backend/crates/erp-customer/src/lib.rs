@@ -27,7 +27,7 @@ pub use entity::{
     CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation, CustomerProfileReplayContext,
     CustomerProfileRequestFingerprint, CustomerProfileRequestShape, EndCustomerAssignment,
 };
-pub use error::{Error, Result};
+pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     AccountFactPort, CustomerAuditPort, FailClosedAccountFactPort, FailClosedAuditPort,
     FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,

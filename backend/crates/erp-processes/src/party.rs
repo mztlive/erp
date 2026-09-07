@@ -1,11 +1,11 @@
 //! Named party processes that own audited outer transactions.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::ids::PartyId;
 use erp_party::PartyExt;
 use mongodb::Database;
-use services::Result;
 
 use crate::adapters::{party_service, MongoSupplierRole};
 use crate::audit::run_audited;

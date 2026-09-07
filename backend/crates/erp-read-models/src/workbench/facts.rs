@@ -1,16 +1,10 @@
 //! 责任队列业务对象事实装载与展示映射。
 
-use erp_integration::repository::IntegrationOpsExt;
 use std::collections::{HashMap, HashSet};
 
 use erp_core::common::time::Instant;
-use erp_import::LegacyImportExt;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
-use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
-use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
-use erp_workflow::entity::work_item::{
-    WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemSubjectVersions, WorkItemType,
-};
+use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 use persistence_core::{Executor, NoTransaction};
 
 use crate::errors::Result;
@@ -19,57 +13,54 @@ use super::brief;
 use super::dto;
 use super::WorkbenchReadService;
 
-/// 工作项简报事实装载使用的实体对象种类别名。
-pub(crate) type ObjectKind = WorkItemBriefObjectKind;
+pub(crate) use super::authority::object_ids;
+pub(crate) use erp_workflow::ports::ObjectKind;
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SubjectBrief {
+pub(crate) struct WorkbenchSubjectDisplay {
     pub(super) counterparty_label: Option<String>,
     pub(super) impact_summary: Option<String>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ObjectFact {
-    pub(super) root_document_id: String,
+pub(crate) struct WorkbenchObjectDisplay {
     pub(super) label: String,
-    pub(super) created_by: String,
-    /// 生产者合同允许的权威版本；无约束值对象表示该领域没有通用锁版本约束。
-    pub(super) subject_versions: WorkItemSubjectVersions,
     pub(super) counterparty_label: Option<String>,
     pub(super) impact_summary: Option<String>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
-    pub(super) subject_briefs: HashMap<String, SubjectBrief>,
+    pub(super) subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
 }
 
-impl ObjectFact {
-    /// 构造只有身份标题的对象事实。
-    ///
-    /// # 参数
-    /// * `root_document_id` - 工作面根对象 ID
-    /// * `label` - 面向用户的对象标题
-    /// * `created_by` - 对象创建人，用于参与权判断
-    ///
-    /// # 返回
-    /// 返回无往来方、无影响覆盖的对象事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub(super) fn new(
-        root_document_id: impl Into<String>,
-        label: impl Into<String>,
-        created_by: impl Into<String>,
-    ) -> Self {
-        Self {
-            root_document_id: root_document_id.into(),
-            label: label.into(),
-            created_by: created_by.into(),
-            subject_versions: WorkItemSubjectVersions::unrestricted(),
-            counterparty_label: None,
-            impact_summary: None,
+/// 权限只消费 authority；明确存在的 display 保存原显示覆盖，包括 None。
+#[derive(Debug, Clone)]
+pub(crate) struct WorkbenchObjectFact {
+    pub(super) authority: erp_workflow::ports::ObjectFact,
+    pub(super) display: WorkbenchObjectDisplay,
+}
+impl WorkbenchObjectFact {
+    pub(super) fn from_authority(authority: erp_workflow::ports::ObjectFact) -> Self {
+        let display = WorkbenchObjectDisplay {
+            label: authority.label.clone(),
+            counterparty_label: authority.counterparty_label.clone(),
+            impact_summary: authority.impact_summary.clone(),
             brief_source: None,
-            subject_briefs: HashMap::new(),
-        }
+            subject_briefs: authority
+                .subject_briefs
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        key.clone(),
+                        WorkbenchSubjectDisplay {
+                            counterparty_label: value.counterparty_label.clone(),
+                            impact_summary: value.impact_summary.clone(),
+                            brief_source: None,
+                        },
+                    )
+                })
+                .collect(),
+        };
+        Self { authority, display }
     }
 }
 
@@ -137,24 +128,6 @@ fn integration_error_brief_source(task: &IntegrationErrorTask) -> brief::ObjectB
             task.last_attempt_summary.as_deref().and_then(brief::non_empty),
         ]),
         extra_sections: sections,
-    }
-}
-
-/// 返回集成错误对业务处理的安全影响说明。
-///
-/// # 参数
-/// * `task` - 集成错误任务正式事实
-///
-/// # 返回
-/// 结果未知返回防重复写入说明，其余分类返回通用缺失或重复风险说明。
-///
-/// # 错误
-/// 无。
-fn integration_error_impact(task: &IntegrationErrorTask) -> &'static str {
-    if task.error_class == ErrorClass::ResultUnknown {
-        "外部结果尚未确认，盲目重试可能造成重复写入或重复履约"
-    } else {
-        "集成异常未处理可能造成业务事实缺失、延迟或上下游不一致"
     }
 }
 
@@ -267,9 +240,7 @@ fn base_created_at_datetime(created_at: u64) -> Option<String> {
         .map(brief::format_instant_datetime)
 }
 
-pub(crate) type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
-
-pub(super) const SYSTEM_OBJECT_OWNER: &str = "__system__";
+pub(crate) type WorkbenchObjectFactMap = HashMap<(ObjectKind, String), WorkbenchObjectFact>;
 
 /// 解析实体注册的工作项简报关系。
 ///
@@ -289,24 +260,6 @@ pub(super) fn object_policy(
     work_item_type.brief_relation(business_object_type)
 }
 
-/// 从批量对象键中提取指定实体种类的稳定 ID。
-///
-/// # 参数
-/// * `keys` - 工作项关系解析形成的对象键集合
-/// * `kind` - 待装载的权威业务对象种类
-///
-/// # 返回
-/// 返回该种类的对象 ID 集合。
-///
-/// # 错误
-/// 无。
-pub(crate) fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
-    keys.iter()
-        .filter(|(candidate, _)| *candidate == kind)
-        .map(|(_, id)| id.clone())
-        .collect()
-}
-
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
 ///
 /// # 参数
@@ -318,10 +271,10 @@ pub(crate) fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind)
 ///
 /// # 错误
 /// 无。
-pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
-    fields.business_object_label = fact.label.clone();
-    fields.root_business_object_id = fact.root_document_id.clone();
-    let subject = fact.subject_briefs.get(&fields.subject_version);
+pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &WorkbenchObjectFact) {
+    fields.business_object_label = fact.display.label.clone();
+    fields.root_business_object_id = fact.authority.root_document_id.clone();
+    let subject = fact.display.subject_briefs.get(&fields.subject_version);
     apply_subject_display(fields, fact, subject);
 }
 
@@ -339,12 +292,12 @@ pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &Obje
 /// 无。
 fn apply_subject_display(
     fields: &mut dto::WorkItemFields,
-    fact: &ObjectFact,
-    subject: Option<&SubjectBrief>,
+    fact: &WorkbenchObjectFact,
+    subject: Option<&WorkbenchSubjectDisplay>,
 ) {
     fields.counterparty_label = subject
         .and_then(|item| item.counterparty_label.clone())
-        .or_else(|| fact.counterparty_label.clone());
+        .or_else(|| fact.display.counterparty_label.clone());
     let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
         && fields
             .impact_summary
@@ -353,14 +306,14 @@ fn apply_subject_display(
     if !preserve_task_impact {
         if let Some(impact) = subject
             .and_then(|item| item.impact_summary.clone())
-            .or_else(|| fact.impact_summary.clone())
+            .or_else(|| fact.display.impact_summary.clone())
         {
             fields.impact_summary = Some(impact);
         }
     }
     fields.brief_source = subject
         .and_then(|item| item.brief_source.clone())
-        .or_else(|| fact.brief_source.clone());
+        .or_else(|| fact.display.brief_source.clone());
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -368,7 +321,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn object_facts_for_rows(
         &self,
         rows: &[erp_workflow::WorkItemRow],
-    ) -> Result<ObjectFactMap> {
+    ) -> Result<WorkbenchObjectFactMap> {
         let keys = rows
             .iter()
             .filter_map(|row| {
@@ -384,11 +337,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         keys: &HashSet<(ObjectKind, String)>,
         executor: &mut dyn Executor,
-    ) -> Result<ObjectFactMap> {
-        let mut facts = ObjectFactMap::new();
+    ) -> Result<WorkbenchObjectFactMap> {
+        let mut facts = WorkbenchObjectFactMap::new();
         self.load_sales_order_facts(keys, &mut facts, executor).await?;
-        self.load_procurement_confirmation_facts(keys, &mut facts, executor)
-            .await?;
         self.load_purchase_order_facts(keys, &mut facts, executor).await?;
         self.load_fulfillment_operation_facts(keys, &mut facts, executor)
             .await?;
@@ -432,7 +383,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     async fn load_independent_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.load_stock_adjustment_facts(keys, facts, executor).await?;
@@ -450,35 +401,25 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     async fn load_legacy_import_batch_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::LegacyImportBatch);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for batch in self
-            .db
-            .legacy_import_batches()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::LegacyImportBatch, batch.base.id.clone()),
-                ObjectFact::new(
-                    batch.base.id.clone(),
-                    format!("旧数据导入批次 {}", batch.batch_no),
-                    SYSTEM_OBJECT_OWNER,
-                ),
-            );
-        }
+        let mut loaded = erp_workflow::ports::ObjectFactMap::new();
+        self.facts_reader()
+            .load_legacy_import_batch_facts(keys, &mut loaded, executor)
+            .await?;
+        facts.extend(
+            loaded
+                .into_iter()
+                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
+        );
         Ok(())
     }
 
     async fn load_integration_error_task_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::IntegrationErrorTask);
@@ -486,22 +427,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         for task in self
-            .db
-            .integration_error_tasks()
-            .list_active_by_ids(&ids, executor)
+            .facts_reader()
+            .read_integration_errors(&ids, executor)
             .await?
         {
-            let owner = task
-                .owner_user_id
-                .clone()
-                .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string());
-            let mut fact = ObjectFact::new(
-                task.base.id.clone(),
-                format!("集成异常 · {}", task.error_class.label()),
-                owner,
-            );
-            fact.impact_summary = Some(integration_error_impact(&task).to_string());
-            fact.brief_source = Some(integration_error_brief_source(&task));
+            let mut fact =
+                WorkbenchObjectFact::from_authority(super::authority::command::integration_error_fact(&task));
+            fact.display.brief_source = Some(integration_error_brief_source(&task));
             facts.insert((ObjectKind::IntegrationErrorTask, task.base.id.clone()), fact);
         }
         Ok(())
@@ -510,7 +442,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     async fn load_reconciliation_difference_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::ReconciliationDifference);
@@ -518,19 +450,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         for difference in self
-            .db
-            .reconciliation_differences()
-            .list_active_by_ids(&ids, executor)
+            .facts_reader()
+            .read_reconciliation_differences(&ids, executor)
             .await?
         {
-            let mut fact = ObjectFact::new(
-                difference.base.id.clone(),
-                format!("业务异常 · {}", difference.difference_type),
-                SYSTEM_OBJECT_OWNER,
+            let mut fact = WorkbenchObjectFact::from_authority(
+                super::authority::command::reconciliation_difference_fact(&difference),
             );
-            fact.impact_summary =
-                Some("需核对两侧不可变证据后处理差异，不得直接改写正式业务事实".to_string());
-            fact.brief_source = Some(reconciliation_difference_brief_source(&difference));
+            fact.display.brief_source = Some(reconciliation_difference_brief_source(&difference));
             facts.insert(
                 (ObjectKind::ReconciliationDifference, difference.base.id.clone()),
                 fact,
@@ -543,36 +470,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     async fn load_supplier_fulfillment_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SupplierFulfillmentOrder);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for order in self
-            .db
-            .supplier_fulfillment_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::SupplierFulfillmentOrder, order.base.id.clone()),
-                ObjectFact {
-                    root_document_id: order.base.id.clone(),
-                    label: format!("供应商履约订单 {}", order.fulfillment_order_no),
-                    created_by: SYSTEM_OBJECT_OWNER.to_string(),
-                    subject_versions: WorkItemSubjectVersions::constrained(vec![order
-                        .base
-                        .version
-                        .to_string()])?,
-                    counterparty_label: None,
-                    impact_summary: None,
-                    brief_source: None,
-                    subject_briefs: HashMap::new(),
-                },
-            );
-        }
+        let mut loaded = erp_workflow::ports::ObjectFactMap::new();
+        self.facts_reader()
+            .load_supplier_fulfillment_order_facts(keys, &mut loaded, executor)
+            .await?;
+        facts.extend(
+            loaded
+                .into_iter()
+                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
+        );
         Ok(())
     }
 
@@ -580,58 +489,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     async fn load_supplier_offering_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SupplierOffering);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let offerings = self
-            .db
-            .supplier_offerings()
-            .list_active_by_ids(&ids, executor)
+        let mut loaded = erp_workflow::ports::ObjectFactMap::new();
+        self.facts_reader()
+            .load_supplier_offering_facts(keys, &mut loaded, executor)
             .await?;
-        let offering_ids = offerings
-            .iter()
-            .map(|offering| erp_core::ids::SupplierOfferingId::new(offering.base.id.clone()))
-            .collect::<Vec<_>>();
-        let availabilities = self
-            .db
-            .supplier_offering_availabilities()
-            .find_by_offering_ids(&offering_ids, executor)
-            .await?
-            .into_iter()
-            .map(|availability| (availability.supplier_offering_id.to_string(), availability))
-            .collect::<HashMap<_, _>>();
-        for offering in offerings {
-            let availability = availabilities.get(&offering.base.id);
-            let mut subject_versions = Vec::with_capacity(2);
-            if offering.stable.status == OfferingStatus::Stopped {
-                subject_versions.push(format!("offering:{}", offering.base.version));
-            }
-            if let Some(availability) = availability {
-                if availability.availability_status == AvailabilityStatus::Stopped {
-                    subject_versions.push(format!("availability:{}", availability.base.version));
-                }
-            }
-            if subject_versions.is_empty() {
-                continue;
-            }
-            facts.insert(
-                (ObjectKind::SupplierOffering, offering.base.id.clone()),
-                ObjectFact {
-                    root_document_id: offering.base.id.clone(),
-                    label: format!("供应商供给 {}", offering.supplier_sku_code),
-                    created_by: offering.stable.created_by,
-                    subject_versions: WorkItemSubjectVersions::constrained(subject_versions)?,
-                    counterparty_label: None,
-                    impact_summary: None,
-                    brief_source: None,
-                    subject_briefs: HashMap::new(),
-                },
-            );
-        }
+        facts.extend(
+            loaded
+                .into_iter()
+                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
+        );
         Ok(())
     }
 }
@@ -702,5 +571,113 @@ mod integration_brief_tests {
             .iter()
             .any(|section| section.label == "右侧证据"));
         assert!(brief.list_summary.contains("2 侧证据"));
+    }
+}
+
+#[cfg(test)]
+mod authority_display_tests {
+    use super::super::access::{has_object_participation, ActorAccess};
+    use super::*;
+    use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority};
+    use erp_workflow::ports::{ObjectFact, SubjectBrief};
+
+    fn fields() -> dto::WorkItemFields {
+        WorkItem::new(
+            WorkItemId::new("task"),
+            WorkItemData {
+                work_item_type: WorkItemType::CardFundsReview,
+                business_object_type: "receivable_account".to_string(),
+                business_object_id: "object".to_string(),
+                subject_version: "submission".to_string(),
+                owner_role: "role-finance".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "actor".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap()
+        .into()
+    }
+
+    #[test]
+    fn absent_display_counterparty_never_falls_back_to_command_counterparty() {
+        let mut authority = ObjectFact::new("participation-root", "command-title", "creator");
+        authority.counterparty_label = Some("command-origin-name".to_string());
+        let mut fact = WorkbenchObjectFact::from_authority(authority);
+        fact.display.label = "display-title".to_string();
+        fact.display.counterparty_label = None;
+        let mut fields = fields();
+        apply_object_display(&mut fields, &fact);
+        assert_eq!(fields.business_object_label, "display-title");
+        assert_eq!(fields.root_business_object_id, "participation-root");
+        assert_eq!(fields.counterparty_label, None);
+        assert_eq!(
+            fact.authority.counterparty_label.as_deref(),
+            Some("command-origin-name")
+        );
+    }
+
+    #[test]
+    fn subject_display_and_authority_impact_remain_separate_and_original_overlay_fallback_is_preserved() {
+        let mut authority = ObjectFact::new("root", "title", "creator");
+        authority.subject_briefs.insert(
+            "submission".to_string(),
+            SubjectBrief {
+                counterparty_label: Some("authority-subject".to_string()),
+                impact_summary: Some("all-source-lines".to_string()),
+            },
+        );
+        let mut fact = WorkbenchObjectFact::from_authority(authority);
+        fact.display.counterparty_label = Some("display-root".to_string());
+        fact.display.subject_briefs.insert(
+            "submission".to_string(),
+            WorkbenchSubjectDisplay {
+                counterparty_label: None,
+                impact_summary: Some("visible-diff-lines".to_string()),
+                brief_source: None,
+            },
+        );
+        let mut fields = fields();
+        apply_object_display(&mut fields, &fact);
+        assert_eq!(fields.counterparty_label.as_deref(), Some("display-root"));
+        assert_eq!(fields.impact_summary.as_deref(), Some("visible-diff-lines"));
+        assert_eq!(
+            fact.authority.subject_briefs["submission"]
+                .impact_summary
+                .as_deref(),
+            Some("all-source-lines")
+        );
+    }
+
+    #[test]
+    fn participation_uses_authority_root_and_creator_and_task_organization() {
+        let fact = WorkbenchObjectFact::from_authority(ObjectFact::new(
+            "root",
+            "display-is-not-an-organization",
+            "creator",
+        ));
+        let mut access = ActorAccess {
+            actor_id: "reader".to_string(),
+            permissions: Vec::new(),
+            participant_document_ids: HashSet::from(["root".to_string()]),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        };
+        assert!(has_object_participation(&access, "role", "company", &fact));
+        access.participant_document_ids.clear();
+        assert!(!has_object_participation(&access, "role", "company", &fact));
+        access.actor_id = "creator".to_string();
+        assert!(has_object_participation(&access, "role", "company", &fact));
+        access.actor_id = "reader".to_string();
+        access.can_manage = true;
+        access.organization_ids.push("company".to_string());
+        assert!(has_object_participation(&access, "role", "company", &fact));
+        assert!(!has_object_participation(&access, "role", "other-company", &fact));
     }
 }

@@ -25,7 +25,7 @@ pub use entity::work_item::{
     AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem,
     WorkItemData, WorkItemStatus, WorkItemType,
 };
-pub use error::{Error, ErrorCode, Result};
+pub use error::{known_duplicate_index_message, Error, ErrorCode, Result};
 pub use ports::{
     ApprovalObjectReadPort, ApprovalUpgradeSubjectFacts, FailClosedObjectReadPort,
     FailClosedWorkflowAuthorizationPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuthorizationPort,

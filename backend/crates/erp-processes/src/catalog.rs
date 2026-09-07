@@ -1,5 +1,6 @@
 //! Named catalog processes that own audited outer transactions.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_catalog::entity::catalog::product_category::{ProductCategory, ProductCategoryData};
@@ -16,7 +17,6 @@ use erp_catalog::{
 };
 use id_generator::next_id;
 use mongodb::Database;
-use services::Result;
 use validator::Validate;
 
 use crate::adapters::catalog_service;

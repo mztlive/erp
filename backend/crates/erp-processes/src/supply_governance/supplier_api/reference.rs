@@ -3,6 +3,7 @@ use super::{
     receipt::{persist_command_receipt, CommandReceiptWrite},
     SupplierApiGovernanceProcess,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_supply::{
     dto::supplier_api::SupplierConnectionCommandResult,
@@ -14,7 +15,6 @@ use erp_supply::{
     service::supplier_api::{command::CommandIdentity, SupplierApiService},
 };
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 impl SupplierApiGovernanceProcess {
     pub(super) async fn execute_reference_command(
         &self,

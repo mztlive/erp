@@ -31,7 +31,7 @@ pub struct FulfillmentProcess {
 impl FulfillmentProcess {
     /// 使用原入口配置构造流程；指纹密钥和敏感信息编解码器保持启动期共享。
     pub fn new(db: Database, fingerprint_key: Vec<u8>, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        let rbac = services::identity_compose::shared_rbac_service(db.clone());
+        let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
         Self {
             db,
             fingerprint_key,

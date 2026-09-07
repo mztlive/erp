@@ -2,6 +2,8 @@
 //!
 //! HTTP 面位于库目标；本二进制只装配进程生命周期、监听端口与后台 worker。
 
+mod indexes;
+
 use config::{Config, S3Config, SafeConfig};
 use std::net::SocketAddr;
 use storage::{S3Storage, S3StorageConfig};
@@ -121,7 +123,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let state = AppState::new(db, cfg.clone(), storage);
     persistence_core::ensure_transaction_support(&state.db()).await?;
-    database::ensure_indexes(&state.db()).await?;
+    crate::indexes::ensure_indexes(&state.db()).await?;
     ensure_registered_approval_policies()?;
     erp_identity::ensure_root_role(&state.rbac()).await?;
     erp_identity::ensure_predefined_roles(&state.rbac()).await?;
@@ -145,7 +147,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 ///
 /// # 错误
 /// 政策缺失或权限字符串无法解析时返回服务错误。
-fn ensure_registered_approval_policies() -> std::result::Result<(), services::Error> {
+fn ensure_registered_approval_policies() -> erp_workflow::Result<()> {
     for document_type in erp_workflow::service::approval::policy::ALL_DOCUMENT_TYPES {
         erp_workflow::service::approval::policy::policy_of(document_type)?;
     }

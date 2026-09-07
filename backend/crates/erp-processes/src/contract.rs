@@ -1,5 +1,6 @@
 //! Named contract processes that own file-asset registration and contract writes.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_contract::{UploadContractRequest, UploadContractView};
@@ -8,7 +9,6 @@ use erp_support::{FileAsset, FileAssetExt, RegisterFileAssetRequest};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
-use services::Result;
 use validator::Validate;
 
 use crate::adapters::contract_service;
@@ -68,7 +68,7 @@ pub async fn upload_contract(
                     .await?;
                 db_for_tx.audit_logs().create(&asset_audit, session).await?;
                 db_for_tx.audit_logs().create(&contract_audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await?;

@@ -164,7 +164,7 @@ mod isolation_tests {
     };
     use {erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::RevisionSource};
 
-    use database::ensure_indexes;
+    use crate::test_indexes::ensure_indexes;
     use erp_catalog::CatalogExt;
     use erp_inventory::InventoryExt;
     use erp_procurement::repository::PurchaseOrderExt;

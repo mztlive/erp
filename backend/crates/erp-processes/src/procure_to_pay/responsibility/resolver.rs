@@ -10,13 +10,13 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::adapter::ResponsibilityFactsAdapter;
 use super::ProcurementResponsibilityProcess;
+use crate::{Error, Result};
 use erp_identity::subject;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use erp_procurement::service::procurement_responsibility::{
     CandidateResolution, ProcurementResponsibilityService,
 };
-use services::{Error, Result};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 

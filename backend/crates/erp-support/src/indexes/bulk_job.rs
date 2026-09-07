@@ -38,7 +38,7 @@ pub(crate) const BACKGROUND_JOB_ITEMS: &str = <mongodb::Database as BulkJobExt>:
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub(crate) async fn ensure(db: &Database) -> Result<()> {
+pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, BULK_SELECTION_SNAPSHOTS, bulk_selection_snapshot_indexes()).await?;
     create_indexes(db, BULK_SELECTION_ITEMS, bulk_selection_item_indexes()).await?;
     create_indexes(db, BACKGROUND_JOBS, background_job_indexes()).await?;

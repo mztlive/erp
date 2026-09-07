@@ -19,7 +19,7 @@ use {
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use super::PayableReadService;
-use services::Result;
+use crate::Result;
 
 /// 付款核销目标的可读来源。
 #[derive(Clone)]

@@ -7,10 +7,10 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::VoidSalesOrderRequest;
-use services::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 作废销售单草稿（主状态 `DRAFT → VOIDED`；放弃有效工作副本）。
@@ -72,11 +72,14 @@ impl SalesOrderCommandProcess {
                         .persist_void(&mut order, working_copy.as_mut(), session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;
 
-        self.read_model().sales_order_detail(id, None).await
+        self.read_model()
+            .sales_order_detail(id, None)
+            .await
+            .map_err(crate::Error::from)
     }
 }

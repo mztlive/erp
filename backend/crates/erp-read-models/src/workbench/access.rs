@@ -16,7 +16,7 @@ use crate::errors::{Error, Result};
 use application_core::AuditActor;
 
 use super::dto;
-use super::facts::{apply_object_display, object_policy, ObjectFact, ObjectFactMap};
+use super::facts::{apply_object_display, object_policy, WorkbenchObjectFact, WorkbenchObjectFactMap};
 use super::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemScope,
     WorkbenchReadService,
@@ -276,7 +276,7 @@ pub(super) fn has_permission(access: &ActorAccess, permission: &str) -> bool {
 pub(super) fn authorized_fields(
     rows: Vec<erp_workflow::WorkItemRow>,
     access: &ActorAccess,
-    facts: &ObjectFactMap,
+    facts: &WorkbenchObjectFactMap,
 ) -> Vec<dto::WorkItemFields> {
     rows.into_iter()
         .filter_map(|row| {
@@ -291,7 +291,7 @@ pub(super) fn authorized_fields(
                     access,
                     fact,
                 )
-                || !fact.subject_versions.accepts(&row.subject_version)
+                || !fact.authority.subject_versions.accepts(&row.subject_version)
             {
                 return None;
             }
@@ -317,7 +317,7 @@ pub(super) fn authorized_fields(
 pub(super) fn authorized_item_fields(
     item: WorkItem,
     access: &ActorAccess,
-    facts: &ObjectFactMap,
+    facts: &WorkbenchObjectFactMap,
 ) -> Option<dto::WorkItemFields> {
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
@@ -330,7 +330,7 @@ pub(super) fn authorized_item_fields(
             access,
             fact,
         )
-        || !fact.subject_versions.accepts(&item.subject_version)
+        || !fact.authority.subject_versions.accepts(&item.subject_version)
     {
         return None;
     }
@@ -393,7 +393,7 @@ pub(super) fn has_item_participation(
     owner_role: &str,
     owner_organization_id: &str,
     access: &ActorAccess,
-    fact: &ObjectFact,
+    fact: &WorkbenchObjectFact,
 ) -> bool {
     let is_explicit_owner =
         work_item_type.uses_explicit_owner_authorization() && owner_user_id == Some(access.actor_id.as_str());
@@ -404,10 +404,12 @@ pub(super) fn has_object_participation(
     access: &ActorAccess,
     owner_role: &str,
     owner_organization_id: &str,
-    fact: &ObjectFact,
+    fact: &WorkbenchObjectFact,
 ) -> bool {
-    fact.created_by == access.actor_id
-        || access.participant_document_ids.contains(&fact.root_document_id)
+    fact.authority.created_by == access.actor_id
+        || access
+            .participant_document_ids
+            .contains(&fact.authority.root_document_id)
         || covers_responsibility(access, owner_role, owner_organization_id)
         || (access.can_manage && covers_organization(access, owner_organization_id))
 }

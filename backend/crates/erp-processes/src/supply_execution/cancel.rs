@@ -10,12 +10,12 @@ use validator::Validate;
 
 use super::place::build_action_message;
 use super::SupplierFulfillmentProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
-use services::{Error, Result};
 
 impl SupplierFulfillmentProcess {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
@@ -141,7 +141,7 @@ impl SupplierFulfillmentProcess {
                     .await?;
                     db.inbox_messages().create(&message_for_tx, session).await?;
                     db.audit_logs().create(&audit_for_tx, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             }), || async {
         tracing::info!(account = %actor.id(), action_id = %action.base.id, "售后动作事务已提交，开始事务外供应商派发");

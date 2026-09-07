@@ -16,13 +16,13 @@ use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAut
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderProcess;
 use crate::procure_to_pay::adapters::audit::audit_receipt_fact;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult, VOID_ACTION};
 use erp_procurement::service::purchase_order::void_order::{
     ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
 };
-use services::{Error, Result};
 
 const VOID_PERMISSION: &str = "purchase_order:delete";
 const VOID_RECEIPT_PREFIX: &str = "purchase-order-void-command-";
@@ -566,18 +566,14 @@ mod tests {
     }
 
     impl RecordingSteps {
-        fn visit(
-            &mut self,
-            step: usize,
-            executor: &mut dyn persistence_core::Executor,
-        ) -> services::Result<()> {
+        fn visit(&mut self, step: usize, executor: &mut dyn persistence_core::Executor) -> crate::Result<()> {
             assert_eq!(
                 executor as *mut dyn persistence_core::Executor as *mut () as usize,
                 self.expected_executor
             );
             self.seen.push(step);
             if self.fail_at == Some(step) {
-                return Err(services::Error::ConflictError("original-step-error".into()));
+                return Err(crate::Error::ConflictError("original-step-error".into()));
             }
             Ok(())
         }
@@ -589,7 +585,7 @@ mod tests {
             &mut self,
             step: super::VoidStep,
             executor: &mut dyn persistence_core::Executor,
-        ) -> services::Result<()> {
+        ) -> crate::Result<()> {
             self.visit(
                 match step {
                     super::VoidStep::SalesGuard => 0,
@@ -603,7 +599,7 @@ mod tests {
         async fn receipt(
             &mut self,
             executor: &mut dyn persistence_core::Executor,
-        ) -> services::Result<super::VoidPurchaseOrderResult> {
+        ) -> crate::Result<super::VoidPurchaseOrderResult> {
             self.visit(3, executor)?;
             Ok(super::VoidDraftReceipt {
                 purchase_order_id: "po-1".into(),
@@ -648,7 +644,7 @@ mod tests {
                 .await
                 .unwrap_err();
             assert!(
-                matches!(error, services::Error::ConflictError(message) if message == "original-step-error")
+                matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );
             assert_eq!(steps.seen, (0..=index).collect::<Vec<_>>());
         }

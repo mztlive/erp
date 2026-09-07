@@ -1,6 +1,7 @@
 //! 发货创建、更新与无审批注册的跨域事务编排。
 
 use super::FulfillmentProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_fulfillment::dto::{CreateDeliveryRequest, DeliveryView, UpdateDeliveryRequest};
@@ -16,7 +17,6 @@ use erp_workflow::service::document_registry::new_registered_document;
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use services::{Error, Result};
 
 impl FulfillmentProcess {
     /// 创建发货单（草稿，跨集合：表头 + 行 + 审计）。
@@ -104,7 +104,7 @@ impl FulfillmentProcess {
                     )
                     .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<Delivery, services::Error>(delivery)
+                    Ok::<Delivery, crate::Error>(delivery)
                 })
             })
             .await?;
@@ -197,7 +197,7 @@ async fn persist_unbound_delivery_document(
 ) -> Result<()> {
     let _ = ensure_delivery_skips_approval_binding()?;
     ensure_delivery_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -233,7 +233,7 @@ async fn register_created_delivery_document(
         DocumentType::Delivery,
         delivery.delivery_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_delivery_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
@@ -278,7 +278,7 @@ async fn persist_created_delivery(
                 )
                 .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

@@ -22,6 +22,7 @@ use super::start_approval::{
     SupplierRefundStartPersistInput,
 };
 use super::ReturnsProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -51,7 +52,6 @@ use erp_workflow::service::document_registry::{find_approval_binding, new_regist
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl ReturnsProcess {
@@ -88,7 +88,10 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads().supplier_refund_detail(&refund.base.id).await
+        self.reads()
+            .supplier_refund_detail(&refund.base.id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 按原付款一次创建供应商退款并启动审批。
@@ -110,7 +113,11 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.reads().supplier_refund_detail(&refund_id).await;
+            return self
+                .reads()
+                .supplier_refund_detail(&refund_id)
+                .await
+                .map_err(crate::Error::from);
         }
         let payment = self
             .db
@@ -147,7 +154,7 @@ impl ReturnsProcess {
             },
         };
         let document = new_registered_document(&id, DocumentType::SupplierRefund, refund.refund_no.clone())
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -210,7 +217,7 @@ impl ReturnsProcess {
                     db.audit_logs().create(&create_audit, session).await?;
                     db.audit_logs().create(&submit_audit, session).await?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -221,7 +228,10 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads().supplier_refund_detail(&detail_id).await
+        self.reads()
+            .supplier_refund_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 提交供应商退款并调用统一 `start_approval`。
@@ -255,7 +265,11 @@ impl ReturnsProcess {
             .await?
             .is_some()
         {
-            return self.reads().supplier_refund_detail(id).await;
+            return self
+                .reads()
+                .supplier_refund_detail(id)
+                .await
+                .map_err(crate::Error::from);
         }
         let adapter = supplier_refund_adapter()?;
         let mut refund = self.domain().load_supplier_refund(id, &mut NoTransaction).await?;
@@ -291,7 +305,10 @@ impl ReturnsProcess {
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_supplier_refund(id, &mut refund, &req, actor)
             .await?;
-        self.reads().supplier_refund_detail(id).await
+        self.reads()
+            .supplier_refund_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -309,7 +326,7 @@ impl ReturnsProcess {
         let subject = supplier_refund_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_supplier_refund_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let organization_id = self.supplier_refund_responsible_org(&refund.supplier_id).await?;
@@ -360,7 +377,10 @@ impl ReturnsProcess {
             self.recover_supplier_refund_start(id, recovery_subject_version, &idempotency_key, actor, error)
                 .await?;
         }
-        self.reads().supplier_refund_detail(id).await
+        self.reads()
+            .supplier_refund_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
@@ -428,7 +448,7 @@ impl ReturnsProcess {
                     .await?;
                     let binding = find_approval_binding(&db, &refund_id, session)
                         .await
-                        .map_err(services::Error::from)?;
+                        .map_err(crate::Error::from)?;
                     let binding = require_supplier_refund_binding(binding.as_ref())?;
                     let subject = supplier_refund_subject_ref(&refund_id)?;
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
@@ -494,7 +514,7 @@ impl ReturnsProcess {
                     .await?;
                     let binding = find_approval_binding(&db, &refund_id, session)
                         .await
-                        .map_err(services::Error::from)?;
+                        .map_err(crate::Error::from)?;
                     let binding = require_supplier_refund_binding(binding.as_ref())?;
                     let subject = supplier_refund_subject_ref(&refund_id)?;
                     replay_return_start_with_executor(
@@ -529,7 +549,7 @@ impl ReturnsProcess {
         let adapter = supplier_refund_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_supplier_refund_binding(binding.as_ref())?.clone();
         let subject = supplier_refund_subject_ref(id)?;
         let runtime =
@@ -608,7 +628,10 @@ impl ReturnsProcess {
             })
             .await?;
 
-        self.reads().supplier_refund_detail(&detail_id).await
+        self.reads()
+            .supplier_refund_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     // -----------------------------------------------------------------------
@@ -644,7 +667,7 @@ async fn persist_created_supplier_refund(
         DocumentType::SupplierRefund,
         refund.refund_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     let audit = actor.clone().resource_log(
         "supplier_refund.create",
         "supplier_refund",
@@ -671,7 +694,7 @@ async fn persist_created_supplier_refund(
                     .create_supplier_refund(&refund, session)
                     .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -730,7 +753,7 @@ async fn persist_bound_supplier_refund_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

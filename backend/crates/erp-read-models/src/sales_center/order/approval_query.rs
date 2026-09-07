@@ -15,11 +15,11 @@ use super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
+use crate::Result;
 use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
     RuntimeHistoryPage,
 };
-use services::Result;
 
 /// 加载销售单详情的只读审批结构。
 ///
@@ -56,7 +56,7 @@ pub(super) async fn load_document_approval(
     review: ReviewStatus,
 ) -> Result<DocumentApprovalView> {
     let subject = super::subject_ref_for_sales_business(business_type, sales_order_id)
-        .map_err(|error| services::Error::ValidationError(error.to_string()))?;
+        .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     let runtime = load_runtime(db, &subject).await?;
     Ok(document_approval_view_with_history(
         binding,

@@ -189,7 +189,7 @@ mod isolation_tests {
     };
     use test_support::{require_mongo, TestDb};
 
-    use database::ensure_indexes;
+    use crate::test_indexes::ensure_indexes;
     use erp_party::PartyExt;
     use erp_supplier::SupplierExt;
     use erp_supply::repository::SupplierOfferingExt;

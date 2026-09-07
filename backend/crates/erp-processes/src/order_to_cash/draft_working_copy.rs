@@ -9,10 +9,10 @@ use erp_sales::repository::SalesOrderExt;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::SalesOrderCommandProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::SalesOrderDraftRequest;
-use services::{Error, Result};
 
 use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 impl SalesOrderCommandProcess {
@@ -146,7 +146,7 @@ impl SalesOrderCommandProcess {
                         )
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<SalesOrderWorkingCopy, services::Error>(working_copy)
+                    Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
                 })
             })
             .await?;

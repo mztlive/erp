@@ -2,7 +2,7 @@
 use super::dto::PurchaseReturnOrderView;
 use super::dto::{PageView, PurchaseReturnOrderListParams, SortDir};
 use super::ReturnsReadService;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use persistence_core::NoTransaction;
 use validator::Validate;

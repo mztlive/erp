@@ -291,6 +291,18 @@ impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     }
 }
 
+/// 从工作台唯一任务路由规则投影处理器和目标工作面。
+///
+/// 保留该规则对任务类型、业务对象和责任角色的验证及失败分类。
+pub fn work_item_destination(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+    owner_role: &str,
+) -> Result<(&'static str, &'static str)> {
+    let route = handler_route(work_item_type, business_object_type, owner_role)?;
+    Ok((route.handler_key, route.destination_workspace_id))
+}
+
 pub(super) struct HandlerRoute {
     pub(super) handler_key: &'static str,
     pub(super) destination_workspace_id: &'static str,

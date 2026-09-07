@@ -1,12 +1,12 @@
 //! 采购变更冻结提交前的来源销售和付款事实组合。
 use super::super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::{SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 impl PurchaseOrderProcess {
     /// 将采购变更目标行绑定到来源销售单当前版本行。
     ///

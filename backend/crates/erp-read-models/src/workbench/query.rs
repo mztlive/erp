@@ -39,6 +39,10 @@ pub struct WorkbenchReadService<A> {
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    pub(super) fn facts_reader(&self) -> super::authority::WorkItemFactsReader {
+        super::authority::WorkItemFactsReader::new(self.db.clone())
+    }
+
     /// Create a workbench read service.
     ///
     /// # 参数

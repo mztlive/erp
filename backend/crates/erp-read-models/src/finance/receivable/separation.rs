@@ -1,5 +1,6 @@
 //! Read-only evidence supporting financial reviewer separation checks.
 
+use crate::{Error, Result};
 use erp_audit::AuditExt;
 use erp_finance::entity::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceStatus, ReceivableAccount,
@@ -8,7 +9,6 @@ use erp_finance::ports::receivable::CardFundsSnapshot;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 use std::collections::HashMap;
 
 /// 重验责任资格，并对已登记票款事实执行可证明的经办/复核岗位分离。

@@ -12,7 +12,7 @@ use super::approval_query::load_document_approval;
 use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
 use super::repository::{load_purchase_order_center_facts, load_purchase_order_list_page};
 use super::PurchaseOrderReadService;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::{
     PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, SortDir, TotalsView,
 };
@@ -239,7 +239,7 @@ impl PurchaseOrderReadService {
                 });
         let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
             .await
-            .map_err(crate::errors::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,

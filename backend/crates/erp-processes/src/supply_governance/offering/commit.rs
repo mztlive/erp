@@ -1,4 +1,5 @@
 //! 跨域写入根的实际provider：领域命令持久化后写同一审计。
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_supply::{
@@ -9,7 +10,6 @@ use erp_supply::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 #[async_trait]
 trait CommitPort: Send {
     type Output: Send;
@@ -119,7 +119,7 @@ pub(super) async fn availability(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use services::Error;
+    use crate::Error;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {

@@ -13,8 +13,8 @@ use id_generator::next_id;
 use persistence_core::Executor;
 use rust_decimal::Decimal;
 
+use crate::{Error, Result};
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
-use services::{Error, Result};
 
 /// 加载当前账号可执行的开放供给分配任务。
 ///
@@ -299,7 +299,7 @@ mod tests {
     };
 
     use super::{remaining_for_scope, validate_procurement_task_access};
-    use services::Error;
+    use crate::Error;
 
     /// 构造带稳定销售行范围的供给分配任务。
     fn procurement_task(owner_user_id: &str) -> WorkItem {

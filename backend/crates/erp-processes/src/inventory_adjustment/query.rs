@@ -3,9 +3,9 @@ use persistence_core::NoTransaction;
 use super::adapter::require_frozen_binding;
 use super::approval_query::{self, load_approval_binding};
 use super::InventoryAdjustmentService;
+use crate::Result;
 use application_core::AuditActor;
 use erp_inventory::StockAdjustmentDetailView;
-use services::Result;
 
 impl InventoryAdjustmentService {
     /// 查询库存调整单详情（表头 + 明细 + 过账流水）。

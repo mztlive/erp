@@ -24,7 +24,7 @@ use super::dto::{
 use super::mapping::{payment_recipient_view, zero_amount};
 
 use super::{PayableReadService, SupplierPaymentFilter};
-use services::{Error, Result};
+use crate::{Error, Result};
 
 impl PayableReadService {
     // -----------------------------------------------------------------------

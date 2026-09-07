@@ -13,13 +13,17 @@ use erp_supply::repository::SupplierSettlementExt;
 use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 
+use super::authority::inventory::{
+    group_settlement_differences, group_settlement_items, settlement_fact, settlement_review_instruction,
+    stock_adjustment_fact,
+};
 use super::brief::{
     format_instant_datetime, format_quantity, join_list_summary, non_empty, push_section, BriefLine,
     ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::presentation::format_yuan;
 use super::WorkbenchReadService;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
+use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap};
 use crate::errors::Result;
 
 #[derive(Default)]
@@ -47,18 +51,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_stock_adjustment_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::StockAdjustment);
         if ids.is_empty() {
             return Ok(());
         }
-        let adjustments = self
-            .db
-            .stock_adjustments()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let adjustments = self.facts_reader().read_stock_adjustments(&ids, executor).await?;
         if adjustments.is_empty() {
             return Ok(());
         }
@@ -77,12 +77,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut visible = lines;
             visible.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = ObjectFact::new(
-                adjustment.base.id.clone(),
-                format!("库存调整单 {}", adjustment.adjustment_no),
-                adjustment.prepared_by.clone(),
-            );
-            fact.impact_summary = Some("不审批则库存调整不能入账".to_string());
+            let mut fact = WorkbenchObjectFact::from_authority(stock_adjustment_fact(&adjustment));
             let mut sections = Vec::new();
             push_section(&mut sections, "仓库", warehouse.as_deref(), false);
             push_section(
@@ -100,7 +95,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     false,
                 );
             }
-            fact.brief_source = Some(ObjectBriefSource {
+            fact.display.brief_source = Some(ObjectBriefSource {
                 customer: None,
                 amount_label: None,
                 extra_sections: sections,
@@ -134,7 +129,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_supplier_settlement_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::SupplierSettlement);
@@ -142,9 +137,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let statements = self
-            .db
-            .supplier_settlement_statements()
-            .list_active_by_ids(&ids, executor)
+            .facts_reader()
+            .read_settlement_statements(&ids, executor)
             .await?;
         let context = self
             .supplier_settlement_brief_context(&statements, executor)
@@ -181,13 +175,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let more_count = all_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut visible_lines = all_lines;
             visible_lines.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = ObjectFact::new(
-                statement.base.id.clone(),
-                format!("供应商结算单 {}", statement.statement_no),
-                statement.prepared_by.clone(),
-            );
-            fact.counterparty_label = supplier.clone();
-            fact.impact_summary = Some(settlement_review_instruction(differences.len(), pending_count));
+            let mut fact = WorkbenchObjectFact::from_authority(settlement_fact(
+                &statement,
+                supplier.clone(),
+                differences.len(),
+                pending_count,
+            ));
             let mut sections = Vec::new();
             push_section(&mut sections, "供应商", supplier.as_deref(), false);
             push_section(&mut sections, "结算期间", Some(period.as_str()), false);
@@ -251,7 +244,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             }
             let review_instruction = settlement_review_instruction(differences.len(), pending_count);
             push_section(&mut sections, "复核条件", Some(&review_instruction), false);
-            fact.brief_source = Some(ObjectBriefSource {
+            fact.display.brief_source = Some(ObjectBriefSource {
                 customer: supplier.clone(),
                 amount_label: Some(format_yuan(&statement.erp_amount)),
                 extra_sections: sections,
@@ -293,18 +286,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|statement| statement.base.id.clone())
             .collect::<Vec<_>>();
         let items = self
-            .db
-            .supplier_settlement_items()
-            .list_by_statement_ids(&statement_ids, executor)
+            .facts_reader()
+            .read_settlement_items(&statement_ids, executor)
             .await?;
         let item_ids = items
             .iter()
             .map(|item| SupplierSettlementItemId::new(item.base.id.clone()))
             .collect::<Vec<_>>();
         let differences = self
-            .db
-            .supplier_settlement_differences()
-            .list_by_statement_item_ids(&item_ids, executor)
+            .facts_reader()
+            .read_settlement_differences(&item_ids, executor)
             .await?;
         let difference_ids = differences
             .iter()
@@ -325,6 +316,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .list_by_source_hashes(&source_hashes, executor)
             .await?;
         let supplier_names = self
+            .facts_reader()
             .supplier_display_names(
                 &statements
                     .iter()
@@ -493,34 +485,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
-/// 按结算单分组冻结明细。
-fn group_settlement_items(
-    items: Vec<SupplierSettlementItem>,
-) -> HashMap<String, Vec<SupplierSettlementItem>> {
-    let mut grouped: HashMap<String, Vec<SupplierSettlementItem>> = HashMap::new();
-    for item in items {
-        grouped
-            .entry(item.statement_id.to_string())
-            .or_default()
-            .push(item);
-    }
-    grouped
-}
-
-/// 按结算明细分组正式差异。
-fn group_settlement_differences(
-    differences: Vec<SupplierSettlementDifference>,
-) -> HashMap<String, Vec<SupplierSettlementDifference>> {
-    let mut grouped: HashMap<String, Vec<SupplierSettlementDifference>> = HashMap::new();
-    for difference in differences {
-        grouped
-            .entry(difference.statement_item_id.to_string())
-            .or_default()
-            .push(difference);
-    }
-    grouped
-}
-
 /// 按差异分组不可变补证。
 fn group_settlement_evidence(
     evidence: Vec<SupplierSettlementDifferenceEvidence>,
@@ -560,17 +524,6 @@ fn settlement_difference_summary(total: usize, pending: usize) -> String {
         format!("{total} 项差异均已有正式结论")
     } else {
         format!("{total} 项差异 · {pending} 项待处理")
-    }
-}
-
-/// 返回供应商结算复核的服务端判断条件。
-fn settlement_review_instruction(total: usize, pending: usize) -> String {
-    if pending > 0 {
-        format!("仍有 {pending} 项差异未形成正式结论，不得确认结算")
-    } else if total > 0 {
-        "全部差异已有正式结论；复核来源证据后方可确认结算".to_string()
-    } else {
-        "双方金额一致；复核冻结来源证据后方可确认结算".to_string()
     }
 }
 

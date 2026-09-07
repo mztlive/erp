@@ -1,0 +1,25 @@
+test_atomic_lock_has_exactly_one_winner (__main__.FactsTests.test_atomic_lock_has_exactly_one_winner) ... ok
+test_build_script_message_is_not_invented_compiler_success (__main__.FactsTests.test_build_script_message_is_not_invented_compiler_success) ... ok
+test_cli_retains_five_sample_gate_and_accepts_contract_path (__main__.FactsTests.test_cli_retains_five_sample_gate_and_accepts_contract_path) ... 错误: --samples 必须为 5
+ok
+test_context_v2_agrees_on_explicit_external_input_hashes (__main__.FactsTests.test_context_v2_agrees_on_explicit_external_input_hashes) ... skipped '--context-collector required for integration check'
+test_df_uses_absolute_bin_and_legacy_environment_fields (__main__.FactsTests.test_df_uses_absolute_bin_and_legacy_environment_fields) ... ok
+test_existing_evaluator_accepts_unchanged_units_shape_and_rejects_forgery (__main__.FactsTests.test_existing_evaluator_accepts_unchanged_units_shape_and_rejects_forgery) ... skipped '--evaluator required for integration check'
+test_existing_live_stale_invalid_and_symlink_locks_are_preserved (__main__.FactsTests.test_existing_live_stale_invalid_and_symlink_locks_are_preserved) ... ok
+test_five_samples_warmups_noop_restores_remain_fourteen_calls (__main__.FactsTests.test_five_samples_warmups_noop_restores_remain_fourteen_calls) ... ok
+test_full_artifact_keeps_fields_and_duplicate_package_targets (__main__.FactsTests.test_full_artifact_keeps_fields_and_duplicate_package_targets) ... ok
+test_full_rejects_invalid_artifact_without_coercion (__main__.FactsTests.test_full_rejects_invalid_artifact_without_coercion) ... ok
+test_lock_write_failure_cleans_only_own_marker (__main__.FactsTests.test_lock_write_failure_cleans_only_own_marker) ... ok
+test_missing_explicit_contract_fails_without_fabricated_metadata (__main__.FactsTests.test_missing_explicit_contract_fails_without_fabricated_metadata) ... ok
+test_new_environment_projection_is_whitelisted_and_hashed (__main__.FactsTests.test_new_environment_projection_is_whitelisted_and_hashed) ... ok
+test_private_facts_refuse_overwrite (__main__.FactsTests.test_private_facts_refuse_overwrite) ... ok
+test_real_inputs_and_full_metadata_preserved_without_historical_script (__main__.FactsTests.test_real_inputs_and_full_metadata_preserved_without_historical_script) ... ok
+test_reference_source_algorithm_and_legacy_parser_unchanged (__main__.FactsTests.test_reference_source_algorithm_and_legacy_parser_unchanged) ... skipped '--reference-script required for source comparison'
+test_release_does_not_remove_a_replacement_marker (__main__.FactsTests.test_release_does_not_remove_a_replacement_marker) ... ok
+test_run_cargo_retains_timing_and_writes_both_exact_views (__main__.FactsTests.test_run_cargo_retains_timing_and_writes_both_exact_views) ... ok
+test_simulated_failure_retains_original_source_restore_and_lock_release (__main__.FactsTests.test_simulated_failure_retains_original_source_restore_and_lock_release) ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.020s
+
+OK (skipped=3)

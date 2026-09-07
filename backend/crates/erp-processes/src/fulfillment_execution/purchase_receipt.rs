@@ -5,6 +5,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -14,7 +15,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-use services::{Error, Result};
 
 use super::FulfillmentProcess;
 use erp_fulfillment::dto::{CreatePurchaseReceiptRequest, PurchaseReceiptView, UpdatePurchaseReceiptRequest};
@@ -113,7 +113,7 @@ impl FulfillmentProcess {
                     )
                     .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<PurchaseReceipt, services::Error>(receipt)
+                    Ok::<PurchaseReceipt, crate::Error>(receipt)
                 })
             })
             .await?;
@@ -256,7 +256,7 @@ async fn persist_unbound_purchase_receipt_document(
 ) -> Result<()> {
     let _ = ensure_purchase_receipt_skips_approval_binding()?;
     ensure_purchase_receipt_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -268,7 +268,7 @@ async fn persist_unbound_purchase_receipt_document(
     apply_purchase_receipt_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor)
         .await
-        .map_err(services::Error::from)
+        .map_err(crate::Error::from)
 }
 
 /// 为已构造采购收货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -289,7 +289,7 @@ async fn register_created_purchase_receipt_document(
         DocumentType::PurchaseReceipt,
         receipt.receipt_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_purchase_receipt_document(db, rbac, object_read, document, &bind_command, actor, executor)
         .await
 }
@@ -337,7 +337,7 @@ async fn persist_created_purchase_receipt(
                 )
                 .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

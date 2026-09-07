@@ -17,7 +17,7 @@ use {
     erp_procurement::entity::purchase_order::PurchaseOrderRevision,
 };
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 /// 校验采购单处于可履约状态（§6.6：生效或部分执行）。
 ///

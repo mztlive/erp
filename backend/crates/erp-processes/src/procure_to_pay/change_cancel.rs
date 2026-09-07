@@ -16,6 +16,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
+use crate::{Error, Result};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
@@ -23,7 +24,6 @@ use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{
     normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
 };
-use services::{Error, Result};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -250,7 +250,7 @@ pub(super) async fn persist_purchase_change_cancel(
                     .update(&mut change_order, session)
                     .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -392,8 +392,8 @@ mod tests {
     use erp_core::common::time::Instant;
 
     use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
+    use crate::Error;
     use erp_workflow::service::approval::execution::prepare_cancel;
-    use services::Error;
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

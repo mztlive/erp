@@ -12,16 +12,15 @@ use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::{Error, Result};
 
 use super::confirmation_query::confirmation_view;
+use super::dto::LegacyImportConfirmationView;
 use super::{ImportApplyService, IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION};
 use erp_import::required_text;
-use erp_import::{
-    CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep, LegacyImportConfirmationView,
-};
+use erp_import::{CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep};
 
 impl ImportApplyService {
     /// 创建待确认确认事实。
@@ -120,7 +119,7 @@ impl ImportApplyService {
                             &import_rule_for_tx,
                             &subject_for_tx,
                         )?;
-                        return Ok::<(LegacyImportConfirmation, WorkItem), services::Error>((
+                        return Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
                             existing,
                             existing_item,
                         ));
@@ -175,7 +174,7 @@ impl ImportApplyService {
                     db.work_items().create(&work_item_for_tx, session).await?;
                     db.legacy_import_batches().update(&mut batch, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(LegacyImportConfirmation, WorkItem), services::Error>((
+                    Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
                         confirmation_for_tx,
                         work_item_for_tx,
                     ))

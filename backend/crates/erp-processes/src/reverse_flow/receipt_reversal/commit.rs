@@ -10,6 +10,7 @@ use super::super::start_approval::{
 };
 use super::super::ReturnsProcess;
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
@@ -29,7 +30,6 @@ use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl ReturnsProcess {
@@ -52,7 +52,11 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.reads().receipt_reversal_detail(&reversal_id).await;
+            return self
+                .reads()
+                .receipt_reversal_detail(&reversal_id)
+                .await
+                .map_err(crate::Error::from);
         }
         let receipt = self
             .db
@@ -89,7 +93,7 @@ impl ReturnsProcess {
         };
         let document =
             new_registered_document(&id, DocumentType::ReceiptReversal, reversal.reversal_no.clone())
-                .map_err(services::Error::from)?;
+                .map_err(crate::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -150,7 +154,7 @@ impl ReturnsProcess {
                     db.audit_logs().create(&create_audit, session).await?;
                     db.audit_logs().create(&submit_audit, session).await?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -161,7 +165,10 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads().receipt_reversal_detail(&detail_id).await
+        self.reads()
+            .receipt_reversal_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 }
 

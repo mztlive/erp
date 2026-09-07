@@ -1,6 +1,7 @@
 //! Receivable account creation coordinating finance, workflow tasks and audit.
 
 use super::{card_funds_task, invoice_task, ReceivableProcess};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -16,7 +17,6 @@ use erp_read_models::finance::dto::ReceivableAccountView;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl ReceivableProcess {
@@ -125,12 +125,15 @@ impl ReceivableProcess {
                     card_funds_task::ensure_initial_card_funds_review_task(&db, &account, session).await?;
                     invoice_task::ensure_sales_invoice_task(&db, &account, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;
 
-        self.read.receivable_account_detail(&account_id).await
+        self.read
+            .receivable_account_detail(&account_id)
+            .await
+            .map_err(crate::Error::from)
     }
 }
 

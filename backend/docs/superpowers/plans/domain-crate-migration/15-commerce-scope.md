@@ -52,6 +52,15 @@
 | supplier_offering三处publication查询与catalog一处修订查询 | 实际只读本域集合 | 保留当前公开合同，16按供给和catalog原归属接线 |
 
 
+以下为阶段 17 执行检查适配时补充的非 owned 范围复核合同，不计入阶段 15 迁移归属，不声称阶段 15 原始提交已包含本表。阶段 15 的 source-map 行与 repository owner 行均须保持为 0。
+
+| 归属判定 | 历史源路径 | 实际保留目标 | 固定执行约束 |
+| --- | --- | --- | --- |
+| 非 owned 范围复核 | `entities/src/ids.rs` | `crates/erp-core/src/ids.rs` | 阶段 01 已迁稳定 ID；不据历史标识创建商城聚合。 |
+| 非 owned 范围复核 | `services/src/errors.rs` | `apps/web-api/src/core/errors.rs` | 历史索引提示保持兼容；阶段 17 由 HTTP 错误边界接续。 |
+| 非 owned 范围复核 | `entities/src/sales_order/entity/order.rs` | `crates/erp-sales/src/entity/sales_order/entity/order.rs` | 卡券销售仍归阶段 10 的销售域，不改归商城。 |
+
+
 全量文件以 source-map.tsv 为默认目标；混合文件必须按上表及第 8 节拆符号。source-symbols.tsv 列出各源文件的类型、Trait、函数和声明行；未另行规定的符号名称与行为保持原样。禁止将该清单作为直接批量 mv 脚本。
 
 本阶段还必须迁移 repository-types.tsv 中 owner_phase=15 的全部拥有仓储类型：其 prepare_at 文件由阶段 01 创建，迁到 final_type_definition，并同步 impl_sources 中的所有专用方法。本阶段开始时这些准备文件属于前序输出，不因编制时尚不存在而遗漏。

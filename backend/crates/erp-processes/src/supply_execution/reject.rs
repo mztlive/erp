@@ -1,10 +1,10 @@
 use super::SupplierFulfillmentProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 use validator::Validate;
 
 impl SupplierFulfillmentProcess {
@@ -67,7 +67,7 @@ impl SupplierFulfillmentProcess {
                     )
                     .await?;
                     db.audit_logs().create(&audit_for_tx, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;

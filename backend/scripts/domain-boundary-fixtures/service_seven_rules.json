@@ -1,0 +1,9 @@
+{
+  "raw_document": "fn filter() -> Document { todo!() }",
+  "raw_bson": "let value: Bson = todo!();",
+  "find_one": "repo.find_one(filter, executor).await?;",
+  "find_many": "repo.find_many(filter, executor).await?;",
+  "find_many_sorted": "repo.find_many_sorted(filter, sort, executor).await?;",
+  "find_one_by_field": "repo.find_one_by_field(\"id\", id, executor).await?;",
+  "exists": "repo.exists(filter, executor).await?;"
+}

@@ -5,9 +5,9 @@ use erp_identity::Permission;
 use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::{subject, SharedRbacService};
-use services::{Error, Result};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 

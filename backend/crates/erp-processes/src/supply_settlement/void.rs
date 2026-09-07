@@ -3,9 +3,9 @@ use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
 use persistence_core::Transactional;
 
 use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSettlementRequest};
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::Result;
 
 impl SupplierSettlementProcess {
     /// 作废尚未提交复核的结算草稿。
@@ -67,7 +67,7 @@ impl SupplierSettlementProcess {
                         .persist_statement(&mut statement_for_tx, session)
                         .await?;
                     db.audit_logs().create(&audit_for_tx, session).await?;
-                    Ok::<SupplierSettlementStatement, services::Error>(statement_for_tx)
+                    Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
                 })
             })
             .await?;

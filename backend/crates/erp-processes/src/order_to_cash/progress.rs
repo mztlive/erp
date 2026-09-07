@@ -14,7 +14,7 @@ pub async fn update_sales_order_money_progress(
     id: &SalesOrderId,
     actor_id: String,
     fulfillment: Option<FulfillmentProgress>,
-) -> services::Result<()> {
+) -> crate::Result<()> {
     let port = FinanceMoneyProgressAdapter::new(db.clone());
     Ok(
         erp_sales::service::sales_order::progress::update_sales_order_money_progress(

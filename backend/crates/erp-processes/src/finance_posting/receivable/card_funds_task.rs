@@ -13,8 +13,8 @@ use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 
 /// 为新形成的待复核应收子账建立唯一正式 W13 任务。
 ///
@@ -87,7 +87,7 @@ pub(crate) async fn ensure_card_funds_review_task(
     };
     let responsibility = work_item_service(
         db.clone(),
-        services::identity_compose::shared_rbac_service(db.clone()),
+        crate::adapters::identity::shared_rbac_service(db.clone()),
     )
     .resolve_finance_responsibility(
         FinanceResponsibilityOperation::CardFundsReview,

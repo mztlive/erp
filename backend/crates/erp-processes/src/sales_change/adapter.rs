@@ -16,6 +16,7 @@ use erp_workflow::entity::approval_integration::{
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
 
+use crate::{Error, Result};
 #[cfg(test)]
 use erp_sales::service::sales_review::start_sales_change_approval;
 use erp_sales::service::sales_review::{cancel_sales_change_to_draft, ensure_final_approve_effective};
@@ -26,7 +27,6 @@ use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 已注册的销售变更单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]

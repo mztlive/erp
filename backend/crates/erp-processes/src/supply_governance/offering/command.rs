@@ -1,11 +1,11 @@
 //! 供给跨域提交：单域准备和写入委派，根事务内最后写原审计。
 use super::SupplierOfferingProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_offering::*;
 use erp_supply::service::supplier_offering::CommandPreparation;
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 impl SupplierOfferingProcess {
     /// 新增公司 SKU 的供应商供给。
     ///

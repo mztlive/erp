@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use crate::{Error, Result};
 use erp_supply::dto::supplier_fulfillment::SupplierOrderResolution;
-use services::{Error, Result};
 
 #[derive(Debug, Clone)]
 pub(super) struct InvestigationReceipt {

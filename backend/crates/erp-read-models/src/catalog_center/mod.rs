@@ -1,5 +1,5 @@
 //! 商品中心聚合读取；查询规则和响应形状由商品领域提供。
-use crate::errors::Result;
+use crate::Result;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::service::catalog::{
     prepare_product_list, prepare_sellable_sku_list, product_page_view, sellable_sku_page_view,

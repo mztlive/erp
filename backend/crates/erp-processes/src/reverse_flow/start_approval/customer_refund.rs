@@ -23,6 +23,7 @@ use persistence_core::Transactional;
 use super::super::adapter::customer_refund_object_readable;
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
@@ -31,7 +32,6 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
 ///
@@ -316,7 +316,7 @@ pub async fn persist_customer_refund_start(
                     .persist_customer_refund(&mut refund, session)
                     .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<CustomerRefund, services::Error>(refund)
+                Ok::<CustomerRefund, crate::Error>(refund)
             })
         })
         .await

@@ -37,7 +37,7 @@ pub use entity::supplier::{
     SupplierQualificationUpdate, SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData,
     SupplierRatingRevisionId,
 };
-pub use error::{Error, Result};
+pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     select_current_default, AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts,
     EmptySensitiveTokens, FileAssetFact, FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact,

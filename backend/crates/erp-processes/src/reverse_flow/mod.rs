@@ -11,6 +11,7 @@ mod sales_return;
 mod start_approval;
 mod supplier_refund;
 
+use crate::{Error, Result};
 pub use adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
@@ -25,7 +26,6 @@ use mongodb::Database;
 pub use payment_posting::PaymentReversalProcess;
 use persistence_core::Executor;
 pub use receipt_reversal::ReceiptReversalProcess;
-use services::{Error, Result};
 
 /// 退货、退款和冲正命令的原事务与审批授权组合。
 pub struct ReturnsProcess {
@@ -36,7 +36,7 @@ pub struct ReturnsProcess {
 impl ReturnsProcess {
     /// 使用原共享 RBAC 和失败关闭对象读取端口构造命令入口。
     pub fn new(db: Database) -> Self {
-        let rbac = services::identity_compose::shared_rbac_service(db.clone());
+        let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
         Self {
             db,
             rbac,

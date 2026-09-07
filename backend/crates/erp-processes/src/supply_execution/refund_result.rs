@@ -1,4 +1,5 @@
 use super::SupplierFulfillmentProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
@@ -12,7 +13,6 @@ use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 use validator::Validate;
 
 impl SupplierFulfillmentProcess {
@@ -99,7 +99,7 @@ impl SupplierFulfillmentProcess {
                         session,
                     )
                     .await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;

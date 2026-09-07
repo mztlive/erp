@@ -1,5 +1,7 @@
 //! 核对供应停止来源并完成原正式任务；不恢复供给或发布。
 use super::SupplierOfferingProcess;
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::{common::time::Instant, ids::SupplierOfferingId};
@@ -12,8 +14,6 @@ use erp_workflow::{
     WorkItemExt,
 };
 use persistence_core::{NoTransaction, Transactional};
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 use validator::Validate;
 const SUPPLY_EXCEPTION_COMPLETE_ACTION: &str = "supplier_offering.supply_exception.complete";
 impl SupplierOfferingProcess {
@@ -55,7 +55,7 @@ impl SupplierOfferingProcess {
 
         let db = self.db.clone();
         let client = db.client().clone();
-        let rbac = services::identity_compose::shared_rbac_service(db.clone());
+        let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
         let actor_for_tx = actor.clone();
         let req_for_tx = req.clone();
         let receipt_for_tx = receipt.clone();

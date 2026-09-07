@@ -7,12 +7,12 @@
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::Error as ServiceError;
+use crate::Result as ServiceResult;
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort};
-use services::Error as ServiceError;
-use services::Result as ServiceResult;
 
 /// 审批强类型领域动作注册表。
 pub struct ApprovalActionRegistry {

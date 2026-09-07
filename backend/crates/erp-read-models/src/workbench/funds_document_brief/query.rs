@@ -2,29 +2,28 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
-use erp_customer::CustomerExt;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::payable::SupplierPayment;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::ReceivableExt;
-use erp_party::Party;
 use erp_party::PartyExt;
-use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
-use erp_supplier::SupplierExt;
 use persistence_core::Executor;
 
-use super::super::brief::{format_instant_date, non_empty, BriefLine, BRIEF_LINE_LIMIT};
+use super::super::brief::{format_instant_date, BriefLine, BRIEF_LINE_LIMIT};
 use super::super::presentation::format_yuan;
 use super::super::WorkbenchReadService;
-use super::mapping::{payment_brief_lines, receipt_brief_lines, voucher_account_line};
-use super::{FundsOriginBrief, InvoiceRequirementBrief, ReceivableRevisionBriefs, VoucherAccountBrief};
+use super::mapping::{
+    payable_origins_from_rows, payment_brief_lines, payment_origins_from_rows, receipt_brief_lines,
+    receipt_origins_from_rows, receivable_origins_from_rows, voucher_account_line,
+};
+use super::{FundsOrigins, InvoiceRequirementBrief, ReceivableRevisionBriefs, VoucherAccountBrief};
 use crate::errors::Result;
+use crate::workbench::authority::funds::mapping::voucher_revision_ids;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 从创建审计回填单据创建人（资金单据实体不落创建人字段）。
@@ -45,24 +44,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         ids: &HashSet<String>,
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        if ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let resource_ids = ids.iter().cloned().collect::<Vec<_>>();
-        let audits = self
-            .db
-            .audit_logs()
-            .list_work_item_creation_audits(resource_type, &resource_ids, executor)
-            .await?;
-        let mut created_by = HashMap::new();
-        for audit in audits {
-            if let Some(resource_id) = audit.resource_id.as_deref() {
-                created_by
-                    .entry(resource_id.to_string())
-                    .or_insert_with(|| audit.actor_id.clone());
-            }
-        }
-        Ok(created_by)
+        self.funds_reader()
+            .load_created_by_from_audit(resource_type, ids, executor)
+            .await
     }
 
     /// 批量读取应付供应商展示名。
@@ -71,11 +55,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         accounts: &[PayableAccount],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let ids = accounts
-            .iter()
-            .map(|account| account.supplier_id.to_string())
-            .collect::<Vec<_>>();
-        self.supplier_display_names(&ids, executor).await
+        self.funds_reader()
+            .payable_supplier_names(accounts, executor)
+            .await
     }
 
     /// 批量读取应付来源采购单号。
@@ -84,18 +66,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         accounts: &[PayableAccount],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let ids = accounts
-            .iter()
-            .map(|account| account.source_document_id.clone())
-            .collect::<Vec<_>>();
-        Ok(self
-            .db
-            .purchase_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?
-            .into_iter()
-            .map(|order| (order.base.id, order.purchase_no))
-            .collect())
+        self.funds_reader()
+            .payable_purchase_numbers(accounts, executor)
+            .await
     }
 
     /// 批量汇总每个应付子账最早分录到期日。
@@ -131,52 +104,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         party_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        if party_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let parties = self.db.parties().list_active_by_ids(party_ids, executor).await?;
-        self.legal_names_for_parties(&parties, executor).await
-    }
-
-    /// 读取本批主体当前修订的法定名称。
-    ///
-    /// # 参数
-    /// * `parties` - 本批主体
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回主体 ID 到法定名称。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn legal_names_for_parties(
-        &self,
-        parties: &[Party],
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, String>> {
-        let revision_ids = parties
-            .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
-        if revision_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let names_by_revision = self
-            .db
-            .party_revisions()
-            .list_active_by_ids(&revision_ids, executor)
-            .await?
-            .into_iter()
-            .map(|revision| (revision.base.id.clone(), revision.legal_name))
-            .collect::<HashMap<_, _>>();
-        Ok(parties
-            .iter()
-            .filter_map(|party| {
-                let revision_id = party.stable.current_revision_id.as_ref()?;
-                let name = names_by_revision.get(revision_id).cloned()?;
-                non_empty(&name).map(|name| (party.base.id.clone(), name))
-            })
-            .collect())
+        self.funds_reader().party_legal_names(party_ids, executor).await
     }
 
     /// 按客户账号批量解析展示名（当前主体法定名称，缺失时回退客户编号）。
@@ -195,29 +123,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         customer_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        if customer_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let customers = self
-            .db
-            .customer_accounts()
-            .list_active_by_ids(customer_ids, executor)
-            .await?;
-        let party_ids = customers
-            .iter()
-            .map(|item| item.party_id.to_string())
-            .collect::<Vec<_>>();
-        let party_names = self.party_legal_names(&party_ids, executor).await?;
-        Ok(customers
-            .into_iter()
-            .map(|customer| {
-                let name = party_names
-                    .get(&customer.party_id.to_string())
-                    .cloned()
-                    .unwrap_or(customer.customer_no);
-                (customer.base.id, name)
-            })
-            .collect())
+        self.funds_reader()
+            .customer_display_names(customer_ids, executor)
+            .await
     }
 
     /// 按供应商账号批量解析展示名（当前主体法定名称，缺失时回退供应商编号）。
@@ -236,29 +144,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         supplier_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        if supplier_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let suppliers = self
-            .db
-            .supplier_accounts()
-            .list_active_by_ids(supplier_ids, executor)
-            .await?;
-        let party_ids = suppliers
-            .iter()
-            .map(|item| item.party_id.to_string())
-            .collect::<Vec<_>>();
-        let party_names = self.party_legal_names(&party_ids, executor).await?;
-        Ok(suppliers
-            .into_iter()
-            .map(|supplier| {
-                let name = party_names
-                    .get(&supplier.party_id.to_string())
-                    .cloned()
-                    .unwrap_or(supplier.supplier_no);
-                (supplier.base.id, name)
-            })
-            .collect())
+        self.funds_reader()
+            .supplier_display_names(supplier_ids, executor)
+            .await
     }
 
     /// 按销售单 ID 批量读取单号。
@@ -281,9 +169,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(HashMap::new());
         }
         Ok(self
-            .db
-            .sales_orders()
-            .list_active_by_ids(sales_order_ids, executor)
+            .funds_reader()
+            .read_sales_orders(sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -311,9 +198,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|account| account.source_sales_order_revision_id.clone())
             .collect::<Vec<_>>();
         let revisions = self
-            .db
-            .sales_order_revisions()
-            .list_active_by_ids(
+            .funds_reader()
+            .read_sales_revisions(
                 &revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )
@@ -348,11 +234,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 )
             })
             .collect::<HashMap<_, _>>();
+        let command_voucher_revision_ids = voucher_revision_ids(&revisions);
         let mut briefs = revisions
             .iter()
-            .filter(|revision| {
-                revision.voucher_category_sku_id.is_some() || revision.voucher_expiry_at.is_some()
-            })
+            .filter(|revision| command_voucher_revision_ids.contains(&revision.base.id))
             .map(|revision| {
                 (
                     revision.base.id.clone(),
@@ -397,6 +282,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             }
         }
         Ok(ReceivableRevisionBriefs {
+            command_voucher_revision_ids,
             invoice_requirements,
             vouchers: briefs,
         })
@@ -491,18 +377,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(HashMap::new());
         }
         let entries = self
-            .db
-            .receivable_entries()
-            .list_active_by_ids(&entry_ids, executor)
+            .funds_reader()
+            .read_receivable_entries(&entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
             .map(|entry| entry.receivable_account_id.to_string())
             .collect::<Vec<_>>();
         let accounts = self
-            .db
-            .receivable_accounts()
-            .list_active_by_ids(&account_ids, executor)
+            .funds_reader()
+            .read_receivable_accounts(&account_ids, executor)
             .await?;
         let sales_order_ids = accounts
             .iter()
@@ -548,11 +432,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         receipt_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, FundsOriginBrief>> {
+    ) -> Result<FundsOrigins> {
         let receipts = self
-            .db
-            .customer_receipts()
-            .list_active_by_ids(receipt_ids, executor)
+            .funds_reader()
+            .read_customer_receipts(receipt_ids, executor)
             .await?;
         let party_ids = receipts
             .iter()
@@ -560,30 +443,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         let lines = self.receipt_allocation_lines(&receipts, executor).await?;
-        Ok(receipts
-            .into_iter()
-            .map(|receipt| {
-                let id = receipt.base.id.clone();
-                let allocation_summary = if receipt.pending_allocations.is_empty() {
-                    "未记录核销分配".to_string()
-                } else {
-                    format!("已关联 {} 笔核销", receipt.pending_allocations.len())
-                };
-                (
-                    id.clone(),
-                    FundsOriginBrief {
-                        counterparty: party_names
-                            .get(&receipt.counterparty_party_id.to_string())
-                            .cloned(),
-                        original_document: Some(format!("回款单 {}", receipt.receipt_no)),
-                        original_amount: Some(format_yuan(&receipt.amount)),
-                        bank_reference: receipt.bank_reference,
-                        allocation_summary: Some(allocation_summary),
-                        lines: lines.get(&id).cloned().unwrap_or_default(),
-                    },
-                )
-            })
-            .collect())
+        Ok(receipt_origins_from_rows(receipts, party_names, lines))
     }
 
     /// 批量读取原应收分录及其销售单、往来主体。
@@ -601,20 +461,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         entry_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, FundsOriginBrief>> {
+    ) -> Result<FundsOrigins> {
         let entries = self
-            .db
-            .receivable_entries()
-            .list_active_by_ids(entry_ids, executor)
+            .funds_reader()
+            .read_receivable_entries(entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
             .map(|entry| entry.receivable_account_id.to_string())
             .collect::<Vec<_>>();
         let accounts = self
-            .db
-            .receivable_accounts()
-            .list_active_by_ids(&account_ids, executor)
+            .funds_reader()
+            .read_receivable_accounts(&account_ids, executor)
             .await?;
         let sales_nos = self
             .sales_order_numbers(
@@ -638,37 +496,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .into_iter()
             .map(|account| (account.base.id.clone(), account))
             .collect::<HashMap<_, _>>();
-        Ok(entries
-            .into_iter()
-            .map(|entry| {
-                let account = accounts.get(&entry.receivable_account_id.to_string());
-                let sales_no = account.and_then(|account| sales_nos.get(&account.sales_order_id.to_string()));
-                let counterparty = account.and_then(|account| {
-                    party_names
-                        .get(&account.counterparty_party_id.to_string())
-                        .cloned()
-                });
-                let title = sales_no
-                    .map(|no| format!("销售单 {no}"))
-                    .unwrap_or_else(|| "销售单号待补全".to_string());
-                let id = entry.base.id.clone();
-                (
-                    id,
-                    FundsOriginBrief {
-                        counterparty,
-                        original_document: Some(format!("应收分录 · {title}")),
-                        original_amount: Some(format_yuan(&entry.amount)),
-                        bank_reference: None,
-                        allocation_summary: Some(format!("原应收到期 {}", entry.due_date)),
-                        lines: vec![BriefLine {
-                            title,
-                            quantity: Some(format_yuan(&entry.amount)),
-                            due_label: Some(format!("{} 到期", entry.due_date)),
-                        }],
-                    },
-                )
-            })
-            .collect())
+        Ok(receivable_origins_from_rows(
+            entries,
+            accounts,
+            party_names,
+            sales_nos,
+        ))
     }
 
     /// 批量读取原付款单及其核销对象，供退款和冲正简报复用。
@@ -686,11 +519,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         payment_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, FundsOriginBrief>> {
+    ) -> Result<FundsOrigins> {
         let payments = self
-            .db
-            .supplier_payments()
-            .list_active_by_ids(payment_ids, executor)
+            .funds_reader()
+            .read_supplier_payments(payment_ids, executor)
             .await?;
         let supplier_names = self
             .supplier_display_names(
@@ -702,29 +534,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             )
             .await?;
         let lines = self.payment_allocation_lines(&payments, executor).await?;
-        Ok(payments
-            .into_iter()
-            .map(|payment| {
-                let id = payment.base.id.clone();
-                let allocation_count = lines.get(&id).map_or(0, Vec::len);
-                let allocation_summary = if allocation_count == 0 {
-                    "未记录核销分配".to_string()
-                } else {
-                    format!("已关联 {allocation_count} 笔核销事实")
-                };
-                (
-                    id.clone(),
-                    FundsOriginBrief {
-                        counterparty: supplier_names.get(&payment.supplier_id.to_string()).cloned(),
-                        original_document: Some(format!("付款单 {}", payment.payment_no)),
-                        original_amount: Some(format_yuan(&payment.amount)),
-                        bank_reference: payment.bank_reference,
-                        allocation_summary: Some(allocation_summary),
-                        lines: lines.get(&id).cloned().unwrap_or_default(),
-                    },
-                )
-            })
-            .collect())
+        Ok(payment_origins_from_rows(payments, supplier_names, lines))
     }
 
     /// 批量读取原应付分录及其采购单、供应商。
@@ -742,20 +552,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         entry_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, FundsOriginBrief>> {
+    ) -> Result<FundsOrigins> {
         let entries = self
-            .db
-            .payable_entries()
-            .list_active_by_ids(entry_ids, executor)
+            .funds_reader()
+            .read_payable_entries(entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
             .map(|entry| entry.payable_account_id.to_string())
             .collect::<Vec<_>>();
         let accounts = self
-            .db
-            .payable_accounts()
-            .list_active_by_ids(&account_ids, executor)
+            .funds_reader()
+            .read_payable_accounts(&account_ids, executor)
             .await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
@@ -763,34 +571,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .into_iter()
             .map(|account| (account.base.id.clone(), account))
             .collect::<HashMap<_, _>>();
-        Ok(entries
-            .into_iter()
-            .map(|entry| {
-                let account = accounts.get(&entry.payable_account_id.to_string());
-                let purchase_no = account.and_then(|account| purchase_nos.get(&account.source_document_id));
-                let counterparty =
-                    account.and_then(|account| supplier_names.get(&account.supplier_id.to_string()).cloned());
-                let title = purchase_no
-                    .map(|no| format!("采购单 {no}"))
-                    .unwrap_or_else(|| "采购单号待补全".to_string());
-                let id = entry.base.id.clone();
-                (
-                    id,
-                    FundsOriginBrief {
-                        counterparty,
-                        original_document: Some(format!("应付分录 · {title}")),
-                        original_amount: Some(format_yuan(&entry.amount)),
-                        bank_reference: None,
-                        allocation_summary: Some(format!("原应付到期 {}", entry.due_date)),
-                        lines: vec![BriefLine {
-                            title,
-                            quantity: Some(format_yuan(&entry.amount)),
-                            due_label: Some(format!("{} 到期", entry.due_date)),
-                        }],
-                    },
-                )
-            })
-            .collect())
+        Ok(payable_origins_from_rows(
+            entries,
+            accounts,
+            supplier_names,
+            purchase_nos,
+        ))
     }
 
     /// 把已过账付款核销事实转成按付款单分组的采购单简报行。
@@ -826,14 +612,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|allocation| allocation.payable_entry_id.to_string())
             .collect::<Vec<_>>();
         let entries = self
-            .db
-            .payable_entries()
-            .list_active_by_ids(&entry_ids, executor)
+            .funds_reader()
+            .read_payable_entries(&entry_ids, executor)
             .await?;
         let accounts = self
-            .db
-            .payable_accounts()
-            .list_active_by_ids(
+            .funds_reader()
+            .read_payable_accounts(
                 &entries
                     .iter()
                     .map(|entry| entry.payable_account_id.to_string())

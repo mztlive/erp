@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::adapters::workflow::workflow_auth;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
@@ -20,7 +21,6 @@ use erp_inventory::{
 use erp_warehouse::WarehouseExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::workflow_compose::workflow_auth;
 
 const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
 const ADJUSTMENT_LIST_PERMISSION: &str = "stock_adjustment:list";
@@ -83,7 +83,7 @@ pub async fn authorize_inventory(
         executor,
     )
     .await
-    .map_err(|error| map_svc(services::Error::from(error)))?
+    .map_err(|error| map_svc(crate::Error::from(error)))?
     {
         return Ok(InventoryAuthorization::inactive());
     }
@@ -110,7 +110,7 @@ pub async fn authorize_inventory(
     let snapshot = rbac
         .role_permission_snapshot(actor.kind(), actor.id(), &permissions)
         .await
-        .map_err(|error| map_svc(services::Error::from(error)))?;
+        .map_err(|error| map_svc(crate::Error::from(error)))?;
     let enabled = enabled_role_ids(db, snapshot.role_ids(), executor).await?;
     let balance_list_roles = enabled_grants(snapshot.granting_role_ids(&balance_list), &enabled);
     let balance_detail_roles = enabled_grants(snapshot.granting_role_ids(&balance_detail), &enabled);
@@ -159,7 +159,7 @@ pub async fn authorize_inventory(
     );
     rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor)
         .await
-        .map_err(|error| map_svc(services::Error::from(error)))?;
+        .map_err(|error| map_svc(crate::Error::from(error)))?;
     Ok(authorization)
 }
 
@@ -556,23 +556,23 @@ pub fn inventory_adjustment_service(
 }
 
 fn map_audit_to_inventory(error: erp_audit::Error) -> erp_inventory::Error {
-    map_svc(services::Error::from(error))
+    map_svc(crate::Error::from(error))
 }
 
-fn map_svc(error: services::Error) -> erp_inventory::Error {
+fn map_svc(error: crate::Error) -> erp_inventory::Error {
     match error {
-        services::Error::Internal(message) => erp_inventory::Error::Internal(message),
-        services::Error::NotFound(message) => erp_inventory::Error::NotFound(message),
-        services::Error::ValidationError(message) => erp_inventory::Error::ValidationError(message),
-        services::Error::BusinessLogicError(message) => erp_inventory::Error::BusinessLogicError(message),
-        services::Error::ConflictError(message) => erp_inventory::Error::ConflictError(message),
-        services::Error::ReceiptDuplicate(error) => erp_inventory::Error::ReceiptDuplicate(error),
-        services::Error::TransientTransaction(error) => erp_inventory::Error::TransientTransaction(error),
-        services::Error::Forbidden(message) => erp_inventory::Error::Forbidden(message),
-        services::Error::Unauthenticated(message) => erp_inventory::Error::Unauthenticated(message),
-        services::Error::Logic(error) => erp_inventory::Error::Logic(error),
-        services::Error::OutcomeUnknown(error) => erp_inventory::Error::OutcomeUnknown(error),
-        services::Error::RepositoryError(error) => erp_inventory::Error::RepositoryError(error),
+        crate::Error::Internal(message) => erp_inventory::Error::Internal(message),
+        crate::Error::NotFound(message) => erp_inventory::Error::NotFound(message),
+        crate::Error::ValidationError(message) => erp_inventory::Error::ValidationError(message),
+        crate::Error::BusinessLogicError(message) => erp_inventory::Error::BusinessLogicError(message),
+        crate::Error::ConflictError(message) => erp_inventory::Error::ConflictError(message),
+        crate::Error::ReceiptDuplicate(error) => erp_inventory::Error::ReceiptDuplicate(error),
+        crate::Error::TransientTransaction(error) => erp_inventory::Error::TransientTransaction(error),
+        crate::Error::Forbidden(message) => erp_inventory::Error::Forbidden(message),
+        crate::Error::Unauthenticated(message) => erp_inventory::Error::Unauthenticated(message),
+        crate::Error::Logic(error) => erp_inventory::Error::Logic(error),
+        crate::Error::OutcomeUnknown(error) => erp_inventory::Error::OutcomeUnknown(error),
+        crate::Error::RepositoryError(error) => erp_inventory::Error::RepositoryError(error),
         other => erp_inventory::Error::Internal(other.to_string()),
     }
 }

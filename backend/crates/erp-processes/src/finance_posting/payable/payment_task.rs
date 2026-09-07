@@ -21,9 +21,9 @@ use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 /// 为采购最终通过形成的应付建立唯一开放付款执行任务。
 ///
@@ -245,7 +245,7 @@ pub(crate) async fn authorize_payment_execution(
     }
     work_item_service(
         db.clone(),
-        services::identity_compose::shared_rbac_service(db.clone()),
+        crate::adapters::identity::shared_rbac_service(db.clone()),
     )
     .ensure_domain_decision_access(actor, &task, executor)
     .await?;
@@ -393,7 +393,7 @@ async fn resolve_payment_responsibility(
 ) -> Result<erp_workflow::service::work_item::ResolvedFinanceResponsibility> {
     work_item_service(
         db.clone(),
-        services::identity_compose::shared_rbac_service(db.clone()),
+        crate::adapters::identity::shared_rbac_service(db.clone()),
     )
     .resolve_finance_responsibility(
         FinanceResponsibilityOperation::SupplierPayment,

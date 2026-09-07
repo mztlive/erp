@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::LegacyImportConfirmationId;
 use erp_import::{ConfirmationStatus, LegacyImportConfirmation, LegacyImportExt};
@@ -9,7 +10,6 @@ use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatu
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 /// Collect work-item ids referenced by confirmations replaced by a newer trial.
 ///

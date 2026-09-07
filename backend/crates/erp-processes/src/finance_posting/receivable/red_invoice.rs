@@ -12,10 +12,10 @@ use validator::Validate;
 use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
 use super::{invoice_task, ReceivableProcess};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_read_models::finance::receivable::snapshot::zero_amount;
-use services::{Error, Result};
 
 use erp_audit::AuditExt;
 use erp_finance::repository::{PayableExt, ReceivableExt};
@@ -146,7 +146,7 @@ impl ReceivableProcess {
                             && existing.net_amount == red_net
                             && existing.tax_amount == red_tax
                         {
-                            return Ok::<String, services::Error>(existing.base.id);
+                            return Ok::<String, crate::Error>(existing.base.id);
                         }
                         return Err(Error::ConflictError("红票号码已登记，请勿重复提交".to_string()));
                     }
@@ -231,7 +231,7 @@ impl ReceivableProcess {
                             .await?;
                         }
                     }
-                    Ok::<String, services::Error>(red_invoice_id.to_string())
+                    Ok::<String, crate::Error>(red_invoice_id.to_string())
                 })
             })
             .await?;

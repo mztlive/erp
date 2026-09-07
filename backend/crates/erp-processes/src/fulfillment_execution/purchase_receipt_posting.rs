@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
 use super::FulfillmentProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -20,7 +21,6 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
@@ -114,7 +114,7 @@ impl FulfillmentProcess {
                         session,
                     )
                     .await?;
-                    Ok::<PurchaseReceipt, services::Error>(receipt)
+                    Ok::<PurchaseReceipt, crate::Error>(receipt)
                 })
             })
             .await?;

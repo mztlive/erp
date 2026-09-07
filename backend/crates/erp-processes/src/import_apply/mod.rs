@@ -7,6 +7,7 @@ mod complete;
 mod confirmation_query;
 mod create_batch;
 mod create_confirmation;
+pub mod dto;
 mod execution;
 pub mod factories;
 mod supersede;

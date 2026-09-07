@@ -24,6 +24,7 @@ use super::super::start_approval::{
     SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
 };
 use super::super::SalesOrderCommandProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::{SubmissionView, SubmitSalesOrderRequest};
@@ -33,7 +34,6 @@ use erp_sales::service::sales_order::command::identity::{
 use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines, submission_view};
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
-use services::{Error, Result};
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {
@@ -280,7 +280,7 @@ impl SalesOrderCommandProcess {
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
@@ -471,7 +471,7 @@ impl SalesOrderCommandProcess {
                         let _ = sales_order_object_readable(&organization_id, &actor_id)?;
                         let binding = find_approval_binding(&db, &sales_order_id_owned, session)
                             .await
-                            .map_err(services::Error::from)?;
+                            .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = crate::order_to_cash::subject_ref_for_sales_business(
                             order.business_type,

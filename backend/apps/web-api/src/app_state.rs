@@ -6,6 +6,7 @@ use erp_processes::adapters::supplier_api::{
     UnavailableSupplierApiGateway, UnavailableSupplierReferenceRegistry,
 };
 use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
+use erp_processes::adapters::workflow::{workflow_audit, workflow_auth, workflow_object_facts, WorkflowAuth};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::integration_resolution::{
     evidence_adapter::MongoIntegrationEvidenceAuthority, IntegrationResolutionProcess,
@@ -22,7 +23,6 @@ use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
 use mongodb::Database;
 use serde::Serialize;
-use services::workflow_compose::{workflow_audit, workflow_auth, workflow_object_facts, WorkflowAuth};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::S3Storage;
@@ -164,7 +164,7 @@ impl AppState {
         let sensitive_data = Arc::new(SensitiveDataCodec::from_secret(
             config.snapshot().app.secret.as_bytes(),
         ));
-        let rbac = services::identity_compose::shared_rbac_service(db.clone());
+        let rbac = erp_processes::adapters::identity::shared_rbac_service(db.clone());
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
             db.clone(),
@@ -231,8 +231,8 @@ impl AppState {
     pub fn file_asset_service(&self) -> FileAssetService {
         FileAssetService::new(
             self.db(),
-            services::support_audit::MongoSupportAudit::shared(self.db()),
-            services::support_documents::MongoBusinessDocument::shared(self.db()),
+            erp_processes::adapters::support_audit::MongoSupportAudit::shared(self.db()),
+            erp_processes::adapters::support_documents::MongoBusinessDocument::shared(self.db()),
         )
     }
 
@@ -240,8 +240,8 @@ impl AppState {
     pub fn bulk_job_service(&self) -> BulkJobService {
         BulkJobService::new(
             self.db(),
-            services::support_audit::MongoSupportAudit::shared(self.db()),
-            services::support_documents::MongoBusinessDocument::shared(self.db()),
+            erp_processes::adapters::support_audit::MongoSupportAudit::shared(self.db()),
+            erp_processes::adapters::support_documents::MongoBusinessDocument::shared(self.db()),
         )
     }
 
@@ -249,7 +249,7 @@ impl AppState {
     pub fn source_registry_service(&self) -> SourceRegistryService {
         SourceRegistryService::new(
             self.db(),
-            services::support_audit::MongoSupportAudit::shared(self.db()),
+            erp_processes::adapters::support_audit::MongoSupportAudit::shared(self.db()),
         )
     }
 
@@ -271,7 +271,7 @@ impl AppState {
     /// 返回进程内注入的通知 outbox 应用端口。
     ///
     /// # 返回
-    /// 返回 services 层端口；HTTP 不得直连审批仓储。
+    /// 返回工作流领域 outbox 端口；HTTP 不得直连审批仓储。
     pub fn approval_outbox_port(&self) -> Arc<ApprovalNotificationOutboxPort> {
         Arc::clone(&self.approval_outbox)
     }
@@ -505,7 +505,7 @@ impl AppState {
 /// 运行 outbox worker，直到收到停止信号。
 ///
 /// # 参数
-/// * `port` - services 层 outbox 端口
+/// * `port` - 工作流领域 outbox 端口
 /// * `worker_id` - 本进程租约持有者
 /// * `stop_rx` - 停止信号
 async fn run_approval_outbox_worker(

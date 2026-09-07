@@ -4,6 +4,7 @@ use super::{
     failure::persist_health_failure_task,
     SupplierConnectionExecutionProcess,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -14,7 +15,6 @@ use erp_supply::{
 };
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
     pub(super) async fn process_catalog_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {

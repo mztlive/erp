@@ -6,6 +6,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -15,7 +16,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
 use erp_workflow::service::document_registry::new_registered_document;
-use services::{Error, Result};
 
 use super::FulfillmentProcess;
 use erp_fulfillment::dto::{CreateServiceFulfillmentRequest, ServiceFulfillmentView};
@@ -157,7 +157,7 @@ async fn persist_unbound_service_fulfillment_document(
 ) -> Result<()> {
     let _ = ensure_service_fulfillment_skips_approval_binding()?;
     ensure_service_fulfillment_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -193,7 +193,7 @@ async fn register_created_service_fulfillment_document(
         DocumentType::ServiceFulfillment,
         record.fulfillment_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_service_fulfillment_document(
         db,
         rbac,
@@ -248,7 +248,7 @@ async fn persist_created_service_fulfillment(
                 )
                 .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

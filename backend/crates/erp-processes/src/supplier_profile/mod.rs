@@ -17,9 +17,9 @@ use erp_supplier::SupplierProfileCommand;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
+use crate::Result;
 use erp_party::SensitiveDataCodec;
 use erp_supplier::{command_view, SupplierProfileMutationView};
-use services::Result;
 
 mod party_change;
 

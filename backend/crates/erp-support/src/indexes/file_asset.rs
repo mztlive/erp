@@ -40,7 +40,7 @@ pub(crate) const DOCUMENT_ATTACHMENTS: &str = <mongodb::Database as FileAssetExt
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub(crate) async fn ensure(db: &Database) -> Result<()> {
+pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, FILE_ASSETS, file_asset_indexes()).await?;
     create_indexes(db, DOCUMENT_ATTACHMENTS, document_attachment_indexes()).await?;
     Ok(())

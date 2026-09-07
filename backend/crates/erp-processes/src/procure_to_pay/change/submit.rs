@@ -25,6 +25,7 @@ use super::super::change_start::{
     PurchaseChangeStartPersistInput,
 };
 use super::super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -39,7 +40,6 @@ use erp_workflow::service::approval::binding::{attach_published_binding, BindPub
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
-use services::{Error, Result};
 
 impl PurchaseOrderProcess {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -142,6 +142,7 @@ impl PurchaseOrderProcess {
         erp_read_models::purchase_center::PurchaseOrderReadService::new(self.db.clone())
             .change_order_detail(change_id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 撤回审批中的采购变更单，回到可修正草稿且 `subject_version` 不回退。
@@ -198,7 +199,7 @@ impl PurchaseOrderProcess {
             },
         };
         let document = new_registered_document(&change.base.id, DocumentType::PurchaseChangeOrder, "")
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let audit = actor.clone().resource_log(
             "purchase_change_order.create",
             "purchase_change_order",
@@ -348,7 +349,7 @@ impl PurchaseOrderProcess {
         let subject = purchase_change_order_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
@@ -473,7 +474,7 @@ impl PurchaseOrderProcess {
                         let _ = purchase_change_order_object_readable(&organization_id, &actor_id)?;
                         let binding = find_approval_binding(&db, &change_order_id, session)
                             .await
-                            .map_err(services::Error::from)?;
+                            .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = purchase_change_order_subject_ref(&change_order_id)?;
                         let Some(_) = replay_purchase_change_start_with_executor(
@@ -545,7 +546,7 @@ impl PurchaseOrderProcess {
         let adapter = purchase_change_order_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = purchase_change_order_subject_ref(id)?;
         let runtime =
@@ -657,7 +658,7 @@ async fn persist_created_change_order(
                 .await?;
                 db.purchase_change_orders().create(&change_order, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -680,7 +681,7 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

@@ -2,6 +2,7 @@
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
 use super::FulfillmentProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -12,7 +13,6 @@ use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine, DeliveryType,
 use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl FulfillmentProcess {
@@ -79,7 +79,7 @@ impl FulfillmentProcess {
                         actor,
                     };
                     execute_posting(&mut posting, delivery_type, line_count, session).await?;
-                    Ok::<Delivery, services::Error>(posting.delivery)
+                    Ok::<Delivery, crate::Error>(posting.delivery)
                 })
             })
             .await?;

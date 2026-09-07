@@ -2,8 +2,8 @@
 
 use std::future::Future;
 
+use crate::Result;
 use application_core::AuditActor;
-use services::Result;
 
 /// 启动/结束方法拥有各自根事务；网关方法只消费已提交的事实，不接 Executor。
 pub(super) trait ConnectionJobExecutionPort: Sync {
@@ -36,10 +36,10 @@ pub(super) async fn execute<P: ConnectionJobExecutionPort>(
 mod tests {
     use std::sync::Mutex;
 
+    use crate::Error;
     use erp_core::AccountKind;
     use erp_supply::entity::failure::SupplierFailureClass;
     use erp_supply::ports::supplier_api_gateway::ClassifiedError;
-    use services::Error;
 
     use super::*;
 

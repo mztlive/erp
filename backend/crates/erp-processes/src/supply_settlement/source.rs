@@ -1,11 +1,11 @@
 //! 不可变来源证据的审计、根事务与原失败恢复。
 use super::SupplierSettlementProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_settlement::*;
 use erp_supply::service::supplier_settlement::{source::source_request_hash, SupplierSettlementService};
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 use validator::Validate;
 impl SupplierSettlementProcess {
     /// 录入一个经服务端逐行核验、不可变且可幂等恢复的来源证据批次。
@@ -56,7 +56,7 @@ impl SupplierSettlementProcess {
                         .persist_source_evidence(&evidence_for_tx, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;

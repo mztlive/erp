@@ -14,7 +14,7 @@ use erp_integration::entity::integration_ops::{
 use erp_workflow::entity::work_item::WorkItem;
 use id_generator::next_id;
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 /// 构造指定到人的错误处理任务（主键与时间由服务注入）。
 ///
@@ -137,7 +137,7 @@ mod tests {
         .unwrap();
 
         let error = super::difference_work_item(&difference, "user-1").unwrap_err();
-        assert!(matches!(error, services::Error::BusinessLogicError(_)));
+        assert!(matches!(error, crate::Error::BusinessLogicError(_)));
 
         let known = ReconciliationDifference::new(
             ReconciliationDifferenceId::new("diff-2"),

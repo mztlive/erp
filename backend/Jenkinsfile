@@ -92,8 +92,7 @@ pipeline {
                     cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
                     env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
                     ./scripts/check-bpm-boundaries.sh
-                    ./scripts/check-service-boundaries.sh
-                    ./scripts/check-domain-boundaries.sh
+                    ./scripts/check-domain-boundaries.sh --cutover
                     ./scripts/check-permissions-drift.sh
                 '''
             }

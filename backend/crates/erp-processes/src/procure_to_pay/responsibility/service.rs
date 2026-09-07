@@ -3,6 +3,7 @@
 use super::adapter::ResponsibilityFactsAdapter;
 use super::resolver::{load_owner_account, ResolutionInput};
 use super::ProcurementResponsibilityProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
@@ -22,7 +23,6 @@ use erp_read_models::purchase_center::procurement_responsibility::{
     apply_rule_list_facts, dto::ProcurementResponsibilityRuleView, load_procurement_rule_list_facts,
 };
 use persistence_core::{Executor, NoTransaction};
-use services::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
     /// 创建采购责任规则并记录审计。

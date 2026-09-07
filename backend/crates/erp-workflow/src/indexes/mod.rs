@@ -22,3 +22,9 @@ pub async fn ensure(db: &Database) -> Result<()> {
     work_item::ensure(db).await?;
     Ok(())
 }
+
+// 启动组合根按基线交错顺序使用单一领域索引实现。
+pub use approval_integration::ensure as ensure_approval_integration;
+pub use bpm::ensure as ensure_bpm;
+pub use document_registry::ensure as ensure_document_registry;
+pub use work_item::ensure as ensure_work_item;

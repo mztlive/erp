@@ -32,14 +32,14 @@ use super::dto::{
     CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult,
 };
 use super::{card_funds_task, ReceivableProcess};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_read_models::finance::receivable::snapshot::{
     card_funds_review_chain, card_funds_snapshot_of, load_card_funds_snapshot, map_chain_error,
     parse_task_version, pending_review_status, CardFundsSnapshot,
 };
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 impl ReceivableProcess {
     /// 以 W13 强类型领域命令完成卡券票款正式复核。
@@ -291,7 +291,7 @@ impl ReceivableProcess {
                         Some(receipt.encode_message().map_err(map_command_receipt_error)?),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<CardFundsCommandReceipt, services::Error>(receipt)
+                    Ok::<CardFundsCommandReceipt, crate::Error>(receipt)
                 })
             })
             .await;

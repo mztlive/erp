@@ -38,12 +38,12 @@ mod refund_writes;
 mod reject;
 mod work_item;
 
+use crate::Result;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
 use mongodb::Database;
-use services::Result;
 use std::sync::Arc;
 /// 供应商履约服务。
 ///

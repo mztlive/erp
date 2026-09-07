@@ -1,7 +1,7 @@
 //! 域 D05 `file_asset` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::file_asset` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 支撑领域的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //!
 //! 上传接口参照 `core/upload.rs` 既有模式：S3 对象写入在 Service 之外完成，
 //! Service 只编排元数据
@@ -186,7 +186,7 @@ pub async fn file_asset_upload(
     let mut asset = match result {
         Ok(asset) => asset,
         Err(error) => {
-            let error = services::Error::from(error);
+            let error = erp_processes::Error::from(error);
             if should_compensate_pending_assets(&error) {
                 delete_pending_asset_objects(&state, &cleanup).await;
             }
@@ -521,8 +521,8 @@ pub(crate) async fn delete_pending_asset_objects(state: &AppState, requests: &[P
 ///
 /// 提交结果未知时事务可能已经落库，必须保留对象并等待同一业务命令核对结果；
 /// 其余错误由事务合同保证没有提交，可以立即执行对象存储补偿。
-pub(crate) fn should_compensate_pending_assets(error: &services::Error) -> bool {
-    !matches!(error, services::Error::OutcomeUnknown(_))
+pub(crate) fn should_compensate_pending_assets(error: &erp_processes::Error) -> bool {
+    !matches!(error, erp_processes::Error::OutcomeUnknown(_))
 }
 
 /// 提取 Multipart 表单中的第一个文件字段并校验大小与 MIME。
@@ -825,8 +825,8 @@ mod tests {
         let database_error = persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
             "unknown commit result",
         ));
-        let unknown = services::Error::OutcomeUnknown(database_error);
-        let definite = services::Error::ConflictError("已确定回滚".to_string());
+        let unknown = erp_processes::Error::OutcomeUnknown(database_error);
+        let definite = erp_processes::Error::ConflictError("已确定回滚".to_string());
 
         assert!(!should_compensate_pending_assets(&unknown));
         assert!(should_compensate_pending_assets(&definite));

@@ -2,16 +2,17 @@
 
 use std::collections::HashSet;
 
-use erp_finance::repository::ReceivableExt;
-use erp_returns::repository::ReturnsExt;
 use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, join_list_summary, non_empty};
 use super::super::presentation::format_yuan;
 use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
-use super::mapping::{amount_reason_brief, append_funds_origin, receipt_brief_source};
+use super::super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap};
+use super::mapping::{
+    amount_reason_brief, append_funds_origin, funds_fact_display, receipt_brief_source, select_funds_origin,
+};
 use crate::errors::Result;
+use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 回款审批任务的对象事实：任务对象是回款单本身。
@@ -39,11 +40,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let receipts = self
-            .db
-            .customer_receipts()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let receipts = self.funds_reader().read_customer_receipts(&ids, executor).await?;
         if receipts.is_empty() {
             return Ok(());
         }
@@ -68,14 +65,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 .get(&receipt.base.id)
                 .cloned()
                 .unwrap_or_default();
-            let mut fact = ObjectFact::new(
-                receipt.base.id.clone(),
-                format!("回款单 {}", receipt.receipt_no),
-                created_by.get(&receipt.base.id).cloned().unwrap_or_default(),
-            );
-            fact.counterparty_label = counterparty.clone();
-            fact.impact_summary = Some("不审批则回款不能过账、不能核销应收".to_string());
-            fact.brief_source = Some(receipt_brief_source(&receipt, counterparty.as_deref(), lines));
+            let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::customer_receipt_fact(
+                &receipt,
+                created_by.get(&receipt.base.id),
+                counterparty.clone(),
+            ));
+
+            fact.display.brief_source = Some(receipt_brief_source(&receipt, counterparty.as_deref(), lines));
             facts.insert((ObjectKind::CustomerReceipt, receipt.base.id.clone()), fact);
         }
         Ok(())
@@ -103,11 +99,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let refunds = self
-            .db
-            .customer_refunds()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let refunds = self.funds_reader().read_customer_refunds(&ids, executor).await?;
         let created_by = self
             .load_created_by_from_audit(
                 "customer_refund",
@@ -137,25 +129,24 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let entry_origins = self.receivable_entry_origins(&entry_ids, executor).await?;
         for refund in refunds {
             let customer = customer_names.get(&refund.customer_id.to_string()).cloned();
-            let origin = refund
-                .original_receipt_id
-                .as_ref()
-                .and_then(|id| receipt_origins.get(&id.to_string()))
-                .or_else(|| {
-                    refund
-                        .original_receivable_entry_id
-                        .as_ref()
-                        .and_then(|id| entry_origins.get(&id.to_string()))
-                });
-            let mut fact = ObjectFact::new(
-                refund.base.id.clone(),
-                format!("客户退款 {}", refund.refund_no),
-                created_by.get(&refund.base.id).cloned().unwrap_or_default(),
+            let origin = select_funds_origin(
+                refund.original_receipt_id.as_ref(),
+                &receipt_origins,
+                refund.original_receivable_entry_id.as_ref(),
+                &entry_origins,
             );
-            fact.counterparty_label = customer
-                .clone()
-                .or_else(|| origin.and_then(|item| item.counterparty.clone()));
-            fact.impact_summary = Some("不审批则客户退款不能过账".to_string());
+            let mut fact = funds_fact_display(
+                authority_mapping::customer_refund_fact(
+                    &refund,
+                    created_by.get(&refund.base.id),
+                    customer.clone(),
+                    &receipt_origins.counterparties,
+                    &entry_origins.counterparties,
+                ),
+                customer
+                    .clone()
+                    .or_else(|| origin.and_then(|item| item.counterparty.clone())),
+            );
             let mut brief = amount_reason_brief(
                 format_yuan(&refund.amount),
                 vec![
@@ -175,7 +166,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 refund.evidence_attachment_id.is_some(),
                 "通过后追加应收冲减与反向核销，原回款或应收事实保留",
             );
-            fact.brief_source = Some(brief);
+            fact.display.brief_source = Some(brief);
             facts.insert((ObjectKind::CustomerRefund, refund.base.id.clone()), fact);
         }
         Ok(())
@@ -203,11 +194,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let reversals = self
-            .db
-            .receipt_reversals()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let reversals = self.funds_reader().read_receipt_reversals(&ids, executor).await?;
         let created_by = self
             .load_created_by_from_audit(
                 "receipt_reversal",
@@ -221,14 +208,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
         for reversal in reversals {
-            let origin = origins.get(&reversal.original_customer_receipt_id.to_string());
-            let mut fact = ObjectFact::new(
-                reversal.base.id.clone(),
-                format!("回款冲正 {}", reversal.reversal_no),
-                created_by.get(&reversal.base.id).cloned().unwrap_or_default(),
+            let origin = origins
+                .briefs
+                .get(&reversal.original_customer_receipt_id.to_string());
+            let mut fact = funds_fact_display(
+                authority_mapping::receipt_reversal_fact(
+                    &reversal,
+                    created_by.get(&reversal.base.id),
+                    &origins.counterparties,
+                ),
+                origin.and_then(|item| item.counterparty.clone()),
             );
-            fact.counterparty_label = origin.and_then(|item| item.counterparty.clone());
-            fact.impact_summary = Some("不审批则回款冲正不能过账".to_string());
             let mut brief = amount_reason_brief(
                 format_yuan(&reversal.amount),
                 vec![
@@ -248,7 +238,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 reversal.evidence_attachment_id.is_some(),
                 "通过后追加反向回款与反向核销，原回款事实保留并标记已冲正",
             );
-            fact.brief_source = Some(brief);
+            fact.display.brief_source = Some(brief);
             facts.insert((ObjectKind::ReceiptReversal, reversal.base.id.clone()), fact);
         }
         Ok(())

@@ -24,6 +24,7 @@ use super::cancel_approval::{
     ensure_stock_adjustment_open_task_identity,
 };
 use super::InventoryAdjustmentService;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_inventory::{
     CancelStockAdjustmentApprovalTokenView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
@@ -34,7 +35,6 @@ use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
 pub(super) async fn load_document_approval(

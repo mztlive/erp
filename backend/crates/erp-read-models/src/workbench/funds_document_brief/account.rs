@@ -2,16 +2,15 @@
 
 use std::collections::HashSet;
 
-use erp_finance::repository::PayableExt;
-use erp_finance::repository::ReceivableExt;
 use persistence_core::Executor;
 
 use super::super::brief::{join_list_summary, push_section, ObjectBriefSource};
 use super::super::presentation::format_yuan;
 use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
-use super::mapping::{invoice_tax_profile_label, payable_account_fact};
+use super::super::{object_ids, ObjectKind, WorkbenchObjectFactMap as ObjectFactMap};
+use super::mapping::{invoice_tax_profile_label, payable_account_fact, receivable_fact_display};
 use crate::errors::Result;
+use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 应收子账票款复核与销项开票任务共用的对象事实。
@@ -37,9 +36,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let accounts = self
-            .db
-            .receivable_accounts()
-            .list_active_by_ids(&ids, executor)
+            .funds_reader()
+            .read_receivable_accounts(&ids, executor)
             .await?;
         if accounts.is_empty() {
             return Ok(());
@@ -81,17 +79,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .map(String::as_str),
             );
             let due_date = due_dates.get(&account.base.id).map(ToString::to_string);
-            let mut fact = ObjectFact::new(
-                account.sales_order_id.to_string(),
-                format!("应收子账 {}", account.account_seq),
-                account.stable.created_by,
+            let mut fact = receivable_fact_display(
+                authority_mapping::receivable_account_fact(
+                    &account,
+                    counterparty.clone(),
+                    revision_briefs
+                        .command_voucher_revision_ids
+                        .contains(&revision_id),
+                ),
+                voucher.is_some(),
             );
-            fact.counterparty_label = counterparty.clone();
-            fact.impact_summary = Some(if voucher.is_some() {
-                "不复核则卡券票款、开票与兑付前置事实不能确认".to_string()
-            } else {
-                "不复核则票款与开票事实不能确认".to_string()
-            });
             let mut sections = Vec::new();
             push_section(&mut sections, "往来主体", counterparty.as_deref(), false);
             push_section(&mut sections, "销售单", sales_no.as_deref(), false);
@@ -183,7 +180,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let card_summary = voucher
                 .filter(|item| item.total_count > 0)
                 .map(|item| format!("卡券 {} 张", item.total_count));
-            fact.brief_source = Some(ObjectBriefSource {
+            fact.display.brief_source = Some(ObjectBriefSource {
                 customer: counterparty.clone(),
                 amount_label: Some(format_yuan(&account.open_total)),
                 extra_sections: sections,
@@ -227,11 +224,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let accounts = self
-            .db
-            .payable_accounts()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let accounts = self.funds_reader().read_payable_accounts(&ids, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
         let due_dates = self.payable_due_dates(&accounts, executor).await?;

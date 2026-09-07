@@ -16,7 +16,7 @@ use super::dto::{
     DocumentApprovalView,
 };
 
-use crate::errors::Result;
+use crate::Result;
 use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
     RuntimeHistoryPage,
@@ -237,7 +237,7 @@ async fn load_bound_definition_graph(
         .bpm_workflow()
         .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
         .await?
-        .ok_or_else(|| crate::errors::Error::ConflictError("采购单绑定的审批定义不存在".to_string()))?;
+        .ok_or_else(|| crate::Error::ConflictError("采购单绑定的审批定义不存在".to_string()))?;
     Ok(bpm::engine::DefinitionGraph {
         definition: graph.definition,
         nodes: graph.nodes,
@@ -250,5 +250,5 @@ fn purchase_order_subject_ref(id: &str) -> Result<SubjectRef> {
         erp_workflow::entity::document_registry::DocumentType::PurchaseOrder,
         id,
     )
-    .map_err(|error| crate::errors::Error::ValidationError(error.to_string()))
+    .map_err(|error| crate::Error::ValidationError(error.to_string()))
 }

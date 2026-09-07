@@ -2,6 +2,7 @@
 //!
 //! 审计和根事务由本流程组合；本域复验与 CAS 由供应链服务完成。
 use super::SupplierSettlementProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_settlement::*;
@@ -10,7 +11,6 @@ use erp_supply::service::supplier_settlement::{
     SupplierSettlementService,
 };
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 impl SupplierSettlementProcess {
     /// 为一个精确差异追加不可变证据引用与业务意见。
@@ -63,7 +63,7 @@ impl SupplierSettlementProcess {
                         )
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;

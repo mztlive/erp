@@ -1,6 +1,6 @@
 //! 直接执行生产 runner 的替身证据，不连接数据库。
 use super::*;
-use services::Error;
+use crate::Error;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 

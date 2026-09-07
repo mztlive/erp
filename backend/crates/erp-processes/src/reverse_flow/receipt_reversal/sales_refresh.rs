@@ -1,9 +1,9 @@
 //! 审计后重新读取核销关联，再依原顺序逐销售单刷新回款进度。
 
+use crate::Result;
 use async_trait::async_trait;
 use erp_core::ids::SalesOrderId;
 use persistence_core::Executor;
-use services::Result;
 
 /// 仅暴露审计后的新读取和单张销售单刷新；生产与替身共用相同 runner。
 #[async_trait]
@@ -30,7 +30,7 @@ pub(super) async fn refresh_affected_sales(
 mod tests {
     use super::super::{post, ReceiptReversalPosting};
     use super::*;
-    use services::Error;
+    use crate::Error;
 
     struct TestExecutor {
         _identity: u8,

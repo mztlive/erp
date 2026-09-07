@@ -25,6 +25,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::customer_receipt_object_readable;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
@@ -36,7 +37,6 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///

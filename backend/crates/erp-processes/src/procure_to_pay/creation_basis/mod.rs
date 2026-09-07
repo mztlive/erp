@@ -19,7 +19,7 @@ pub use erp_read_models::purchase_center::repository::{
     basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, stock_basis_groups_for_order,
 };
 /// 保持跨域命令原冲突类别。
-pub fn procurement_quantity_changed() -> services::Error {
+pub fn procurement_quantity_changed() -> crate::Error {
     erp_procurement::service::purchase_order::creation_basis::procurement_quantity_changed().into()
 }
 #[cfg(test)]

@@ -12,7 +12,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::dto::PaymentRecipientView;
-use services::{Error, Result};
+use crate::{Error, Result};
 
 /// 解析供应商在当前业务日唯一生效的默认收款账户。
 ///

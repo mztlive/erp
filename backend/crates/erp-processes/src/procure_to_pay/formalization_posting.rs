@@ -1,11 +1,11 @@
 //! 采购正式化生产步骤与调用方唯一执行器的顺序合同。
 use super::review::{FormalizedOrderPersist, FormalizedPurchaseEffects};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 /// 采购正式化与跨域后续写入的既有边界。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -284,7 +284,7 @@ pub async fn upgrade_binding(
 /// 构造运行服务。
 fn runtime_service(
     state: &AppState,
-) -> std::sync::Arc<ApprovalRuntimeService<services::workflow_compose::WorkflowAuth>> {
+) -> std::sync::Arc<ApprovalRuntimeService<erp_processes::adapters::workflow::WorkflowAuth>> {
     state.approval_runtime_service()
 }
 
@@ -292,7 +292,7 @@ fn runtime_service(
 fn ok_json<T: serde::Serialize>(data: T) -> ApprovalResult<serde_json::Value> {
     serde_json::to_value(data)
         .map(ApiResponse::ok_with_data)
-        .map_err(|error| ApprovalHttpError::from(services::Error::Internal(error.to_string())))
+        .map_err(|error| ApprovalHttpError::from(erp_processes::Error::Internal(error.to_string())))
 }
 
 /// 协议层已注入 actor 的决定命令。
@@ -319,7 +319,7 @@ fn decision_command(
     if request.decision == DecisionValue::Reject && request.reason.as_deref().unwrap_or("").trim().is_empty()
     {
         return Err(ApprovalHttpError::coded(
-            services::ErrorCode::ApprovalRejectReasonRequired,
+            erp_workflow::ErrorCode::ApprovalRejectReasonRequired,
             crate::core::handler::approval_instance::error::correlation_id(headers),
             None,
         ));

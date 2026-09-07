@@ -13,13 +13,13 @@ use super::super::cancel_approval::{
 };
 use super::super::SalesOrderCommandProcess;
 use super::submit::latest_submission_no;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::CancelSalesOrderApprovalRequest;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
-use services::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 撤回审批中的销售单，回到可修正草稿。
@@ -64,7 +64,7 @@ impl SalesOrderCommandProcess {
         let ports = sales_approval_ports(order.business_type)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = crate::order_to_cash::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -93,6 +93,9 @@ impl SalesOrderCommandProcess {
             },
         )
         .await?;
-        self.read_model().sales_order_detail(id, None).await
+        self.read_model()
+            .sales_order_detail(id, None)
+            .await
+            .map_err(crate::Error::from)
     }
 }

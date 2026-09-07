@@ -1,0 +1,20 @@
+{
+  "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "verified_old_root_source_files": [
+    "backend/entities/src/lib.rs",
+    "backend/entities/src/README.md",
+    "backend/database/src/lib.rs",
+    "backend/database/src/repository/README.md",
+    "backend/database/src/repository/mod.rs",
+    "backend/database/src/indexes/mod.rs",
+    "backend/database/src/repository/extensions/mod.rs",
+    "backend/database/src/repository/owned/mod.rs",
+    "backend/services/src/lib.rs",
+    "backend/services/src/errors.rs"
+  ],
+  "old_service_rules_absorbed": true,
+  "old_service_exit_code": 0,
+  "new_domain_exit_code": 0,
+  "remaining_old_work_item": "owned by fact-reader shard; final clearance required",
+  "real_database_verified": false
+}

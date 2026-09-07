@@ -4,13 +4,13 @@ use super::{
     completion::{complete_acceptance, CompletionKind},
     CustomerAcceptanceProcess,
 };
+use crate::Result;
 use application_core::AuditActor;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
-use services::Result;
 use validator::Validate;
 impl CustomerAcceptanceProcess {
     /// 过账客户验收（草稿 → 已过账；§8.2 第 5 条跨集合事务）。
@@ -79,7 +79,7 @@ impl CustomerAcceptanceProcess {
                         .await?;
                     complete_acceptance(&db, &acceptance, &actor, CompletionKind::Post { task }, session)
                         .await?;
-                    Ok::<CustomerAcceptance, services::Error>(acceptance)
+                    Ok::<CustomerAcceptance, crate::Error>(acceptance)
                 })
             })
             .await?;

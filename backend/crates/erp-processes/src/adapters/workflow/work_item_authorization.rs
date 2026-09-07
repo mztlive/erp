@@ -1,12 +1,12 @@
 //! 将原工作流任务授权入口装配为详情消费的唯一窄读取端口。
 
+use super::{work_item_service, WorkflowAuth};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::SharedRbacService;
 use erp_read_models::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use erp_workflow::service::work_item::WorkItemService;
 use mongodb::Database;
-use services::workflow_compose::{work_item_service, WorkflowAuth};
 
 /// 私有持有完整工作流服务，仅向详情暴露授权后的五项事实。
 pub struct WorkItemAuthorizationAdapter {

@@ -1,0 +1,22 @@
+test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests (__main__.CutoverTests.test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests) ... ok
+test_comments_wire_strings_and_nested_comments_are_not_legacy_code (__main__.CutoverTests.test_comments_wire_strings_and_nested_comments_are_not_legacy_code) ... ok
+test_composition_cycle_fails_final_checker (__main__.CutoverTests.test_composition_cycle_fails_final_checker) ... ok
+test_each_missing_service_rule_fails_and_existing_rules_remain (__main__.CutoverTests.test_each_missing_service_rule_fails_and_existing_rules_remain) ... ok
+test_final_workspace_without_legacy_passes_actual_checker (__main__.CutoverTests.test_final_workspace_without_legacy_passes_actual_checker) ... ok
+test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail (__main__.CutoverTests.test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail) ... ok
+test_legacy_package_and_transitive_nonmember_edge_fail (__main__.CutoverTests.test_legacy_package_and_transitive_nonmember_edge_fail) ... ok
+test_legacy_source_all_members_inline_tests_and_explicit_target (__main__.CutoverTests.test_legacy_source_all_members_inline_tests_and_explicit_target) ... ok
+test_missing_activity_target_fails (__main__.CutoverTests.test_missing_activity_target_fails) ... ok
+test_missing_declared_and_required_member_fails (__main__.CutoverTests.test_missing_declared_and_required_member_fails) ... ok
+test_negative_workspace_check_has_real_nonzero_process_exit (__main__.CutoverTests.test_negative_workspace_check_has_real_nonzero_process_exit) ... ok
+test_normal_entry_automatically_enforces_final_rules_when_old_members_are_absent (__main__.CutoverTests.test_normal_entry_automatically_enforces_final_rules_when_old_members_are_absent) ... ok
+test_old_src_and_manifest_fail_but_historical_archive_is_untouched (__main__.CutoverTests.test_old_src_and_manifest_fail_but_historical_archive_is_untouched) ... ok
+test_workspace_missing_file_table_members_or_package_records_fails (__main__.CutoverTests.test_workspace_missing_file_table_members_or_package_records_fails) ... ok
+test_read_only_before_and_existing_empty_output_are_rejected (__main__.CaptureTests.test_read_only_before_and_existing_empty_output_are_rejected) ... ok
+test_real_comparator_drift_exit_is_not_swallowed (__main__.CaptureTests.test_real_comparator_drift_exit_is_not_swallowed) ... ok
+test_real_compare_preserves_review_exit_and_unverified_runtime (__main__.CaptureTests.test_real_compare_preserves_review_exit_and_unverified_runtime) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 1.240s
+
+OK

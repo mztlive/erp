@@ -1,6 +1,6 @@
 use config::Config;
 use erp_identity::AdminService;
-use services::identity_compose::shared_rbac_service;
+use erp_processes::adapters::identity::shared_rbac_service;
 
 use crate::error::Result;
 
@@ -28,7 +28,7 @@ impl AdminRuntime {
         let config = Config::from_file(config_path).await?;
         let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;
         persistence_core::ensure_transaction_support(&db).await?;
-        database::ensure_indexes(&db).await?;
+        crate::indexes::ensure_indexes(&db).await?;
         let rbac = shared_rbac_service(db.clone());
         Ok(Self {
             service: AdminService::new(db, rbac),

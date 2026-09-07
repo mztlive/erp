@@ -20,7 +20,7 @@ use super::dto::{
 use super::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
 
 use super::{PayableAccountFilter, PayableReadService};
-use services::{Error, Result};
+use crate::{Error, Result};
 
 impl PayableReadService {
     // -----------------------------------------------------------------------

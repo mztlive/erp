@@ -28,6 +28,7 @@ use super::super::start_approval::{
 use super::super::SalesOrderCommandProcess;
 use super::identity::{persist_bound_sales_document, sales_create_bind_command};
 use super::submit::ensure_unified_start_command;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::{
@@ -37,7 +38,6 @@ use erp_sales::service::sales_order::mapper::{
     build_stable_lines, build_submission, build_submission_lines, build_working_copy,
 };
 use erp_workflow::service::approval::execution::prepare_start;
-use services::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
@@ -183,7 +183,11 @@ impl SalesOrderCommandProcess {
             .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
             .await?
         {
-            return self.read_model().sales_order_detail(&order_id, None).await;
+            return self
+                .read_model()
+                .sales_order_detail(&order_id, None)
+                .await
+                .map_err(crate::Error::from);
         }
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(&req.contract_id, req.draft.clone())
@@ -362,7 +366,7 @@ impl SalesOrderCommandProcess {
                         }
                         db.audit_logs().create(&create_audit, session).await?;
                         db.audit_logs().create(&submit_audit, session).await?;
-                        Ok::<(), services::Error>(())
+                        Ok::<(), crate::Error>(())
                     })
                 })
                 .await;
@@ -371,11 +375,19 @@ impl SalesOrderCommandProcess {
                     .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
                     .await?
                 {
-                    return self.read_model().sales_order_detail(&order_id, None).await;
+                    return self
+                        .read_model()
+                        .sales_order_detail(&order_id, None)
+                        .await
+                        .map_err(crate::Error::from);
                 }
                 return Err(error);
             }
-            return self.read_model().sales_order_detail(&detail_id, None).await;
+            return self
+                .read_model()
+                .sales_order_detail(&detail_id, None)
+                .await
+                .map_err(crate::Error::from);
         }
 
         let audit = actor.clone().resource_log_with_id(
@@ -434,7 +446,7 @@ impl SalesOrderCommandProcess {
                         )
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -443,12 +455,19 @@ impl SalesOrderCommandProcess {
                 .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
                 .await?
             {
-                return self.read_model().sales_order_detail(&order_id, None).await;
+                return self
+                    .read_model()
+                    .sales_order_detail(&order_id, None)
+                    .await
+                    .map_err(crate::Error::from);
             }
             return Err(error);
         }
 
-        self.read_model().sales_order_detail(&order.base.id, None).await
+        self.read_model()
+            .sales_order_detail(&order.base.id, None)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 按稳定审计收据回读已创建的销售单身份。

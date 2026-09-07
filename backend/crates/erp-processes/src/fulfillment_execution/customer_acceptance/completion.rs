@@ -4,6 +4,7 @@ use super::task::{
     ensure_customer_acceptance_task, persist_customer_acceptance_task_after_posting,
     CustomerAcceptanceTaskReason,
 };
+use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
@@ -12,7 +13,6 @@ use erp_sales::entity::sales_order::FulfillmentProgress;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 /// 用例确定任务来源和审计种类，避免给普通 post 新增幂等回放。
 pub(super) enum CompletionKind {
@@ -214,11 +214,11 @@ impl AcceptanceSalesProgress for SalesProgressWriter<'_> {
 #[cfg(test)]
 mod tests {
     use super::{apply_projection, finish, AcceptanceCompletion, AcceptanceSalesProgress, CompletionMode};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use erp_fulfillment::entity::fulfillment::AcceptanceProgress;
     use erp_sales::entity::sales_order::FulfillmentProgress;
     use persistence_core::Executor;
-    use services::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,

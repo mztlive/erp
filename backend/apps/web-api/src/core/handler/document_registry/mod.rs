@@ -8,13 +8,13 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
+use erp_processes::adapters::workflow::{workflow_audit, workflow_object_facts};
 use erp_workflow::service::document_registry::{
     AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
     CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
     DocumentRegistryService, DocumentRelationView, PageView, RegisterBusinessDocumentRequest,
     WorkflowActionListParams, WorkflowActionView,
 };
-use services::workflow_compose::{workflow_audit, workflow_object_facts};
 
 use crate::{
     app_state::AppState,

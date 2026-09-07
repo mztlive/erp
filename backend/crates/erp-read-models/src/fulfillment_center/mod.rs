@@ -2,11 +2,11 @@
 mod acceptance_eligibility;
 pub mod dto;
 pub mod repository;
+use crate::Result;
 use dto::CommitCustomerAcceptanceView;
 use erp_core::ids::SalesOrderId;
 use erp_fulfillment::service::FulfillmentService;
 use mongodb::Database;
-use services::Result;
 
 /// 组合销售版本展示信息与履约资格、验收历史的只读服务。
 pub struct FulfillmentReadService {

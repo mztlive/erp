@@ -32,6 +32,8 @@ use super::dto::{
 };
 use super::invoice::register_created_invoice_document;
 use super::{invoice_task, ReceivableProcess};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -41,8 +43,6 @@ use erp_read_models::finance::receivable::snapshot::{
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 impl ReceivableProcess {
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
@@ -102,7 +102,7 @@ impl ReceivableProcess {
                     )
                     .await?
                     {
-                        return Ok::<(String, String), services::Error>(replayed);
+                        return Ok::<(String, String), crate::Error>(replayed);
                     }
                     let (account, snapshot) = load_card_funds_registration_context(
                         &db,
@@ -163,7 +163,7 @@ impl ReceivableProcess {
                         DocumentType::CustomerReceipt,
                         receipt.receipt_no.clone(),
                     )
-                    .map_err(services::Error::from)?;
+                    .map_err(crate::Error::from)?;
                     persist_bound_customer_receipt_document(
                         &db,
                         &rbac,
@@ -219,7 +219,7 @@ impl ReceivableProcess {
                         None,
                     )
                     .await?;
-                    Ok::<(String, String), services::Error>((account.base.id, receipt.base.id))
+                    Ok::<(String, String), crate::Error>((account.base.id, receipt.base.id))
                 })
             })
             .await?;
@@ -284,7 +284,7 @@ impl ReceivableProcess {
                     )
                     .await?
                     {
-                        return Ok::<(String, String), services::Error>(replayed);
+                        return Ok::<(String, String), crate::Error>(replayed);
                     }
                     let (account, _snapshot) = load_card_funds_registration_context(
                         &db,
@@ -392,7 +392,7 @@ impl ReceivableProcess {
                         None,
                     )
                     .await?;
-                    Ok::<(String, String), services::Error>((account.base.id, invoice.base.id))
+                    Ok::<(String, String), crate::Error>((account.base.id, invoice.base.id))
                 })
             })
             .await?;

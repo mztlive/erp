@@ -13,22 +13,22 @@ use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 use super::confirmation_query::{confirmation_view, work_item_view};
 use super::create_confirmation::{confirmation_next_step, replace_confirmation_in_matrix};
+use super::dto::CompleteImportBusinessConfirmationResult;
 use super::{
     ImportApplyService, COMMAND_FINGERPRINT_PREFIX, IMPORT_CONFIRMATION_AUDIT_PREFIX,
     IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION,
 };
 use erp_import::parse_receipt_number;
 use erp_import::{
-    CompleteImportBusinessConfirmationCommand, CompleteImportBusinessConfirmationResult,
-    ImportBusinessConfirmationNextStep, ImportBusinessConfirmationResultStatus,
-    PreparedConfirmationCompletion,
+    CompleteImportBusinessConfirmationCommand, ImportBusinessConfirmationNextStep,
+    ImportBusinessConfirmationResultStatus, PreparedConfirmationCompletion,
 };
 
 impl ImportApplyService {
@@ -72,7 +72,7 @@ impl ImportApplyService {
         let prepared_for_tx = prepared.clone();
         let actor_id = actor.id().to_string();
         let audit_actor = actor.clone();
-        let rbac_for_tx = services::identity_compose::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let transaction_result = client
@@ -168,7 +168,7 @@ impl ImportApplyService {
                         )),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<ConfirmationCompletionTransactionResult, services::Error>(
+                    Ok::<ConfirmationCompletionTransactionResult, crate::Error>(
                         ConfirmationCompletionTransactionResult {
                             confirmation,
                             work_item,

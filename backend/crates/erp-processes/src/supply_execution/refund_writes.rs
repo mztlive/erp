@@ -1,4 +1,5 @@
 //! 退款回调的原三组跨域写入，在一个调用方执行器内按序完成。
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_integration::{entity::integration_ops::InboxMessage, repository::IntegrationOpsExt};
@@ -8,7 +9,6 @@ use erp_supply::entity::supplier_fulfillment::{
 use erp_supply::service::supplier_fulfillment::refund_result::persist_refund_result;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 #[async_trait]
 trait RefundWrites: Send {
@@ -70,9 +70,9 @@ pub(super) async fn persist(
 #[cfg(test)]
 mod tests {
     use super::{execute, RefundWrites};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
-    use services::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }

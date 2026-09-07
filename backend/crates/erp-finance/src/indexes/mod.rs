@@ -13,3 +13,8 @@ pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     payable::ensure(db).await?;
     receivable::ensure(db).await
 }
+
+// 启动组合根按基线交错顺序使用单一领域索引实现。
+pub use cost::ensure as ensure_cost;
+pub use payable::ensure as ensure_payable;
+pub use receivable::ensure as ensure_receivable;

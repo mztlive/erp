@@ -1,5 +1,9 @@
 //! Cross-domain processes: approval dispatch, audited transactions and named use cases.
 
+mod errors;
+
+pub use errors::{Error, Result};
+
 pub mod adapters;
 pub mod approval_dispatch;
 pub mod attachments;
@@ -51,3 +55,6 @@ pub mod supplier_connection_execution;
 pub mod supply_execution;
 pub mod supply_governance;
 pub mod supply_settlement;
+
+#[cfg(test)]
+mod test_indexes;

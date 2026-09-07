@@ -1,8 +1,8 @@
 //! 供给创建/修订/可供更新及供应停止任务的真实跨域根。
+use crate::Error;
 use erp_supply::ports::offering_qualification::QualificationPort;
 use erp_supply::service::supplier_offering::SupplierOfferingService;
 use mongodb::Database;
-use services::Error;
 use std::sync::Arc;
 mod command;
 mod commit;

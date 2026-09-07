@@ -2,7 +2,7 @@
 use super::approval::supplier_refund_approval_view;
 use super::dto::SupplierRefundView;
 use super::ReturnsReadService;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
@@ -49,7 +49,7 @@ impl ReturnsReadService {
             .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
         let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
             .await
-            .map_err(crate::errors::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,

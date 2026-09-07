@@ -2,11 +2,11 @@
 
 use super::projection::document_approval_view;
 use super::{SalesChangeOrderDetailView, SalesChangeReadService};
+use crate::{Error, Result};
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::SalesReviewExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 
 impl SalesChangeReadService {
     /// 查询销售变更单详情。
@@ -39,7 +39,7 @@ impl SalesChangeReadService {
     {
         match find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => Ok(binding),
             Err(Error::NotFound(_)) => Ok(None),

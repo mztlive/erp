@@ -1,5 +1,6 @@
 //! 销售变更正式版本、应收差额、复核/开票任务及审计的同事务组合。
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -7,7 +8,6 @@ use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesCha
 use erp_sales::service::sales_review::SalesReviewService;
 use mongodb::{ClientSession, Database};
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 
 mod adapter;
 mod cancel_approval;
@@ -78,6 +78,7 @@ impl SalesChangeProcess {
         SalesChangeReadService::new(self.db.clone())
             .sales_change_order_detail(id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 在审批运行时持有的事务内生效销售变更。
@@ -120,7 +121,7 @@ pub async fn cancel_approval_in_transaction(
         .sales_change_orders()
         .find_by_id(id, executor)
         .await?
-        .ok_or_else(|| services::Error::NotFound("销售变更单不存在".to_string()))?;
+        .ok_or_else(|| crate::Error::NotFound("销售变更单不存在".to_string()))?;
     adapter::execute_sales_change_domain_action(&mut change, action, actor.id())?;
     erp_sales::service::sales_review::persist_cancelled_change(db, &mut change, executor).await?;
     let audit = actor.clone().resource_log(

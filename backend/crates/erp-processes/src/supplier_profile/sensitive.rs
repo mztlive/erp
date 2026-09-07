@@ -8,10 +8,10 @@ use erp_supplier::SupplierExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_party::SensitiveFieldKind;
-use services::{Error, Result};
 
 use super::{validation::ensure_sensitive_party, SupplierProfileService};
 use erp_supplier::{RevealSupplierSensitiveRequest, SupplierSensitiveRevealView};

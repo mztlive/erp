@@ -32,6 +32,7 @@ use super::adapter::{
 use super::approval_prepare::load_bound_definition_graph;
 use super::approval_query::load_approval_binding;
 use super::InventoryAdjustmentService;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -53,7 +54,6 @@ use erp_workflow::service::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
 };
 use erp_workflow::ApprovalActionContext;
-use services::{Error, Result};
 
 const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
 const STOCK_ADJUSTMENT_AUDIT_RESOURCE: &str = "stock_adjustment";
@@ -677,7 +677,7 @@ async fn ensure_cancel_authorized_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
     if !approval_actor_is_active_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         executor,
     )
@@ -698,13 +698,13 @@ async fn ensure_cancel_authorized_with_executor(
         )
         .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
     let cancel_scope = approval_cancel_scope_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         executor,
     )
     .await?;
     let read_scope = approval_document_read_scope_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         DocumentType::StockAdjustment,
         executor,
@@ -723,7 +723,7 @@ async fn ensure_cancel_authorized_with_executor(
         });
     }
     let visibility = definition_management_visibility_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         executor,
     )
@@ -879,7 +879,7 @@ async fn persist_stock_adjustment_cancel(
                     )),
                 )?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<StockAdjustment, services::Error>(adjustment)
+                Ok::<StockAdjustment, crate::Error>(adjustment)
             })
         })
         .await
@@ -1145,7 +1145,7 @@ mod tests {
     use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
     use super::{cancel_audit_matches_instance, cancel_audit_message_prefix, cancel_replay_actor_mismatch};
-    use services::Error;
+    use crate::Error;
 
     /// 库存普通撤回必须复用统一 V3/legacy 身份，禁止退回 raw key 或独立摘要。
     #[test]

@@ -17,8 +17,8 @@
 
 use mongodb::Database;
 
+use crate::adapters::identity::shared_rbac_service;
 use erp_identity::SharedRbacService;
-use services::identity_compose::shared_rbac_service;
 
 mod account;
 mod adapter;

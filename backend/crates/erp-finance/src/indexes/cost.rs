@@ -29,7 +29,7 @@ pub(crate) const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_A
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub(crate) async fn ensure(db: &Database) -> Result<()> {
+pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, COST_ENTRIES, cost_entry_indexes()).await?;
     create_indexes(db, COST_ALLOCATIONS, cost_allocation_indexes()).await?;
     Ok(())

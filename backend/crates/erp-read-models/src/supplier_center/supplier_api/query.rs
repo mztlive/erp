@@ -10,8 +10,8 @@ use erp_supply::entity::supplier_api::{
 use erp_supply::repository::SupplierApiExt;
 use persistence_core::NoTransaction;
 
+use crate::Result;
 use application_core::AuditActor;
-use services::Result;
 
 use super::context::GovernanceContext;
 use super::SupplierApiReadService;

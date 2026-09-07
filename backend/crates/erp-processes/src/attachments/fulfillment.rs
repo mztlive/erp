@@ -2,11 +2,11 @@
 
 use crate::fulfillment_execution::service_crypto::evidence_metadata;
 use crate::fulfillment_execution::FulfillmentProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_fulfillment::dto::{ConfirmServiceFulfillmentRequest, ServiceFulfillmentView};
 use erp_fulfillment::entity::fulfillment::ServiceEvidencePolicy;
 use erp_support::PendingFileAssetRequest;
-use services::Result;
 
 use super::pending::PendingFileAssets;
 
@@ -34,7 +34,7 @@ pub async fn confirm_service_fulfillment_with_assets(
             request.registration.retention_class,
         );
         ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
-            .map_err(|error| services::Error::ValidationError(error.to_string()))?;
+            .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
     service

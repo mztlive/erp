@@ -1,0 +1,28 @@
+{
+  "original_spec_sha256": "90b68e088ceb02c499762575b36aee0620c60d46f1edb4971f25206faa2da211",
+  "original_finance_probe": {
+    "id": "finance",
+    "baseline_path": "services/src/receivable/mapping.rs",
+    "final_path": "crates/erp-finance/src/service/receivable/mapping.rs",
+    "baseline_package": "services",
+    "final_package": "erp-finance",
+    "symbol": "zero_amount",
+    "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+    "after": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
+    "equivalence": "相同 Amount 零值和固定精度；JSON 0.00 与 BSON Decimal128 结果应通过纯内存测试核验"
+  },
+  "corrected_finance_probe": {
+    "id": "finance",
+    "baseline_path": "services/src/receivable/mapping.rs",
+    "final_path": "crates/erp-finance/src/service/receivable/mapping.rs",
+    "baseline_package": "services",
+    "final_package": "erp-finance",
+    "symbol": "zero_amount",
+    "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+    "after": "\"0.00\".parse::<Amount>().expect(\"固定零金额必须可解析\")",
+    "equivalence": "同一zero_amount内对同一0.00文本调用Amount的FromStr实现；Amount值、JSON字符串及BSON Decimal128同形，不改变内部Decimal scale"
+  },
+  "reason": "原0.00到0的补丁改变Amount内部Decimal scale及JSON/BSON表示，不符合原等价性要求。改为同一函数、同一文本、同一FromStr实现的调用写法，禁止修改金额规则或配置。",
+  "old_probe_timing_acceptance": "旧财务探针样本仅保留为历史记录，不得计入最终性能判定；最终双方全部重跑",
+  "original_bytes_source": "git show a537414eb8f78c43ebc383a3457a45c437dececc:backend/docs/superpowers/plans/domain-crate-migration/compile-probes.json"
+}

@@ -8,10 +8,10 @@ use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyOwned};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_party::SensitiveFieldKind;
-use services::{Error, Result};
 
 use super::CustomerProfileService;
 use erp_customer::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};

@@ -7,7 +7,7 @@ use std::{future::Future, pin::Pin};
 use persistence_core::Transactional;
 
 use super::IntegrationResolutionProcess;
-use services::Result;
+use crate::Result;
 
 impl IntegrationResolutionProcess {
     /// 在事务中执行业务写入与审计日志写入（跨集合原子提交，D01 样板写法）。

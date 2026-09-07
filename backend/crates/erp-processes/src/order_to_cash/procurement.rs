@@ -6,7 +6,7 @@ use erp_sales::entity::sales_order::{
 
 use super::SalesOrderCommandProcess;
 use crate::procure_to_pay::responsibility::{ProcurementResponsibilityProcess, ResolutionInput};
-use services::Result;
+use crate::Result;
 
 impl SalesOrderCommandProcess {
     /// 在销售提交审批前严格校验全部实物及服务行的采购责任。

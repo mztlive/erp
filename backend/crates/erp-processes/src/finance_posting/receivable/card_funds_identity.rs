@@ -10,7 +10,7 @@ use erp_workflow::entity::work_item::{
 };
 
 use super::dto::CardFundsReviewType;
-use services::{Error, Result};
+use crate::{Error, Result};
 
 /// 将 HTTP 复核类型映射为领域复核种类。
 ///
@@ -130,13 +130,13 @@ fn map_identity_error(error: CardFundsCommandIdentityError) -> Error {
 mod tests {
     use super::{lock_registration_work_item, lock_review_work_item, map_identity_error};
     use crate::finance_posting::receivable::dto::CardFundsReviewType;
+    use crate::Error;
     use erp_core::common::time::Instant;
     use erp_core::ids::{ReceivableAccountId, WorkItemId};
     use erp_workflow::entity::work_item::{
         AssignmentSource, CardFundsCommandIdentityError, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemType,
     };
-    use services::Error;
 
     fn item() -> WorkItem {
         WorkItem::new_at(

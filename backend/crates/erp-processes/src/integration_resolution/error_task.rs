@@ -5,12 +5,12 @@
 use super::creation_writes::{persist_created, CreatedFact};
 use super::producer::error_work_item;
 use super::IntegrationResolutionProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::IntegrationErrorTask;
 use erp_integration::service::error_task::prepare_error_task;
-use services::Result;
 use validator::Validate;
 
 impl IntegrationResolutionProcess {

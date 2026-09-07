@@ -1,2 +1,0 @@
-# rule	path	count
-# Service 层 MongoDB/BSON 与通用 Repository 查询技术债已清零；新增命中必须失败。

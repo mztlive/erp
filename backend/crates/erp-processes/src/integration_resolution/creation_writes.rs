@@ -1,4 +1,5 @@
 //! 集成事实、正式 WorkItem、审计的原顺序写入；复用外层唯一 Executor。
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_integration::entity::integration_ops::{
@@ -11,7 +12,6 @@ use erp_integration::service::{
 use erp_workflow::{entity::work_item::WorkItem, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 pub(super) enum CreatedFact<'a> {
     ErrorTask(&'a IntegrationErrorTask),
@@ -83,9 +83,9 @@ pub(super) async fn persist_created(
 #[cfg(test)]
 mod tests {
     use super::{execute, CreationWrites};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
-    use services::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }

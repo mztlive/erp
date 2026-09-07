@@ -5,6 +5,7 @@
 use super::creation_writes::{persist_created, CreatedFact};
 use super::producer::error_work_item;
 use super::IntegrationResolutionProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -15,7 +16,6 @@ use erp_integration::service::inbox_message::*;
 use erp_integration::service::validation::ensure_version;
 use erp_support::SourceRegistryExt;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 use validator::Validate;
 
 impl IntegrationResolutionProcess {

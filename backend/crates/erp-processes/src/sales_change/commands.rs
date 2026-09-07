@@ -15,6 +15,7 @@ use super::start_approval::{
     SalesChangeStartPersistInput,
 };
 use super::SalesChangeProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -40,7 +41,6 @@ use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl SalesChangeProcess {
@@ -84,7 +84,7 @@ impl SalesChangeProcess {
             erp_workflow::entity::document_registry::DocumentType::SalesChangeOrder,
             String::new(),
         )
-        .map_err(services::Error::from)?;
+        .map_err(crate::Error::from)?;
         let audit = actor.clone().resource_log(
             "sales_change_order.create",
             "sales_change_order",
@@ -107,6 +107,7 @@ impl SalesChangeProcess {
         SalesChangeReadService::new(self.db.clone())
             .sales_change_order_detail(&change_id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 提交销售变更并调用统一 `start_approval`。
@@ -173,7 +174,7 @@ impl SalesChangeProcess {
                 Box::pin(async move {
                     sales_write.persist(&db, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;
@@ -181,6 +182,7 @@ impl SalesChangeProcess {
         SalesChangeReadService::new(self.db.clone())
             .sales_change_order_detail(id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 撤回审批中的销售变更单，回到可修正草稿且 `subject_version` 不回退。
@@ -208,7 +210,7 @@ impl SalesChangeProcess {
         let adapter = sales_change_order_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = sales_change_order_subject_ref(id)?;
         let subject_version = latest_change_submission_no(&self.db, id).await?;
@@ -240,6 +242,7 @@ impl SalesChangeProcess {
         SalesChangeReadService::new(self.db.clone())
             .sales_change_order_detail(id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 冻结提交并启动统一审批。
@@ -263,7 +266,7 @@ impl SalesChangeProcess {
         let subject = sales_change_order_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let sales_write = SalesReviewService::new(self.db.clone())
             .prepare_submission(change_order, actor)
@@ -337,6 +340,7 @@ impl SalesChangeProcess {
         SalesChangeReadService::new(self.db.clone())
             .sales_change_order_detail(id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
@@ -374,7 +378,7 @@ impl SalesChangeProcess {
                         let _ = sales_change_order_object_readable(&organization_id, &actor_id)?;
                         let binding = find_approval_binding(&db, &change_order_id, session)
                             .await
-                            .map_err(services::Error::from)?;
+                            .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = sales_change_order_subject_ref(&change_order_id)?;
                         replay_sales_change_start_with_executor(
@@ -482,7 +486,7 @@ async fn persist_created_change_order(
                 .await?;
                 sales_write.persist(&db, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -504,8 +508,8 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let auth = services::workflow_compose::workflow_auth(db.clone(), rbac.clone());
-    let audit = services::workflow_compose::workflow_audit(db.clone());
+    let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
+    let audit = crate::adapters::workflow::workflow_audit(db.clone());
     let binding = erp_workflow::service::approval::binding::bind_published_definition_on_document_create(
         db,
         &auth,

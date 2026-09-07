@@ -1,5 +1,6 @@
 use mongodb::ClientSession;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::SalesOrder;
@@ -7,7 +8,6 @@ use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::DocumentRegistryExt;
-use services::{Error, Result};
 
 use super::super::adapter::{sales_order_object_readable, sales_order_responsible_org_id};
 
@@ -49,7 +49,7 @@ pub(super) async fn persist_bound_sales_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

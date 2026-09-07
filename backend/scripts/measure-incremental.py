@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -384,7 +385,7 @@ def collect_environment(backend: Path, target_dir: Path, commit: str) -> dict[st
         loadavg = os.getloadavg()
     except OSError:
         loadavg = None
-    df = run_checked(["df", "-h", str(target_dir)], cwd=backend)
+    df = run_checked(["/bin/df", "-h", str(target_dir)], cwd=backend)
     cargo_config = backend / ".cargo" / "config.toml"
     codegen = None
     if cargo_config.is_file():
@@ -485,6 +486,7 @@ def run_cargo(
     (output_dir / "cargo.stderr.log").write_text(proc.stderr, encoding="utf-8")
     units = parse_compiler_units(proc.stdout)
     write_json(output_dir / "units.json", units)
+    write_private_json(output_dir / "units-full.json", parse_compiler_units_full(proc.stdout))
     timings_src = copy_timings(target_dir, output_dir / "timings.html")
     sample = {
         "command": argv,
@@ -520,29 +522,170 @@ def fingerprint_excerpt(stderr: str, limit: int = 80) -> list[str]:
     return lines
 
 
-def acquire_target_lock(target_dir: Path) -> Path:
-    """Create an exclusive lock file in the dedicated target directory."""
+# Keep legacy units.json and metadata.json schemas stable for existing evaluators.
+# Complete facts live beside them and remain independently linked to raw inputs.
+BUILD_ENV_KEYS = {
+    "CARGO_BUILD_JOBS", "CARGO_INCREMENTAL", "CARGO_TERM_COLOR", "CARGO_TARGET_DIR", "CARGO_LOG",
+    "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTDOCFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS",
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTUP_TOOLCHAIN", "RUSTDOC",
+    "CARGO_BUILD_TARGET", "CARGO_BUILD_RUSTFLAGS", "CARGO_BUILD_RUSTDOCFLAGS",
+    "CARGO_BUILD_INCREMENTAL", "CARGO_BUILD_RUSTC", "CARGO_BUILD_RUSTC_WRAPPER",
+    "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTDOC", "RUSTC_BOOTSTRAP",
+    "CC", "CXX", "AR", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "MAKEFLAGS", "CARGO_MAKEFLAGS",
+}
+
+
+def parse_compiler_units_full(jsonl: str) -> dict[str, Any]:
+    """Retain whole observed messages; never coerce missing/invalid facts into success."""
+    artifacts: list[dict[str, Any]] = []
+    scripts: list[dict[str, Any]] = []
+    finished: list[dict[str, Any]] = []
+    for raw in jsonl.splitlines():
+        if not raw.strip():
+            continue
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            continue  # Unmodified raw JSONL and legacy non_json_lines retain diagnostics.
+        if not isinstance(message, dict):
+            raise MeasureError("Cargo JSON message 不是对象，不能形成完整编译事实")
+        reason = message.get("reason")
+        if reason == "compiler-artifact":
+            target, profile = message.get("target"), message.get("profile")
+            if not (
+                type(message.get("fresh")) is bool
+                and isinstance(message.get("package_id"), str) and message["package_id"]
+                and isinstance(target, dict) and isinstance(profile, dict)
+                and isinstance(target.get("name"), str) and target["name"]
+                and isinstance(target.get("kind"), list) and target["kind"]
+                and all(isinstance(kind, str) and kind for kind in target["kind"])
+                and ("name" in profile or "debuginfo" in profile)
+            ):
+                raise MeasureError("compiler-artifact 缺少有效 package/target/profile/fresh，拒绝补造事实")
+            artifacts.append(message)
+        elif reason == "build-script-executed":
+            scripts.append(message)
+        elif reason == "build-finished":
+            finished.append(message)
+    return {
+        "schema_version": 1,
+        "evidence_kind": "complete_observed_cargo_messages",
+        "raw_cargo_jsonl_sha256": hashlib.sha256(jsonl.encode("utf-8")).hexdigest(),
+        "artifacts": artifacts,
+        "build_scripts": scripts,
+        "build_finished": finished,
+        "notes": "JSON object values are retained without dropping target/profile/features/filenames or deduplicating lib/bin/custom-build. Raw cargo.jsonl remains the byte evidence. No missing fields are invented.",
+    }
+
+
+def allowed_build_environment(env: Mapping[str, str]) -> dict[str, Any]:
+    """Fingerprint allowlisted values from the exact measured child environment."""
+    values = {}
+    for key, value in sorted(env.items()):
+        if key not in BUILD_ENV_KEYS and not re.fullmatch(
+            r"CARGO_PROFILE_(DEV|RELEASE|TEST|BENCH)_(OPT_LEVEL|DEBUG|SPLIT_DEBUGINFO|STRIP|DEBUG_ASSERTIONS|OVERFLOW_CHECKS|LTO|PANIC|INCREMENTAL|CODEGEN_UNITS|RPATH|CODEGEN_BACKEND)", key
+        ) and not re.fullmatch(r"CARGO_TARGET_[A-Z0-9_]+_(LINKER|RUSTFLAGS|RUSTDOCFLAGS)", key):
+            continue
+        # Same canonical-value hashing as capture-domain-measurement-context v2;
+        # no arbitrary flag, wrapper path, credential or environment value dump.
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+        values[key] = {"value_sha256": hashlib.sha256(encoded).hexdigest(), "value_type": "str"}
+    return {
+        "schema_version": 1,
+        "evidence_kind": "allowlisted_measured_child_environment",
+        "values": values,
+        "notes": "Observed values only; effective jobs/config/toolchain/media require the separate live context collector and review. No build environment is modified here.",
+    }
+
+
+def write_private_json(path: Path, value: Any) -> dict[str, str]:
+    """Create a new private facts artifact and return its actual byte hash."""
+    raw = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(raw)
+    return {"path": path.name, "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def measurement_input(path: Path, repo: Path, selected_by: str) -> dict[str, Any]:
+    """Read the selected real file, including external tools used against old source."""
+    try:
+        actual = path.expanduser().resolve(strict=True)
+        if not actual.is_file():
+            raise OSError("not a regular file")
+        raw = actual.read_bytes()
+    except (OSError, RuntimeError) as error:
+        raise MeasureError(f"测量输入不可读 ({selected_by})") from error
+    return {
+        "path": str(actual), "sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw),
+        "selected_by": selected_by,
+        "location": "measured_repo" if actual.is_relative_to(repo) else "external_to_measured_repo",
+    }
+
+
+def write_measurement_facts(
+    output: Path, *, repo: Path, target_dir: Path, commit: str,
+    spec_path: Path, contract_path: Path, contract_explicit: bool,
+    metadata: Mapping[str, Any], env: Mapping[str, str],
+) -> None:
+    """Record actual inputs/full metadata outside all timed Cargo intervals."""
+    inputs = {
+        "measurement_script": measurement_input(Path(__file__), repo, "executing __file__"),
+        "probe_spec": measurement_input(spec_path, repo, "--spec"),
+        "measurement_contract": measurement_input(
+            contract_path, repo, "--measurement-contract" if contract_explicit else "executing_script_repo_default"
+        ),
+    }
+    metadata_ref = write_private_json(output / "cargo-metadata-full.json", metadata)
+    environment_ref = write_private_json(output / "build-environment.json", allowed_build_environment(env))
+    write_private_json(output / "measurement-facts.json", {
+        "schema_version": 1, "evidence_kind": "measurement_inputs_and_complete_facts",
+        "commit": commit, "repo": str(repo), "target_dir": str(target_dir),
+        "inputs": inputs, "full_metadata": metadata_ref, "build_environment": environment_ref,
+        "metadata_scope": "Exact complete object from this run's existing cargo_metadata call, which removes CARGO_TARGET_DIR and observes the default target. metadata.json separately records the measured dedicated target; no second metadata command is run.",
+        "timing_scope": "Written before warmup; each units-full.json is written after that Cargo subprocess has exited and its wall time has been captured.",
+        "comparable": None,
+    })
+
+
+@dataclass
+class TargetLock:
+    """Own the atomically created marker and its still-open inode."""
+    path: Path
+    fd: int
+
+
+def acquire_target_lock(target_dir: Path) -> TargetLock:
+    """Acquire exclusively; existing live, stale, partial or symlink markers all fail closed."""
     target_dir.mkdir(parents=True, exist_ok=True)
     lock_path = target_dir / "measure-incremental.lock"
-    if lock_path.exists():
-        try:
-            payload = json.loads(lock_path.read_text(encoding="utf-8"))
-            pid = int(payload.get("pid", 0))
-        except (OSError, ValueError, json.JSONDecodeError):
-            pid = 0
-        if pid and _pid_alive(pid):
-            raise MeasureError(f"目标目录已有正在运行的测量锁: {lock_path} pid={pid}")
-    write_json(lock_path, {"pid": os.getpid(), "created_at": utc_now()})
-    return lock_path
-
-
-def _pid_alive(pid: int) -> bool:
-    """Return whether a PID exists (best-effort)."""
     try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+        fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as error:
+        raise MeasureError(f"目标目录已有测量锁，拒绝自动覆盖或删除: {lock_path}") from error
+    lock = TargetLock(lock_path, fd)
+    try:
+        raw = (json.dumps({"pid": os.getpid(), "created_at": utc_now()}) + "\n").encode()
+        with os.fdopen(os.dup(fd), "wb") as stream:
+            stream.write(raw)
+    except BaseException:
+        release_target_lock(lock)
+        raise
+    return lock
+
+
+def release_target_lock(lock: TargetLock) -> None:
+    """Release only this open inode; never unlink a replacement marker owned elsewhere."""
+    try:
+        owned = os.fstat(lock.fd)
+        try:
+            current = lock.path.lstat()
+        except FileNotFoundError:
+            return
+        if (owned.st_dev, owned.st_ino) == (current.st_dev, current.st_ino):
+            lock.path.unlink()
+    finally:
+        os.close(lock.fd)
 
 
 def prove_backup_restore() -> dict[str, Any]:
@@ -675,7 +818,7 @@ def measure(args: argparse.Namespace) -> dict[str, Any]:
     default_target = Path(metadata["target_directory"]).resolve()
     if target_dir == default_target:
         raise MeasureError("CARGO_TARGET_DIR 不能使用日常 cargo metadata 目标目录")
-    lock_path: Path | None = None
+    lock_path: TargetLock | None = None
     guard: SourceGuard | None = None
     session = RestoreSession(None)
     summary: dict[str, Any] = {
@@ -713,6 +856,16 @@ def measure(args: argparse.Namespace) -> dict[str, Any]:
                     if pkg.get("id") in set(metadata.get("workspace_members") or [])
                 ],
             },
+        )
+        contract_arg = getattr(args, "measurement_contract", None)
+        contract_path = Path(contract_arg) if contract_arg else (
+            Path(__file__).resolve().parents[1]
+            / "docs/superpowers/plans/domain-crate-migration/compile-measurement.md"
+        )
+        write_measurement_facts(
+            output, repo=repo, target_dir=target_dir, commit=commit,
+            spec_path=spec_path, contract_path=contract_path, contract_explicit=bool(contract_arg),
+            metadata=metadata, env=cargo_env(host_env, target_dir),
         )
         write_json(output / "reverse-dependencies.json", reverse_dependencies(metadata, probe.package))
         write_json(
@@ -844,7 +997,7 @@ def measure(args: argparse.Namespace) -> dict[str, Any]:
         write_json(output / "summary.json", summary)
         if lock_path is not None:
             try:
-                lock_path.unlink()
+                release_target_lock(lock_path)
             except OSError:
                 pass
 
@@ -855,6 +1008,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", help="专用 git worktree 的仓库根绝对路径")
     parser.add_argument("--revision", choices=REVISIONS)
     parser.add_argument("--spec", help="compile-probes.json 绝对路径")
+    parser.add_argument("--measurement-contract", help="本次实际执行合同绝对路径；默认使用当前脚本所在仓库的 compile-measurement.md")
     parser.add_argument("--scenario", choices=SCENARIOS)
     parser.add_argument("--mode", choices=MODES)
     parser.add_argument("--target-dir", help="本组独立 CARGO_TARGET_DIR")

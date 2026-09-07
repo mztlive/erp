@@ -5,7 +5,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_core::ids::PurchaseOrderSubmissionId;
 use erp_core::money::{Amount, Quantity};
 use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 use persistence_core::Executor;
@@ -16,8 +15,8 @@ use {
     erp_procurement::entity::purchase_order::PurchaseOrderSubmission,
     erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLine,
 };
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
+use super::authority::purchase::{previous_formal_submission_ids, purchase_facts, purchase_line_counts};
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
     ObjectBriefSource,
@@ -25,7 +24,7 @@ use super::brief::{
 use super::change_order_brief::{change_diff_lines, purchase_order_submission_line_states, LineStateMap};
 use super::presentation::{format_yuan, purchase_review_impact_summary};
 use super::WorkbenchReadService;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
+use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchSubjectDisplay};
 use crate::errors::Result;
 
 /// 采购审核在对象事实中按提交版本保存的展示包。
@@ -39,6 +38,7 @@ struct PurchaseReviewDisplay {
 
 #[derive(Default)]
 struct PurchaseSubmissionLineContext {
+    line_counts: HashMap<String, usize>,
     brief_lines: HashMap<String, Vec<BriefLine>>,
     line_states: HashMap<String, LineStateMap>,
 }
@@ -66,43 +66,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_purchase_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let orders = self.purchase_orders_for_keys(keys, executor).await?;
+        let orders = self
+            .facts_reader()
+            .purchase_orders_for_keys(keys, executor)
+            .await?;
         if orders.is_empty() {
             return Ok(());
         }
-        let displays = self.purchase_review_displays(&orders, executor).await?;
-        insert_purchase_order_facts(facts, &orders, &displays);
+        let (displays, authority) = self.purchase_review_displays(&orders, executor).await?;
+        insert_purchase_order_facts(facts, &orders, &displays, &authority);
         Ok(())
-    }
-
-    /// 按对象键批量读取采购单。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 没有采购单键时返回空集合。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn purchase_orders_for_keys(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseOrder>> {
-        let ids = object_ids(keys, ObjectKind::PurchaseOrder);
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        Ok(self
-            .db
-            .purchase_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?)
     }
 
     /// 按采购单批量解析提交、销售单号、提交人和简报。
@@ -120,51 +96,31 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         orders: &[PurchaseOrder],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, PurchaseReviewDisplay>> {
-        let submissions = self.purchase_submissions_for_orders(orders, executor).await?;
+    ) -> Result<(
+        HashMap<String, PurchaseReviewDisplay>,
+        erp_workflow::ports::ObjectFactMap,
+    )> {
+        let submissions = self
+            .facts_reader()
+            .purchase_submissions_for_orders(orders, executor)
+            .await?;
         let sales_order_nos = self.sales_order_numbers_for_orders(orders, executor).await?;
         let line_context = self
             .purchase_submission_brief_lines(&submissions, executor)
             .await?;
         let submitter_names = HashMap::<String, String>::new();
         let _ = executor;
-        Ok(assemble_purchase_review_displays(
-            &submissions,
-            &source_sales_orders_by_purchase_order(orders, &sales_order_nos),
-            &line_context.brief_lines,
-            &line_context.line_states,
-            &submitter_names,
+        let authority = purchase_facts(orders, &submissions, &line_context.line_counts);
+        Ok((
+            assemble_purchase_review_displays(
+                &submissions,
+                &source_sales_orders_by_purchase_order(orders, &sales_order_nos),
+                &line_context.brief_lines,
+                &line_context.line_states,
+                &submitter_names,
+            ),
+            authority,
         ))
-    }
-
-    /// 读取本批采购单的全部提交，避免按单 N+1。
-    ///
-    /// # 参数
-    /// * `orders` - 本批采购单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回这些采购单上的全部提交。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn purchase_submissions_for_orders(
-        &self,
-        orders: &[PurchaseOrder],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseOrderSubmission>> {
-        let order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<Vec<_>>();
-        if order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        Ok(self
-            .db
-            .purchase_order_submissions()
-            .list_work_item_brief_submissions_by_orders(&order_ids, executor)
-            .await?)
     }
 
     /// 读取本批采购单来源销售单号。
@@ -191,9 +147,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(HashMap::new());
         }
         Ok(self
-            .db
-            .sales_orders()
-            .list_active_by_ids(&sales_order_ids, executor)
+            .facts_reader()
+            .read_sales_orders(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id.clone(), order.order_no))
@@ -216,18 +171,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         submissions: &[PurchaseOrderSubmission],
         executor: &mut dyn Executor,
     ) -> Result<PurchaseSubmissionLineContext> {
-        let submission_ids = submissions
-            .iter()
-            .map(|item| PurchaseOrderSubmissionId::new(item.base.id.clone()))
-            .collect::<Vec<_>>();
-        if submission_ids.is_empty() {
-            return Ok(PurchaseSubmissionLineContext::default());
-        }
         let lines = self
-            .db
-            .purchase_order_submission_lines()
-            .find_lines_by_submission_ids(&submission_ids, executor)
+            .facts_reader()
+            .purchase_submission_lines(submissions, executor)
             .await?;
+        let line_counts = purchase_line_counts(&lines);
         let line_states = purchase_order_submission_line_states(&lines);
         let mut grouped: HashMap<String, Vec<(u32, PurchaseOrderSubmissionLine)>> = HashMap::new();
         for line in lines {
@@ -247,6 +195,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             })
             .collect();
         Ok(PurchaseSubmissionLineContext {
+            line_counts,
             brief_lines,
             line_states,
         })
@@ -348,31 +297,6 @@ fn assemble_purchase_review_displays(
         .collect()
 }
 
-/// 为每次正式重提定位同一采购单的上一次正式提交。
-fn previous_formal_submission_ids(submissions: &[PurchaseOrderSubmission]) -> HashMap<String, String> {
-    let mut grouped: HashMap<String, Vec<(u32, String)>> = HashMap::new();
-    for submission in submissions {
-        let Some(sequence) = submission.formal_sequence() else {
-            continue;
-        };
-        grouped
-            .entry(submission.purchase_order_id.to_string())
-            .or_default()
-            .push((sequence, submission.base.id.clone()));
-    }
-    let mut previous = HashMap::new();
-    for mut values in grouped.into_values() {
-        values.sort_by_key(|(sequence, _)| *sequence);
-        for pair in values.windows(2) {
-            let [(_, before), (_, after)] = pair else {
-                continue;
-            };
-            previous.insert(after.clone(), before.clone());
-        }
-    }
-    previous
-}
-
 /// 把采购单事实和按提交准备好的简报写入对象事实表。
 ///
 /// # 参数
@@ -386,14 +310,22 @@ fn previous_formal_submission_ids(submissions: &[PurchaseOrderSubmission]) -> Ha
 /// # 错误
 /// 无。
 fn insert_purchase_order_facts(
-    facts: &mut ObjectFactMap,
+    facts: &mut WorkbenchObjectFactMap,
     orders: &[PurchaseOrder],
     displays: &HashMap<String, PurchaseReviewDisplay>,
+    authority: &erp_workflow::ports::ObjectFactMap,
 ) {
     for order in orders {
         facts.insert(
             (ObjectKind::PurchaseOrder, order.base.id.clone()),
-            purchase_order_fact(order, displays),
+            purchase_order_fact(
+                order,
+                displays,
+                authority
+                    .get(&(ObjectKind::PurchaseOrder, order.base.id.clone()))
+                    .expect("权威映射覆盖每张已读取采购单")
+                    .clone(),
+            ),
         );
     }
 }
@@ -412,27 +344,24 @@ fn insert_purchase_order_facts(
 fn purchase_order_fact(
     order: &PurchaseOrder,
     displays: &HashMap<String, PurchaseReviewDisplay>,
-) -> ObjectFact {
-    let mut fact = ObjectFact::new(
-        order.base.id.clone(),
-        format!("采购单 {}", order.purchase_no),
-        order.stable.created_by.clone(),
-    );
+    authority: erp_workflow::ports::ObjectFact,
+) -> WorkbenchObjectFact {
+    let mut fact = WorkbenchObjectFact::from_authority(authority);
     for (submission_id, display) in displays {
         if display.purchase_order_id != order.base.id {
             continue;
         }
-        let brief = SubjectBrief {
+        let brief = WorkbenchSubjectDisplay {
             counterparty_label: display.counterparty.clone(),
             impact_summary: Some(display.impact.clone()),
             brief_source: Some(display.brief.clone()),
         };
         if order.current_submission_id.as_deref() == Some(submission_id.as_str()) {
-            fact.counterparty_label = brief.counterparty_label.clone();
-            fact.impact_summary = brief.impact_summary.clone();
-            fact.brief_source = brief.brief_source.clone();
+            fact.display.counterparty_label = brief.counterparty_label.clone();
+            fact.display.impact_summary = brief.impact_summary.clone();
+            fact.display.brief_source = brief.brief_source.clone();
         }
-        fact.subject_briefs.insert(submission_id.clone(), brief);
+        fact.display.subject_briefs.insert(submission_id.clone(), brief);
     }
     fact
 }

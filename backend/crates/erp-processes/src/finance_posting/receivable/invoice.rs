@@ -15,6 +15,7 @@ use validator::Validate;
 
 use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use super::ReceivableProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -30,7 +31,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-use services::{Error, Result};
 
 impl ReceivableProcess {
     // -----------------------------------------------------------------------
@@ -216,7 +216,7 @@ impl ReceivableProcess {
                     )
                     .await?;
                     let committed_id = invoice.base.id.clone();
-                    Ok::<String, services::Error>(committed_id)
+                    Ok::<String, crate::Error>(committed_id)
                 })
             })
             .await;
@@ -308,7 +308,7 @@ impl ReceivableProcess {
                     session,
                 )
                 .await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await?;
@@ -448,7 +448,7 @@ async fn persist_unbound_invoice_document(
 ) -> Result<()> {
     let _ = ensure_invoice_skips_approval_binding()?;
     ensure_invoice_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -460,7 +460,7 @@ async fn persist_unbound_invoice_document(
     apply_invoice_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor)
         .await
-        .map_err(services::Error::from)
+        .map_err(crate::Error::from)
 }
 
 /// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
@@ -481,7 +481,7 @@ pub(super) async fn register_created_invoice_document(
         DocumentType::Invoice,
         invoice.invoice_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_invoice_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
@@ -517,7 +517,7 @@ async fn persist_created_invoice(
                 .await?;
                 db.invoices().create(&invoice, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

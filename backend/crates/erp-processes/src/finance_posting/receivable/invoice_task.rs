@@ -15,9 +15,9 @@ use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
 
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 /// 触发应收可开票额度变化的正式业务事实。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,7 +141,7 @@ pub(crate) async fn record_invoice_execution(
     }
     work_item_service(
         db.clone(),
-        services::identity_compose::shared_rbac_service(db.clone()),
+        crate::adapters::identity::shared_rbac_service(db.clone()),
     )
     .ensure_domain_decision_access(actor, &task, executor)
     .await?;
@@ -172,7 +172,7 @@ async fn create_invoice_task(
 ) -> Result<()> {
     let responsibility = work_item_service(
         db.clone(),
-        services::identity_compose::shared_rbac_service(db.clone()),
+        crate::adapters::identity::shared_rbac_service(db.clone()),
     )
     .resolve_finance_responsibility(
         FinanceResponsibilityOperation::SalesInvoice,

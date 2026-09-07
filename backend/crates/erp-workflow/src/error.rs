@@ -123,12 +123,30 @@ impl From<persistence_core::Error> for Error {
 }
 
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
-    match error.duplicate_index_name() {
-        Some("uk_work_items_open_fulfillment_object") => "该履约对象已存在开放任务，请刷新后重试".to_string(),
-        Some("uk_work_items_open_customer_acceptance_object") => {
-            "该销售单已存在开放客户验收任务，请刷新后重试".to_string()
+    error
+        .duplicate_index_name()
+        .and_then(known_duplicate_index_message)
+        .unwrap_or("数据已存在，请勿重复提交")
+        .to_string()
+}
+
+/// 返回本域已知唯一索引的固定冲突提示。
+///
+/// # 参数
+/// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
+///
+/// # 返回
+/// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 约束
+/// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
+pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
+    match index_name {
+        "uk_work_items_open_fulfillment_object" => Some("该履约对象已存在开放任务，请刷新后重试"),
+        "uk_work_items_open_customer_acceptance_object" => {
+            Some("该销售单已存在开放客户验收任务，请刷新后重试")
         }
-        _ => "数据已存在，请勿重复提交".to_string(),
+        _ => None,
     }
 }
 
@@ -263,5 +281,33 @@ mod tests {
     fn frozen_error_codes_cover_contract_set() {
         assert_eq!(ErrorCode::ALL.len(), 21);
         assert!(ErrorCode::ALL.contains(&ErrorCode::ApprovalGenericWorkItemMutationForbidden));
+    }
+
+    #[test]
+    fn known_duplicate_export_keeps_exact_owned_index_matrix() {
+        let cases = [
+            (
+                "uk_work_items_open_fulfillment_object",
+                "该履约对象已存在开放任务，请刷新后重试",
+            ),
+            (
+                "uk_work_items_open_customer_acceptance_object",
+                "该销售单已存在开放客户验收任务，请刷新后重试",
+            ),
+        ];
+        for (index, expected) in cases {
+            assert_eq!(super::known_duplicate_index_message(index), Some(expected));
+            assert_eq!(
+                super::known_duplicate_index_message(&format!("{index}_extra")),
+                None
+            );
+            assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
+            assert_eq!(
+                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
+                None
+            );
+        }
+        assert_eq!(super::known_duplicate_index_message(""), None);
+        assert_eq!(super::known_duplicate_index_message("unknown_index"), None);
     }
 }

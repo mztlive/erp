@@ -1,0 +1,10 @@
+{
+  "phase": "17",
+  "input_head": "a537414eb8f78c43ebc383a3457a45c437dececc",
+  "integrator": "Codex",
+  "branch": "chore/domain-crate-17-cutover",
+  "status": "执行中",
+  "preceding_phase_evidence": ".domain-migration-evidence/16",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

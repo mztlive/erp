@@ -1,6 +1,7 @@
 //! 采购命令重验与创建依据视图共用的数据来源；所有读取使用调用方 Executor。
 use super::mapping::{sales_order_basis_fact, stock_balance_fact};
 use super::{load_creation_basis_facts, load_sales_procurement_coverage};
+use crate::{Error, Result};
 use erp_core::ids::SalesOrderId;
 use erp_inventory::InventoryExt;
 use erp_procurement::entity::purchase_order::{
@@ -15,7 +16,6 @@ use erp_sales::{
 };
 use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
-use services::{Error, Result};
 use std::collections::{HashMap, HashSet};
 /// 加载可作为采购来源的已生效销售单。
 ///

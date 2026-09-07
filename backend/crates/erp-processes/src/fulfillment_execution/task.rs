@@ -19,8 +19,8 @@ use id_generator::next_id;
 use persistence_core::Executor;
 use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
+use crate::{Error, Result};
 use erp_identity::SharedRbacService;
-use services::{Error, Result};
 
 mod command;
 
@@ -184,7 +184,7 @@ pub async fn ensure_fulfillment_task(
     }
 
     let owner = resolve_task_owner(db, &object, executor).await?;
-    let rbac = services::identity_compose::shared_rbac_service(db.clone());
+    let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_fulfillment_owner_eligible(
         db,
         &rbac,
@@ -466,7 +466,7 @@ pub async fn ensure_fulfillment_owner_eligible(
         .ok_or_else(|| {
             Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
         })?;
-    AvailableWorkItemAccount::from_account(&services::workflow_compose::account_fact(&account)).map_err(
+    AvailableWorkItemAccount::from_account(&crate::adapters::workflow::account_fact(&account)).map_err(
         |_| Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string()),
     )?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
@@ -490,7 +490,7 @@ async fn ensure_current_owner_execution_access(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let rbac = services::identity_compose::shared_rbac_service(db.clone());
+    let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_fulfillment_owner_eligible(db, &rbac, actor_id, &task.business_object_type, executor).await
 }
 

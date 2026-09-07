@@ -1,4 +1,5 @@
 use super::SupplierFulfillmentProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -15,7 +16,6 @@ use erp_supply::ports::supplier_gateway::DispatchOutcome;
 use erp_supply::repository::SupplierFulfillmentExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 use validator::Validate;
 
 impl SupplierFulfillmentProcess {
@@ -75,7 +75,7 @@ impl SupplierFulfillmentProcess {
                     persist_place_facts(&db, &order_for_tx, &items_for_tx, &action_for_tx, session).await?;
                     db.inbox_messages().create(&message_for_tx, session).await?;
                     db.audit_logs().create(&audit_for_tx, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             }), || async {
         tracing::info!(account = %actor.id(), order_id = %order.base.id, "下单事务已提交，开始事务外供应商派发");
@@ -209,27 +209,28 @@ impl SupplierFulfillmentProcess {
         let task_for_tx = task.cloned();
         let work_item_id = WorkItemId::new(next_id());
         let task_audit_actor = actor.clone();
-        let (order_out, action_out, message_out) =
-            client
-                .with_transaction(move |session| {
-                    Box::pin(async move {
-                        super::dispatch_writes::MongoWrites {
-                            db: &db,
-                            order: &mut order_for_tx,
-                            action: &mut action_for_tx,
-                            message: &mut message_for_tx,
-                            task: task_for_tx.as_ref(),
-                            work_item_id,
-                            actor: &task_audit_actor,
-                        }
-                        .persist(session)
-                        .await?;
-                        Ok::<(SupplierFulfillmentOrder, SupplierOrderAction, InboxMessage), services::Error>(
-                            (order_for_tx, action_for_tx, message_for_tx),
-                        )
-                    })
+        let (order_out, action_out, message_out) = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    super::dispatch_writes::MongoWrites {
+                        db: &db,
+                        order: &mut order_for_tx,
+                        action: &mut action_for_tx,
+                        message: &mut message_for_tx,
+                        task: task_for_tx.as_ref(),
+                        work_item_id,
+                        actor: &task_audit_actor,
+                    }
+                    .persist(session)
+                    .await?;
+                    Ok::<(SupplierFulfillmentOrder, SupplierOrderAction, InboxMessage), crate::Error>((
+                        order_for_tx,
+                        action_for_tx,
+                        message_for_tx,
+                    ))
                 })
-                .await?;
+            })
+            .await?;
         *order = order_out;
         *action = action_out;
         *message = message_out;

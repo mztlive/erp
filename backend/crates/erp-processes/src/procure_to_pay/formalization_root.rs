@@ -2,13 +2,13 @@
 
 use super::review::FormalizedOrderPersist;
 use super::PurchaseOrderProcess;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
-use services::Result;
 
 /// 采购最终通过流程，财务与履约步骤严格复用原 Executor 和写入顺序。
 pub struct PurchaseOrderFormalizationProcess {

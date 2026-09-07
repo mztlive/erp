@@ -2,7 +2,7 @@
 use super::dto::CustomerRefundView;
 use super::dto::{CustomerRefundListParams, PageView, SortDir};
 use super::ReturnsReadService;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -120,7 +120,7 @@ impl ReturnsReadService {
             .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
         let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
             .await
-            .map_err(crate::errors::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,

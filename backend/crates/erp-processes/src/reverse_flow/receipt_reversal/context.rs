@@ -1,6 +1,7 @@
 //! 回款冲正命令的原回款组织读取与发布定义绑定。
 
 use super::super::adapter::{receipt_reversal_object_readable, receipt_reversal_responsible_org_id};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId};
 use erp_finance::repository::ReceivableExt;
@@ -10,7 +11,6 @@ use erp_workflow::service::approval::binding::{attach_published_binding, BindPub
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 
 /// 查询原回款往来主体作为责任组织，并带回可选客户。
 ///
@@ -46,7 +46,7 @@ pub(super) async fn persist_bound_receipt_reversal_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

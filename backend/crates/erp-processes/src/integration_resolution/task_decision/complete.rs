@@ -3,6 +3,8 @@ use super::super::IntegrationResolutionProcess;
 use super::guard::{command_identity, load_bound_work_item};
 use super::{store_receipt, TASK_COMPLETION_AUDIT};
 
+use crate::adapters::workflow::work_item_service;
+use crate::Result;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{
@@ -15,8 +17,6 @@ use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
-use services::workflow_compose::work_item_service;
-use services::Result;
 
 /// 正式任务完成步骤；本域终态写入先于 WorkItem 完成与回执。
 struct CompletionCommand<'a> {
@@ -121,7 +121,7 @@ impl IntegrationResolutionProcess {
         actor: AuditActor,
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskCompletionResult> {
-        let rbac = services::identity_compose::shared_rbac_service(self.db.clone());
+        let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
         self.run_audited(move |db, session| {

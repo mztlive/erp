@@ -13,11 +13,11 @@ use super::receipt::{
     stable_digest, stable_evidence_id, stable_internal_idempotency_key, CompletionReceipt,
 };
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
 const COMPLETION_AUDIT_PREFIX: &str = "w26-completion-";
 
@@ -55,7 +55,7 @@ impl SupplierFulfillmentProcess {
         let completion_idempotency_key = stable_internal_idempotency_key("w26c", &audit_id);
         let actor_id = actor.id().to_string();
         let actor_for_tx = actor.clone();
-        let rbac_for_tx = services::identity_compose::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let command_for_tx = command.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -149,7 +149,7 @@ impl SupplierFulfillmentProcess {
                         Some(completion_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<CompletionReceipt, services::Error>(receipt)
+                    Ok::<CompletionReceipt, crate::Error>(receipt)
                 })
             })
             .await;

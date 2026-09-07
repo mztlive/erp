@@ -7,9 +7,6 @@ pub enum Error {
     /// MongoDB 连接、事务探测或索引初始化失败。
     #[error(transparent)]
     Database(#[from] persistence_core::Error),
-    /// 服务编排或领域校验失败。
-    #[error(transparent)]
-    Service(#[from] services::Error),
     /// 身份用例失败。
     #[error(transparent)]
     Identity(#[from] erp_identity::Error),

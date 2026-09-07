@@ -1,5 +1,6 @@
 //! 现有库存选源的原子预占写入边界。
 use super::{latest_stock_group, procurement_quantity_changed};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_core::ids::{SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId};
 use erp_core::money::Quantity;
@@ -12,7 +13,6 @@ use erp_procurement::entity::purchase_order::{payload_fingerprint, StockAllocati
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use persistence_core::Executor;
-use services::{Error, Result};
 use std::str::FromStr;
 
 /// 已持久化的现有库存分配及其公开结果。

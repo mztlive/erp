@@ -3,6 +3,7 @@ use super::{
     completion::{complete_acceptance, CompletionKind},
     CustomerAcceptanceProcess,
 };
+use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
@@ -10,7 +11,6 @@ use erp_fulfillment::dto::{CustomerAcceptanceView, ReverseCustomerAcceptanceRequ
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
-use services::Result;
 use validator::Validate;
 impl CustomerAcceptanceProcess {
     /// 冲正客户验收（已过账 → 已冲正；§8.2 第 5 条反向分配事务）。
@@ -93,7 +93,7 @@ impl CustomerAcceptanceProcess {
                         session,
                     )
                     .await?;
-                    Ok::<CustomerAcceptance, services::Error>(reverse_acceptance)
+                    Ok::<CustomerAcceptance, crate::Error>(reverse_acceptance)
                 })
             })
             .await;

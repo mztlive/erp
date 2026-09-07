@@ -5,6 +5,7 @@ use super::{
     completion::{complete_acceptance, CompletionKind},
     CustomerAcceptanceProcess,
 };
+use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
@@ -16,7 +17,6 @@ use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::Transactional;
-use services::{Error, Result};
 use validator::Validate;
 impl CustomerAcceptanceProcess {
     /// 原子登记并过账客户验收。
@@ -73,7 +73,8 @@ impl CustomerAcceptanceProcess {
             return self
                 .read
                 .committed_customer_acceptance_view(&acceptance_id, &req.sales_order_id)
-                .await;
+                .await
+                .map_err(crate::Error::from);
         }
 
         let generated_acceptance_no = if req.acceptance_id.is_none() {
@@ -156,7 +157,7 @@ impl CustomerAcceptanceProcess {
                         session,
                     )
                     .await?;
-                    Ok::<CustomerAcceptance, services::Error>(acceptance)
+                    Ok::<CustomerAcceptance, crate::Error>(acceptance)
                 })
             })
             .await;
@@ -168,7 +169,8 @@ impl CustomerAcceptanceProcess {
                     return self
                         .read
                         .committed_customer_acceptance_view(&acceptance_id, &sales_order_id)
-                        .await;
+                        .await
+                        .map_err(crate::Error::from);
                 }
                 None => return Err(error),
             },

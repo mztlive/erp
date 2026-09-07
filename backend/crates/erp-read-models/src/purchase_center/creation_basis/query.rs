@@ -7,6 +7,7 @@ use super::super::{
     PurchaseOrderReadService,
 };
 use super::mapping::{build_basis_view, build_stock_basis_view};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SkuId};
 use erp_procurement::entity::purchase_order::SalesProcurementCoverage;
@@ -14,7 +15,6 @@ use erp_procurement::service::purchase_order::creation_basis::{basis_groups_from
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 use std::collections::{HashMap, HashSet};
 impl PurchaseOrderReadService {
     /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。

@@ -172,19 +172,19 @@ mod tests {
     /// 采购变更生效不得把数据库 CAS 或 MongoDB 瞬态事务冲突泄露为 500。
     #[test]
     fn effect_concurrency_errors_map_to_stable_conflicts() {
-        let optimistic = services::Error::from(persistence_core::Error::OptimisticLockingError);
+        let optimistic = crate::Error::from(persistence_core::Error::OptimisticLockingError);
         assert!(matches!(
             optimistic,
-            services::Error::ConflictError(message)
+            crate::Error::ConflictError(message)
                 if message == "数据已被其他请求修改，请刷新后重试"
         ));
 
-        let transient = services::Error::from(persistence_core::Error::TransientTransactionConflict(
+        let transient = crate::Error::from(persistence_core::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("write conflict"),
         ));
         assert!(matches!(
             transient,
-            services::Error::TransientTransaction(persistence_core::Error::TransientTransactionConflict(_))
+            crate::Error::TransientTransaction(persistence_core::Error::TransientTransactionConflict(_))
         ));
     }
 

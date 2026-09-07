@@ -2,6 +2,7 @@ use super::{
     receipt::{persist_command_receipt, CommandReceiptWrite},
     SupplierApiGovernanceProcess,
 };
+use crate::Result;
 use application_core::AuditActor;
 use erp_core::ids::BackgroundJobId;
 use erp_supply::{
@@ -12,7 +13,6 @@ use erp_supply::{
 use erp_support::{BackgroundJob, BulkJobExt, SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
 use id_generator::next_id;
 use persistence_core::Transactional;
-use services::Result;
 impl SupplierApiGovernanceProcess {
     pub(super) async fn create_health_job(
         &self,

@@ -10,7 +10,7 @@ use erp_supplier::{
 use erp_support::{FileAssetExt, PendingAttachmentBatch, SensitivityClass};
 use persistence_core::NoTransaction;
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
 use erp_supplier::command_view;

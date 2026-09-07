@@ -1,4 +1,5 @@
 //! 审批取消的同事务写入：Apply 更新运行事实，Replay 仍执行本域 CAS 和审计。
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_core::common::time::Instant;
@@ -9,7 +10,6 @@ use erp_workflow::service::approval::execution::PreparedExecution;
 use erp_workflow::{BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 pub(super) enum CancelledReturn<'a> {
     CustomerRefund(&'a mut CustomerRefund),
@@ -109,7 +109,7 @@ pub(super) async fn persist(mut port: MongoCancelWrite<'_>, executor: &mut dyn E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use services::Error;
+    use crate::Error;
     struct SessionMarker(u64);
     impl Executor for SessionMarker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {

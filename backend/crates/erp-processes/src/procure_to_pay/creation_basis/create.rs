@@ -29,6 +29,7 @@ use erp_procurement::dto::purchase_order::{
 
 use super::super::PurchaseOrderProcess;
 use super::{procurement_quantity_changed, validate_requested_quantities};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -42,7 +43,6 @@ use erp_read_models::purchase_center::repository::{
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
-use services::{Error, Result};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
@@ -425,7 +425,7 @@ async fn write_prepared_draft(
             creator_id: write.actor.id().to_string(),
         },
     };
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -436,7 +436,7 @@ async fn write_prepared_draft(
     .await?
     .ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
     let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")
-        .map_err(services::Error::from)?;
+        .map_err(crate::Error::from)?;
     attach_published_binding(&mut document, binding)?;
     db.purchase_orders().create(write.order, session).await?;
     db.business_documents().create(&document, session).await?;

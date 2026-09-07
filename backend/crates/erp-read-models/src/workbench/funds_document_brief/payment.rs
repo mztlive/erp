@@ -2,8 +2,6 @@
 
 use std::collections::HashSet;
 
-use erp_finance::repository::PayableExt;
-use erp_returns::repository::ReturnsExt;
 use persistence_core::Executor;
 
 use super::super::brief::{
@@ -11,9 +9,10 @@ use super::super::brief::{
 };
 use super::super::presentation::format_yuan;
 use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
-use super::mapping::{amount_reason_brief, append_funds_origin};
+use super::super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap};
+use super::mapping::{amount_reason_brief, append_funds_origin, funds_fact_display, select_funds_origin};
 use crate::errors::Result;
+use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 供应商付款事实简报。
@@ -38,11 +37,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let payments = self
-            .db
-            .supplier_payments()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let payments = self.funds_reader().read_supplier_payments(&ids, executor).await?;
         let created_by = self
             .load_created_by_from_audit(
                 "supplier_payment",
@@ -62,13 +57,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 .get(&payment.base.id)
                 .cloned()
                 .unwrap_or_default();
-            let mut fact = ObjectFact::new(
-                payment.base.id.clone(),
-                format!("供应商付款 {}", payment.payment_no),
-                created_by.get(&payment.base.id).cloned().unwrap_or_default(),
-            );
-            fact.counterparty_label = supplier.clone();
-            fact.impact_summary = Some("付款已登记并过账；纠错须走付款冲正或供应商退款".to_string());
+            let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::supplier_payment_fact(
+                &payment,
+                created_by.get(&payment.base.id),
+                supplier.clone(),
+            ));
+
             let mut sections = Vec::new();
             push_section(&mut sections, "供应商", supplier.as_deref(), false);
             push_section(
@@ -94,7 +88,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             }
             let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
-            fact.brief_source = Some(ObjectBriefSource {
+            fact.display.brief_source = Some(ObjectBriefSource {
                 customer: None,
                 amount_label: Some(format_yuan(&payment.amount)),
                 extra_sections: sections,
@@ -134,11 +128,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let refunds = self
-            .db
-            .supplier_refunds()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let refunds = self.funds_reader().read_supplier_refunds(&ids, executor).await?;
         let created_by = self
             .load_created_by_from_audit(
                 "supplier_refund",
@@ -163,23 +153,22 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let entry_origins = self.payable_entry_origins(&entry_ids, executor).await?;
         for refund in refunds {
             let supplier = supplier_names.get(&refund.supplier_id.to_string()).cloned();
-            let origin = refund
-                .original_payment_id
-                .as_ref()
-                .and_then(|id| payment_origins.get(&id.to_string()))
-                .or_else(|| {
-                    refund
-                        .original_payable_entry_id
-                        .as_ref()
-                        .and_then(|id| entry_origins.get(&id.to_string()))
-                });
-            let mut fact = ObjectFact::new(
-                refund.base.id.clone(),
-                format!("供应商退款 {}", refund.refund_no),
-                created_by.get(&refund.base.id).cloned().unwrap_or_default(),
+            let origin = select_funds_origin(
+                refund.original_payment_id.as_ref(),
+                &payment_origins,
+                refund.original_payable_entry_id.as_ref(),
+                &entry_origins,
             );
-            fact.counterparty_label = supplier.clone();
-            fact.impact_summary = Some("不审批则供应商退款不能过账".to_string());
+            let mut fact = funds_fact_display(
+                authority_mapping::supplier_refund_fact(
+                    &refund,
+                    created_by.get(&refund.base.id),
+                    supplier.clone(),
+                    &payment_origins.counterparties,
+                    &entry_origins.counterparties,
+                ),
+                supplier.clone(),
+            );
             let mut brief = amount_reason_brief(
                 format_yuan(&refund.amount),
                 vec![
@@ -199,7 +188,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 refund.evidence_attachment_id.is_some(),
                 "通过后追加应付冲减；已付款部分追加反向付款分配，原付款或应付事实保留",
             );
-            fact.brief_source = Some(brief);
+            fact.display.brief_source = Some(brief);
             facts.insert((ObjectKind::SupplierRefund, refund.base.id.clone()), fact);
         }
         Ok(())
@@ -227,11 +216,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let reversals = self
-            .db
-            .payment_reversals()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let reversals = self.funds_reader().read_payment_reversals(&ids, executor).await?;
         let created_by = self
             .load_created_by_from_audit(
                 "payment_reversal",
@@ -245,14 +230,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let origins = self.supplier_payment_origins(&payment_ids, executor).await?;
         for reversal in reversals {
-            let origin = origins.get(&reversal.original_supplier_payment_id.to_string());
-            let mut fact = ObjectFact::new(
-                reversal.base.id.clone(),
-                format!("付款冲正 {}", reversal.reversal_no),
-                created_by.get(&reversal.base.id).cloned().unwrap_or_default(),
+            let origin = origins
+                .briefs
+                .get(&reversal.original_supplier_payment_id.to_string());
+            let mut fact = funds_fact_display(
+                authority_mapping::payment_reversal_fact(
+                    &reversal,
+                    created_by.get(&reversal.base.id),
+                    &origins.counterparties,
+                ),
+                origin.and_then(|item| item.counterparty.clone()),
             );
-            fact.counterparty_label = origin.and_then(|item| item.counterparty.clone());
-            fact.impact_summary = Some("不审批则付款冲正不能过账".to_string());
             let mut brief = amount_reason_brief(
                 format_yuan(&reversal.amount),
                 vec![
@@ -272,7 +260,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 reversal.evidence_attachment_id.is_some(),
                 "通过后追加反向付款与反向核销，原付款事实保留并标记已冲正",
             );
-            fact.brief_source = Some(brief);
+            fact.display.brief_source = Some(brief);
             facts.insert((ObjectKind::PaymentReversal, reversal.base.id.clone()), fact);
         }
         Ok(())

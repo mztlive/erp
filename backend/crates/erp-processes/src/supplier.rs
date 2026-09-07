@@ -1,10 +1,10 @@
 //! Named supplier processes that own audited outer transactions.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supplier::SupplierExt;
 use mongodb::Database;
-use services::Result;
 
 use crate::adapters::supplier_service;
 use crate::audit::run_audited;

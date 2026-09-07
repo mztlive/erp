@@ -1,10 +1,10 @@
 //! Named customer processes that own audited outer transactions.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_customer::CustomerExt;
 use mongodb::Database;
-use services::Result;
 
 use crate::adapters::customer_service;
 use crate::audit::run_audited;

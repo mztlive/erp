@@ -1,6 +1,6 @@
 //! 结算根流程的审计回执身份与解析。
+use crate::{Error, Result};
 use erp_supply::service::supplier_settlement::shared::digest_parts;
-use services::{Error, Result};
 const COMMAND_RECEIPT_PREFIX: &str = "supplier-settlement-command-";
 pub(super) const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 /// 生成不暴露原始幂等键的稳定审计收据 ID。

@@ -1,22 +1,24 @@
-# RS Project Template
+# ERP Backend
 
-Rust template that ships an Axum-based Web API and Mongo-backed repositories. Authentication, RBAC, account management, and file upload are wired end to end.
+Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read models. Keep business rules and persistence with their owning domain.
 
 ## What’s Included
 
 - **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
 - **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `web-api`.
-- **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
-- **Domain/services (`entities/`, `services/`)**: Domain entities and application services for ERP operator accounts, audit logs, and RBAC.
+- **Persistence (`crates/persistence-core`)**: Generic repositories, executors, transaction support, and Mongo helpers. Domain crates own concrete repositories, collection accessors, and index definitions.
+- **Business domains (`crates/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to `erp-processes`; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
 
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
 - `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
-- `services/` – Business orchestration grouped by active domains such as accounts, auditing, and IAM.
-- `entities/` – Active domain entities, value objects, and validation helpers.
-- `database/` – Generic MongoDB repositories, typed `DatabaseExt` accessors, entity-specific queries, indexes, and transaction support.
+- `crates/erp-core`, `application-core`, `persistence-core` – Shared value, application and persistence contracts.
+- `crates/erp-processes` – Named cross-domain processes and concrete consumer adapters.
+- `crates/erp-read-models` – Mixed queries, display projections and the shared work-item fact reader.
+- Other `crates/erp-*` – Business domains with independent normal/build/dev dependency boundaries.
+- Legacy `database/tests` and `services/tests` – Historical archives only; preserve bytes and exclude them from Cargo targets.
 - `config/` – Config loader with CLI args and optional Nacos hot-reload.
 - `crates/` – Shared libraries (`id-generator`, `storage`, `entity-*`, `permission-macros`).
 - `config.toml.example` – Minimal local configuration template.
@@ -79,16 +81,17 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 ## Development Checklist
 
 - Format and lint: `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features`.
-- Tests: `cargo test --workspace` (service and entity tests live inline); add a happy-path test for every functional change.
+- Tests: `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`. Preserve existing ignored tests; do not run historical `tests/`, `--test`, `--include-ignored`, MongoDB or external-service tests.
+- Boundaries: run `./scripts/check-bpm-boundaries.sh`, `./scripts/check-domain-boundaries.sh --cutover` and `./scripts/check-permissions-drift.sh`. Legacy crate sources, manifests, and dependency edges must remain absent.
 - Docker: `docker-compose.yml` builds the local Web API; production uses
   digest-pinned images through `docker-compose.production.yml` and `Jenkinsfile`.
   See `DEPLOY.md` for local build, Jenkins parameters, deployment, and rollback.
 
-## Extending the Template
+## Implementation Contract
 
-- Add new domains under `services/src/<domain>/` with a `dto.rs` and only the modules required by real use cases; expose protocol adapters under `apps/web-api/src/core/handler/{admin,auth}` or the dedicated shared handler file such as `upload.rs`.
+- Extend the owning domain under `crates/erp-<domain>/src/`; use only modules required by real use cases. Place mixed writes in a named Process, mixed reads in a ReadModel, and protocol adapters in the existing HTTP handler tree.
 - Reuse service-layer DTOs in handlers instead of duplicating request structs; prefer thin wrappers only when HTTP validation differs.
-- Use `database::Repository` via `DatabaseExt` for all persistence, and keep business rules inside entities/value objects.
+- Use domain-owned repositories through their collection accessors and `persistence_core::Executor` for all persistence, and keep business rules inside entities/value objects.
 - Add external-provider abstractions only when a real integration has at least one caller.
 
 ## Notes

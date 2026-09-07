@@ -1,6 +1,7 @@
 //! Cross-domain invoice posting steps sharing the root transaction executor.
 
 use super::invoice_task::{self, SalesInvoiceTaskChange};
+use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
@@ -10,7 +11,6 @@ use erp_finance::entity::receivable::{Invoice, ReceivableAccount};
 use erp_finance::service::receivable::invoice_posting::persist_sales_invoice_allocations;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 /// Immutable posting intent validated by the root invoice command.
 pub(super) struct InvoicePostingInput<'a> {
@@ -175,7 +175,7 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
 mod tests {
     use super::*;
 
-    use services::Error;
+    use crate::Error;
 
     // 非零大小保证执行器地址能够区分不同实例。
     struct TestExecutor {

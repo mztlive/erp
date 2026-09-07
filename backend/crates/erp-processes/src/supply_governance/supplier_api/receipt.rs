@@ -1,4 +1,5 @@
 //! 回执先写、审计后写、最后读取任务编号；复用同一调用方 Executor。
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::{
@@ -11,7 +12,6 @@ use erp_supply::{
 };
 use erp_support::BulkJobExt;
 use persistence_core::Executor;
-use services::Result;
 
 pub(super) struct CommandReceiptWrite<'a> {
     pub(super) connection: &'a SupplierApiConnection,
@@ -125,7 +125,7 @@ impl ReceiptWritePort for MongoReceiptWrite<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use services::Error;
+    use crate::Error;
     use std::sync::Mutex;
     struct TestExecutor {
         visits: usize,

@@ -8,7 +8,7 @@ use erp_fulfillment::entity::fulfillment::{
 use persistence_core::NoTransaction;
 use {erp_fulfillment::repository::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 use super::{
     dto::{AcceptanceEligibilityView, AcceptanceSalesLineGroupView, EligibleFulfillmentFactView},

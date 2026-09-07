@@ -8,6 +8,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -17,7 +18,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
 use erp_workflow::service::document_registry::new_registered_document;
-use services::{Error, Result};
 
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::FulfillmentProcess;
@@ -151,7 +151,7 @@ impl FulfillmentProcess {
                         record_id.to_string(),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<ElectronicDelivery, services::Error>(record)
+                    Ok::<ElectronicDelivery, crate::Error>(record)
                 })
             })
             .await?;
@@ -247,7 +247,7 @@ async fn persist_unbound_electronic_delivery_document(
 ) -> Result<()> {
     let _ = ensure_electronic_delivery_skips_approval_binding()?;
     ensure_electronic_delivery_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -283,7 +283,7 @@ async fn register_created_electronic_delivery_document(
         DocumentType::ElectronicDelivery,
         record.fulfillment_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_electronic_delivery_document(
         db,
         rbac,
@@ -338,7 +338,7 @@ async fn persist_created_electronic_delivery(
                 )
                 .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

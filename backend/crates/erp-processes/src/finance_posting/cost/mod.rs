@@ -10,6 +10,7 @@
 //! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
 //! `CostExt` 直接写入）。
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::CostEntryId;
@@ -21,7 +22,6 @@ use erp_finance::service::cost::{
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 /// 手工成本登记的根流程服务。
 pub struct CostService {
     db: Database,
@@ -85,7 +85,7 @@ impl CostService {
                 Box::pin(async move {
                     persist_cost_entry_in_transaction(&db, prepared, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;

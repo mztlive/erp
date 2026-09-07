@@ -1,11 +1,11 @@
 //! W26 的唯一正式任务工厂；绑定供应商订单而非集成错误任务。
+use crate::Result;
 use erp_core::ids::WorkItemId;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use services::Result;
 const W26_OWNER_ROLE: &str = "role-procurement";
 const W26_OWNER_ORGANIZATION: &str = "company";
 /// 在原创建分支与时点执行 WorkItem 构造校验；调用方预先生成身份。

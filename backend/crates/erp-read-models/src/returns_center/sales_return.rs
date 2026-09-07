@@ -2,7 +2,7 @@
 use super::dto::SalesReturnCaseView;
 use super::dto::{PageView, SalesReturnCaseListParams, SortDir};
 use super::ReturnsReadService;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use persistence_core::NoTransaction;
 use validator::Validate;

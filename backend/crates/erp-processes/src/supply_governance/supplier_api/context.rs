@@ -1,9 +1,9 @@
 use super::SupplierApiGovernanceProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::{subject, Permission};
 use erp_supply::entity::supplier_api::SupplierConnectionAction;
 use erp_supply::service::supplier_api::context::action_permission;
-use services::{Error, Result};
 impl SupplierApiGovernanceProcess {
     pub(super) async fn ensure_action_permission(
         &self,

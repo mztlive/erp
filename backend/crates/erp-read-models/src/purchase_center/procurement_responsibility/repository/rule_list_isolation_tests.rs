@@ -1,4 +1,4 @@
-use database::ensure_indexes;
+use crate::test_indexes::ensure_indexes;
 use erp_catalog::entity::catalog::product_category::ProductCategoryData;
 use erp_catalog::entity::catalog::sku::SkuData;
 use erp_catalog::entity::catalog::sku_revision::SkuRevisionData;

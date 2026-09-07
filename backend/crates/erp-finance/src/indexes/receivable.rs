@@ -48,7 +48,7 @@ pub(crate) const SALES_INVOICE_ALLOCATIONS: &str =
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub(crate) async fn ensure(db: &Database) -> Result<()> {
+pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, RECEIVABLE_ACCOUNTS, receivable_account_indexes()).await?;
     create_indexes(db, RECEIVABLE_ENTRIES, receivable_entry_indexes()).await?;
     create_indexes(db, RECEIVABLE_FUNDS_REVIEWS, receivable_funds_review_indexes()).await?;

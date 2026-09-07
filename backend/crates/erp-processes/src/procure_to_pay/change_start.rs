@@ -27,6 +27,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
+use crate::{Error, Result};
 use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use erp_workflow::service::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
@@ -37,7 +38,6 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -429,7 +429,7 @@ pub(super) async fn persist_purchase_change_start(
                 )
                 .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -557,10 +557,10 @@ mod tests {
     use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
     use erp_workflow::entity::document_registry::DocumentType;
 
+    use crate::Error;
     use erp_workflow::service::approval::execution::idempotency::{start_identity, StartIdentityParams};
     use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
     use erp_workflow::service::approval::process_kind::process_kind_of;
-    use services::Error;
 
     fn node(
         id: &str,

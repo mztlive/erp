@@ -24,12 +24,12 @@ use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph_with_executor,
     persist_purchase_order_start_with_session, PurchaseOrderStartInput, PurchaseOrderStartPersistInput,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
-use services::{Error, Result};
 
 /// 创建并提交后的正式号与乐观锁版本。
 pub(super) struct SubmittedCreatedOrder {
@@ -311,7 +311,7 @@ async fn prepare_created_order_start(
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
     let binding = find_approval_binding(db, &order.base.id, session)
         .await
-        .map_err(services::Error::from)?;
+        .map_err(crate::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, session).await?;
     let start = purchase_order_start_command(

@@ -13,13 +13,13 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-use services::{Error, Result};
 
 use super::adapter::document_approval_view_with_history;
 use super::approval_prepare as start_approval;
@@ -87,7 +87,7 @@ impl InventoryAdjustmentService {
             DocumentType::StockAdjustment,
             adjustment.adjustment_no.clone(),
         )
-        .map_err(services::Error::from)?;
+        .map_err(crate::Error::from)?;
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::StockAdjustment,
             business_object_id: id.to_string(),
@@ -304,7 +304,7 @@ async fn persist_bound_document(
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<ApprovalDefinitionBinding> {
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -317,7 +317,7 @@ async fn persist_bound_document(
     attach_published_binding(document, binding.clone())?;
     persist_registered_document(db, document, session)
         .await
-        .map_err(services::Error::from)?;
+        .map_err(crate::Error::from)?;
     Ok(binding)
 }
 

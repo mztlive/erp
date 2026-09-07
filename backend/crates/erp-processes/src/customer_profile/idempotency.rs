@@ -4,8 +4,8 @@ use erp_customer::CustomerExt;
 use erp_customer::{CustomerProfileCommand, CustomerProfileReplayContext};
 use persistence_core::NoTransaction;
 
+use crate::{Error, Result};
 use erp_customer::CustomerProfileMutationView;
-use services::{Error, Result};
 
 use super::CustomerProfileService;
 

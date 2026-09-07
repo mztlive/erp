@@ -103,12 +103,27 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 ///
 /// 创建依据和责任选择器保留原专用文案，其余唯一索引使用原通用文案。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    index_name
+        .and_then(known_duplicate_index_message)
+        .unwrap_or("数据已存在，请勿重复提交")
+        .to_string()
+}
+
+/// 返回本域已知唯一索引的固定冲突提示。
+///
+/// # 参数
+/// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
+///
+/// # 返回
+/// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 约束
+/// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
+pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
-        Some("uk_purchase_orders_creation_basis") => "该采购创建依据已生成采购单".to_string(),
-        Some("uk_procurement_responsibility_active_selector") => {
-            "同一采购责任选择器只能有一条启用规则".to_string()
-        }
-        _ => "数据已存在，请勿重复提交".to_string(),
+        "uk_purchase_orders_creation_basis" => Some("该采购创建依据已生成采购单"),
+        "uk_procurement_responsibility_active_selector" => Some("同一采购责任选择器只能有一条启用规则"),
+        _ => None,
     }
 }
 
@@ -164,5 +179,30 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    #[test]
+    fn known_duplicate_export_keeps_exact_owned_index_matrix() {
+        let cases = [
+            ("uk_purchase_orders_creation_basis", "该采购创建依据已生成采购单"),
+            (
+                "uk_procurement_responsibility_active_selector",
+                "同一采购责任选择器只能有一条启用规则",
+            ),
+        ];
+        for (index, expected) in cases {
+            assert_eq!(super::known_duplicate_index_message(index), Some(expected));
+            assert_eq!(
+                super::known_duplicate_index_message(&format!("{index}_extra")),
+                None
+            );
+            assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
+            assert_eq!(
+                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
+                None
+            );
+        }
+        assert_eq!(super::known_duplicate_index_message(""), None);
+        assert_eq!(super::known_duplicate_index_message("unknown_index"), None);
     }
 }

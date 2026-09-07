@@ -10,10 +10,10 @@ use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_workflow::ApprovalActionContext;
-use services::{Error, Result};
 
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use super::approval_query::load_approval_binding;

@@ -9,11 +9,11 @@ use std::future::Future;
 
 use super::assume_send;
 
+use erp_processes::adapters::workflow::work_item_service;
 use erp_workflow::service::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
     FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
 };
-use services::workflow_compose::work_item_service;
 use validator::Validate;
 
 use crate::{

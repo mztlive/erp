@@ -16,8 +16,8 @@ use id_generator::next_id;
 use persistence_core::Executor;
 use {erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::SalesOrder};
 
+use crate::{Error, Result};
 use erp_identity::SharedRbacService;
-use services::{Error, Result};
 
 const OBJECT_TYPE: &str = "sales_order";
 const OWNER_ROLE: &str = "sales_order_owner";
@@ -109,7 +109,7 @@ async fn create_customer_acceptance_task(
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let owner_user_id = order.stable.created_by.clone();
-    let rbac = services::identity_compose::shared_rbac_service(db.clone());
+    let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
     let task = WorkItem::new_with_responsibility_key(
         erp_core::ids::WorkItemId::new(next_id()),
@@ -220,7 +220,7 @@ async fn ensure_customer_acceptance_owner_eligible(
         .find_work_item_account(owner_user_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string()))?;
-    AvailableWorkItemAccount::from_account(&services::workflow_compose::account_fact(&account))
+    AvailableWorkItemAccount::from_account(&crate::adapters::workflow::account_fact(&account))
         .map_err(|_| Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()))?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
     let required = PermissionSet::new(
@@ -242,7 +242,7 @@ async fn ensure_current_owner_execution_access(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let rbac = services::identity_compose::shared_rbac_service(db.clone());
+    let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
     if task.owner_user_id.as_deref() == Some(actor_id) {
         return Ok(());

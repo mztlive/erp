@@ -10,9 +10,9 @@ use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::{Error, Result};
 
 use super::ImportApplyService;
 use erp_import::{CreateLegacyImportBatchRequest, LegacyImportBatchView};
@@ -109,7 +109,7 @@ impl ImportApplyService {
                         .await?;
                     db.background_jobs().create(&job_for_tx, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;

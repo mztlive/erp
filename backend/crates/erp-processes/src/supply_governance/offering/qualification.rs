@@ -1,4 +1,5 @@
 //! 供给资格的实际catalog/supplier组合，按原位置读取六项事实。
+use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_catalog::{CatalogExt, ProductKind};
 use erp_core::{
@@ -9,7 +10,6 @@ use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supply::ports::offering_qualification::QualificationPort;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 /// 生产资格适配器；构造不读取任何事实。
 pub struct MongoOfferingQualification {
     db: Database,

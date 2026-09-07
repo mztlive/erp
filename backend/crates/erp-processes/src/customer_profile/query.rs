@@ -11,7 +11,7 @@ use erp_party::PartyExt;
 use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision};
 use persistence_core::NoTransaction;
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 use super::CustomerProfileService;
 use erp_customer::{

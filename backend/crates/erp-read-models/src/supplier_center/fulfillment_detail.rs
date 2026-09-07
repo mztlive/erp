@@ -18,7 +18,7 @@ use erp_workflow::service::work_item::WorkItemAllowedAction;
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 /// 组合履约订单、主体名称、调查证据和正式任务授权的详情读取器。
 pub struct SupplierFulfillmentDetailReadService {

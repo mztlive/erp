@@ -19,10 +19,10 @@
 //! - D20 `cost`：`CONFIRMED` 成本事实（审核通过、变更差额）；
 //! - D03 `work_item`：采购审核待办（提交创建、审核完成）。
 
+use crate::{Error, Result};
 use erp_identity::SharedRbacService;
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use mongodb::Database;
-use services::{Error, Result};
 mod adapter;
 mod adapters;
 mod allocation_maintenance;

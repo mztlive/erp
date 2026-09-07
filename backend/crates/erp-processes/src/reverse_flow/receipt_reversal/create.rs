@@ -2,6 +2,7 @@
 
 use super::super::ReturnsProcess;
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_identity::SharedRbacService;
@@ -16,7 +17,6 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
 use persistence_core::Transactional;
-use services::Result;
 use validator::Validate;
 
 impl ReturnsProcess {
@@ -50,7 +50,10 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads().receipt_reversal_detail(&reversal.base.id).await
+        self.reads()
+            .receipt_reversal_detail(&reversal.base.id)
+            .await
+            .map_err(crate::Error::from)
     }
 }
 
@@ -83,7 +86,7 @@ async fn persist_created_receipt_reversal(
         DocumentType::ReceiptReversal,
         reversal.reversal_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     let audit = actor.clone().resource_log(
         "receipt_reversal.create",
         "receipt_reversal",
@@ -108,7 +111,7 @@ async fn persist_created_receipt_reversal(
                 .await?;
                 ReturnsService::persist_created_receipt_reversal(&db, &reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await

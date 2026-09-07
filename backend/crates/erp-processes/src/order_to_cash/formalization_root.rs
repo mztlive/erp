@@ -1,13 +1,13 @@
 //! 销售首次生效的订单、应收、财务任务与审计组合流程。
 
 use super::{FormalizedSubmissionWrite, SalesOrderCommandProcess};
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use services::Result;
 
 /// 以同一事务完成销售形式化与首次应收，不改变授权栅栏和重复生效判断。
 pub struct SalesOrderFormalizationProcess {
@@ -80,7 +80,11 @@ impl SalesOrderFormalizationProcess {
                     .await?;
             }
         }
-        service.read_model().sales_order_detail(id, None).await
+        service
+            .read_model()
+            .sales_order_detail(id, None)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 在审批运行时持有的事务内形式化最终通过的销售单。

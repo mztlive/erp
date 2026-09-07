@@ -1,4 +1,5 @@
 //! 退款启动回放的真实授权提供方；主体、动作与对象范围按原顺序读取。
+use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::SharedRbacService;
@@ -9,7 +10,6 @@ use erp_workflow::service::approval::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 #[async_trait]
 trait ReplayAuthorizationPort: Send + Sync {
@@ -35,7 +35,7 @@ struct MongoReplayAuthorization<'a> {
 impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
     async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
         Ok(approval_actor_is_active_with_executor(
-            &services::workflow_compose::workflow_auth(self.db.clone(), self.rbac.clone()),
+            &crate::adapters::workflow::workflow_auth(self.db.clone(), self.rbac.clone()),
             actor,
             executor,
         )
@@ -48,7 +48,7 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalManagementScope> {
         Ok(approval_document_action_scope_with_executor(
-            &services::workflow_compose::workflow_auth(self.db.clone(), self.rbac.clone()),
+            &crate::adapters::workflow::workflow_auth(self.db.clone(), self.rbac.clone()),
             actor,
             permission,
             executor,
@@ -62,7 +62,7 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalManagementScope> {
         Ok(approval_document_read_scope_with_executor(
-            &services::workflow_compose::workflow_auth(self.db.clone(), self.rbac.clone()),
+            &crate::adapters::workflow::workflow_auth(self.db.clone(), self.rbac.clone()),
             actor,
             document_type,
             executor,

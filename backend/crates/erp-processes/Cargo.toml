@@ -21,8 +21,6 @@ erp-finance = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 bpm = { workspace = true }
-database = { workspace = true }
-entities = { workspace = true }
 entity-core = { workspace = true }
 erp-audit = { workspace = true }
 erp-core = { workspace = true }
@@ -42,7 +40,6 @@ mongodb = { workspace = true }
 persistence-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-services = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing = { workspace = true }

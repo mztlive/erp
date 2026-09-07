@@ -11,6 +11,7 @@ mod receipt_reversal_approval_tests;
 
 use sales_refresh::{refresh_affected_sales, AffectedSales};
 
+use crate::Result;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -24,7 +25,6 @@ use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, Transactional};
-use services::Result;
 
 /// 回款冲正最终动作的跨域流程；客户端直接过账入口仍由原 Handler 拒绝。
 pub struct ReceiptReversalProcess {
@@ -70,6 +70,7 @@ impl ReceiptReversalProcess {
         ReturnsReadService::new(self.db.clone())
             .receipt_reversal_detail(&detail_id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 复用审批最终通过的会话，禁止创建内层事务或延后销售刷新。
@@ -193,9 +194,9 @@ impl AffectedSales for DatabasePosting<'_> {
 #[cfg(test)]
 mod tests {
     use super::{post, ReceiptReversalPosting};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
-    use services::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,

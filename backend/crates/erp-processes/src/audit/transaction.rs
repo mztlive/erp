@@ -10,7 +10,7 @@ use erp_audit::AuditLog;
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 
-use services::Result;
+use crate::Result;
 
 /// 在单个 MongoDB 事务中执行业务写入并追加成功审计。
 ///

@@ -1,5 +1,5 @@
 //! 供应商外呼只在原意图提交成功之后进入；不把执行器传给外部步骤。
-use services::Result;
+use crate::Result;
 use std::future::Future;
 
 /// 原意图失败时禁止进入供应商步骤，保留最先返回的错误。
@@ -44,7 +44,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{after_intent, recover_final_result, reuse_or_prepare};
-    use services::Error;
+    use crate::Error;
     use std::sync::{Arc, Mutex};
 
     #[tokio::test]

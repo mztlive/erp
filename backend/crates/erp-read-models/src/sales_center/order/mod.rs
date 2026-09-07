@@ -5,11 +5,11 @@ pub mod dto;
 mod query;
 mod status;
 
+use crate::{Error, Result};
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
-use services::{Error, Result};
 
 /// 销售单列表与详情的跨域只读组合服务。
 pub struct SalesOrderReadService {

@@ -20,6 +20,7 @@ use super::start_approval::{
     PaymentReversalStartPersistInput,
 };
 use super::ReturnsProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -49,7 +50,6 @@ use erp_workflow::service::document_registry::{find_approval_binding, new_regist
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl ReturnsProcess {
@@ -87,7 +87,10 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads().payment_reversal_detail(&reversal.base.id).await
+        self.reads()
+            .payment_reversal_detail(&reversal.base.id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 按原付款一次创建付款冲正并启动审批。
@@ -109,7 +112,11 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.reads().payment_reversal_detail(&reversal_id).await;
+            return self
+                .reads()
+                .payment_reversal_detail(&reversal_id)
+                .await
+                .map_err(crate::Error::from);
         }
         let payment = self
             .db
@@ -148,7 +155,7 @@ impl ReturnsProcess {
         };
         let document =
             new_registered_document(&id, DocumentType::PaymentReversal, reversal.reversal_no.clone())
-                .map_err(services::Error::from)?;
+                .map_err(crate::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -211,7 +218,7 @@ impl ReturnsProcess {
                     db.audit_logs().create(&create_audit, session).await?;
                     db.audit_logs().create(&submit_audit, session).await?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -222,7 +229,10 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads().payment_reversal_detail(&detail_id).await
+        self.reads()
+            .payment_reversal_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 提交付款冲正并调用统一 `start_approval`。
@@ -288,7 +298,10 @@ impl ReturnsProcess {
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor)
             .await?;
-        self.reads().payment_reversal_detail(id).await
+        self.reads()
+            .payment_reversal_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -306,7 +319,7 @@ impl ReturnsProcess {
         let subject = payment_reversal_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let (organization_id, supplier_id) = self
@@ -356,7 +369,10 @@ impl ReturnsProcess {
             },
         )
         .await?;
-        self.reads().payment_reversal_detail(id).await
+        self.reads()
+            .payment_reversal_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -373,7 +389,7 @@ impl ReturnsProcess {
         let adapter = payment_reversal_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
         let subject = payment_reversal_subject_ref(id)?;
         let runtime =
@@ -455,7 +471,7 @@ async fn persist_created_payment_reversal(
         DocumentType::PaymentReversal,
         reversal.reversal_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     let audit = actor.clone().resource_log(
         "payment_reversal.create",
         "payment_reversal",
@@ -482,7 +498,7 @@ async fn persist_created_payment_reversal(
                     .create_payment_reversal(&reversal, session)
                     .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -549,7 +565,7 @@ async fn persist_bound_payment_reversal_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

@@ -24,12 +24,12 @@ use super::status::{
     close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
 };
 use super::SalesOrderReadService;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::subject;
 use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SalesOrderListParams, SubmissionView};
 use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::service::document_registry::find_approval_binding;
-use services::{Error, Result};
 
 /// 构造尚无当前销售版本时的零采购覆盖视图。
 ///

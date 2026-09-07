@@ -12,7 +12,7 @@ use persistence_core::NoTransaction;
 use serde::Serialize;
 use {erp_sales::entity::sales_order::CloseStatus, erp_sales::entity::sales_order::CommercialStatus};
 
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 
 const RECENT_RELATED_LIMIT: u32 = 5;
 

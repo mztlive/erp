@@ -1,0 +1,29 @@
+test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests (cutover_tool_selftests.CutoverTests.test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests) ... ok
+test_comments_wire_strings_and_nested_comments_are_not_legacy_code (cutover_tool_selftests.CutoverTests.test_comments_wire_strings_and_nested_comments_are_not_legacy_code) ... ok
+test_composition_cycle_fails_final_checker (cutover_tool_selftests.CutoverTests.test_composition_cycle_fails_final_checker) ... ok
+test_each_missing_service_rule_fails_and_existing_rules_remain (cutover_tool_selftests.CutoverTests.test_each_missing_service_rule_fails_and_existing_rules_remain) ... ok
+test_final_workspace_without_legacy_passes_actual_checker (cutover_tool_selftests.CutoverTests.test_final_workspace_without_legacy_passes_actual_checker) ... ok
+test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail (cutover_tool_selftests.CutoverTests.test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail) ... ok
+test_legacy_package_and_transitive_nonmember_edge_fail (cutover_tool_selftests.CutoverTests.test_legacy_package_and_transitive_nonmember_edge_fail) ... ok
+test_legacy_source_all_members_inline_tests_and_explicit_target (cutover_tool_selftests.CutoverTests.test_legacy_source_all_members_inline_tests_and_explicit_target) ... ok
+test_missing_activity_target_fails (cutover_tool_selftests.CutoverTests.test_missing_activity_target_fails) ... ok
+test_missing_declared_and_required_member_fails (cutover_tool_selftests.CutoverTests.test_missing_declared_and_required_member_fails) ... ok
+test_negative_workspace_check_has_real_nonzero_process_exit (cutover_tool_selftests.CutoverTests.test_negative_workspace_check_has_real_nonzero_process_exit) ... ok
+test_normal_entry_automatically_enforces_final_rules_when_old_members_are_absent (cutover_tool_selftests.CutoverTests.test_normal_entry_automatically_enforces_final_rules_when_old_members_are_absent) ... ok
+test_old_src_and_manifest_fail_but_historical_archive_is_untouched (cutover_tool_selftests.CutoverTests.test_old_src_and_manifest_fail_but_historical_archive_is_untouched) ... ok
+test_workspace_missing_file_table_members_or_package_records_fails (cutover_tool_selftests.CutoverTests.test_workspace_missing_file_table_members_or_package_records_fails) ... ok
+test_read_only_before_and_existing_empty_output_are_rejected (cutover_tool_selftests.CaptureTests.test_read_only_before_and_existing_empty_output_are_rejected) ... ok
+test_real_comparator_drift_exit_is_not_swallowed (cutover_tool_selftests.CaptureTests.test_real_comparator_drift_exit_is_not_swallowed) ... ok
+test_real_compare_preserves_review_exit_and_unverified_runtime (cutover_tool_selftests.CaptureTests.test_real_compare_preserves_review_exit_and_unverified_runtime) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 1.210s
+
+OK
+领域边界检查
+夹具: errors=0
+工作区: errors=0
+  说明: instantiated planned crates: application-core, erp-audit, erp-catalog, erp-contract, erp-core, erp-customer, erp-finance, erp-fulfillment, erp-identity, erp-import, erp-integration, erp-inventory, erp-party, erp-processes, erp-procurement, erp-read-models, erp-returns, erp-sales, erp-supplier, erp-supply, erp-support, erp-warehouse, erp-workflow, persistence-core
+  说明: cargo metadata 无 kind=test 集成目标
+  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
+领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。

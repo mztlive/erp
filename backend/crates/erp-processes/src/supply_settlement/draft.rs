@@ -4,6 +4,7 @@ use super::{
     RefreshSettlementStatementRequest, SettlementDraftAction, SettlementDraftCommandResult,
     SupplierSettlementProcess,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
@@ -12,7 +13,6 @@ use erp_supply::service::supplier_settlement::{
     SupplierSettlementService,
 };
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 /// 刷新命令的持久化幂等收据。
@@ -86,7 +86,7 @@ impl SupplierSettlementProcess {
                         )
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -196,7 +196,7 @@ impl SupplierSettlementProcess {
                         )
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<SupplierSettlementStatement, services::Error>(statement_for_tx)
+                    Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
                 })
             })
             .await;

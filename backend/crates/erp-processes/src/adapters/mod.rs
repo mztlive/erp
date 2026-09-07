@@ -120,3 +120,8 @@ pub mod supplier_api;
 pub mod supplier_failure;
 pub mod supplier_fulfillment_gateway;
 pub mod workflow;
+
+pub mod identity;
+pub mod identity_audit;
+pub mod support_audit;
+pub mod support_documents;

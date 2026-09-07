@@ -1,7 +1,7 @@
 //! 供应商付款条件提供方的采购命令适配。
 use super::PurchaseOrderProcess;
+use crate::Result;
 use erp_procurement::entity::purchase_order::PaymentTermSnapshot;
-use services::Result;
 impl PurchaseOrderProcess {
     /// 解析付款条件并生成门禁快照（金额/比例门槛暂空）。
     pub(super) async fn payment_term_snapshot(&self, payment_term_code: &str) -> Result<PaymentTermSnapshot> {

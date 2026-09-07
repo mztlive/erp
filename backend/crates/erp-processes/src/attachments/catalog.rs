@@ -1,5 +1,6 @@
 //! Catalog commands that register uploaded files in the same business transaction.
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_catalog::{
     CreateProductBrandRequest, CreateProductRequest, ProductBrandView, ProductView,
@@ -7,7 +8,6 @@ use erp_catalog::{
 };
 use erp_support::PendingFileAssetRequest;
 use mongodb::Database;
-use services::Result;
 
 use crate::adapters::{catalog_service, CatalogPendingAttachments};
 

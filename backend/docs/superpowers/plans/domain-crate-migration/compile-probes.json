@@ -32,8 +32,8 @@
       "final_package": "erp-finance",
       "symbol": "zero_amount",
       "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
-      "after": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
-      "equivalence": "相同 Amount 零值和固定精度；JSON 0.00 与 BSON Decimal128 结果应通过纯内存测试核验"
+      "after": "\"0.00\".parse::<Amount>().expect(\"固定零金额必须可解析\")",
+      "equivalence": "同一zero_amount内对同一0.00文本调用Amount的FromStr实现；Amount值、JSON字符串及BSON Decimal128同形，不改变内部Decimal scale"
     }
   ]
 }

@@ -18,6 +18,7 @@ use erp_workflow::entity::approval_integration::{
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
 
+use crate::{Error, Result};
 use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
@@ -26,7 +27,6 @@ use erp_workflow::service::approval::policy::{
     OwnerOrganizationSource, SALES_ORDER_PROCUREMENT_CONFIRMATION,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;

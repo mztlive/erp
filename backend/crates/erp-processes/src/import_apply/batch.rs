@@ -18,9 +18,9 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::{Error, Result};
 
 use super::ImportApplyService;
 use erp_import::{
@@ -821,7 +821,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn persist_rolls_back_when_later_row_cas_fails() {
-        use database::ensure_indexes;
+        use crate::test_indexes::ensure_indexes;
         use erp_audit::AuditExt;
         use erp_audit::AuditLog;
         use erp_audit::AuditLogData;
@@ -932,7 +932,7 @@ mod tests {
             .unwrap();
             let client = db.client().clone();
             let persist_db = db.clone();
-            let persist: services::Result<LegacyImportBatch> = client
+            let persist: crate::Result<LegacyImportBatch> = client
                 .with_transaction(move |session| {
                     Box::pin(async move {
                         persist_apply_transaction(

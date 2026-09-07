@@ -8,9 +8,9 @@ use erp_support::{RetentionClass, SensitivityClass};
 pub(super) struct ServiceCryptoAdapter<'a>(pub(super) &'a SensitiveDataCodec);
 
 impl ServiceLocationCryptoPort for ServiceCryptoAdapter<'_> {
-    type Error = services::Error;
+    type Error = crate::Error;
 
-    fn encrypt(&self, plaintext: &str) -> services::Result<String> {
+    fn encrypt(&self, plaintext: &str) -> crate::Result<String> {
         Ok(self.0.encrypt(plaintext)?)
     }
 }

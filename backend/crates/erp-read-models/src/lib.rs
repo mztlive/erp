@@ -1,9 +1,8 @@
 //! Cross-domain read models: workbench, customer center and fulfillment queue.
 
-mod errors {
-    pub type Error = services::Error;
-    pub type Result<T> = services::Result<T>;
-}
+mod errors;
+
+pub use errors::{Error, Result};
 
 pub mod customer_center;
 pub mod fulfillment_queue;
@@ -39,3 +38,6 @@ pub mod integration_center;
 
 pub mod catalog_center;
 pub mod ports;
+
+#[cfg(test)]
+mod test_indexes;

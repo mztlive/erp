@@ -16,7 +16,7 @@ impl ReturnsProcess {
         let subject = customer_refund_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let organization_id = self.customer_responsible_org_id(&refund.customer_id).await?;
@@ -67,7 +67,10 @@ impl ReturnsProcess {
             self.recover_customer_refund_start(id, recovery_subject_version, &idempotency_key, actor, error)
                 .await?;
         }
-        self.reads().customer_refund_detail(id).await
+        self.reads()
+            .customer_refund_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
     async fn recover_customer_refund_start(
@@ -112,7 +115,7 @@ impl ReturnsProcess {
                         .await?;
                         let binding = find_approval_binding(&db, &refund_id, session)
                             .await
-                            .map_err(services::Error::from)?;
+                            .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
                         let subject = customer_refund_subject_ref(&refund_id)?;
                         replay_return_start_with_executor(
@@ -181,7 +184,7 @@ impl ReturnsProcess {
                     .await?;
                     let binding = find_approval_binding(&db, &refund_id, session)
                         .await
-                        .map_err(services::Error::from)?;
+                        .map_err(crate::Error::from)?;
                     let binding = require_frozen_binding(binding.as_ref())?;
                     let subject = customer_refund_subject_ref(&refund_id)?;
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
@@ -221,7 +224,7 @@ impl ReturnsProcess {
         let adapter = customer_refund_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = customer_refund_subject_ref(id)?;
         let runtime =

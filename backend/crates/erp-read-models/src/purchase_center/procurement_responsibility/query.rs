@@ -1,9 +1,9 @@
 //! 采购责任列表查询与显示事实装配。
 use super::dto::{ProcurementResponsibilityRuleListParams, ProcurementResponsibilityRulePageView};
 use super::{load_procurement_rule_list_page, to_rule_list_views, ProcurementResponsibilityReadService};
+use crate::Result;
 use erp_procurement::repository::procurement_responsibility::ProcurementResponsibilityRuleFilter;
 use persistence_core::NoTransaction;
-use services::Result;
 impl ProcurementResponsibilityReadService {
     /// 分页查询采购责任规则。
     ///

@@ -14,7 +14,7 @@ use erp_returns::entity::returns::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::Result;
+use crate::Result;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 销售退货处理单列表允许的排序字段白名单。

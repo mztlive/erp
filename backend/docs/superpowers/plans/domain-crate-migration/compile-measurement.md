@@ -4,7 +4,7 @@
 
 本合同同时约束阶段 00 基线、阶段 05/09/10 中间复测和阶段 17 最终验收。目标是减少一次真实内部代码编辑后的 check/build 等待时间，并确认无依赖领域保持 Fresh。
 
-阶段 00 必须实现 `backend/scripts/measure-incremental.py`。该脚本是阶段 00 的待交付代码，本文档编制没有创建或执行它。实现必须满足下文固定接口、恢复机制和输出格式；在脚本验收前，不执行会修改源文件的测量循环。
+活动测量器为 `backend/scripts/measure-incremental.py`。最终基线与候选必须显式使用同一份已冻结且自检通过的测量脚本、compile-probes.json 和本合同。阶段 00 对照提交 `400ab4f7855255b284fe8a8e1caffe27acc96083` 不含该测量脚本，不得伪造其历史存在性。
 
 ## 2. 环境固定
 
@@ -24,7 +24,9 @@
 | --- | --- | --- |
 | Customer | 客户联系方式 required_value 的 Option 借用映射 | None、空值、普通/Unicode 字符串返回相同借用内容 |
 | Sales | sales_submission_fingerprint 的摘要输入借用 | 完整请求 JSON 字节和摘要完全相同 |
-| Finance | zero_amount 的等价十进制零解析 | Amount 值、JSON 字符串、BSON Decimal128 同形 |
+| Finance | zero_amount 对同一0.00文本改用parse调用FromStr | Amount 值、JSON 字符串、BSON Decimal128及小数位数同形 |
+
+财务探针必须保留输入文本 `0.00`。原计划中把该文本改成 `0` 的补丁不能保持 Decimal scale 与 JSON/BSON 表示，已在阶段17纠正；该旧补丁的历史计时不计入最终验收。最终仅允许同一 `zero_amount` 函数对相同文本使用 `FromStr` 与 `parse::<Amount>()` 两种调用写法，先核验实际类型与两侧源码，再完整重测。
 
 这些是已有生产路径内的实现改动；不使用空注释、touch 文件或未被调用的新增函数充当有效样本。测量补丁不提交、不部署，不改变公开 API/DTO 或业务输出。
 
@@ -41,6 +43,7 @@ python3 scripts/measure-incremental.py
   --repo /absolute/path/to/isolated/repo
   --revision baseline|candidate
   --spec /absolute/path/to/compile-probes.json
+  --measurement-contract /absolute/path/to/compile-measurement.md
   --scenario customer|sales|finance
   --mode check|build
   --target-dir /absolute/path/to/dedicated/target
@@ -141,3 +144,14 @@ regression = (candidate_median - baseline_median) / baseline_median × 100%
 入口和真实依赖的 Process/Read Model 重编译、最终二进制链接仍可能发生。中间阶段残留旧大 crate 导致的重编译必须如实记录；不能将中间结果写成最终隔离已经达标。
 
 结构通过但耗时不达标时，阶段 17 保持未验收，依据实测检查宏、单态化、build.rs、feature 传播和入口依赖范围。不得改变样本函数、构建命令、设备或阈值制造通过结果。
+
+## 9. 最终测量事实与独立判定
+
+- `measurement-facts.json` 必须记录实际执行的脚本、spec、合同路径与 SHA256。两个版本必须使用同一冻结版本；路径相同不能替代内容哈希相同。
+- 每次 Cargo 原 JSONL 对应 `units-full.json`，保留完整 target/profile/features/filenames 对象及输入 SHA256；原 `units.json` 继续作为兼容分类证据，不用摘要冒充完整 Cargo metadata。
+- 每组 `cargo-metadata-full.json` 保存同一次真实 metadata 结果；其默认 target 与该组显式测量 target 分别记录。`build-environment.json` 仅记录允许的构建环境指纹，禁止凭据或整个环境转储。
+- `capture-domain-measurement-context.py` 在每组前后记录实际 host、hardware、物理设备、jobs、脚本、构建配置与第三方依赖指纹。两侧显式传入 `--measurement-script`、`--measurement-spec`、`--measurement-contract`；存在配置解析缺口时不得认定环境相等。
+- 全部 12 组顺序执行，各用独立 target。目标锁采用排他创建，已有或疑似失效锁一律拒绝，不覆盖正在使用的锁。
+- `evaluate-domain-performance.py` 从12组原始样本重算中位数、Fresh/Dirty、环境一致性和每个模式的阈值。样本有效、环境相等、领域隔离、check阈值、build阈值必须分别记录，最终通过须同时成立。
+- 19个业务域均须包含在候选隔离判定中；不得只检查Sales和Finance。负载端点只构成观察记录，不能证明全程没有变化；无法支持环境可比时保留失败或未核验状态。
+- 所有性能文件保留失败原始样本。未经证据支持不得删除慢样本、替换场景、缩小目标集合或调整通过阈值。

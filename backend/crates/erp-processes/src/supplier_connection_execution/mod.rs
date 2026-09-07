@@ -1,12 +1,12 @@
 //! 供应商连接后台任务执行：启动事务、事务外网关调用和结果事务。
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_support::BulkJobExt;
 use erp_support::{SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 use std::sync::Arc;
 
 mod catalog;

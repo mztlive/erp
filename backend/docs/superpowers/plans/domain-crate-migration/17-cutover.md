@@ -5,11 +5,11 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 17 |
-| 状态 | 未开始 |
+| 状态 | 执行中 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | 治理/范围核验/最终验收，不创建空业务 crate |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
+| 执行负责人 | Codex；唯一共享注册集成负责人，分片所有权按实际输入证据登记 |
 | 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
@@ -69,6 +69,17 @@
 
 此外必须按 source-symbols.tsv 的选定符号用 rg 检索全部生产消费者，并复核 grouped use、类型别名、pub use、impl、宏与 cfg(test) 调用。具体跨域消费者按第 7、8 节处理；每个旧引用必须改为直接目标合同或组合入口，不能新增旧路径转发。
 
+### 6.1 实际额外切换范围
+
+- 原五个 identity/support/workflow 组合适配器迁入实际 Process adapter；授权、采购改派和 W29 关闭仍按原 Port 方法调用领域提供方。唯一事实读模型不得承担跨域写入。
+- 原 `services/work_item` 与工作台的共享权威事实合并到 `workbench::authority::WorkItemFactsReader`。命令最小事实与显示详情分别保持原查询次数、读取顺序和缺字段行为；不得以完整显示查询替换权限事实查询。
+- Process 与 ReadModel 各自拥有真实 Error/Result，直接消费19领域错误，Process可接收ReadModel错误。审批码只使用 workflow 的唯一定义，禁止旧错误别名或读模型反向依赖Process。
+- 活动唯一键提示由七个拥有领域提供窄函数；三个历史索引提示只由HTTP保留。应用边界仅对这三项保留typed DuplicateKey，HTTP仅对这三项重新分类，其余RepositoryError维持Internal。
+- Web、CLI及两个组合crate的原ignore库测试分别登记阶段00原逐集合索引顺序。只复用领域公开索引，不移动或运行历史tests。
+- 索引组合根使用27个调用保留19领域的原30组索引操作；身份账号/角色、审计日志、身份授权索引按原交错位置执行，workflow/support/finance子组不得以领域聚合入口重排。单个集合内的索引键、选项与创建调用不变。
+- 导入确认的三个复合响应归Process，直接使用workflow唯一定义的任务类型与状态；投影必须保留实际关联任务值，禁止将所有类型固定成IMPORT_BUSINESS_CONFIRMATION。
+- 测量脚本、完整Cargo事实采集、环境记录与独立阈值判定脚本属于最终共享门禁；原00固定生成的事务字段保留历史原件并另附真实性勘误。
+
 ## 7. 目标依赖合同
 
 最终只允许入口→领域/组合层，组合层→领域，领域→基础，workflow→bpm，id-generator→persistence-core；所有 legacy 依赖为 0。
@@ -123,8 +134,7 @@ cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-bpm-boundaries.sh
-./scripts/check-service-boundaries.sh
-./scripts/check-domain-boundaries.sh
+./scripts/check-domain-boundaries.sh --cutover
 ./scripts/check-permissions-drift.sh
 git diff --check
 ```

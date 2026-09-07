@@ -1,4 +1,5 @@
 //! 派发结果在同一执行器中依次写回本域、集成信封、正式责任。
+use crate::Result;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -10,7 +11,6 @@ use erp_supply::service::supplier_fulfillment::{place::persist_dispatch_entities
 use erp_workflow::{WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 #[async_trait]
 trait DispatchWrites: Send {
     async fn domain(&mut self, executor: &mut dyn Executor) -> Result<()>;
@@ -103,9 +103,9 @@ impl DispatchWrites for MongoWrites<'_> {
 #[cfg(test)]
 mod tests {
     use super::{execute, DispatchWrites};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
-    use services::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }

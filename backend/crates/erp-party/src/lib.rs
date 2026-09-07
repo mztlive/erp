@@ -26,7 +26,7 @@ pub use entity::party::{
     PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId, PartyTaxProfileUpdate, PartyUpdate,
     QueryFingerprint, SensitiveFactReuse,
 };
-pub use error::{Error, Result};
+pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     FailClosedAuditPort, FailClosedSupplierRolePort, PartyAuditPort, PreparedPartyAudit, SupplierRolePort,
 };

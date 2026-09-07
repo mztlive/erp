@@ -6,7 +6,7 @@ use validator::Validate;
 use super::super::dto::PurchaseChangeOrderView;
 use super::super::PurchaseOrderReadService;
 use super::mapping::change_list_view;
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 use application_core::{normalize_sort, PageView, SortDir};
 use erp_procurement::dto::purchase_order::PurchaseChangeOrderListParams;
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -87,7 +87,7 @@ impl PurchaseOrderReadService {
     async fn load_change_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
         match find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(crate::errors::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => Ok(binding),
             Err(Error::NotFound(_)) => Ok(None),

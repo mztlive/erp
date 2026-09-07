@@ -32,6 +32,7 @@ use super::approval_prepare::{
 };
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -40,7 +41,6 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::map_receipt_first_write_error;
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 库存调整启动事务写入集合。
 ///
@@ -225,7 +225,7 @@ pub async fn persist_stock_adjustment_start(
                 let mut adjustment = adjustment;
                 db.stock_adjustments().update(&mut adjustment, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<StockAdjustment, services::Error>(adjustment)
+                Ok::<StockAdjustment, crate::Error>(adjustment)
             })
         })
         .await?;

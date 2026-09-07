@@ -2,6 +2,7 @@
 use super::super::allocation_maintenance::prepare_current_sales_allocations;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::effect::EffectiveChangePosting;
+use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_procurement::entity::purchase_order::PurchaseOrder;
@@ -11,7 +12,6 @@ use erp_procurement::service::purchase_order::allocation_maintenance::{
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

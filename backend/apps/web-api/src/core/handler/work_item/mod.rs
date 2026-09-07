@@ -42,6 +42,7 @@ where
     SendFut(fut)
 }
 
+use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_read_models::{
     FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView,
     WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
@@ -52,7 +53,6 @@ use erp_workflow::service::work_item::{
     WorkItemReassignCandidateView,
 };
 use serde::Serialize;
-use services::workflow_compose::{work_item_service, workflow_auth};
 
 use crate::{
     app_state::AppState,
@@ -113,11 +113,17 @@ pub enum WorkItemActionError {
 
 impl From<erp_workflow::Error> for WorkItemActionError {
     fn from(error: erp_workflow::Error) -> Self {
-        services::Error::from(error).into()
+        erp_processes::Error::from(error).into()
     }
 }
 
-impl From<services::Error> for WorkItemActionError {
+impl From<erp_read_models::Error> for WorkItemActionError {
+    fn from(error: erp_read_models::Error) -> Self {
+        erp_processes::Error::from(error).into()
+    }
+}
+
+impl From<erp_processes::Error> for WorkItemActionError {
     /// 将服务错误映射为责任命令错误。
     ///
     /// # 参数
@@ -125,10 +131,10 @@ impl From<services::Error> for WorkItemActionError {
     ///
     /// # 返回
     /// 审批任务保护使用稳定码，其余沿用统一映射。
-    fn from(error: services::Error) -> Self {
-        if error.code() == Some(services::ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
+    fn from(error: erp_processes::Error) -> Self {
+        if error.code() == Some(erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
             return Self::ApprovalProtected(ApprovalHttpError::coded(
-                services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+                erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
                 uuid::Uuid::new_v4().to_string(),
                 None,
             ));
@@ -231,7 +237,7 @@ fn reject_approval_task(
         return Ok(());
     }
     Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(
-        services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+        erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
         crate::core::handler::approval_instance::error::correlation_id(headers),
         None,
     )))
@@ -496,8 +502,8 @@ mod tests {
 
     #[tokio::test]
     async fn approval_generic_mutation_maps_to_stable_409() {
-        let response = WorkItemActionError::from(services::Error::from_approval_code(
-            services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+        let response = WorkItemActionError::from(erp_processes::Error::from_approval_code(
+            erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
         ))
         .into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);

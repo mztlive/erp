@@ -4,6 +4,14 @@ set -euo pipefail
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAILED=0
+if [[ "${1:-}" == "--self-test-only" && "$#" -eq 1 ]]; then
+    exec python3 "${BACKEND_DIR}/scripts/bpm_workspace.py" --backend "${BACKEND_DIR}" --self-test-only
+fi
+if [[ "$#" -ne 0 ]]; then
+    echo "用法: $0 [--self-test-only]" >&2
+    exit 2
+fi
+
 
 fail() {
     echo "错误: $1" >&2
@@ -11,7 +19,9 @@ fail() {
 }
 
 search_rs() {
-    grep -RIn --include='*.rs' -E "$1" "${BACKEND_DIR}" || true
+    # Keep the same ERE and exact metadata-derived files; batch subprocesses
+    # within the platform argv limit instead of spawning grep for every file.
+    printf '%s\0' "${ACTIVE_RUST_SOURCES[@]}" | xargs -0 grep -Hn -E "$1" || true
 }
 
 require_file() {
@@ -54,54 +64,19 @@ require_file "${BACKEND_DIR}/crates/bpm/Cargo.toml"
 require_file "${BACKEND_DIR}/scripts/check-bpm-boundaries.sh"
 require_file "${BACKEND_DIR}/crates/erp-workflow/src/service/approval/process_kind.rs"
 
-if ! grep -E -q '^[[:space:]]*"crates/bpm"' "${BACKEND_DIR}/Cargo.toml"; then
-    fail "workspace members 未登记 crates/bpm"
+# The final workspace no longer contains legacy manifests. Resolve the actual
+# members and all normal/build/dev edges once; do not infer them from old paths.
+if ! SOURCE_LIST="$(python3 "${BACKEND_DIR}/scripts/bpm_workspace.py" --backend "${BACKEND_DIR}")"; then
+    fail "BPM 活动 workspace/完整依赖图检查失败"
+    exit 1
 fi
-if ! grep -E -q '^bpm = \{ path = "crates/bpm" \}' "${BACKEND_DIR}/Cargo.toml"; then
-    fail "[workspace.dependencies] 未登记 bpm path"
-fi
-
-for crate in entities database services; do
-    if ! grep -E -q '^bpm = \{ workspace = true \}' "${BACKEND_DIR}/${crate}/Cargo.toml"; then
-        fail "${crate}/Cargo.toml 未直接声明 bpm = { workspace = true }"
-    fi
-    if grep -E -q 'bpm = \{ path' "${BACKEND_DIR}/${crate}/Cargo.toml"; then
-        fail "${crate}/Cargo.toml 重复声明了 BPM path"
-    fi
-done
-
-if grep -E -q 'bpm[[:space:]]*=' "${BACKEND_DIR}/apps/web-api/Cargo.toml"; then
-    fail "apps/web-api 不得直接依赖 bpm"
-fi
-
-require_file "${BACKEND_DIR}/apps/cli/Cargo.toml"
-if ! grep -E -q '^[[:space:]]*"apps/cli"' "${BACKEND_DIR}/Cargo.toml"; then
-    fail "workspace members 未登记 apps/cli"
-fi
-if grep -E -q 'web-api[[:space:]]*=' "${BACKEND_DIR}/apps/cli/Cargo.toml"; then
-    fail "apps/cli 不得依赖 web-api"
-fi
-if grep -E -q 'bpm[[:space:]]*=' "${BACKEND_DIR}/apps/cli/Cargo.toml"; then
-    fail "apps/cli 不得直接依赖 bpm"
-fi
-CLI_TREE="$(cargo tree -p cli --edges normal --manifest-path "${BACKEND_DIR}/Cargo.toml")"
-if printf '%s\n' "${CLI_TREE}" | grep -E -w 'web-api' >/dev/null; then
-    fail "cli 依赖图包含 web-api"
-    printf '%s\n' "${CLI_TREE}" | grep -E -w 'web-api' >&2 || true
-fi
-
-echo "检查 bpm 依赖图…"
-if grep -E -q '^(entities|database|services|web-api|config|mongodb|axum|id-generator|permission-macros)[[:space:]]*=' \
-    "${BACKEND_DIR}/crates/bpm/Cargo.toml"; then
-    fail "bpm/Cargo.toml 声明了禁止依赖"
-    grep -En '^(entities|database|services|web-api|config|mongodb|axum|id-generator|permission-macros)[[:space:]]*=' \
-        "${BACKEND_DIR}/crates/bpm/Cargo.toml" >&2 || true
-fi
-
-TREE="$(cargo tree -p bpm --edges normal --manifest-path "${BACKEND_DIR}/Cargo.toml")"
-if printf '%s\n' "${TREE}" | grep -E -w 'entities|database|services|web-api|mongodb|axum|id-generator|permission-macros' >/dev/null; then
-    fail "bpm 依赖图包含禁止 crate"
-    printf '%s\n' "${TREE}" | grep -E -w 'entities|database|services|web-api|mongodb|axum|id-generator|permission-macros' >&2 || true
+ACTIVE_RUST_SOURCES=()
+while IFS= read -r source; do
+    [[ -n "$source" ]] && ACTIVE_RUST_SOURCES+=("$source")
+done <<< "$SOURCE_LIST"
+if [[ "${#ACTIVE_RUST_SOURCES[@]}" -eq 0 ]]; then
+    fail "活动 workspace 没有 Rust 源码"
+    exit 1
 fi
 
 echo "检查 bpm 源码边界…"

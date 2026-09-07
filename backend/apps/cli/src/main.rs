@@ -1,6 +1,8 @@
 //! ERP 运维命令行入口。
 //!
-//! 本 crate 只编排 `services` 已有账号用例，禁止依赖 `web-api`。
+//! 本 crate 只装配身份领域已有账号用例，禁止依赖 `web-api`。
+
+mod indexes;
 
 mod args;
 mod error;

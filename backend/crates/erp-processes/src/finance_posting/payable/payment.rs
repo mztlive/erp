@@ -26,6 +26,7 @@ use super::mapping::resolve_current_payment_recipient;
 use super::payment_task;
 use super::posting::{post_supplier_payment_in_transaction, PaymentPostSource};
 use super::{PayableService, SupplierPaymentWithAssetsResult};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -34,7 +35,6 @@ use erp_identity::SharedRbacService;
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-use services::{Error, Result};
 
 impl PayableService {
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
@@ -177,7 +177,7 @@ impl PayableService {
                         DocumentType::SupplierPayment,
                         payment.payment_no.clone(),
                     )
-                    .map_err(services::Error::from)?;
+                    .map_err(crate::Error::from)?;
                     persist_unbound_supplier_payment_document(
                         &db,
                         &rbac,
@@ -233,7 +233,7 @@ impl PayableService {
                     .await?;
                     let command_audit = command_receipt_for_tx.audit(actor_owned.clone(), id)?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<SupplierPayment, services::Error>(payment)
+                    Ok::<SupplierPayment, crate::Error>(payment)
                 })
             })
             .await;
@@ -360,7 +360,7 @@ async fn persist_unbound_supplier_payment_document(
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -376,5 +376,5 @@ async fn persist_unbound_supplier_payment_document(
     }
     persist_registered_document(db, &document, session)
         .await
-        .map_err(services::Error::from)
+        .map_err(crate::Error::from)
 }

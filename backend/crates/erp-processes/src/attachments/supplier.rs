@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
+use crate::Result;
 use application_core::AuditActor;
 use erp_party::SensitiveDataCodec;
 use erp_supplier::SaveSupplierProfileRequest;
 use erp_support::PendingFileAssetRequest;
 use mongodb::Database;
-use services::Result;
 
 use crate::supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
 

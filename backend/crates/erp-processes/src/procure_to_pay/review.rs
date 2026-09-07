@@ -24,9 +24,9 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::allocation_maintenance::prepare_current_sales_allocations;
 use super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
-use services::{Error, Result};
 
 impl PurchaseOrderProcess {
     /// 读取并完成采购形式化的事务外领域计算。

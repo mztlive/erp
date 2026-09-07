@@ -22,6 +22,7 @@ use super::mapping::{
     build_adjustment_line_updates, is_supported_start_receipt_identity, stock_adjustment_start_identity,
     stock_adjustment_start_scopes,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_inventory::{ExpectedStockBalanceVersion, SubmitStockAdjustmentRequest};
@@ -40,7 +41,6 @@ use erp_workflow::service::approval::{
     approval_actor_is_active_with_executor, approval_decide_scope_with_executor,
     approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
 };
-use services::{Error, Result};
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
 
@@ -430,7 +430,7 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if !approval_actor_is_active_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         executor,
     )
@@ -441,14 +441,14 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     }
     let organization_id = adjustment.warehouse_id.as_ref();
     let action_scope = approval_document_action_scope_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         "stock_adjustment:submit",
         executor,
     )
     .await?;
     let read_scope = approval_document_read_scope_with_executor(
-        &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
         DocumentType::StockAdjustment,
         executor,
@@ -658,13 +658,13 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
         let decide_scope = approval_decide_scope_with_executor(
-            &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+            &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
             &assignee_actor,
             executor,
         )
         .await?;
         let read_scope = approval_document_read_scope_with_executor(
-            &services::workflow_compose::workflow_auth(db.clone(), rbac.clone()),
+            &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
             &assignee_actor,
             DocumentType::StockAdjustment,
             executor,

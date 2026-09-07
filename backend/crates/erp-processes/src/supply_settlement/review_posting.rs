@@ -1,5 +1,6 @@
 //! 正式复核事务的生产步骤与同一执行器合同。
 use super::review::{review_decision_receipt_message, ReviewDecisionReceipt};
+use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -29,7 +30,6 @@ use erp_supply::{
 use erp_workflow::{entity::work_item::WorkItem, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Step {
     Authorize,
@@ -94,7 +94,7 @@ impl PostingSteps for MongoPosting<'_> {
         let input = &mut self.input;
         match step {
             Step::Authorize => {
-                services::workflow_compose::work_item_service(input.db.clone(), input.rbac.clone())
+                crate::adapters::workflow::work_item_service(input.db.clone(), input.rbac.clone())
                     .ensure_domain_decision_access(input.actor, input.work_item, ex)
                     .await?
             }

@@ -21,6 +21,7 @@ use super::adapter::{
 };
 use super::start_approval::load_bound_definition_graph;
 use super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
@@ -34,7 +35,6 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::find_approval_binding;
-use services::{Error, Result};
 use validator::Validate;
 
 impl PurchaseOrderProcess {
@@ -81,7 +81,7 @@ impl PurchaseOrderProcess {
         let adapter = purchase_order_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, order.approval_subject_version).await?;
@@ -467,8 +467,8 @@ mod tests {
     use erp_core::common::time::Instant;
 
     use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
+    use crate::Error;
     use erp_workflow::service::approval::execution::{prepare_document_cancel, PreparedExecution};
-    use services::Error;
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -650,14 +650,14 @@ mod tests {
             &mut self,
             step: super::CancelStep,
             executor: &mut dyn persistence_core::Executor,
-        ) -> services::Result<()> {
+        ) -> crate::Result<()> {
             assert_eq!(
                 executor as *mut dyn persistence_core::Executor as *mut () as usize,
                 self.expected_executor
             );
             self.seen.push(step);
             if self.fail_at == Some(step) {
-                return Err(services::Error::ConflictError("original-step-error".to_string()));
+                return Err(crate::Error::ConflictError("original-step-error".to_string()));
             }
             Ok(())
         }
@@ -695,7 +695,7 @@ mod tests {
                 .await
                 .unwrap_err();
             assert!(
-                matches!(error, services::Error::ConflictError(message) if message == "original-step-error")
+                matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );
             assert_eq!(steps.seen, expected[..=index]);
         }

@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use crate::finance_posting::payable::PayableService;
 use crate::finance_posting::payable::SupplierPaymentWithAssetsResult;
+use crate::Result;
 use application_core::AuditActor;
 use erp_finance::dto::payable::CommitSupplierPaymentRequest;
 use erp_support::{BankReceiptEvidencePolicy, PendingFileAssetRequest};
 use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
-use services::Result;
 
 use super::pending::PendingFileAssets;
 
@@ -28,7 +28,7 @@ pub async fn commit_supplier_payment_with_assets(
             request.registration.retention_class,
             false,
         )
-        .map_err(|error| services::Error::ValidationError(error.to_string()))?;
+        .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
     PayableService::new(db)

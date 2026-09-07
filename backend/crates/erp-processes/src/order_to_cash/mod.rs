@@ -12,6 +12,7 @@ mod procurement;
 pub mod progress;
 mod start_approval;
 
+use crate::{Error, Result};
 pub use adapter::sales_order_object_readable;
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::BusinessType;
@@ -20,7 +21,6 @@ use erp_workflow::entity::document_registry::DocumentType;
 pub use formalization_root::SalesOrderFormalizationProcess;
 use formalize::FormalizedSubmissionWrite;
 use mongodb::Database;
-use services::{Error, Result};
 
 /// Sales lifecycle commands combining sales writes, provider checks, workflow and audit.
 pub struct SalesOrderCommandProcess {

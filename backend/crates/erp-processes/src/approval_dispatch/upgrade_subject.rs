@@ -29,9 +29,9 @@ use {
     erp_sales::entity::sales_order::ReviewStatus,
 };
 
+use crate::{Error, Result};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::policy::require_process_required;
-use services::{Error, Result};
 
 /// 审批绑定升级使用的强业务对象事实。
 ///

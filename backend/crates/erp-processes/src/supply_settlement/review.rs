@@ -4,6 +4,7 @@ use super::{
     SubmitSettlementReviewResult, SupplierSettlementProcess, COMMAND_FINGERPRINT_PREFIX,
     SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -26,7 +27,6 @@ use erp_workflow::entity::work_item::{
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use std::str::FromStr;
 use validator::Validate;
 
@@ -125,7 +125,7 @@ impl SupplierSettlementProcess {
                         Some(review_submission_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(SupplierSettlementStatement, WorkItem), services::Error>((current, work_item))
+                    Ok::<(SupplierSettlementStatement, WorkItem), crate::Error>((current, work_item))
                 })
             })
             .await;
@@ -224,7 +224,7 @@ impl SupplierSettlementProcess {
         let client = db.client().clone();
         let actor_id = actor.id().to_string();
         let audit_actor = actor.clone();
-        let rbac_for_tx = services::identity_compose::shared_rbac_service(self.db.clone());
+        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let operation_id = req.decision.operation_id.clone();
         let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
@@ -255,7 +255,7 @@ impl SupplierSettlementProcess {
                         session,
                     )
                     .await?;
-                    Ok::<(SupplierSettlementStatement, WorkItem, ReviewDecisionReceipt), services::Error>((
+                    Ok::<(SupplierSettlementStatement, WorkItem, ReviewDecisionReceipt), crate::Error>((
                         statement, work_item, receipt,
                     ))
                 })

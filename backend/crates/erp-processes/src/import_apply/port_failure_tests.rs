@@ -1,5 +1,6 @@
 //! Characterizing tests: a write-port failure must not produce a completed confirmation/WorkItem.
 
+use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
@@ -7,7 +8,6 @@ use erp_import::{
     ConfirmationDecision, ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
 };
 use persistence_core::{Executor, NoTransaction};
-use services::{Error, Result};
 
 /// Minimal write port used to prove confirmation/WorkItem do not advance on failure.
 #[async_trait]

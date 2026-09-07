@@ -1,6 +1,7 @@
 //! 在原结果事务中登记连接失败的 W29 事实、工作项和审计。
 use crate::adapters::supplier_failure::integration_class;
 use crate::integration_resolution::producer::error_work_item;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -14,7 +15,6 @@ use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierHealthChec
 use erp_supply::{ports::supplier_api_gateway::ClassifiedError, service::supplier_api::context::digest};
 use erp_support::BackgroundJob;
 use erp_workflow::WorkItemExt;
-use services::Result;
 
 pub(super) fn settle_health_failure(
     job: &mut BackgroundJob,
@@ -130,8 +130,8 @@ impl FailureWritePort for MongoFailureWrite<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
     use persistence_core::Executor;
-    use services::Error;
     use std::sync::Mutex;
 
     struct TestExecutor {

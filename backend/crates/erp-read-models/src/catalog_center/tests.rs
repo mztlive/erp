@@ -84,7 +84,7 @@ async fn invalid_product_page_stops_before_any_query() {
     let params = serde_json::from_value(json!({"page": 0})).unwrap();
     assert!(matches!(
         service.product_list(&params).await,
-        Err(crate::errors::Error::ValidationError(_))
+        Err(crate::Error::ValidationError(_))
     ));
     assert!(query.calls.lock().unwrap().is_empty());
 }
@@ -122,7 +122,7 @@ async fn product_repository_failure_keeps_original_catalog_error_mapping() {
     let service = CatalogCenterReadService::new(query.clone());
     let params = serde_json::from_value(json!({})).unwrap();
     assert!(matches!(service.product_list(&params).await,
-        Err(crate::errors::Error::ConflictError(message)) if message == "数据已被其他请求修改，请刷新后重试"));
+        Err(crate::Error::ConflictError(message)) if message == "数据已被其他请求修改，请刷新后重试"));
     assert_eq!(*query.calls.lock().unwrap(), vec!["product"]);
 }
 
@@ -133,10 +133,10 @@ async fn sellable_validation_precedes_price_validation_and_query() {
     let params =
         serde_json::from_value(json!({"page":0,"sales_price_min":"5.00","sales_price_max":"1.00"})).unwrap();
     assert!(matches!(service.sellable_sku_list(&params).await,
-        Err(crate::errors::Error::ValidationError(message)) if message.contains("页码必须大于0")));
+        Err(crate::Error::ValidationError(message)) if message.contains("页码必须大于0")));
     let params = serde_json::from_value(json!({"sales_price_min":"5.00","sales_price_max":"1.00"})).unwrap();
     assert!(matches!(service.sellable_sku_list(&params).await,
-        Err(crate::errors::Error::ValidationError(message)) if message == "最低销售价不能高于最高销售价"));
+        Err(crate::Error::ValidationError(message)) if message == "最低销售价不能高于最高销售价"));
     assert!(query.calls.lock().unwrap().is_empty());
 }
 

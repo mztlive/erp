@@ -1,9 +1,9 @@
 //! File-asset adapter for financial review evidence validation.
 
+use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::{ReviewEvidenceAssetFact, ValidatedCardFundsReviewDecision};
 use erp_support::FileAsset;
-use services::{Error, Result};
 
 pub(super) use erp_finance::service::receivable::card_funds_decision::{
     canonical_evidence, validated_from_dto, workflow_comment,

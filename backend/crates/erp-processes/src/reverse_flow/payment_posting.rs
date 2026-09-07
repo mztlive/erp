@@ -1,6 +1,7 @@
 //! 付款冲正、应付冲减、付款工作项与审计的同事务逆向流程。
 
 use super::adapter::execute_payment_reversal_domain_action;
+use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::PayableAccountId;
@@ -14,7 +15,6 @@ use erp_returns::entity::returns::PaymentReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use services::Result;
 use std::collections::HashSet;
 
 /// 付款冲正最终通过流程；所有财务与工作项副作用复用调用方事务。
@@ -63,6 +63,7 @@ impl PaymentReversalProcess {
         ReturnsReadService::new(self.db.clone())
             .payment_reversal_detail(&detail_id)
             .await
+            .map_err(crate::Error::from)
     }
 
     /// 在审批最终通过持有的唯一事务内执行付款冲正。
@@ -236,7 +237,7 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use services::Error;
+    use crate::Error;
     use std::sync::Mutex;
 
     struct TestExecutor {

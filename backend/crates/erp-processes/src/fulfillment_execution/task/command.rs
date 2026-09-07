@@ -3,12 +3,12 @@ use super::{
     ensure_current_owner_execution_access, ensure_task_matches_frozen_identity, load_single_open_task,
     FulfillmentTaskObject,
 };
+use crate::Result;
 use async_trait::async_trait;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 #[derive(Clone, Copy)]
 enum CommandKind {
@@ -106,12 +106,12 @@ pub(super) async fn complete(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
     use erp_core::ids::{DeliveryId, PurchaseOrderId, SalesOrderId, WorkItemId};
     use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryData, DeliveryType};
     use erp_workflow::entity::work_item::{
         AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
     };
-    use services::Error;
     use std::sync::Mutex;
 
     struct TestExecutor {

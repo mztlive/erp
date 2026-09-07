@@ -3,9 +3,9 @@ use erp_inventory::StockAdjustmentUpdate;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_workflow::service::approval::execution::PreparedExecution;
-use services::{Error, Result};
 
 use super::adapter::{
     execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,

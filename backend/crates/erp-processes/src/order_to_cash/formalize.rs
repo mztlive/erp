@@ -24,10 +24,10 @@ use super::SalesOrderCommandProcess;
 use crate::procure_to_pay::responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityProcess, ResolutionInput,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_sales::service::sales_order::formalize::{build_revision_for_order, load_latest_submission};
 use erp_sales::service::sales_order::lifecycle::ensure_final_approve_formalize;
-use services::{Error, Result};
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 pub(super) struct ProcurementFormalizationPlan {

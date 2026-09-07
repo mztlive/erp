@@ -78,7 +78,7 @@ pub enum Error {
     Validation(#[from] validator::ValidationErrors),
 
     #[error("{0}")]
-    Coded(services::ErrorCode),
+    Coded(erp_workflow::ErrorCode),
 }
 
 impl From<persistence_core::Error> for Error {
@@ -87,7 +87,19 @@ impl From<persistence_core::Error> for Error {
     /// 唯一键与乐观锁冲突使用 409，其余仓储错误保持内部错误语义。
     /// 唯一键冲突优先按已知索引名给出字段级提示。
     fn from(error: persistence_core::Error) -> Self {
-        services::Error::from(error).into()
+        match error {
+            error @ persistence_core::Error::DuplicateKey(_) => {
+                Self::Conflict(duplicate_index_conflict_message(error.duplicate_index_name()))
+            }
+            persistence_core::Error::OptimisticLockingError => {
+                Self::Conflict("数据已被其他请求修改，请刷新后重试".to_string())
+            }
+            persistence_core::Error::TransientTransactionConflict(_) => {
+                Self::Conflict("并发事务冲突，请重试".to_string())
+            }
+            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
+            other => Self::Internal(format!("数据库错误：{other}")),
+        }
     }
 }
 
@@ -130,164 +142,242 @@ impl From<std::io::Error> for Error {
     }
 }
 
+// 穷尽移动共有错误载荷；RBAC、审批码与应用历史索引在各实际边界显式展开。
+macro_rules! boundary_error {
+    ($error:expr, $provider:ident; $($extra:tt)*) => {
+        match $error {
+            $provider::Error::ValidationError(msg) => Error::BadRequest(msg),
+            $provider::Error::NotFound(msg) => Error::NotFound(msg),
+            $provider::Error::ConflictError(msg) => Error::Conflict(msg),
+            $provider::Error::ReceiptDuplicate(_) => Error::Conflict("数据已存在，请勿重复提交".to_string()),
+            $provider::Error::TransientTransaction(_) => Error::Conflict("并发事务冲突，请重试".to_string()),
+            $provider::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
+            $provider::Error::Forbidden(msg) => Error::Forbidden(msg),
+            $provider::Error::Unauthenticated(msg) => Error::Unauthorized(msg),
+            $provider::Error::Logic(err) => Error::Logic(err),
+            $provider::Error::Internal(msg) => Error::Internal(msg),
+            $provider::Error::OutcomeUnknown(error) => Error::OutcomeUnknown(error),
+            $($extra)*
+            error @ $provider::Error::RepositoryError(_) => Error::Internal(error.to_string()),
+        }
+    };
+}
+
 impl From<erp_identity::Error> for Error {
     /// 将身份领域错误映射为 HTTP 边界错误。
     fn from(err: erp_identity::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_identity;
+            error @ erp_identity::Error::Rbac(_) => Self::Internal(error.to_string()),
+        )
     }
 }
 
 impl From<erp_audit::Error> for Error {
     /// 将审计领域错误映射为 HTTP 边界错误。
     fn from(err: erp_audit::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_audit;
+        )
     }
 }
 
 impl From<erp_workflow::Error> for Error {
     /// 将工作流领域错误映射为 HTTP 边界错误。
     fn from(err: erp_workflow::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_workflow;
+            error @ erp_workflow::Error::Rbac(_) => Self::Internal(error.to_string()),
+            erp_workflow::Error::Coded(code) => Self::Coded(code),
+        )
     }
 }
 
 impl From<erp_support::Error> for Error {
     /// 将支撑领域错误映射为 HTTP 边界错误。
     fn from(err: erp_support::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_support;
+        )
     }
 }
 
 impl From<erp_party::Error> for Error {
     /// 将主体领域错误映射为 HTTP 边界错误。
     fn from(err: erp_party::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_party;
+        )
     }
 }
 
 impl From<erp_customer::Error> for Error {
     /// 将客户领域错误映射为 HTTP 边界错误。
     fn from(err: erp_customer::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_customer;
+        )
     }
 }
 
 impl From<erp_supplier::Error> for Error {
     /// 将供应商领域错误映射为 HTTP 边界错误。
     fn from(err: erp_supplier::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_supplier;
+        )
     }
 }
 
 impl From<erp_catalog::Error> for Error {
     /// 将商品领域错误映射为 HTTP 边界错误。
     fn from(err: erp_catalog::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_catalog;
+        )
     }
 }
 
 impl From<erp_warehouse::Error> for Error {
     /// 将仓库领域错误映射为 HTTP 边界错误。
     fn from(err: erp_warehouse::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_warehouse;
+        )
     }
 }
 
 impl From<erp_contract::Error> for Error {
     /// 将合同领域错误映射为 HTTP 边界错误。
     fn from(err: erp_contract::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_contract;
+        )
     }
 }
 
 impl From<erp_inventory::Error> for Error {
     /// 将库存领域错误映射为 HTTP 边界错误。
     fn from(err: erp_inventory::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_inventory;
+        )
     }
 }
 
 impl From<erp_finance::Error> for Error {
     /// 将财务领域错误映射为 HTTP 边界错误。
     fn from(err: erp_finance::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_finance;
+        )
     }
 }
 
 impl From<erp_sales::Error> for Error {
     /// 将销售领域错误映射为 HTTP 边界错误。
     fn from(err: erp_sales::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_sales;
+        )
     }
 }
 
 impl From<erp_integration::Error> for Error {
     /// 将集成领域错误映射为 HTTP 边界错误。
     fn from(err: erp_integration::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_integration;
+        )
     }
 }
 
 impl From<erp_supply::Error> for Error {
     /// 将供应链领域错误映射为 HTTP 边界错误。
     fn from(err: erp_supply::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_supply;
+        )
     }
 }
 
 impl From<erp_returns::Error> for Error {
     /// 将退货逆向领域错误映射为 HTTP 边界错误。
     fn from(err: erp_returns::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_returns;
+        )
     }
 }
 
 impl From<erp_fulfillment::Error> for Error {
     /// 将履约领域错误映射为 HTTP 边界错误。
     fn from(err: erp_fulfillment::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_fulfillment;
+        )
     }
 }
 
 impl From<erp_procurement::Error> for Error {
     /// 将采购领域错误映射为 HTTP 边界错误。
     fn from(err: erp_procurement::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_procurement;
+        )
     }
 }
 
 impl From<erp_import::Error> for Error {
     /// 将导入领域错误映射为 HTTP 边界错误。
     fn from(err: erp_import::Error) -> Self {
-        services::Error::from(err).into()
+        boundary_error!(err, erp_import;
+        )
     }
 }
 
-impl From<services::Error> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
-    fn from(err: services::Error) -> Self {
-        match err {
-            services::Error::ValidationError(msg) => Error::BadRequest(msg),
-            services::Error::NotFound(msg) => Error::NotFound(msg),
-            services::Error::ConflictError(msg) => Error::Conflict(msg),
-            services::Error::ReceiptDuplicate(_) => Error::Conflict("数据已存在，请勿重复提交".to_string()),
-            services::Error::TransientTransaction(_) => Error::Conflict("并发事务冲突，请重试".to_string()),
-            services::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
-            services::Error::Forbidden(msg) => Error::Forbidden(msg),
-            services::Error::Unauthenticated(msg) => Error::Unauthorized(msg),
-            services::Error::Logic(err) => Error::Logic(err),
-            services::Error::Internal(msg) => Error::Internal(msg),
-            services::Error::OutcomeUnknown(error) => Error::OutcomeUnknown(error),
-            services::Error::Coded(code) => Error::Coded(code),
-            other => Error::Internal(other.to_string()),
-        }
+impl From<erp_processes::Error> for Error {
+    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    fn from(err: erp_processes::Error) -> Self {
+        boundary_error!(err, erp_processes;
+            error @ erp_processes::Error::Rbac(_) => Self::Internal(error.to_string()),
+            erp_processes::Error::Coded(code) => Self::Coded(code),
+            erp_processes::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
+        )
     }
+}
+
+impl From<erp_read_models::Error> for Error {
+    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    fn from(err: erp_read_models::Error) -> Self {
+        boundary_error!(err, erp_read_models;
+            error @ erp_read_models::Error::Rbac(_) => Self::Internal(error.to_string()),
+            erp_read_models::Error::Coded(code) => Self::Coded(code),
+            erp_read_models::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
+        )
+    }
+}
+
+/// 历史索引兼容提示仅在 HTTP 拥有；活动提示仍由实际领域唯一提供。
+fn historical_index_message(index: &str) -> Option<&'static str> {
+    match index {
+        "uk_procurement_confirmation_lines_confirmation_line"
+        | "uk_procurement_confirmation_lines_active_confirmation_line" => {
+            Some("该采购确认已有相同分行序号，请刷新后重试")
+        }
+        "uk_product_publication_revisions_publication_revision" => {
+            Some("该发布修订序号已被占用，请刷新后重试")
+        }
+        _ => None,
+    }
+}
+
+/// 仅三项精确历史 DuplicateKey 从应用 typed 载体进入兼容响应。
+fn historical_http_duplicate(error: &persistence_core::Error) -> bool {
+    matches!(error, persistence_core::Error::DuplicateKey(_))
+        && error
+            .duplicate_index_name()
+            .and_then(historical_index_message)
+            .is_some()
+}
+
+/// 按唯一拥有者查询索引提示；未知或无索引名保持原通用提示。
+fn duplicate_index_conflict_message(index: Option<&str>) -> String {
+    index
+        .and_then(|name| {
+            historical_index_message(name)
+                .or_else(|| erp_party::known_duplicate_index_message(name))
+                .or_else(|| erp_supplier::known_duplicate_index_message(name))
+                .or_else(|| erp_supply::known_duplicate_index_message(name))
+                .or_else(|| erp_contract::known_duplicate_index_message(name))
+                .or_else(|| erp_procurement::known_duplicate_index_message(name))
+                .or_else(|| erp_customer::known_duplicate_index_message(name))
+                .or_else(|| erp_workflow::known_duplicate_index_message(name))
+        })
+        .unwrap_or("数据已存在，请勿重复提交")
+        .to_string()
 }
 
 impl IntoResponse for Error {
@@ -516,7 +606,7 @@ pub type Result<T> = std::result::Result<ApiResponse<T>, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
+    use super::{duplicate_index_conflict_message, Error};
     use axum::body::to_bytes;
     use axum::http::{header::RETRY_AFTER, StatusCode};
     use axum::response::IntoResponse;
@@ -524,25 +614,26 @@ mod tests {
 
     #[test]
     fn maps_service_error_with_semantics() {
-        let not_found: Error = services::Error::NotFound("x".into()).into();
-        let conflict: Error = services::Error::ConflictError("x".into()).into();
-        let validation: Error = services::Error::ValidationError("x".into()).into();
-        let business: Error = services::Error::BusinessLogicError("x".into()).into();
-        let forbidden: Error = services::Error::Forbidden("x".into()).into();
-        let unauthorized: Error = services::Error::Unauthenticated("x".into()).into();
-        let logic: Error = services::Error::Logic(erp_core::Error::from("x")).into();
-        let outcome_unknown: Error = services::Error::from(persistence_core::Error::CommitOutcomeUnknown(
-            mongodb::error::Error::custom("unknown"),
-        ))
+        let not_found: Error = erp_processes::Error::NotFound("x".into()).into();
+        let conflict: Error = erp_processes::Error::ConflictError("x".into()).into();
+        let validation: Error = erp_processes::Error::ValidationError("x".into()).into();
+        let business: Error = erp_processes::Error::BusinessLogicError("x".into()).into();
+        let forbidden: Error = erp_processes::Error::Forbidden("x".into()).into();
+        let unauthorized: Error = erp_processes::Error::Unauthenticated("x".into()).into();
+        let logic: Error = erp_processes::Error::Logic(erp_core::Error::from("x")).into();
+        let outcome_unknown: Error = erp_processes::Error::from(
+            persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown")),
+        )
         .into();
-        let receipt_duplicate: Error = services::Error::ReceiptDuplicate(
+        let receipt_duplicate: Error = erp_processes::Error::ReceiptDuplicate(
             persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate receipt source")),
         )
         .into();
-        let transient: Error = services::Error::from(persistence_core::Error::TransientTransactionConflict(
-            mongodb::error::Error::custom("transient source"),
-        ))
-        .into();
+        let transient: Error =
+            erp_processes::Error::from(persistence_core::Error::TransientTransactionConflict(
+                mongodb::error::Error::custom("transient source"),
+            ))
+            .into();
 
         assert!(matches!(not_found, Error::NotFound(_)));
         assert!(matches!(conflict, Error::Conflict(_)));
@@ -569,7 +660,7 @@ mod tests {
     fn duplicate_key_race_maps_to_http_conflict() {
         let repository_error =
             persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate key"));
-        let service_error = services::Error::from(repository_error);
+        let service_error = erp_processes::Error::from(repository_error);
         let response = Error::from(service_error).into_response();
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
@@ -737,4 +828,14 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(response.headers().get(RETRY_AFTER).is_none());
     }
+    #[test]
+    fn publication_revision_duplicate_maps_to_refresh_message() {
+        let message =
+            duplicate_index_conflict_message(Some("uk_product_publication_revisions_publication_revision"));
+
+        assert_eq!(message, "该发布修订序号已被占用，请刷新后重试");
+    }
 }
+
+#[cfg(test)]
+mod cutover_tests;

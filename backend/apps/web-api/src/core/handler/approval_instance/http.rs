@@ -83,8 +83,10 @@ impl PreparedInstanceListQuery {
             query.limit,
             query.q,
         )
-        .map_err(|error| match services::Error::from(error) {
-            services::Error::ValidationError(message) => ApprovalHttpError::unprocessable(message, headers),
+        .map_err(|error| match erp_processes::Error::from(error) {
+            erp_processes::Error::ValidationError(message) => {
+                ApprovalHttpError::unprocessable(message, headers)
+            }
             error => ApprovalHttpError::from_service(error, headers),
         })?;
         Ok(Self { view, query })

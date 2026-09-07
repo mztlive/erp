@@ -15,6 +15,7 @@ use erp_workflow::entity::approval_integration::{
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
 
+use crate::{Error, Result};
 use erp_workflow::service::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
 };
@@ -22,7 +23,6 @@ use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 已注册的付款冲正单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]

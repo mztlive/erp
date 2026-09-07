@@ -1,5 +1,6 @@
 //! Audit-backed replay of finance card-funds command receipts.
 
+use crate::{Error, Result};
 use erp_audit::AuditExt;
 use erp_finance::entity::receivable::{
     CardFundsCommandReceiptError, CardFundsRegistrationKind, CardFundsRegistrationReceipt,
@@ -7,7 +8,6 @@ use erp_finance::entity::receivable::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 pub(super) use erp_finance::service::receivable::card_funds_receipt::complete_review_result;
 

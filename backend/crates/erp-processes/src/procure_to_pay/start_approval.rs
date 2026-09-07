@@ -28,6 +28,7 @@ use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::purchase_order_object_readable;
+use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
 use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use erp_workflow::service::approval::execution::idempotency::{
@@ -39,7 +40,6 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use services::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -730,10 +730,10 @@ pub(crate) mod tests {
     use erp_workflow::entity::document_registry::DocumentType;
     use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 
+    use crate::Error;
     use erp_workflow::service::approval::execution::idempotency::{start_identity, StartIdentityParams};
     use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
     use erp_workflow::service::approval::process_kind::process_kind_of;
-    use services::Error;
 
     fn node(
         id: &str,
@@ -987,14 +987,14 @@ pub(crate) mod tests {
             &mut self,
             step: super::StartStep,
             executor: &mut dyn persistence_core::Executor,
-        ) -> services::Result<()> {
+        ) -> crate::Result<()> {
             assert_eq!(
                 executor as *mut dyn persistence_core::Executor as *mut () as usize,
                 self.expected_executor
             );
             self.seen.push(step);
             if self.fail_at == Some(step) {
-                return Err(services::Error::ConflictError("original-step-error".to_string()));
+                return Err(crate::Error::ConflictError("original-step-error".to_string()));
             }
             Ok(())
         }
@@ -1051,7 +1051,7 @@ pub(crate) mod tests {
                 .await
                 .unwrap_err();
             assert!(
-                matches!(error, services::Error::ConflictError(message) if message == "original-step-error")
+                matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );
             assert_eq!(steps.seen, expected[..=index]);
         }

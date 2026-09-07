@@ -10,6 +10,7 @@ mod tests;
 
 #[cfg(test)]
 use self::guard::command_identity;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
@@ -18,7 +19,6 @@ use erp_integration::service::task_decision::action::next_allowed_actions;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
-use services::{Error, Result};
 
 const TASK_ACTION_AUDIT: &str = "integration.task_action";
 const TASK_COMPLETION_AUDIT: &str = "integration.task_completion";

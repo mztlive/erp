@@ -34,7 +34,7 @@ pub(crate) const EXTERNAL_IDENTITY_TARGETS: &str =
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub(crate) async fn ensure(db: &Database) -> Result<()> {
+pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SOURCE_SYSTEMS, source_system_indexes()).await?;
     create_indexes(db, EXTERNAL_IDENTITY_MAPS, external_identity_map_indexes()).await?;
     create_indexes(db, EXTERNAL_IDENTITY_TARGETS, external_identity_target_indexes()).await?;

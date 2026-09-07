@@ -1,4 +1,5 @@
 //! 客户验收 NO_APPROVAL 单据登记；所有写入使用调用方 Executor。
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_identity::SharedRbacService;
@@ -12,7 +13,6 @@ use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy}
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::Executor;
-use services::{Error, Result};
 /// 客户验收创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
 ///
 /// # 返回
@@ -149,7 +149,7 @@ async fn persist_unbound_customer_acceptance_document(
 ) -> Result<()> {
     let _ = ensure_customer_acceptance_skips_approval_binding()?;
     ensure_customer_acceptance_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -161,7 +161,7 @@ async fn persist_unbound_customer_acceptance_document(
     apply_customer_acceptance_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor)
         .await
-        .map_err(services::Error::from)
+        .map_err(crate::Error::from)
 }
 
 /// 为已构造客户验收登记 `BusinessDocument` 并调用统一绑定端口。
@@ -182,7 +182,7 @@ pub async fn register_created_customer_acceptance_document(
         DocumentType::CustomerAcceptance,
         acceptance.acceptance_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_customer_acceptance_document(
         db,
         rbac,

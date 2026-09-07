@@ -15,11 +15,11 @@ use validator::Validate;
 use super::dto::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 
 use super::PayableService;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
 use erp_audit::CommandReceiptServiceExt as _;
-use services::{Error, Result};
 
 impl PayableService {
     // -----------------------------------------------------------------------
@@ -152,7 +152,7 @@ impl PayableService {
                     let receipt_audit =
                         command_receipt_for_tx.audit(actor_owned.clone(), invoice_mut.base.id.clone())?;
                     db.audit_logs().create(&receipt_audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;

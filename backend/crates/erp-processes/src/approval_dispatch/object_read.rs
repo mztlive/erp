@@ -118,10 +118,10 @@ pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
 ///
 /// # 错误
 /// 无；调用方继续传播映射后的错误。
-fn map_workflow_error(error: services::Error) -> Error {
+fn map_workflow_error(error: crate::Error) -> Error {
     match error {
-        services::Error::ValidationError(message) => Error::ValidationError(message),
-        services::Error::BusinessLogicError(message) => Error::BusinessLogicError(message),
+        crate::Error::ValidationError(message) => Error::ValidationError(message),
+        crate::Error::BusinessLogicError(message) => Error::BusinessLogicError(message),
         other => Error::Internal(other.to_string()),
     }
 }

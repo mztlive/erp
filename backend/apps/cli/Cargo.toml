@@ -7,13 +7,49 @@ autotests = false
 [dependencies]
 clap = { workspace = true }
 config = { workspace = true }
-database = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
 persistence-core = { workspace = true }
 rpassword = "7.4.0"
-services = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+erp-workflow = { workspace = true }
+
+erp-support = { workspace = true }
+
+erp-catalog = { workspace = true }
+
+erp-contract = { workspace = true }
+
+erp-finance = { workspace = true }
+
+erp-customer = { workspace = true }
+
+erp-fulfillment = { workspace = true }
+
+erp-integration = { workspace = true }
+
+erp-inventory = { workspace = true }
+
+erp-import = { workspace = true }
+
+erp-party = { workspace = true }
+
+erp-procurement = { workspace = true }
+
+erp-returns = { workspace = true }
+
+erp-sales = { workspace = true }
+
+erp-supplier = { workspace = true }
+
+erp-supply = { workspace = true }
+
+erp-warehouse = { workspace = true }
+
+erp-processes = { workspace = true }
+
+mongodb = { workspace = true }

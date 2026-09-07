@@ -10,6 +10,7 @@ use axum::{
     http::HeaderMap,
     Extension, Json,
 };
+use erp_processes::adapters::workflow::{workflow_audit, workflow_auth, WorkflowAuth};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::definition::{
     definition_management_visibility, ApprovalDefinitionService,
@@ -18,7 +19,6 @@ use erp_workflow::service::approval::definition_dto::{
     CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
     PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
 };
-use services::workflow_compose::{workflow_audit, workflow_auth, WorkflowAuth};
 
 use crate::{
     app_state::AppState,

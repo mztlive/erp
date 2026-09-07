@@ -14,11 +14,11 @@ use validator::Validate;
 
 use super::super::change_adapter::execute_purchase_change_domain_action;
 use super::super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult};
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use services::{Error, Result};
 
 impl PurchaseOrderProcess {
     /// 最终通过并生效：改写采购单并同步履约影响。

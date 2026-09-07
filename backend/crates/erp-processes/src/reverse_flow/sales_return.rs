@@ -1,5 +1,6 @@
 //! SalesReturnCase 无审批登记、业务创建与审计的原子流程。
 use super::ReturnsProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_identity::SharedRbacService;
@@ -19,7 +20,6 @@ use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy}
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl ReturnsProcess {
@@ -62,6 +62,7 @@ impl ReturnsProcess {
         ReturnsReadService::new(self.db.clone())
             .sales_return_case_detail(&case.base.id)
             .await
+            .map_err(crate::Error::from)
     }
 }
 
@@ -201,7 +202,7 @@ async fn persist_unbound_sales_return_document(
 ) -> Result<()> {
     let _ = ensure_sales_return_case_skips_approval_binding()?;
     ensure_sales_return_case_has_no_adapter()?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,
@@ -213,7 +214,7 @@ async fn persist_unbound_sales_return_document(
     apply_sales_return_case_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor)
         .await
-        .map_err(services::Error::from)
+        .map_err(crate::Error::from)
 }
 
 /// 为已构造销售退货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -234,7 +235,7 @@ async fn register_created_sales_return_document(
         DocumentType::SalesReturnCase,
         case.return_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     persist_unbound_sales_return_document(db, rbac, object_read, document, &bind_command, actor, executor)
         .await
 }
@@ -273,7 +274,7 @@ async fn persist_created_sales_return_case(
                     audit: &audit,
                 };
                 persist_creation(&mut creation, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -444,8 +445,8 @@ mod sales_return_case_no_approval_tests {
 #[cfg(test)]
 mod creation_sequence_tests {
     use super::{persist_creation, CreationSteps};
+    use crate::{Error, Result};
     use persistence_core::Executor;
-    use services::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,

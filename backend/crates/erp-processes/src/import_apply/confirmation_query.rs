@@ -7,18 +7,16 @@ use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
-use services::workflow_compose::work_item_service;
-use services::{Error, Result};
 
+use super::dto::{ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationView};
 use super::{ImportApplyService, IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_WORKSPACE};
 use erp_import::LegacyImportConfirmationFilter;
-use erp_import::{
-    ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationListParams, LegacyImportConfirmationView,
-    PageView, SortDir,
-};
+use erp_import::{LegacyImportConfirmationListParams, PageView, SortDir};
 
 impl ImportApplyService {
     /// 分页查询导入确认事实列表。
@@ -76,7 +74,7 @@ impl ImportApplyService {
                 .await
                 .map_err(Error::from)
             {
-                Ok(view) => Some(authorized_work_item_view(view, row.status)),
+                Ok(view) => Some(authorized_work_item_view(view, row.status)?),
                 Err(Error::Forbidden(_) | Error::NotFound(_)) => {
                     work_items.get(&work_item_id).map(read_only_work_item_view)
                 }
@@ -115,10 +113,10 @@ impl ImportApplyService {
 pub(super) fn work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkItemView {
     ImportBusinessConfirmationWorkItemView {
         work_item_id: item.base.id.clone(),
-        work_item_type: import_work_item_type(item.work_item_type),
+        work_item_type: item.work_item_type,
         task_version: item.base.version.to_string(),
         subject_version: item.subject_version.clone(),
-        status: import_work_item_status(item.status),
+        status: item.status,
         owner_role: item.owner_role.clone(),
         owner_organization_id: item.owner_organization_id.clone(),
         owner_user_id: item.owner_user_id.clone(),
@@ -145,7 +143,12 @@ pub(super) fn read_only_work_item_view(item: &WorkItem) -> ImportBusinessConfirm
 fn authorized_work_item_view(
     item: erp_workflow::service::work_item::AuthorizedWorkItem,
     confirmation_status: ConfirmationStatus,
-) -> ImportBusinessConfirmationWorkItemView {
+) -> Result<ImportBusinessConfirmationWorkItemView> {
+    let (handler_key, destination_workspace_id) = erp_read_models::workbench::work_item_destination(
+        item.item.work_item_type,
+        &item.item.business_object_type,
+        &item.item.owner_role,
+    )?;
     let mut allowed_actions = item
         .allowed_actions
         .iter()
@@ -158,21 +161,21 @@ fn authorized_work_item_view(
     if let Some(blocker) = item.processing_blocker {
         action_blockers.push(blocker.message);
     }
-    ImportBusinessConfirmationWorkItemView {
+    Ok(ImportBusinessConfirmationWorkItemView {
         work_item_id: item.item.base.id.clone(),
-        work_item_type: import_work_item_type(item.item.work_item_type),
+        work_item_type: item.item.work_item_type,
         task_version: item.item.base.version.to_string(),
         subject_version: item.item.subject_version.clone(),
-        status: import_work_item_status(item.item.status),
+        status: item.item.status,
         owner_role: item.item.owner_role.clone(),
         owner_organization_id: item.item.owner_organization_id.clone(),
         owner_user_id: item.item.owner_user_id.clone(),
         processing_state: processing_state_code(item.processing_state).to_string(),
         allowed_actions,
         action_blockers,
-        handler_key: IMPORT_CONFIRMATION_HANDLER.to_string(),
-        destination_workspace_id: IMPORT_CONFIRMATION_WORKSPACE.to_string(),
-    }
+        handler_key: handler_key.to_string(),
+        destination_workspace_id: destination_workspace_id.to_string(),
+    })
 }
 
 /// 只有当前责任人且确认事实仍待处理时，才追加 W18 正式领域动作。
@@ -220,20 +223,5 @@ pub(super) fn confirmation_view(
     view
 }
 
-fn import_work_item_type(
-    _item: erp_workflow::entity::work_item::WorkItemType,
-) -> erp_import::ImportWorkItemType {
-    erp_import::ImportWorkItemType::ImportBusinessConfirmation
-}
-
-fn import_work_item_status(
-    status: erp_workflow::entity::work_item::WorkItemStatus,
-) -> erp_import::ImportWorkItemStatus {
-    match status {
-        erp_workflow::entity::work_item::WorkItemStatus::Open => erp_import::ImportWorkItemStatus::Open,
-        erp_workflow::entity::work_item::WorkItemStatus::Completed => {
-            erp_import::ImportWorkItemStatus::Completed
-        }
-        erp_workflow::entity::work_item::WorkItemStatus::Closed => erp_import::ImportWorkItemStatus::Closed,
-    }
-}
+#[cfg(test)]
+mod tests;

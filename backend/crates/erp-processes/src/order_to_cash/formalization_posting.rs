@@ -1,6 +1,7 @@
 //! Fixed first-formalization posting order within the caller's transaction.
 
 use super::formalize::{persist_procurement_work_items, FormalizedSubmissionWrite};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_core::ids::SalesOrderId;
@@ -8,14 +9,13 @@ use erp_finance::entity::receivable::{ReceivableAccount, SalesBusinessTypeFact};
 use erp_finance::service::receivable::initial_account::{create_initial_receivable, InitialReceivableInput};
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::Executor;
-use services::{Error, Result};
 
 /// Each variant is one existing side-effect boundary, in the original order below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PostingStep {
     RevalidateProcurement,
     ProcurementTasks,
-    Document,
+    RegisterDocument,
     SalesRevision,
     SynchronizeProcurement,
     SalesSubmission,
@@ -37,7 +37,7 @@ async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> 
     for step in [
         RevalidateProcurement,
         ProcurementTasks,
-        Document,
+        RegisterDocument,
         SalesRevision,
         SynchronizeProcurement,
         SalesSubmission,
@@ -78,7 +78,7 @@ impl PostingSteps for MongoPosting<'_> {
                     persist_procurement_work_items(&write.db, &write.procurement_items, executor).await?;
                 }
             }
-            Document => {
+            RegisterDocument => {
                 if let Some(mut document) = write
                     .db
                     .business_documents()
@@ -235,7 +235,7 @@ mod tests {
         vec![
             RevalidateProcurement,
             ProcurementTasks,
-            Document,
+            RegisterDocument,
             SalesRevision,
             SynchronizeProcurement,
             SalesSubmission,

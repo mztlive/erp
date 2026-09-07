@@ -33,7 +33,7 @@ use super::brief::{
 };
 use super::presentation::format_yuan;
 use super::WorkbenchReadService;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
+use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap};
 use crate::errors::Result;
 
 pub(super) type LineStateMap = HashMap<String, DiffLineState>;
@@ -80,18 +80,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_sales_change_review_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::SalesChangeOrder);
         if ids.is_empty() {
             return Ok(());
         }
-        let changes = self
-            .db
-            .sales_change_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let changes = self.facts_reader().read_sales_changes(&ids, executor).await?;
         if changes.is_empty() {
             return Ok(());
         }
@@ -100,9 +96,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|item| item.sales_order_id.to_string())
             .collect::<Vec<_>>();
         let sales_nos = self
-            .db
-            .sales_orders()
-            .list_active_by_ids(&sales_order_ids, executor)
+            .facts_reader()
+            .read_sales_orders(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -125,19 +120,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let more_count = all_diff_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut lines = all_diff_lines;
             lines.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = ObjectFact::new(
-                change.base.id.clone(),
-                sales_no
-                    .as_deref()
-                    .map(|no| format!("销售变更单 {no}"))
-                    .unwrap_or_else(|| "销售变更单（来源单号待补全）".to_string()),
-                change.stable.created_by.clone(),
-            );
-            fact.counterparty_label = submission
-                .map(|item| item.customer_snapshot.customer_name.clone())
-                .or_else(|| base.map(|item| item.customer_snapshot.customer_name.clone()));
-            fact.impact_summary = Some("不审批则销售变更不能生效；通过后按目标提交形成新版本".to_string());
-            fact.brief_source = Some(sales_change_brief_source(
+            let mut fact = WorkbenchObjectFact::from_authority(super::authority::changes::sales_change_fact(
+                &change,
+                sales_no.as_deref(),
+                base,
+                submission,
+            ));
+            fact.display.brief_source = Some(sales_change_brief_source(
                 &change,
                 sales_no.as_deref(),
                 base,
@@ -165,18 +154,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_purchase_change_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::PurchaseChangeOrder);
         if ids.is_empty() {
             return Ok(());
         }
-        let changes = self
-            .db
-            .purchase_change_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let changes = self.facts_reader().read_purchase_changes(&ids, executor).await?;
         if changes.is_empty() {
             return Ok(());
         }
@@ -185,9 +170,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|item| item.purchase_order_id.to_string())
             .collect::<Vec<_>>();
         let purchase_nos = self
-            .db
-            .purchase_orders()
-            .list_active_by_ids(&purchase_ids, executor)
+            .facts_reader()
+            .read_purchase_orders(&purchase_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.purchase_no))
@@ -210,19 +194,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let more_count = all_diff_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut lines = all_diff_lines;
             lines.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = ObjectFact::new(
-                change.base.id.clone(),
-                purchase_no
-                    .as_deref()
-                    .map(|no| format!("采购变更单 {no}"))
-                    .unwrap_or_else(|| "采购变更单（来源单号待补全）".to_string()),
-                change.stable.created_by.clone(),
-            );
-            fact.counterparty_label = submission
-                .map(|item| item.supplier_snapshot.supplier_name.clone())
-                .or_else(|| base.map(|item| item.supplier_snapshot.supplier_name.clone()));
-            fact.impact_summary = Some("不审批则采购变更不能生效；通过后按目标提交形成新版本".to_string());
-            fact.brief_source = Some(purchase_change_brief_source(
+            let mut fact =
+                WorkbenchObjectFact::from_authority(super::authority::changes::purchase_change_fact(
+                    &change,
+                    purchase_no.as_deref(),
+                    base,
+                    submission,
+                ));
+            fact.display.brief_source = Some(purchase_change_brief_source(
                 &change,
                 purchase_no.as_deref(),
                 base,
@@ -246,18 +225,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|change| change.base_revision_id.to_string())
             .collect::<Vec<_>>();
         let base_revisions = self
-            .db
-            .sales_order_revisions()
-            .list_active_by_ids(&base_ids, executor)
+            .facts_reader()
+            .read_sales_revisions(&base_ids, executor)
             .await?;
         let submission_ids = changes
             .iter()
             .filter_map(|change| change.current_submission_id.clone())
             .collect::<Vec<_>>();
         let submissions = self
-            .db
-            .sales_change_submissions()
-            .list_active_by_ids(
+            .facts_reader()
+            .read_sales_change_submissions(
                 &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )
@@ -315,18 +292,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|change| change.base_revision_id.to_string())
             .collect::<Vec<_>>();
         let base_revisions = self
-            .db
-            .purchase_order_revisions()
-            .list_active_by_ids(&base_ids, executor)
+            .facts_reader()
+            .read_purchase_revisions(&base_ids, executor)
             .await?;
         let submission_ids = changes
             .iter()
             .filter_map(|change| change.current_submission_id.clone())
             .collect::<Vec<_>>();
         let submissions = self
-            .db
-            .purchase_change_submissions()
-            .list_active_by_ids(
+            .facts_reader()
+            .read_purchase_change_submissions(
                 &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 executor,
             )

@@ -45,9 +45,6 @@ COPY Cargo.toml Cargo.lock ./
 COPY apps ./apps
 COPY config ./config
 COPY crates ./crates
-COPY database ./database
-COPY entities ./entities
-COPY services ./services
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \

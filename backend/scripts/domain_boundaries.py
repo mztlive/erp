@@ -20,6 +20,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from cutover_workspace import (
+    active_source_paths, legacy_graph_errors, legacy_source_errors,
+    legacy_tree_errors, workspace_errors,
+)
+
 
 FOUNDATION = {"erp-core", "application-core", "persistence-core"}
 COMPOSITION = {"erp-processes", "erp-read-models"}
@@ -59,11 +64,24 @@ BPM_FORBIDDEN_PACKAGES = {
 }
 PLANNED_DOMAIN_PACKAGES = FOUNDATION | COMPOSITION | BUSINESS_DOMAINS
 KINDS = ("normal", "build", "dev")
+CUTOVER_REQUIRED_PACKAGES = (
+    FOUNDATION | COMPOSITION | (BUSINESS_DOMAINS - {"erp-commerce"})
+    | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
+       "permission-macros", "storage", "id-generator", "test-support"}
+)
+
 
 SERVICE_MONGO_RULES = {
     "mongodb_bson": re.compile(r"mongodb\s*::\s*bson|\bbson\s*::\s*(?:doc|Document|Bson|\{)"),
     "mongodb_options": re.compile(r"mongodb\s*::\s*options|\boptions\s*::\s*(?:Find|Update|Replace|Delete|Aggregate)"),
     "doc_macro": re.compile(r"\bdoc!\s*[({]"),
+    "raw_document": re.compile(r"\bDocument\b"),
+    "raw_bson": re.compile(r"\bBson\b"),
+    "find_one": re.compile(r"\.find_one\s*\("),
+    "find_many": re.compile(r"\.find_many\s*\("),
+    "find_many_sorted": re.compile(r"\.find_many_sorted\s*\("),
+    "find_one_by_field": re.compile(r"\.find_one_by_field\s*\("),
+    "exists": re.compile(r"\.exists\s*\("),
     "raw_collection": re.compile(r"\.collection(?:_with_type)?\s*(?:::<[^>]+>)?\s*\("),
     "aggregate": re.compile(r"\.aggregate\s*\("),
     "count_documents": re.compile(r"\.count_documents\s*\("),
@@ -496,6 +514,12 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
         ),
     )
 
+    service_cases = json.loads(read_text(fixture_dir / "service_seven_rules.json"))
+    for rule, sample in service_cases.items():
+        if not SERVICE_MONGO_RULES[rule].search(sample):
+            result.errors.append(f"新增 Service 规则负例未命中: {rule}")
+        require_hit(rule, scan_service_mongo(f"service/{rule}.rs", sample))
+
     grouped = read_text(fixture_dir / "source_grouped_use_negative.rs")
     paths = extract_use_paths(grouped)
     required_paths = {
@@ -547,12 +571,14 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
         ),
     )
 
+    import tempfile
     clearance = json.loads(read_text(fixture_dir / "clearance_negative.json"))
-    leftover = clearance["old_source"]
-    if leftover:
-        require_hit("clearance_negative", [f"已验收阶段仍残留旧源: {leftover}"])
-    else:
-        result.errors.append("清零负向夹具缺少残留路径")
+    with tempfile.TemporaryDirectory(prefix="domain-clearance-fixture-") as temporary:
+        fixture_backend = Path(temporary)
+        leftover = fixture_backend / clearance["old_source"]
+        leftover.parent.mkdir(parents=True, exist_ok=True)
+        leftover.write_text("pub struct ResidualEntity;\n")
+        require_hit("clearance_negative", legacy_tree_errors(fixture_backend))
     return result
 
 
@@ -564,6 +590,8 @@ def cargo_metadata(backend: Path) -> dict[str, Any]:
             "metadata",
             "--format-version",
             "1",
+            "--all-features",
+            "--locked",
             "--manifest-path",
             str(backend / "Cargo.toml"),
         ],
@@ -625,11 +653,30 @@ def iter_rs(root: Path) -> Iterable[Path]:
         yield path
 
 
-def check_workspace(backend: Path, metadata: Mapping[str, Any]) -> CheckResult:
+def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool = False) -> CheckResult:
     """Apply boundary rules to the current workspace."""
     result = CheckResult()
+    # Once old members are absent, the normal CI entry must not silently retain
+    # migration-era composition exemptions. --cutover also catches partial cuts.
+    members = set(metadata.get("workspace_members") or [])
+    old_members = {package.get("name") for package in metadata.get("packages") or []
+                   if package.get("id") in members} & OLD_BUSINESS
+    cutover = cutover or not old_members
+    result.errors.extend(workspace_errors(
+        backend, metadata, CUTOVER_REQUIRED_PACKAGES if cutover else set()
+    ))
+    if result.errors:
+        return result
+    if cutover:
+        result.errors.extend(legacy_graph_errors(metadata))
+        result.errors.extend(legacy_tree_errors(backend))
+        for path in active_source_paths(metadata):
+            result.errors.extend(legacy_source_errors(path, path.read_text(encoding="utf-8")))
+        result.notes.append("最终切换模式：所有活动成员/依赖类别/旧源路径均执行零 legacy 检查")
     graph = graph_from_metadata(metadata)
     result.errors.extend(forbidden_graph_errors(graph))
+    if cutover:
+        result.errors.extend(_cycle_notes(graph, sorted(graph.packages)))
     present_planned = sorted(graph.packages & PLANNED_DOMAIN_PACKAGES)
     if not present_planned:
         result.notes.append(
@@ -755,13 +802,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run fixture self-checks, then the workspace graph and source scan."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", type=Path, required=True, help="backend 目录")
+    parser.add_argument("--cutover", action="store_true", help="阶段 17：完整 workspace 与零 legacy 强制验收")
+    parser.add_argument("--self-test-only", action="store_true", help="只运行临时纯工具夹具，不调用 Cargo")
     args = parser.parse_args(argv)
     backend = args.backend.resolve()
     fixture_dir = load_fixtures(Path(__file__).resolve().parent)
     fixtures = run_fixture_suite(fixture_dir)
+    from cutover_tool_selftests import run_pure_self_tests
+    if not run_pure_self_tests():
+        fixtures.errors.append("最终切换工具纯夹具失败")
+    if args.self_test_only:
+        for error in fixtures.errors:
+            print(error, file=sys.stderr)
+        print(f"仅工具自检：errors={len(fixtures.errors)}；未检查实际 workspace，未调用 Cargo")
+        return 1 if fixtures.errors else 0
     try:
         metadata = cargo_metadata(backend)
-        workspace = check_workspace(backend, metadata)
+        workspace = check_workspace(backend, metadata, cutover=args.cutover)
     except Exception as error:  # noqa: BLE001 — report as checker failure
         workspace = CheckResult(errors=[str(error)])
     sys.stdout.write(format_report(fixtures, workspace))

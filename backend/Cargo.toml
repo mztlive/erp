@@ -33,9 +33,6 @@ members = [
   "crates/storage",
   "crates/id-generator",
   "crates/test-support",
-  "database",
-  "entities",
-  "services",
   "config",
 ]
 resolver = "2"
@@ -69,13 +66,10 @@ erp-returns = { path = "crates/erp-returns" }
 erp-integration = { path = "crates/erp-integration" }
 erp-supply = { path = "crates/erp-supply" }
 config = { path = "config" }
-database = { path = "database" }
-entities = { path = "entities" }
 entity-core = { path = "crates/entity-core" }
 entity-macros = { path = "crates/entity-macros" }
 id-generator = { path = "crates/id-generator" }
 permission-macros = { path = "crates/permission-macros" }
-services = { path = "services" }
 storage = { path = "crates/storage" }
 test-support = { path = "crates/test-support" }
 
@@ -100,7 +94,7 @@ mongodb = { version = "3.8.1", default-features = false, features = [
 ] }
 bson = { version = "3.1.0", features = ["serde"] }
 
-# 定点小数（P0-1.3 固化：金额/单价/数量/税率一律使用 entities::money，禁止浮点）
+# 定点小数（P0-1.3 固化：金额/单价/数量/税率一律使用 erp_core::money，禁止浮点）
 rust_decimal = "1.42.1"
 
 # 工具库

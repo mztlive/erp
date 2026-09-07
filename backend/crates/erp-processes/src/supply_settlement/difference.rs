@@ -3,6 +3,7 @@ use super::{
     command_audit_id, dto, ensure_audit_resource, ensure_same_id, parse_receipt_number, receipt_result,
     SupplierSettlementProcess, COMMAND_FINGERPRINT_PREFIX,
 };
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::entity::supplier_settlement::{
@@ -14,7 +15,6 @@ use erp_supply::service::supplier_settlement::{
     SupplierSettlementService,
 };
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 
 impl SupplierSettlementProcess {
@@ -83,7 +83,7 @@ impl SupplierSettlementProcess {
                         Some(difference_decision_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(SupplierSettlementStatement, SupplierSettlementDifference), services::Error>((
+                    Ok::<(SupplierSettlementStatement, SupplierSettlementDifference), crate::Error>((
                         statement, difference,
                     ))
                 })

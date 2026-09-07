@@ -22,6 +22,7 @@ use super::snapshot::{
 use super::ReceivableReadService;
 use crate::finance::dto::ReceivableAccountView;
 use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_finance::dto::receivable::{
     CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewDetailParams,
@@ -31,7 +32,6 @@ use erp_finance::repository::ReceivableAccountFilter;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
-use services::{Error, Result};
 use std::future::Future;
 
 impl ReceivableReadService {

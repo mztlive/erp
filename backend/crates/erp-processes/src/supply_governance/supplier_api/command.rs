@@ -1,5 +1,6 @@
 use super::receipt::{persist_command_receipt, CommandReceiptWrite};
 use super::SupplierApiGovernanceProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_api::*;
@@ -18,7 +19,6 @@ use erp_supply::service::supplier_api::{
 };
 use erp_support::BulkJobExt;
 use persistence_core::{NoTransaction, Transactional};
-use services::{Error, Result};
 use validator::Validate;
 impl SupplierApiGovernanceProcess {
     /// 执行固定连接治理命令并返回可幂等重放的正式回执。

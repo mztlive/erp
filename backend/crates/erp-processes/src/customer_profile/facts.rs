@@ -14,7 +14,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
-use services::{Error, Result};
+use crate::{Error, Result};
 
 use super::{numbering::business_no, CustomerProfileService};
 use erp_customer::{

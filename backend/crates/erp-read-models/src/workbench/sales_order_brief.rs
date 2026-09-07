@@ -14,16 +14,18 @@ use persistence_core::Executor;
 use {
     erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderSubmission,
     erp_sales::entity::sales_order::SalesOrderSubmissionLine,
-    erp_sales::entity::sales_order::SubmissionStatus,
 };
 
+use super::authority::sales::preferred_submission;
+#[cfg(test)]
+use super::authority::sales::sales_order_impact;
 use super::brief::{
     format_instant_due_label, format_quantity, join_list_summary, line_title, non_empty, push_section,
     BriefLine, BriefSection, ObjectBriefSource, BRIEF_LINE_LIMIT,
 };
 use super::presentation::format_yuan;
 use super::WorkbenchReadService;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
+use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap};
 use crate::errors::Result;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -44,51 +46,24 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn load_sales_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
+        facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = object_ids(keys, ObjectKind::SalesOrder);
         if ids.is_empty() {
             return Ok(());
         }
-        let orders = self.db.sales_orders().list_active_by_ids(&ids, executor).await?;
+        let orders = self.facts_reader().read_sales_orders(&ids, executor).await?;
         if orders.is_empty() {
             return Ok(());
         }
-        let submissions = self.sales_submissions_for_orders(&orders, executor).await?;
+        let submissions = self
+            .facts_reader()
+            .sales_submissions_for_orders(&orders, executor)
+            .await?;
         let lines_by_submission = self.sales_submission_brief_lines(&submissions, executor).await?;
         insert_sales_order_facts(facts, &orders, &submissions, &lines_by_submission);
         Ok(())
-    }
-
-    /// 读取本批销售单的全部提交，避免按单 N+1。
-    ///
-    /// # 参数
-    /// * `orders` - 本批销售单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回这些销售单上的全部提交。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn sales_submissions_for_orders(
-        &self,
-        orders: &[SalesOrder],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderSubmission>> {
-        let order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<Vec<_>>();
-        if order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        Ok(self
-            .db
-            .sales_order_submissions()
-            .list_work_item_brief_submissions_by_orders(&order_ids, executor)
-            .await?)
     }
 
     /// 读取本批销售提交行并转成按提交分组的简报行。
@@ -155,7 +130,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 /// # 错误
 /// 无。
 fn insert_sales_order_facts(
-    facts: &mut ObjectFactMap,
+    facts: &mut WorkbenchObjectFactMap,
     orders: &[SalesOrder],
     submissions: &[SalesOrderSubmission],
     lines_by_submission: &HashMap<String, Vec<BriefLine>>,
@@ -184,12 +159,9 @@ fn sales_order_fact(
     order: &SalesOrder,
     submissions: &[SalesOrderSubmission],
     lines_by_submission: &HashMap<String, Vec<BriefLine>>,
-) -> ObjectFact {
-    let mut fact = ObjectFact::new(
-        order.base.id.clone(),
-        format!("销售单 {}", order.order_no),
-        order.stable.created_by.clone(),
-    );
+) -> WorkbenchObjectFact {
+    let mut fact =
+        WorkbenchObjectFact::from_authority(super::authority::sales::sales_order_fact(order, submissions));
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };
@@ -198,38 +170,8 @@ fn sales_order_fact(
         .cloned()
         .unwrap_or_default();
     let brief = sales_order_brief_source(submission, lines);
-    fact.counterparty_label = non_empty(&submission.customer_snapshot.customer_name);
-    fact.impact_summary = Some(sales_order_impact(submission.business_type.label()).to_string());
-    fact.brief_source = Some(brief);
+    fact.display.brief_source = Some(brief);
     fact
-}
-
-/// 优先取该销售单上最新的审核中提交；没有审核中时回退最新提交。
-///
-/// # 参数
-/// * `order_id` - 销售单 ID
-/// * `submissions` - 本批销售提交
-///
-/// # 返回
-/// 没有该单提交时返回 `None`。
-///
-/// # 错误
-/// 无。
-fn preferred_submission<'a>(
-    order_id: &str,
-    submissions: &'a [SalesOrderSubmission],
-) -> Option<&'a SalesOrderSubmission> {
-    let mut for_order = submissions
-        .iter()
-        .filter(|item| item.sales_order_id.to_string() == order_id)
-        .collect::<Vec<_>>();
-    for_order.sort_by_key(|item| item.submission_no);
-    for_order
-        .iter()
-        .copied()
-        .rev()
-        .find(|item| item.stable.status == SubmissionStatus::InReview)
-        .or_else(|| for_order.last().copied())
 }
 
 /// 组装销售单事项简报键值和列表一行摘要。
@@ -378,24 +320,6 @@ fn sales_order_list_summary(
         first_line,
         more,
     ])
-}
-
-/// 按业务性质给出销售单审批的业务影响。
-///
-/// # 参数
-/// * `business_type_label` - 业务性质中文标签
-///
-/// # 返回
-/// 卡券与实物使用不同后果文案。
-///
-/// # 错误
-/// 无。
-fn sales_order_impact(business_type_label: &str) -> &'static str {
-    if business_type_label == "卡券" {
-        "不审批则卡券销售不能生效"
-    } else {
-        "不审批则销售单不能生效、不能履约"
-    }
 }
 
 /// 把单条销售提交行转成简报行。

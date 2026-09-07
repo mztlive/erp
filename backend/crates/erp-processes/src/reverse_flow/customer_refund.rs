@@ -16,6 +16,7 @@ use super::start_approval::{
     CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
 };
 use super::ReturnsProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
@@ -41,7 +42,6 @@ use erp_workflow::service::approval::execution::{command_recovery_delay, prepare
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::{Executor, NoTransaction, Transactional};
-use services::{Error, Result};
 
 use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_returns::entity::returns::CustomerRefund;
@@ -81,7 +81,10 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads().customer_refund_detail(&refund.base.id).await
+        self.reads()
+            .customer_refund_detail(&refund.base.id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 按原回款一次创建客户退款并启动审批。
@@ -103,7 +106,11 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.reads().customer_refund_detail(&refund_id).await;
+            return self
+                .reads()
+                .customer_refund_detail(&refund_id)
+                .await
+                .map_err(crate::Error::from);
         }
         let receipt = erp_finance::service::receivable::customer_refund::load_customer_refund_source(
             &self.db,
@@ -137,7 +144,7 @@ impl ReturnsProcess {
             },
         };
         let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())
-            .map_err(services::Error::from)?;
+            .map_err(crate::Error::from)?;
         let create_audit =
             actor
                 .clone()
@@ -200,7 +207,7 @@ impl ReturnsProcess {
                     db.audit_logs().create(&create_audit, session).await?;
                     db.audit_logs().create(&submit_audit, session).await?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await;
@@ -211,7 +218,10 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads().customer_refund_detail(&detail_id).await
+        self.reads()
+            .customer_refund_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 提交客户退款并调用统一 `start_approval`。
@@ -245,7 +255,11 @@ impl ReturnsProcess {
             .await?
             .is_some()
         {
-            return self.reads().customer_refund_detail(id).await;
+            return self
+                .reads()
+                .customer_refund_detail(id)
+                .await
+                .map_err(crate::Error::from);
         }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
@@ -281,7 +295,10 @@ impl ReturnsProcess {
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_customer_refund(id, &mut refund, &req, actor)
             .await?;
-        self.reads().customer_refund_detail(id).await
+        self.reads()
+            .customer_refund_detail(id)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 最终通过过账（§8.3-3 事务不变量）。
@@ -318,7 +335,10 @@ impl ReturnsProcess {
             })
             .await?;
 
-        self.reads().customer_refund_detail(&detail_id).await
+        self.reads()
+            .customer_refund_detail(&detail_id)
+            .await
+            .map_err(crate::Error::from)
     }
 }
 
@@ -440,7 +460,7 @@ async fn persist_created_customer_refund(
         DocumentType::CustomerRefund,
         refund.refund_no.clone(),
     )
-    .map_err(services::Error::from)?;
+    .map_err(crate::Error::from)?;
     let audit = actor.clone().resource_log(
         "customer_refund.create",
         "customer_refund",
@@ -467,7 +487,7 @@ async fn persist_created_customer_refund(
                     .create_customer_refund_in_transaction(&refund, session)
                     .await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), services::Error>(())
+                Ok::<(), crate::Error>(())
             })
         })
         .await
@@ -526,7 +546,7 @@ async fn persist_bound_customer_refund_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = services::workflow_compose::bind_published_definition_on_document_create(
+    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
         rbac,
         object_read,

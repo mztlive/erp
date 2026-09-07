@@ -101,10 +101,27 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将供应商域唯一索引名称映射为面向用户的冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    index_name
+        .and_then(known_duplicate_index_message)
+        .unwrap_or("数据已存在，请勿重复提交")
+        .to_string()
+}
+
+/// 返回本域已知唯一索引的固定冲突提示。
+///
+/// # 参数
+/// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
+///
+/// # 返回
+/// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 约束
+/// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
+pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
-        Some("uk_supplier_accounts_party") => "该主体已绑定供应商角色".to_string(),
-        Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
-        _ => "数据已存在，请勿重复提交".to_string(),
+        "uk_supplier_accounts_party" => Some("该主体已绑定供应商角色"),
+        "uk_supplier_accounts_supplier_no" => Some("供应商编号已存在"),
+        _ => None,
     }
 }
 
@@ -137,5 +154,27 @@ mod tests {
             super::duplicate_index_conflict_message(Some("uk_supplier_accounts_supplier_no")),
             "供应商编号已存在"
         );
+    }
+
+    #[test]
+    fn known_duplicate_export_keeps_exact_owned_index_matrix() {
+        let cases = [
+            ("uk_supplier_accounts_party", "该主体已绑定供应商角色"),
+            ("uk_supplier_accounts_supplier_no", "供应商编号已存在"),
+        ];
+        for (index, expected) in cases {
+            assert_eq!(super::known_duplicate_index_message(index), Some(expected));
+            assert_eq!(
+                super::known_duplicate_index_message(&format!("{index}_extra")),
+                None
+            );
+            assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
+            assert_eq!(
+                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
+                None
+            );
+        }
+        assert_eq!(super::known_duplicate_index_message(""), None);
+        assert_eq!(super::known_duplicate_index_message("unknown_index"), None);
     }
 }

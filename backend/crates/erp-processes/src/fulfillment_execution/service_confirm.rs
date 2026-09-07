@@ -15,9 +15,9 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use services::{Error, Result};
 
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::service_crypto::{evidence_metadata, ServiceCryptoAdapter};
@@ -495,8 +495,8 @@ mod tests {
 #[cfg(test)]
 mod confirmation_order_tests {
     use super::{execute_confirmation, ServiceConfirmationPort};
+    use crate::{Error, Result};
     use persistence_core::Executor;
-    use services::{Error, Result};
     use std::sync::Mutex;
 
     struct TestExecutor {

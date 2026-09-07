@@ -258,7 +258,7 @@ mod isolation_tests {
     };
     use test_support::{require_mongo, TestDb};
 
-    use database::ensure_indexes;
+    use crate::test_indexes::ensure_indexes;
     use erp_procurement::repository::PurchaseOrderExt;
     use persistence_core::{NoTransaction, Transactional};
 

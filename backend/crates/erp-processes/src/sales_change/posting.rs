@@ -1,5 +1,6 @@
 //! 销售变更同事务写入合同；生产与纯替身共同执行相同编排函数。
 
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::AuditExt;
 use erp_core::ids::ReceivableAccountId;
@@ -9,7 +10,6 @@ use erp_finance::service::receivable::sales_change::{
 use erp_sales::service::sales_review::EffectiveChangeWrite;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::Result;
 
 /// 销售变更最终生效的最小写入能力；不得在实现内另开事务。
 #[async_trait]
@@ -143,9 +143,9 @@ pub(super) async fn prepare_receivable_delta(
 #[cfg(test)]
 mod tests {
     use super::{post, SalesChangePostingPort};
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
-    use services::{Error, Result};
 
     // 非零大小保证执行器地址能够区分不同实例。
     struct TestExecutor {

@@ -17,10 +17,10 @@ use super::dto::{
 use super::mapping::resolve_current_payment_recipient;
 use super::payment_task;
 use super::PayableService;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_party::SensitiveDataCodec;
-use services::{Error, Result};
 
 impl PayableService {
     /// 在付款任务责任校验后揭示当前默认收款账号。
@@ -127,11 +127,14 @@ impl PayableService {
                         .create_payable_with_entry(&account, &entry, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), services::Error>(())
+                    Ok::<(), crate::Error>(())
                 })
             })
             .await?;
 
-        self.read().payable_account_detail(&account_id).await
+        self.read()
+            .payable_account_detail(&account_id)
+            .await
+            .map_err(crate::Error::from)
     }
 }

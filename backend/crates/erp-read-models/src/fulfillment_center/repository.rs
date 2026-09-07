@@ -1,11 +1,11 @@
 //! 验收根流程使用的跨域履约进度事实读取，贯穿调用方 Executor。
 use super::acceptance_eligibility::{build_line_eligibilities, so_line_ids, EligibilityGroupSources};
+use crate::{Error, Result};
 use erp_core::ids::SalesOrderId;
 use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, FulfillmentFactType, ServiceFulfillment};
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::{entity::sales_order::BusinessType, repository::SalesOrderExt};
 use mongodb::Database;
-use services::{Error, Result};
 
 /// 验收过账/冲正后读取履约进度投影（§4.3.1：实物与服务「客户验收通过即履约完成」）。
 ///

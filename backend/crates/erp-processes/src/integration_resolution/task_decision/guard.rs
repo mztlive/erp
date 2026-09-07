@@ -1,6 +1,7 @@
 //! 正式任务绑定、权限前置与审计回执重放。
 use super::super::IntegrationResolutionProcess;
 use super::ReceiptEnvelope;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditExt;
 use erp_integration::dto::{IntegrationItemType, IntegrationNonTerminalTaskAction, PreparedWorkItemTarget};
@@ -10,7 +11,6 @@ use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::{de::DeserializeOwned, Serialize};
-use services::{Error, Result};
 
 impl IntegrationResolutionProcess {
     pub(super) async fn replay_receipt<T: DeserializeOwned>(

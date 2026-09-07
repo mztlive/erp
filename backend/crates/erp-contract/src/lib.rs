@@ -20,7 +20,7 @@ pub use entity::contract::{
     ContractRevisionId, ContractStatus, ContractUpdate, CustomerSnapshot, InvoiceRequirementSnapshot,
     PaymentTermSnapshot, SettlementPartySnapshot,
 };
-pub use error::{Error, Result};
+pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
     EmptyAccountNames, EmptyAssignments, EmptyCustomers, EmptyFileAssetFacts, FailClosedAccountNamePort,

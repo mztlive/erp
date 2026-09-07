@@ -2,6 +2,7 @@
 use super::repository::offering::{
     SupplierOfferingListQuery as OfferingListQuery, SupplierOfferingReadRepository,
 };
+use crate::Result;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
@@ -9,7 +10,6 @@ use erp_supplier::SupplierAccount;
 use erp_supply::entity::supplier_offering::{SupplierOfferingAvailability, SupplierOfferingRevision};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use services::Result;
 use std::collections::HashMap;
 use validator::Validate;
 pub mod dto;

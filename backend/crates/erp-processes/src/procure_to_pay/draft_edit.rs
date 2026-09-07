@@ -16,6 +16,7 @@ use validator::Validate;
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderProcess;
+use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{
@@ -27,7 +28,6 @@ use erp_procurement::service::purchase_order::draft_edit::{
     map_draft_edit_violation, persist_replacement, DraftReplacement,
 };
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
-use services::{Error, Result};
 
 const SAVE_PERMISSION: &str = "purchase_order:update";
 const SAVE_RECEIPT_PREFIX: &str = "purchase-order-save-draft-command-";
@@ -289,7 +289,9 @@ pub(super) async fn advance_guard_and_load_coverage(
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
     sales_order.advance_procurement_guard(actor_id)?;
     db.sales_orders().update(&mut sales_order, session).await?;
-    load_sales_procurement_coverage(db, &sales_order, session).await
+    load_sales_procurement_coverage(db, &sales_order, session)
+        .await
+        .map_err(crate::Error::from)
 }
 
 /// 持久化草稿替换、同步任务并写入稳定命令收据。

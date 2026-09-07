@@ -3,6 +3,7 @@
 use super::approval_view::document_approval_view;
 use super::ReceivableReadService;
 use crate::finance::dto::CustomerReceiptView;
+use crate::{Error, Result};
 use erp_core::ids::CustomerReceiptId;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{CustomerReceiptListParams, PageView, SortDir};
@@ -12,7 +13,6 @@ use erp_finance::service::receivable::mapping::zero_amount;
 use erp_workflow::service::document_registry::find_approval_binding;
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::NoTransaction;
-use services::{Error, Result};
 use std::collections::HashMap;
 use validator::Validate;
 
@@ -148,7 +148,7 @@ impl ReceivableReadService {
         let (allocated_total, views) = allocation_view(&allocations);
         let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
             .await
-            .map_err(services::Error::from)
+            .map_err(crate::Error::from)
         {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
