@@ -5,8 +5,6 @@
 
 mod integration_ops;
 
-mod returns;
-
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
@@ -34,7 +32,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     erp_import::indexes::ensure(db).await?;
     erp_party::indexes::ensure(db).await?;
     erp_procurement::indexes::ensure(db).await?;
-    returns::ensure(db).await?;
+    erp_returns::indexes::ensure(db).await?;
     erp_sales::indexes::ensure(db).await?;
     erp_supplier::indexes::ensure(db).await?;
     supplier_api::ensure(db).await?;

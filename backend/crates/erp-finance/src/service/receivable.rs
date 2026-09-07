@@ -36,3 +36,5 @@ pub mod initial_account;
 pub mod sales_change;
 
 pub mod receipt_reversal;
+
+pub mod customer_refund;

@@ -1,16 +1,29 @@
 //! 回款冲正最终过账：退货状态、财务逆向核销、成功审计及销售进度共享事务。
 
+mod approval;
+mod commit;
+mod context;
+mod create;
+mod sales_refresh;
+
+#[cfg(test)]
+mod receipt_reversal_approval_tests;
+
+use sales_refresh::{refresh_affected_sales, AffectedSales};
+
 use application_core::AuditActor;
 use async_trait::async_trait;
-use entities::returns::ReceiptReversal;
 use erp_audit::{AuditActorLogs, AuditExt};
+use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::service::receivable::receipt_reversal::{
     load_posted_receipt, receipt_allocation_sales_order_ids, reverse_receipt_allocations,
 };
+use erp_read_models::returns_center::{dto::ReceiptReversalView, ReturnsReadService};
+use erp_returns::entity::returns::ReceiptReversal;
+use erp_returns::service::ReturnsService;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, Transactional};
-use services::returns::{ReceiptReversalView, ReturnsService};
 use services::Result;
 
 /// 回款冲正最终动作的跨域流程；客户端直接过账入口仍由原 Handler 拒绝。
@@ -54,7 +67,7 @@ impl ReceiptReversalProcess {
                 })
             })
             .await?;
-        ReturnsService::new(self.db.clone())
+        ReturnsReadService::new(self.db.clone())
             .receipt_reversal_detail(&detail_id)
             .await
     }
@@ -132,7 +145,7 @@ impl ReceiptReversalPosting for DatabasePosting<'_> {
         Ok(())
     }
     async fn post_reversal(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        ReturnsService::persist_posted_receipt_reversal(self.db, &mut self.reversal, executor).await
+        Ok(ReturnsService::persist_posted_receipt_reversal(self.db, &mut self.reversal, executor).await?)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let audit = self.actor.clone().resource_log(
@@ -144,25 +157,36 @@ impl ReceiptReversalPosting for DatabasePosting<'_> {
         Ok(())
     }
     async fn refresh_sales(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        // 冲正后刷新销售单回款进度与关闭状态（已结清可能退回部分回款）。
-        // 必须重新查询审计写入后的全部分配，不复用逆转准备阶段的分配快照。
-        let sales_order_ids = receipt_allocation_sales_order_ids(
-            self.db,
-            &self.reversal.original_customer_receipt_id,
-            executor,
-        )
-        .await?;
-        for sales_order_id in sales_order_ids {
-            crate::order_to_cash::progress::update_sales_order_money_progress(
+        refresh_affected_sales(self, executor).await
+    }
+}
+
+#[async_trait]
+impl AffectedSales for DatabasePosting<'_> {
+    async fn load_sales(&mut self, executor: &mut dyn Executor) -> Result<Vec<SalesOrderId>> {
+        Ok(
+            receipt_allocation_sales_order_ids(
                 self.db,
+                &self.reversal.original_customer_receipt_id,
                 executor,
-                &sales_order_id,
-                self.actor.id().to_string(),
-                None,
             )
-            .await?;
-        }
-        Ok(())
+            .await?,
+        )
+    }
+
+    async fn refresh_sale(
+        &mut self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        crate::order_to_cash::progress::update_sales_order_money_progress(
+            self.db,
+            executor,
+            sales_order_id,
+            self.actor.id().to_string(),
+            None,
+        )
+        .await
     }
 }
 

@@ -104,7 +104,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::CustomerRefundPost | ApprovalDomainAction::SupplierRefundPost => {
             let session = require_transaction(executor)?;
-            services::returns::finalize_approved_return_in_transaction(
+            crate::reverse_flow::finalize_approved_return_in_transaction(
                 &registry.db,
                 action.document_type(),
                 context.business_object_id(),
@@ -190,7 +190,7 @@ async fn dispatch_action(
         | ApprovalDomainAction::SupplierRefundCancelApproval
         | ApprovalDomainAction::ReceiptReversalCancelApproval
         | ApprovalDomainAction::PaymentReversalCancelApproval => {
-            services::returns::cancel_approval_in_transaction(
+            crate::reverse_flow::cancel_approval_in_transaction(
                 &registry.db,
                 action.document_type(),
                 context.business_object_id(),

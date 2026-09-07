@@ -75,19 +75,19 @@ fn adapter_object_read_for_type(
             .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::CustomerRefund => Ok(Some(
-            services::returns::customer_refund_object_readable(organization_id, assignee_user_id)
+            crate::reverse_flow::customer_refund_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::SupplierRefund => Ok(Some(
-            services::returns::supplier_refund_object_readable(organization_id, assignee_user_id)
+            crate::reverse_flow::supplier_refund_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::ReceiptReversal => Ok(Some(
-            services::returns::receipt_reversal_object_readable(organization_id, assignee_user_id)
+            crate::reverse_flow::receipt_reversal_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::PaymentReversal => Ok(Some(
-            services::returns::payment_reversal_object_readable(organization_id, assignee_user_id)
+            crate::reverse_flow::payment_reversal_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         _ => Ok(None),

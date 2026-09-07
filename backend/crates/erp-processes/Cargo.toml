@@ -9,6 +9,7 @@ rust_decimal = { workspace = true }
 erp-sales = { workspace = true }
 erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
+erp-returns = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 erp-read-models = { workspace = true }

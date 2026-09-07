@@ -6,13 +6,13 @@
 //! 同一外层事务中先加载事实并完成授权、查询收据；只有无收据的 Fresh 分支才
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
-use database::ReturnsExt;
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use erp_customer::CustomerExt;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::ReceivableExt;
 use erp_inventory::InventoryExt;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_returns::repository::ReturnsExt;
 use erp_sales::entity::sales_review::SalesChangeOrderStatus;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::SalesReviewExt;

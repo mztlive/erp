@@ -1,15 +1,10 @@
 //! Domain-owned MongoDB repositories composed from persistence-core.
 
 mod business_capability_confirmation;
-mod customer_refund;
 mod inbox_message;
 mod integration_error_task;
-mod payment_reversal;
-mod receipt_reversal;
 mod reconciliation_difference;
 mod reconciliation_difference_resolution;
-mod sales_return_case;
-mod sales_return_line;
 
 mod supplier_api_capability;
 mod supplier_api_connection;
@@ -24,7 +19,6 @@ mod supplier_offering_revision;
 mod supplier_order_action;
 mod supplier_order_action_line;
 mod supplier_order_status_history;
-mod supplier_refund;
 mod supplier_refund_allocation;
 mod supplier_refund_fact;
 mod supplier_settlement_difference;
@@ -33,15 +27,10 @@ mod supplier_settlement_item;
 mod supplier_settlement_source_evidence;
 mod supplier_settlement_statement;
 pub use business_capability_confirmation::BusinessCapabilityConfirmationRepository;
-pub use customer_refund::CustomerRefundRepository;
 pub use inbox_message::InboxMessageRepository;
 pub use integration_error_task::IntegrationErrorTaskRepository;
-pub use payment_reversal::PaymentReversalRepository;
-pub use receipt_reversal::ReceiptReversalRepository;
 pub use reconciliation_difference::ReconciliationDifferenceRepository;
 pub use reconciliation_difference_resolution::ReconciliationDifferenceResolutionRepository;
-pub use sales_return_case::SalesReturnCaseRepository;
-pub use sales_return_line::SalesReturnLineRepository;
 
 pub use supplier_api_capability::SupplierApiCapabilityRepository;
 pub use supplier_api_connection::SupplierApiConnectionRepository;
@@ -56,7 +45,6 @@ pub use supplier_offering_revision::SupplierOfferingRevisionRepository;
 pub use supplier_order_action::SupplierOrderActionRepository;
 pub use supplier_order_action_line::SupplierOrderActionLineRepository;
 pub use supplier_order_status_history::SupplierOrderStatusHistoryRepository;
-pub use supplier_refund::SupplierRefundRepository;
 pub use supplier_refund_allocation::SupplierRefundAllocationRepository;
 pub use supplier_refund_fact::SupplierRefundFactRepository;
 pub use supplier_settlement_difference::SupplierSettlementDifferenceRepository;
@@ -64,9 +52,3 @@ pub use supplier_settlement_difference_evidence::SupplierSettlementDifferenceEvi
 pub use supplier_settlement_item::SupplierSettlementItemRepository;
 pub use supplier_settlement_source_evidence::SupplierSettlementSourceEvidenceRepository;
 pub use supplier_settlement_statement::SupplierSettlementStatementRepository;
-
-mod purchase_return_line;
-pub use purchase_return_line::PurchaseReturnLineRepository;
-
-mod purchase_return_order;
-pub use purchase_return_order::PurchaseReturnOrderRepository;

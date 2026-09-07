@@ -1,26 +1,31 @@
 //! 域 D21 `returns` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::returns` 的 DTO。
+//! 直接复用 领域与读模型的 DTO。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::returns::{
+use erp_processes::reverse_flow::ReturnsProcess;
+use erp_read_models::returns_center::dto::{
+    CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView,
+    PurchaseReturnOrderListParams, PurchaseReturnOrderView, ReceiptReversalView, SalesReturnCaseListParams,
+    SalesReturnCaseView, SupplierRefundView,
+};
+use erp_read_models::returns_center::ReturnsReadService;
+use erp_returns::dto::{
     CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
     CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest, CommitCustomerRefundRequest,
     CommitPaymentReversalRequest, CommitReceiptReversalRequest, CommitSupplierRefundRequest,
     CreateCustomerRefundRequest, CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest,
     CreateReceiptReversalRequest, CreateSalesReturnCaseRequest, CreateSupplierRefundRequest,
-    CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView, PostCustomerRefundRequest,
-    PostPaymentReversalRequest, PostReceiptReversalRequest, PostSupplierRefundRequest,
-    PurchaseReturnOrderListParams, PurchaseReturnOrderView, ReceiptReversalView, ReturnsService,
-    SalesReturnCaseListParams, SalesReturnCaseView, SubmitCustomerRefundRequest,
-    SubmitPaymentReversalRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
-    SupplierRefundView,
+    PostCustomerRefundRequest, PostPaymentReversalRequest, PostReceiptReversalRequest,
+    PostSupplierRefundRequest, SubmitCustomerRefundRequest, SubmitPaymentReversalRequest,
+    SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
 };
+use erp_returns::service::ReturnsService;
 
 use crate::{
     app_state::AppState,
@@ -46,8 +51,7 @@ pub async fn sales_return_case_list(
     State(state): State<AppState>,
     Query(params): Query<SalesReturnCaseListParams>,
 ) -> Result<PageView<SalesReturnCaseView>> {
-    let page = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = ReturnsReadService::new(state.db())
         .sales_return_case_list(&params)
         .await?;
 
@@ -73,8 +77,7 @@ pub async fn sales_return_case_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SalesReturnCaseView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .sales_return_case_detail(&id)
         .await?;
 
@@ -102,7 +105,7 @@ pub async fn sales_return_case_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesReturnCaseRequest>,
 ) -> Result<SalesReturnCaseView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_sales_return_case(req, &actor)
         .await?;
@@ -129,8 +132,7 @@ pub async fn purchase_return_order_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseReturnOrderListParams>,
 ) -> Result<PageView<PurchaseReturnOrderView>> {
-    let page = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = ReturnsReadService::new(state.db())
         .purchase_return_order_list(&params)
         .await?;
 
@@ -156,8 +158,7 @@ pub async fn purchase_return_order_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PurchaseReturnOrderView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .purchase_return_order_detail(&id)
         .await?;
 
@@ -185,7 +186,7 @@ pub async fn purchase_return_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseReturnOrderRequest>,
 ) -> Result<PurchaseReturnOrderView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_purchase_return_order(req, &actor)
         .await?;
@@ -212,8 +213,7 @@ pub async fn customer_refund_list(
     State(state): State<AppState>,
     Query(params): Query<CustomerRefundListParams>,
 ) -> Result<PageView<CustomerRefundView>> {
-    let page = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = ReturnsReadService::new(state.db())
         .customer_refund_list(&params)
         .await?;
 
@@ -239,8 +239,7 @@ pub async fn customer_refund_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .customer_refund_detail(&id)
         .await?;
 
@@ -268,7 +267,7 @@ pub async fn customer_refund_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_customer_refund(req, &actor)
         .await?;
@@ -289,7 +288,7 @@ pub async fn customer_refund_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_customer_refund(req, &actor)
         .await?;
@@ -319,7 +318,7 @@ pub async fn customer_refund_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .submit_customer_refund(&id, req, &actor)
         .await?;
@@ -350,7 +349,7 @@ pub async fn customer_refund_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelCustomerRefundApprovalRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .cancel_customer_refund_approval(&id, req, &actor)
         .await?;
@@ -383,7 +382,7 @@ pub async fn customer_refund_post(
 ) -> Result<CustomerRefundView> {
     match ReturnsService::reject_client_post() {
         Err(error) => Err(error.into()),
-        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+        Ok(never) => match never {},
     }
 }
 
@@ -406,8 +405,7 @@ pub async fn supplier_refund_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .supplier_refund_detail(&id)
         .await?;
 
@@ -435,7 +433,7 @@ pub async fn supplier_refund_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_supplier_refund(req, &actor)
         .await?;
@@ -456,7 +454,7 @@ pub async fn supplier_refund_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_supplier_refund(req, &actor)
         .await?;
@@ -486,7 +484,7 @@ pub async fn supplier_refund_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .submit_supplier_refund(&id, req, &actor)
         .await?;
@@ -517,7 +515,7 @@ pub async fn supplier_refund_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSupplierRefundApprovalRequest>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .cancel_supplier_refund_approval(&id, req, &actor)
         .await?;
@@ -550,7 +548,7 @@ pub async fn supplier_refund_post(
 ) -> Result<SupplierRefundView> {
     match ReturnsService::reject_supplier_refund_client_post() {
         Err(error) => Err(error.into()),
-        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+        Ok(never) => match never {},
     }
 }
 
@@ -573,8 +571,7 @@ pub async fn receipt_reversal_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .receipt_reversal_detail(&id)
         .await?;
 
@@ -602,7 +599,7 @@ pub async fn receipt_reversal_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_receipt_reversal(req, &actor)
         .await?;
@@ -623,7 +620,7 @@ pub async fn receipt_reversal_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_receipt_reversal(req, &actor)
         .await?;
@@ -653,7 +650,7 @@ pub async fn receipt_reversal_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .submit_receipt_reversal(&id, req, &actor)
         .await?;
@@ -684,7 +681,7 @@ pub async fn receipt_reversal_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelReceiptReversalApprovalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .cancel_receipt_reversal_approval(&id, req, &actor)
         .await?;
@@ -717,7 +714,7 @@ pub async fn receipt_reversal_post(
 ) -> Result<ReceiptReversalView> {
     match ReturnsService::reject_receipt_reversal_client_post() {
         Err(error) => Err(error.into()),
-        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+        Ok(never) => match never {},
     }
 }
 
@@ -740,8 +737,7 @@ pub async fn payment_reversal_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReturnsReadService::new(state.db())
         .payment_reversal_detail(&id)
         .await?;
 
@@ -769,7 +765,7 @@ pub async fn payment_reversal_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_payment_reversal(req, &actor)
         .await?;
@@ -790,7 +786,7 @@ pub async fn payment_reversal_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_payment_reversal(req, &actor)
         .await?;
@@ -820,7 +816,7 @@ pub async fn payment_reversal_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .submit_payment_reversal(&id, req, &actor)
         .await?;
@@ -851,7 +847,7 @@ pub async fn payment_reversal_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPaymentReversalApprovalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsService::new(state.db())
+    let view = ReturnsProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .cancel_payment_reversal_approval(&id, req, &actor)
         .await?;
@@ -884,13 +880,13 @@ pub async fn payment_reversal_post(
 ) -> Result<PaymentReversalView> {
     match ReturnsService::reject_payment_reversal_client_post() {
         Err(error) => Err(error.into()),
-        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+        Ok(never) => match never {},
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use services::returns::{
+    use erp_returns::dto::{
         SubmitCustomerRefundRequest, SubmitPaymentReversalRequest, SubmitReceiptReversalRequest,
         SubmitSupplierRefundRequest,
     };

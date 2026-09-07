@@ -1,7 +1,5 @@
 pub mod integration_ops;
 
-pub mod returns;
-
 pub mod supplier_api;
 pub mod supplier_fulfillment;
 pub mod supplier_offering;

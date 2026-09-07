@@ -4,15 +4,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use entities::returns::PaymentReversal;
 use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use erp_finance::entity::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use erp_finance::repository::PayableExt;
 use erp_party::PartyExt;
+use erp_returns::entity::returns::PaymentReversal;
 use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use {database::ReturnsExt, database::SupplierSettlementExt, erp_procurement::repository::PurchaseOrderExt};
+use {
+    database::SupplierSettlementExt, erp_procurement::repository::PurchaseOrderExt,
+    erp_returns::repository::ReturnsExt,
+};
 
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use super::PayableReadService;
@@ -102,16 +105,16 @@ fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalVi
         id: reversal.base.id,
         reversal_no: reversal.reversal_no,
         status: match reversal.status {
-            entities::returns::PaymentReversalStatus::Draft => {
+            erp_returns::entity::returns::PaymentReversalStatus::Draft => {
                 erp_finance::dto::payable::PaymentReversalStatus::Draft
             }
-            entities::returns::PaymentReversalStatus::InApproval => {
+            erp_returns::entity::returns::PaymentReversalStatus::InApproval => {
                 erp_finance::dto::payable::PaymentReversalStatus::InApproval
             }
-            entities::returns::PaymentReversalStatus::Posted => {
+            erp_returns::entity::returns::PaymentReversalStatus::Posted => {
                 erp_finance::dto::payable::PaymentReversalStatus::Posted
             }
-            entities::returns::PaymentReversalStatus::Reversed => {
+            erp_returns::entity::returns::PaymentReversalStatus::Reversed => {
                 erp_finance::dto::payable::PaymentReversalStatus::Reversed
             }
         },
@@ -475,10 +478,10 @@ pub(super) async fn resolve_source_document_no(
 mod tests {
     use std::str::FromStr;
 
-    use entities::returns::{PaymentReversal, PaymentReversalData};
     use erp_core::common::time::Instant;
     use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
     use erp_core::money::Amount;
+    use erp_returns::entity::returns::{PaymentReversal, PaymentReversalData};
 
     use super::{group_payment_reversals, merge_source_document_nos};
 

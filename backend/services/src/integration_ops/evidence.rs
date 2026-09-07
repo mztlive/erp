@@ -3,7 +3,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use database::{IntegrationOpsExt, ReturnsExt, SupplierFulfillmentExt};
+use database::{IntegrationOpsExt, SupplierFulfillmentExt};
 use entities::integration_ops::{
     difference_terminal_policy, error_terminal_policy,
     reconciliation_reason_registry as domain_reason_registry, CanonicalEvidenceReference, DirectConclusion,
@@ -11,7 +11,8 @@ use entities::integration_ops::{
     IntegrationErrorTask, MessageType, ReconciliationDifference, ReplayOriginalReference,
     RequiredEvidenceKind, ResolutionAction, TerminalEvidencePolicy,
 };
-use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
+use erp_returns::entity::returns::{CustomerRefundStatus, SupplierRefundStatus};
+use erp_returns::repository::ReturnsExt;
 use mongodb::Database;
 use persistence_core::Executor;
 

@@ -145,10 +145,10 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
     );
     assert_start_write_order(
         concat!(
-            include_str!("../../../../services/src/returns/start_approval/customer_refund.rs"),
-            include_str!("../../../../services/src/returns/start_approval/supplier_refund.rs"),
-            include_str!("../../../../services/src/returns/start_approval/receipt_reversal.rs"),
-            include_str!("../../../../services/src/returns/start_approval/payment_reversal.rs"),
+            include_str!("../reverse_flow/start_approval/customer_refund.rs"),
+            include_str!("../reverse_flow/start_approval/supplier_refund.rs"),
+            include_str!("../reverse_flow/start_approval/receipt_reversal.rs"),
+            include_str!("../reverse_flow/start_approval/payment_reversal.rs"),
         ),
         4,
         ".mark_approval_started(",
@@ -164,10 +164,10 @@ fn generic_start_replay_paths_return_before_transaction_writes() {
         include_str!("../sales_change/start_approval.rs"),
         include_str!("../procure_to_pay/change_start.rs"),
         include_str!("../finance_posting/receivable/start_approval.rs"),
-        include_str!("../../../../services/src/returns/start_approval/customer_refund.rs"),
-        include_str!("../../../../services/src/returns/start_approval/supplier_refund.rs"),
-        include_str!("../../../../services/src/returns/start_approval/receipt_reversal.rs"),
-        include_str!("../../../../services/src/returns/start_approval/payment_reversal.rs"),
+        include_str!("../reverse_flow/start_approval/customer_refund.rs"),
+        include_str!("../reverse_flow/start_approval/supplier_refund.rs"),
+        include_str!("../reverse_flow/start_approval/receipt_reversal.rs"),
+        include_str!("../reverse_flow/start_approval/payment_reversal.rs"),
     ] {
         let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("let PreparedExecution::Apply(writes) = prepared else"));
