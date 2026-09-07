@@ -1,0 +1,1136 @@
+{
+  "status": "passed",
+  "scope": "execution structure + recorded input/code/evidence commits",
+  "phase_documents": 18,
+  "source_files": 922,
+  "repository_types": 141,
+  "symbol_index_rows": 14681,
+  "markdown_documents": 21,
+  "checks_do_not_compile_or_migrate_code": true,
+  "failures": [],
+  "local_execution_complete": true,
+  "human_acceptance_asserted": false,
+  "real_database_verified": false,
+  "quality_gates_rerun": false,
+  "phase_execution_evidence": [
+    {
+      "phase": "00",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "400ab4f7855255b284fe8a8e1caffe27acc96083",
+      "code_commit": "475734cc301a8d8516fd29788cfc8ce937a09cb1",
+      "evidence_commit": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/00/input.json",
+          "sha256": "004316148c4f38a63a012fb765265c89b85af1d57300f27585768cb446849530",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/files.tsv",
+          "sha256": "70eb78e3f06cc43045b214777b1de4a0a7ef6bf349bcba8415be7faf96f0e47d",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/metadata.json",
+          "sha256": "bea7445cb55b05c9ffef86e197bbd480dbd1e63661ea63eb6f1d1f869387e212",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/boundary.log",
+          "sha256": "8d3c16c5d1aa80d6c634e12d1ee6c292e233203b33bbae36e247b9ecbc892583",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/unit-tests.log",
+          "sha256": "83a6ff0e3d18e4402042b04abae7b1c55f6dfee14431be0e55c10e95fc13228e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/quality-gates.log",
+          "sha256": "30ecacbd9ad1caebb75bc57ca6abaa766ed8db060262311ea7215115020aabb4",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/contract-comparison.json",
+          "sha256": "984fcb70cbe50bf66e6af69f2f38d73eceb40c307d9218b1a9da85c47d01b66c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/00/transaction-contract.json",
+          "sha256": "772a75b7ab05ed5ae1a8ccbe018d18f14692d01a67bdfaf57d24554d815375c1",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "01",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "7640f7b916891225ff19f5f1e1148b8a093fe0ff",
+      "code_commit": "63ebff5bde5ef2c5c278b27e0c120aedf711dd26",
+      "evidence_commit": "b399b662226064bd1fee36df026c461dd75066fd",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/01/input.json",
+          "sha256": "5d2c1d34c7b1365e7acd51d8fe7280bc7f060bc646270ea6e9257d604cd0dfeb",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/files.tsv",
+          "sha256": "543b9d1e0ab38ac2d88cf75cc05c03688c33ca6db5bd403cc874b0bf0833bb1f",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/metadata.json",
+          "sha256": "c54364de0849415bcc5707e1b5b8156b220d8603a22c771e30208bb7f8119688",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/boundary.log",
+          "sha256": "53f253c420606d010d0b1ee0c72ef6347333f53ac7f942886d24f57f3c8ad785",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/unit-tests.log",
+          "sha256": "45b96aed50efbd4a5ab6989924efcb15c85b85ba7d6fcfa9c8835e4f2efebec1",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/quality-gates.log",
+          "sha256": "57d8134fe6c944d77a116ef024b8df37a689431cab20d1afa388e8540157d1dd",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/contract-comparison.json",
+          "sha256": "81ce5aca06701825250bb47827320936d509f0baadf395337066c418a53d2147",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/01/transaction-contract.json",
+          "sha256": "fe9b9cf639dc97ebb3dd8fdd0fc4fee24e7c7134423000cb3617e31b378be215",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "02",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "b399b662226064bd1fee36df026c461dd75066fd",
+      "code_commit": "7b734435d7027a1445c0d8705916204474326987",
+      "evidence_commit": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/02/input.json",
+          "sha256": "7720886679617d383442d6da4d7f82462a0f78a47582c3df6ea388fa039f6b4a",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/files.tsv",
+          "sha256": "9eed4acbd8a73df00e62c776f3c0211687af7ed4f10d298683b525b49708374d",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/metadata.json",
+          "sha256": "3a3d8274601978912a02292efb36055e8f63f377f6b7d30d91c3a8feac00942d",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/boundary.log",
+          "sha256": "bf2e2a49c4f1d7d71fb60d169da4b0eea25b10fb9ac66f4f43d61e39515860d3",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/unit-tests.log",
+          "sha256": "bb2bcd6d4a5dc9e1494b31b764dc54e555adb8d3bd2ed82b45462a434833c1fa",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/quality-gates.log",
+          "sha256": "171bc447cc48797805da89fc6a70a8070e26a483d79a327c8b0979616603fe9c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/contract-comparison.json",
+          "sha256": "3c617cfeccf13195c42314a0e295fa6ff4e435e29da09db036116ba8fc99cf10",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/02/transaction-contract.json",
+          "sha256": "9e498a66eb452f6180be0ded42a569ab7a15e377df32a69a64eedb16305cf538",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "03",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "fead5bad842092ddbdcbf598ab7b3d00384ff226",
+      "code_commit": "74d6d0be96dc837405b12db77ca8dd16455eb342",
+      "evidence_commit": "56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/03/input.json",
+          "sha256": "91c9f2bf135144f3949d4ba16768aedef476e2078cb7316eb929f3057c4ebcbf",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/files.tsv",
+          "sha256": "6614ad43b69e3f93333ae92d12f2d27681ad55e82edd82f9300a687eaea641ca",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/metadata.json",
+          "sha256": "adfddd11979fdfbb9c308d8ef9dfde7cf2bd0fc4c12d5179228ea1ff98098ae1",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/boundary.log",
+          "sha256": "22f78ce1424117ca8a49746959de20d117d95056bfc17cf944f55437e7b48c6b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/unit-tests.log",
+          "sha256": "27b7b012ec8a95811a2d9d8e4a7c63a388a0730ab28ae2fe91534de522bbab30",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/quality-gates.log",
+          "sha256": "95ef29217e88c0a0470e0c03caae087e8ae07efa4a482258493f5c16d4071d20",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/contract-comparison.json",
+          "sha256": "ce3ab2f275fdb6e6a2d08ff20c8d68b7172cff901cd3381d8e15d1a565249814",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/03/transaction-contract.json",
+          "sha256": "82c95400f6b0f91ee04e1a55c3a51222d082905b22e6cbe0732951420ed43de8",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "04",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "56ff3eb8bfe6f17ee55da4368b6db3aa03b82d0a",
+      "code_commit": "c8b5f6b3f18430a36f1e35eca1992c01c25e4814",
+      "evidence_commit": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/04/input.json",
+          "sha256": "7f717ee0b1021b6b45fc87fa7139d39b49afa80f7fa81bd0e5f5bb3a647428e8",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/files.tsv",
+          "sha256": "1bd60803d1bb1198cb8a9ca4688c910cbb60e49a4e2efada523e0294bd5b1150",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/metadata.json",
+          "sha256": "b4e4f2847a17d13819b445a20623b70dce91c2736f0a2eeee3904ec9eef013d7",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/boundary.log",
+          "sha256": "a09e35296f1360623a3221354645e0afb9198d3155581ecc1d39a018ca93ea96",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/unit-tests.log",
+          "sha256": "d27894e49a49bf4ae1fa1641fac349da3f7e6c5ab0eef59b8dadd2262fdc7dd2",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/quality-gates.log",
+          "sha256": "81a41e883748ed630cc5bd3bbbc266a7ed399729fed30c58d539fb40c41c261b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/contract-comparison.json",
+          "sha256": "feaac4ce9bd2721a10c6d89e925a7e0c483c5169faa7cfaa8603fb53b197bffe",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/04/transaction-contract.json",
+          "sha256": "67ab5c47a70a9265c566a82f9a9d68bad2fad534aaa20bd047e3360dbac5919d",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "05",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "c2ceb82eb893191cd0a3bf518bfb9c58d5748a15",
+      "code_commit": "0f92caee0ad1780917bffb2350a2a5bb2a24febc",
+      "evidence_commit": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/05/input.json",
+          "sha256": "6c7bbcbb367579b120639313ffb5cf8ac52ab9fd66413e244f240d9e779861c5",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/files.tsv",
+          "sha256": "9d8dddbcfe7db5d12fbefb95975cb4add40d39790e9bba4101db1cde6888ea5b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/metadata.json",
+          "sha256": "b76a0fdbc9ca892eac6d7353376bb3b9cc21804ff4029aadc24f990d7f194f4e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/boundary.log",
+          "sha256": "53e2d870e91839a13aefe393abdd0135cad562a474755435a4faa5b3342b922f",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/unit-tests.log",
+          "sha256": "2b974b180b4e95e3d7fc6e94b75cf8246d7829a795d08f8cbb826679ffb75eee",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/quality-gates.log",
+          "sha256": "353e6dac60ca2b08a46906763235d89114fb7540a50012cc50496c6e7105bb91",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/contract-comparison.json",
+          "sha256": "faa87ee3c6b26660cdf12cbe60effe06c9bd9a1480dd52c994e0ea3dd6759f9f",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/05/transaction-contract.json",
+          "sha256": "02603bc84878cf2443327c9b76ddf56bc8ae27845452f74d44467e1909db3865",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "06",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "88c386d071a72052b3c0d061de26a9c4ed5e76e9",
+      "code_commit": "b3f9ea487d63bc36e943c2d94a997bccf83fac59",
+      "evidence_commit": "2f77816b06145648ecb11dbe4f151b914457c267",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/06/input.json",
+          "sha256": "6cecb5b49c28ff2cfba52a8a9562c2ea1b4927edbfda2786365bf0276ec6936e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/files.tsv",
+          "sha256": "25b324b21a86f846ef7c2cfaa31d93d59317c4e9aed7fc93e708d80aaf65eb6e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/metadata.json",
+          "sha256": "be7262b2a02f5f1eb0883651a35fb3857f8bd78fbfcac4e7dae0d3faa358069c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/boundary.log",
+          "sha256": "a9c25c22153ba8a7eed29ca4bd73b24a33ed9f99a18a967480e742fec7cd0732",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/unit-tests.log",
+          "sha256": "7af5ede733ca2e5e48314ee2c2a237a9041d59e438dcfb39e94674346fa7308d",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/quality-gates.log",
+          "sha256": "b3cd6ddf890516a622c222d836555ee40840a6b65ea828bbab6a66615e938580",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/contract-comparison.json",
+          "sha256": "da7938bd9de055e5e4e2106f4768096dd335732636b6dbc3292bca59b683c5b9",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/06/transaction-contract.json",
+          "sha256": "86bfdba86b01d24e2060485cae2f77f5466348a1ebb5454f31a5085545ad9fb4",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "07",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "2f77816b06145648ecb11dbe4f151b914457c267",
+      "code_commit": "8911cb1f466130b565868a8ec9daf087997a6eb3",
+      "evidence_commit": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/07/input.json",
+          "sha256": "f690b7d838d004420d380899460f4a9a50a24c7712d7fbaf6b2a840594f1e4b7",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/files.tsv",
+          "sha256": "e14cc2f9a9f9203dcbdde73f5edde2ebbb1cad0bb0c98dc9396b721e0f1a03dd",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/metadata.json",
+          "sha256": "4523979653b2925cbdff681a099059477197623fc13f015d015be8327e865f4f",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/boundary.log",
+          "sha256": "fa1e125d00ae8b3616ad7596adda89305c9dcc5c2454af7c3bb55381231f77d2",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/unit-tests.log",
+          "sha256": "2ba7ffcd56151a3b1aaa63b9868c7dc8ed42f15a259d53bc76818cdafafcedbc",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/quality-gates.log",
+          "sha256": "5e80fb1355cad66dacb0ec63ffa56faa45dc1e0ed5e6ee6cbf7eec0551841e07",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/contract-comparison.json",
+          "sha256": "11477f9d14f4481d8877438f4f251ed11c754d8f9ee7f66a7599b8117f556abe",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/07/transaction-contract.json",
+          "sha256": "7cad45a3a90916458360b4489990b3d77d30a3b0ebba5a95d9691a162c4e41c6",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "08",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
+      "code_commit": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+      "evidence_commit": "6778959016426ecd808f97db6bcb37955bd7b11b",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/08/input.json",
+          "sha256": "7f70fc4df2f2072552b3325cd3ca839a62805515815e8b49babbe60a142550a2",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/files.tsv",
+          "sha256": "e9c6cc767b669ac01066b8ecb5de6ec67af04a88e6e00c505cb7812d8b4c315e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/metadata.json",
+          "sha256": "53ff7a8de4578af0f0f84aa9471df44a59f68e0418ff9589947598f1203e28ac",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/boundary.log",
+          "sha256": "67fd1932fbb32814f4398ba89032fbdac79238d8f4cd43f08acfa1d1d67023db",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/unit-tests.log",
+          "sha256": "6580315c553ec2826ddbd2b6930d9b3c1b5279f1eb3efe784426d3bcb9231ab6",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/quality-gates.log",
+          "sha256": "c3570867cb53f4f045216dd98c9cc2f476cba5393b4e9e89bcb31277249b1fc4",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/contract-comparison.json",
+          "sha256": "5f7c4365c249aa93412bef2014e79b21c81d5063a510a7c523076c7f96625c75",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/08/transaction-contract.json",
+          "sha256": "feb5df5acaaf5bdab64e1b1ed2ac67fd2e33ab0eb7a5368f8ea3082056f901b6",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "09",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+      "code_commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+      "evidence_commit": "abf36f41d741dc243f689c877af44f6196eff62b",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/09/input.json",
+          "sha256": "a14eb72e03fbf1c5579ec72704067f0c50d69785af3ad14a3208adfc4bf93daf",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/files.tsv",
+          "sha256": "a0f804288aec5c02ca4e8592fd2d70096bd64ee5d1c9e79c10de7c806bfa2701",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/metadata.json",
+          "sha256": "f0c91b5f21612db6455ac5e93fb3c84bce0e71d8393449cec598379538146105",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/boundary.log",
+          "sha256": "5a709e70173fb2a76639012ca4e2082af8818c59b9563ab23b361e023c4550ae",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/unit-tests.log",
+          "sha256": "01fdac0eca89cabbbe920da059a7dface80a2051244bdfa8460069bd280472ba",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/quality-gates.log",
+          "sha256": "ea5b74f813387ac7c9e87f9768fc0e4005e368eafe2d4164432b7c7a38aa59ff",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/contract-comparison.json",
+          "sha256": "119138d14f0820acc631d09658e3680f264ec3019a41eb695f6f7755ef139a4c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/09/transaction-contract.json",
+          "sha256": "96b2c44248617a3352dea4acfbc2bcafe445ed12e59294ba6e8330d99bd3c761",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "10",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "abf36f41d741dc243f689c877af44f6196eff62b",
+      "code_commit": "07da7863ec0fb975d2093e4e97a43c7e0813e607",
+      "evidence_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/10/input.json",
+          "sha256": "8e2b137ac651d42fce22dd1420d91ede3b22b071e94eadb64457c1dceeafefdd",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/files.tsv",
+          "sha256": "66a7d4ef9fb3f5768e01e0a13a263a92a04f676a683576d8f99a6543189b2b71",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/metadata.json",
+          "sha256": "3bde2221eac9696083824c4363c6094cadf695ce7b7effc2d7d2c9875fe816aa",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/boundary.log",
+          "sha256": "0a79f7bff3de17c3749476655e4476b711d66a600a26a59c77098cf497527442",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/unit-tests.log",
+          "sha256": "c7c17ad7e9bb036d0f97850d24e28b80a5b179f1bbb77e6db607fa9cd621c67a",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/quality-gates.log",
+          "sha256": "455c278d28e866bb6fdec130e70bce02ee42647b3a837019f5fefe965a90028c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/contract-comparison.json",
+          "sha256": "504f6ad8968e5787f2c88f29edf47e2c24f53173f66a308eaa9b5131d05cbbc6",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/10/transaction-contract.json",
+          "sha256": "3159e5c5d76827c0f05973303707b011661c312ad7066b5b38b10f12b70412b7",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "11",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+      "code_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "evidence_commit": "cf89fb4774fd3b81d477e9088be1d6c2f699f46e",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/11/input.json",
+          "sha256": "b6962cbe18e84f6fe3e5fa3d2a74e439920bc7864d81722b4d10e2ec2f2e5da1",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/files.tsv",
+          "sha256": "b26173b0b908d134225961c20ae21b195f6c5640fda6d102c5935bc99cd9bf54",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/metadata.json",
+          "sha256": "eeaa60220be4d4ba797550a1eaa8b104bdfaf30a5653a4cc69134209cfd9c3d3",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/boundary.log",
+          "sha256": "3af2af4f322b39c2a24abf210052c6bc7e9d74c158c02152a1fee31432dbe4e9",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/unit-tests.log",
+          "sha256": "5136b0aff0d847b3dd62371e129b1d4034ffc5643a8fd59cff7cef547165b600",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/quality-gates.log",
+          "sha256": "18bdc861dd51cdde13240b8246805d8db5d5aa1c5aebd0a6f3f33ff4426db065",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/contract-comparison.json",
+          "sha256": "dff700a4482f6b647ee9b5642b95c693533cfc568346a56a7babd7de1aa637af",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/11/transaction-contract.json",
+          "sha256": "be083c4629c71d5dfd1bbb5611d94946c5baa24bd488380a95617cc1729fb901",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "12",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "cf89fb4774fd3b81d477e9088be1d6c2f699f46e",
+      "code_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "evidence_commit": "5b83e18ef01d4a36cd1c6862aa0ac38402a0e908",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/12/input.json",
+          "sha256": "8252e79dba8dfc95e919e387229514df90cb2d0bab07f3ba011b15ce996d218a",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/files.tsv",
+          "sha256": "61fce1fa2dc5719699c44b96c8725355206f1e6660692018a58d3418dabf5ab7",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/metadata.json",
+          "sha256": "fe2d47200a5458dde50e7a17eb77973f28d028563c4a9b51df8e075dddd15d71",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/boundary.log",
+          "sha256": "5c4089fe67759b99e5db3234c07f633315fb3159a0ce20ec6ce617894fd80f87",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/unit-tests.log",
+          "sha256": "e7dfa46792f3c5cafe84db2e8f5ff35273cb0bf9831eb57291b4c8ddfae93fab",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/quality-gates.log",
+          "sha256": "826a426cec366d0db41aea00769dd3e9514474f2625dabc35ca181f28b6eea40",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/contract-comparison.json",
+          "sha256": "29d22d71f65fd2ee9c97e61993dc8e88c0dece9bacb9389db6b5e357340165aa",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/12/transaction-contract.json",
+          "sha256": "f964c4689676c3fe609cc95aff00494b2ab60f78a59a507e9a900972e43ecb49",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "13",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "5b83e18ef01d4a36cd1c6862aa0ac38402a0e908",
+      "code_commit": "453cd48082793b8f40e5afa37d5d225a747fd1b0",
+      "evidence_commit": "cb159e5bf874e54254ea6fc447347627572d1a16",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/13/input.json",
+          "sha256": "840d885afcdad352f2f8c0a835696f1d8322d6d0a2fbe79e43acc68377675970",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/files.tsv",
+          "sha256": "75d6eecf72cccb86f9a2458d877931e6494292939b8f03500e181fb0fa3a5dce",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/metadata.json",
+          "sha256": "a2591afc7cd4fea807eb5fa24930796b29d5589d90603b3dd14f79a115edf41b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/boundary.log",
+          "sha256": "0dedc1f9fde9393b8b26f092b85d9e2731058ed9b0c6eac7515fd3de6a1c8015",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/unit-tests.log",
+          "sha256": "1e32c0f3c670323ac983c6b461a2d52a540ed382aea1965f4e9e816a0226ae8a",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/quality-gates.log",
+          "sha256": "826a426cec366d0db41aea00769dd3e9514474f2625dabc35ca181f28b6eea40",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/contract-comparison.json",
+          "sha256": "460c778ace2ac01fd86139944c62fff2b8466ae7523c7006f4d8c6d2bcff84bc",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/13/transaction-contract.json",
+          "sha256": "42acecaafb60ae76bcabb454769e45cba0d935a0bc8e07d9aafc357b12d37c39",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "14",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "cb159e5bf874e54254ea6fc447347627572d1a16",
+      "code_commit": "b274cebaefad13c1d0216a7b2252a4cecab5413f",
+      "evidence_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/14/input.json",
+          "sha256": "0a926e6f11e0f05272cedaf730659eec836f7acef454705a3cf1751bfa2db01b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/files.tsv",
+          "sha256": "730cac5c9c1005d256bf0a993392f5b2ca28fdb2b94bf5c055f9271fcd939bba",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/metadata.json",
+          "sha256": "144d147fe9fec8c1884010b328f5c3ea0e60a827c3a354b14ed1cec22ca6dc6b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/boundary.log",
+          "sha256": "1ad00b1e417a56ee3ad40e1721eef2c1e2111ba4bd74ed3e00418d93107b46e7",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/unit-tests.log",
+          "sha256": "46cc0b9afc3156e8881586dc99e0c6fd4c46d79021c3c082b20cf9ae6100e3a0",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/quality-gates.log",
+          "sha256": "826a426cec366d0db41aea00769dd3e9514474f2625dabc35ca181f28b6eea40",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/contract-comparison.json",
+          "sha256": "b91d7d07e580a5277ce9cc3eaa9307ada76935d927e39ebfa6d814c87563891e",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/14/transaction-contract.json",
+          "sha256": "2106277416ee52f3a6f04047bfb6e142b05c6d86e148ced5e7e1542523d5f1e6",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "15",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+      "code_commit": "f5269ee9ab2277c87cb435cd1bf89adfc7483d64",
+      "evidence_commit": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/15/input.json",
+          "sha256": "181e1ca7c17aa693392183fdb7cf7ef8ab4e43b6a667c615ba2e7c75a46b8586",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/files.tsv",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/metadata.json",
+          "sha256": "7ffbf33029023fe12d9c82c4749db3e6e3eb96711d571b607af4335b7a4de6c6",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/boundary.log",
+          "sha256": "1ad00b1e417a56ee3ad40e1721eef2c1e2111ba4bd74ed3e00418d93107b46e7",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/unit-tests.log",
+          "sha256": "8f853e29b1b72b5e655accf58be2767661ecda15e5b1a701fc989f575d4652d2",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/quality-gates.log",
+          "sha256": "826a426cec366d0db41aea00769dd3e9514474f2625dabc35ca181f28b6eea40",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/contract-comparison.json",
+          "sha256": "2d79d7fd5c4fb5838a082983241a2bcb28f0d5e48bfe3123bc7c25de7c60fd81",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/15/transaction-contract.json",
+          "sha256": "e5a2620cf1392b6ca0e9a13c3c96465fb9a6b30710ed8b512a7caf10ca1199fc",
+          "matches_evidence_commit": true
+        }
+      ],
+      "empty_files_list_reason": "精确非 owned 范围复核且 source-map/owned 仓储归属均为零",
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "16",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "ed8015e28d36e5b9323b87e1a1fd5f63c122eb70",
+      "code_commit": "72a0c79a2261d33699b869329376e534edfb1ef4",
+      "evidence_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/16/input.json",
+          "sha256": "a4460c1879d6938ae8ed1668dbe574b24b18c773bf6b7ab5e15f4837a1575b69",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/files.tsv",
+          "sha256": "7ed0b209667cc7f723ca27c2d22daab8dcc6cd1b94753899e17835ebefb86763",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/metadata.json",
+          "sha256": "333687f6842f56c891942bbd0be9b140a06f850eb9b652b4e294f132a5bea0d8",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/boundary.log",
+          "sha256": "08acaea4446ec26cbb1cd7c96965d00e984cc5db42c4caad648f31f9efb1021d",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/unit-tests.log",
+          "sha256": "7fdb0969fa3ce02a34175a0ccd1ce41228e03df3e759b8efc57e895378112689",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/quality-gates.log",
+          "sha256": "fd773265fec763fbfe6e877c50bd3552e36d056503c395138a222c7b15b5b313",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/contract-comparison.json",
+          "sha256": "db706c802b44c5e87e7bcc2555ffa145594b381420d269b1ae6974a3e1ce9a5c",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/16/transaction-contract.json",
+          "sha256": "9eab0c130fe40bbbb1898054df419b9102ae98e0fc9201a9eb980f7b1177f11f",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    },
+    {
+      "phase": "17",
+      "status": "本地门禁通过",
+      "local_gate_evidence_complete": true,
+      "input_commit": "a537414eb8f78c43ebc383a3457a45c437dececc",
+      "code_commit": "39c55021d8bb1d030eade4afb3e135e4b5a8a18b",
+      "evidence_commit": "648b3b726ced41b798867bcf5cce6b8d787eb40b",
+      "evidence_files": [
+        {
+          "path": ".domain-migration-evidence/17/input.json",
+          "sha256": "3b4503f66f1edf77c18783b75fe7a9a8378f9a827ab08d59a6136eb5912b3a22",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/files.tsv",
+          "sha256": "3220a89905d65f6b59739bf3d6a5e83a52c3c57b8452042e8e8379304f20d3a6",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/metadata.json",
+          "sha256": "b90db074d9e0834139fddbd10e9413a4e8eef8fffb8a065a6fc7ce74715e4cdf",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/boundary.log",
+          "sha256": "c5ec1f8574746cbc840f077982c3708e9a49a491ebecb771458d19cd47afc455",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/unit-tests.log",
+          "sha256": "ccba07dadb1e95707637aaec8f9ee7729553b546bec8412b8dc003a0ce0d804b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/quality-gates.log",
+          "sha256": "a34ad4977155e620ff035cf044208b1d1e564122c951d380bc4d3f46391d6c7b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/contract-comparison.json",
+          "sha256": "d6c2f065b37e86514437a8aacfaa7ff51cd0f8fe4ec68d15bdb95f780fd2157b",
+          "matches_evidence_commit": true
+        },
+        {
+          "path": ".domain-migration-evidence/17/transaction-contract.json",
+          "sha256": "9fe7bce21d8cba8170932ec87e4cd9dfc1f04c26744a52f159dbbca4f8808c22",
+          "matches_evidence_commit": true
+        }
+      ],
+      "recorded_quality_gates": {
+        "fmt": true,
+        "check": true,
+        "clippy": true,
+        "lib_tests": true,
+        "bpm": true,
+        "service": true,
+        "domain": true,
+        "permissions": true,
+        "diff": true
+      }
+    }
+  ],
+  "non_owned_scope_review_rows": [
+    {
+      "phase": "15",
+      "source": "entities/src/ids.rs",
+      "target": "crates/erp-core/src/ids.rs",
+      "counted_as_owned_migration": false
+    },
+    {
+      "phase": "15",
+      "source": "entities/src/sales_order/entity/order.rs",
+      "target": "crates/erp-sales/src/entity/sales_order/entity/order.rs",
+      "counted_as_owned_migration": false
+    },
+    {
+      "phase": "15",
+      "source": "services/src/errors.rs",
+      "target": "apps/web-api/src/core/errors.rs",
+      "counted_as_owned_migration": false
+    }
+  ]
+}
