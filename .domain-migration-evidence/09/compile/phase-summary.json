@@ -1,0 +1,39 @@
+{
+  "phase": "09",
+  "code_commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+  "storage_for_both_revisions": "/Volumes/Kingston",
+  "scenarios": {
+    "finance": {
+      "check": {
+        "baseline_seconds": 4.199479833943769,
+        "candidate_seconds": 4.365449083968997,
+        "improvement_percent": -3.952138278739259,
+        "sample_count_per_revision": 5,
+        "candidate_dirty_packages": [
+          "database",
+          "erp-finance",
+          "erp-processes",
+          "erp-read-models",
+          "services",
+          "web-api"
+        ]
+      },
+      "build": {
+        "baseline_seconds": 9.882491917000152,
+        "candidate_seconds": 10.268740250030532,
+        "improvement_percent": -3.9084103106215906,
+        "sample_count_per_revision": 5,
+        "candidate_dirty_packages": [
+          "database",
+          "erp-finance",
+          "erp-processes",
+          "erp-read-models",
+          "services",
+          "web-api"
+        ]
+      }
+    }
+  },
+  "interpretation": "阶段09仍有 database/services 反向依赖；本阶段未实现编译提速。最终阈值须在阶段17完成全部领域隔离后验证。",
+  "real_database_verified": false
+}

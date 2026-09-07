@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 09 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-finance` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；本阶段唯一共享注册文件集成负责人 |
+| 输入/输出提交 | 输入快照 `67789590`（保留阶段 08 当前实现与证据）；实现 `7d94672e`；测量/证据见本文件所属证据提交 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -82,19 +82,19 @@ finance 内部 receivable/payable/cost 可相互调用；finance 不依赖 sales
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固定收款分配/核销、应付分配、开票额度、差额分录、负数/溢出/舍入、部分冲销和历史账户显示的特征测试。
+1. [x] 固定收款分配/核销、应付分配、开票额度、差额分录、负数/溢出/舍入、部分冲销和历史账户显示的特征测试。
 
-2. [ ] 迁入 receivable/payable/cost 的实体、DTO、仓储、extensions 和索引；统一使用阶段 01 的拥有仓储。领域持久化快照含外域状态时保留原序列化值，用财务消费方事实类型和显式映射消除外域聚合依赖。
+2. [x] 迁入 receivable/payable/cost 的实体、DTO、仓储、extensions 和索引；统一使用阶段 01 的拥有仓储。领域持久化快照含外域状态时保留原序列化值，用财务消费方事实类型和显式映射消除外域聚合依赖。
 
-3. [ ] 建立 finance 的收款/开票/付款/成本事务内接口；从 card_funds_register、invoice、red_invoice、customer_receipt 和 payable/payment 拆出写销售进度、审批和工作项的步骤进入 processes::finance_posting。公开业务行为和步骤顺序保持不变。
+3. [x] 建立 finance 的收款/开票/付款/成本事务内接口；从 card_funds_register、invoice、red_invoice、customer_receipt 和 payable/payment 拆出写销售进度、审批和工作项的步骤进入 processes::finance_posting。公开业务行为和步骤顺序保持不变。
 
-4. [ ] 把 invoice_task/card_funds_task/payment_task 中任务决策与写入分别归明确财务事实判断和 workflow 命令；processes 执行最终协调。财务 DTO 中直接嵌入 WorkItemView 的视图迁 read-models。
+4. [x] 把 invoice_task/card_funds_task/payment_task 中任务决策与写入分别归明确财务事实判断和 workflow 命令；processes 执行最终协调。财务 DTO 中直接嵌入 WorkItemView 的视图迁 read-models。
 
-5. [ ] 销售当前仍在旧 services：由 processes 直接调用旧销售事务内接口；erp-finance 禁止依赖旧 services。旧销售的单纯财务事实调用可单向切到 finance；需要完整跨域事务的外层入口同时上移到 processes，禁止 services→processes 回边。
+5. [x] 销售当前仍在旧 services：由 processes 直接调用旧销售事务内接口；erp-finance 禁止依赖旧 services。旧销售的单纯财务事实调用可单向切到 finance；需要完整跨域事务的外层入口同时上移到 processes，禁止 services→processes 回边。
 
-6. [ ] 更新 receivable/payable/cost Handler、审批动作分发、客户中心、销售金额摘要与逆向流程调用方，删除旧财务模块。将唯一索引消息与领域错误保留在正确消费层，禁止所有错误降为 Internal。
+6. [x] 更新 receivable/payable/cost Handler、审批动作分发、客户中心、销售金额摘要与逆向流程调用方，删除旧财务模块。将唯一索引消息与领域错误保留在正确消费层，禁止所有错误降为 Internal。
 
-7. [ ] 运行完整财务纯内联测试、入口检查和公共门禁；执行 Finance 增量 check/build 复测并记录仍受旧销售大 crate 影响的调用链。
+7. [x] 运行完整财务纯内联测试、入口检查和公共门禁；执行 Finance 增量 check/build 复测并记录仍受旧销售大 crate 影响的调用链。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -162,15 +162,27 @@ erp-finance 引入销售或 WorkItem 完整类型；财务字段/索引/舍入�
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序工作区快照 67789590；阶段分支 chore/domain-crate-09-finance；保留阶段08的10个原有修改 | .domain-migration-evidence/09/input.json |
+| 文件与符号 | 90个计划旧源删除；16个拥有仓储迁入；混合文件按第16节实际职责拆分 | files.tsv、source-clearance.json、semantic-review.md |
+| 依赖 | normal/build/dev 无财务到其他业务域或旧三层依赖 | metadata.json、finance-dependencies.json、boundary.log |
+| 旧实现清零 | 财务实体、仓储、服务、工厂/索引注册切换；历史31个tests档案逐字节不变 | source-clearance.json、historical-tests.json |
+| 测试 | 全workspace纯lib：3329通过、0失败、68忽略；3组实际步骤Port共6项测试通过 | unit-tests.log |
+| 协议与数据 | 已捕获合同changed=0、missing=0；唯一新增SalesBusinessTypeFact保持原wire值；50项原始needs_review已分类复核 | contract-comparison.json、missing-drift-report.json、contract-review.json |
+| 事务合同 | 17个事务/2个幂等符号源码复核；同一Executor、原序、每步失败短路以实际Port测试证明；真实数据库运行未验证 | transaction-contract.json、semantic-review.md、contract-review.json |
+| 公共门禁 | fmt/check/clippy/lib tests/BPM/service/domain/permissions/git diff全部exit 0；第三方依赖版本未变 | quality-gates.log、dependency-lock.json |
+| 编译复测 | 同盘各5样本；check 4.1995→4.3654秒，build 9.8825→10.2687秒；分别回退3.95%/3.91%，旧database/services闭包仍在；最终阈值留阶段17验证 | compile/phase-summary.json及4组完整原始报告 |
+| 阶段提交 | 实现7d94672e4c90445c6763ed57076bdc1c1d8a010f；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表中未写目录前缀的证据均位于 `.domain-migration-evidence/09/`。原始静态扫描退出码为2，复核证据必须与扫描结果共同使用；未将其记为扫描器直接通过。
+
+## 16. 当前实现落点与验证合同
+
+- 财务 entity、DTO、拥有仓储、索引及本域写入接口归 `crates/erp-finance/src/`。source-map 阶段 09 的 90 个旧源文件全部删除，16 个拥有仓储由财务工厂唯一导出。
+- 财务跨域命令由 `erp-processes::finance_posting::{receivable,payable,cost}` 执行；账户、回款、付款等跨域读模型归 `erp-read-models::finance`。纯发票和成本查询调用财务服务。
+- 销售正式化、销售变更、采购正式化和付款冲正外层根事务分别归 `order_to_cash`、`sales_change`、`procure_to_pay`、`reverse_flow`。旧领域仅保留本阶段后续拆分所需的窄事务内接口，不得反向调用 processes。
+- 财务实体消费 `SalesBusinessTypeFact` 与 `ReviewEvidenceAssetFact`；上层执行显式转换。原销售类型序列化值、附件错误分类和可用性规则必须保持。
+- 收据重放、ID/时间生成、验证优先级和原写序以 `.domain-migration-evidence/09/semantic-review.md` 的 17 个事务符号核验为证据；同一 Executor 与失败停止以三个实际编排 Port 的 6 个纯内联测试为证据。
+- 静态合同比较原始退出码为 2（`needs_review`）：已捕获合同的 changed/missing 均为 0；50 项解析或源码变更疑点在 `contract-review.json` 逐类核销。必须同时读取原始报告和复核记录，不得把原始扫描改记为运行时通过。
+- 原准备读取中已有的 `NoTransaction` 时点保持；不得把步骤替身测试解释为所有读取均在数据库事务内。真实数据库运行未验证。

@@ -1,0 +1,10 @@
+{
+  "id": "finance",
+  "path": "crates/erp-finance/src/service/receivable/mapping.rs",
+  "package": "erp-finance",
+  "symbol": "zero_amount",
+  "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+  "after": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
+  "equivalence": "相同 Amount 零值和固定精度；JSON 0.00 与 BSON Decimal128 结果应通过纯内存测试核验",
+  "sha256_before": "fe7042b613155399420220188a8becf2dcf8d24b3bfba84d074f12facf217e4f"
+}

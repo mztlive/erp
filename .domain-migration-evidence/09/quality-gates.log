@@ -1,0 +1,43 @@
+rustc: rustc 1.99.0-nightly (daf2e5e18 2026-07-13)
+cargo: cargo 1.99.0-nightly (59800466c 2026-07-07)
+python3: Python 3.14.7
+COMMAND cargo fmt --all -- --check
+EXIT 0
+EVIDENCE 最终 TestExecutor 调整后重跑
+
+COMMAND cargo check --workspace --locked
+EXIT 0
+EVIDENCE check.log
+
+COMMAND cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+EXIT 0
+EVIDENCE clippy.log
+
+COMMAND cargo clippy -p erp-processes --all-targets --all-features --locked -- -D warnings
+EXIT 0
+EVIDENCE test-strengthening-clippy.log
+
+COMMAND env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+EXIT 0
+EVIDENCE unit-tests.log: 3329 passed, 0 failed, 68 ignored
+
+COMMAND ./scripts/check-bpm-boundaries.sh
+EXIT 0
+EVIDENCE bpm-boundaries.log
+
+COMMAND ./scripts/check-service-boundaries.sh
+EXIT 0
+EVIDENCE service-boundaries.log
+
+COMMAND ./scripts/check-domain-boundaries.sh
+EXIT 0
+EVIDENCE boundary.log
+
+COMMAND ./scripts/check-permissions-drift.sh
+EXIT 0
+EVIDENCE permissions.log
+
+COMMAND git diff --check
+EXIT 0
+EVIDENCE 最终 TestExecutor 调整后重跑
+真实数据库运行未验证

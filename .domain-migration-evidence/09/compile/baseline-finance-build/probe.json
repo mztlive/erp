@@ -1,0 +1,10 @@
+{
+  "id": "finance",
+  "path": "services/src/receivable/mapping.rs",
+  "package": "services",
+  "symbol": "zero_amount",
+  "before": "Amount::from_str(\"0.00\").expect(\"固定零金额必须可解析\")",
+  "after": "Amount::from_str(\"0\").expect(\"固定零金额必须可解析\")",
+  "equivalence": "相同 Amount 零值和固定精度；JSON 0.00 与 BSON Decimal128 结果应通过纯内存测试核验",
+  "sha256_before": "a9a25f7cd8692a66c89cb40a58a05a75ce267113e8914af719d31d7b7a5f2e73"
+}

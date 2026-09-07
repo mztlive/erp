@@ -1,0 +1,56 @@
+{
+  "phase": "09",
+  "code_commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "new_symbols": [
+    "SalesBusinessTypeFact"
+  ],
+  "raw_needs_review_count": 50,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "reason": "tuple/newtype 与动态索引绑定的解析边界",
+      "evidence": "parser-limitations-review.json",
+      "result": "9 个所涉文件逐字节不变"
+    },
+    {
+      "raw_items": 1,
+      "reason": "money 候选源文件哈希变化",
+      "evidence": "missing-drift-report.json: foundation_comparison.money",
+      "result": "无算法符号哈希差异；基础金额源码不变"
+    },
+    {
+      "raw_items": 2,
+      "reason": "2 个幂等与 17 个事务符号的词法哈希变化",
+      "evidence": "semantic-review.md",
+      "result": "逐项追踪实际调用链，原校验、ID、写序、Executor 和错误传播未发现实质漂移"
+    },
+    {
+      "raw_items": 1,
+      "reason": "新增 SalesBusinessTypeFact 消费方枚举",
+      "evidence": "unit-tests.log: sales_business_type_preserves_stable_serialization",
+      "result": "显式双分支映射及 VOUCHER/GOODS_SERVICE 往返测试通过"
+    }
+  ],
+  "executed_behavior_evidence": {
+    "port_executor_identity": "非零大小 TestExecutor，同一步骤序列全程传递同一借用",
+    "port_suites": [
+      "finance_posting::payable::posting::tests",
+      "finance_posting::receivable::invoice_posting::tests",
+      "sales_change::posting::tests"
+    ],
+    "port_test_count": 6,
+    "original_test_total": 3315,
+    "candidate_test_total": 3329,
+    "failed": 0,
+    "ignored": 68,
+    "historical_test_files_byte_identical": 31
+  },
+  "scope": "源码合同复核与纯内联测试；原始 needs_review 状态保留，不将静态采集标为运行时验证",
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

@@ -1,0 +1,15 @@
+test_collection_constant_swap_fails (__main__.SelfTests.test_collection_constant_swap_fails) ... ok
+test_direct_builder_and_collection_registration (__main__.SelfTests.test_direct_builder_and_collection_registration) ... ok
+test_field_change_fails (__main__.SelfTests.test_field_change_fails) ... ok
+test_grouped_error_mapping_preserves_guard_and_status (__main__.SelfTests.test_grouped_error_mapping_preserves_guard_and_status) ... ok
+test_index_keys_and_uniqueness_fail (__main__.SelfTests.test_index_keys_and_uniqueness_fail) ... ok
+test_literals_and_nested_comments (__main__.SelfTests.test_literals_and_nested_comments) ... ok
+test_missing_symbol_fails (__main__.SelfTests.test_missing_symbol_fails) ... ok
+test_path_like_wire_literal_is_not_normalized (__main__.SelfTests.test_path_like_wire_literal_is_not_normalized) ... ok
+test_relocation_and_qualified_import_keep_contract (__main__.SelfTests.test_relocation_and_qualified_import_keep_contract) ... ok
+test_serde_change_fails (__main__.SelfTests.test_serde_change_fails) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.006s
+
+OK

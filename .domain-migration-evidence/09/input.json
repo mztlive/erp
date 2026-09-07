@@ -1,0 +1,25 @@
+{
+  "phase": "09",
+  "input_head": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+  "integrator": "Codex",
+  "branch": "chore/domain-crate-09-finance",
+  "status": "本地门禁通过",
+  "preserved_input_changes": [
+    ".domain-migration-evidence/08/boundary.log",
+    ".domain-migration-evidence/08/contract-comparison.json",
+    ".domain-migration-evidence/08/files.tsv",
+    ".domain-migration-evidence/08/input.json",
+    ".domain-migration-evidence/08/metadata.json",
+    ".domain-migration-evidence/08/quality-gates.log",
+    ".domain-migration-evidence/08/transaction-contract.json",
+    ".domain-migration-evidence/08/unit-tests.log",
+    "backend/docs/superpowers/plans/domain-crate-migration/08-inventory.md",
+    "backend/docs/superpowers/plans/domain-crate-migration/README.md"
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证",
+  "input_snapshot_commit": "6778959016426ecd808f97db6bcb37955bd7b11b",
+  "output_code_commit": "7d94672e4c90445c6763ed57076bdc1c1d8a010f",
+  "performance_evidence": "compile/phase-summary.json",
+  "review_kind": "静态合同复核与纯内联门禁；非人工阶段验收"
+}

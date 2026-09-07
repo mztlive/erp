@@ -1,0 +1,457 @@
+{
+  "phase": "09",
+  "source_count": 90,
+  "all_old_sources_removed": true,
+  "sources": [
+    {
+      "source": "database/src/indexes/cost.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/indexes/cost.rs"
+    },
+    {
+      "source": "database/src/indexes/payable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/indexes/payable.rs"
+    },
+    {
+      "source": "database/src/indexes/receivable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/indexes/receivable.rs"
+    },
+    {
+      "source": "database/src/repository/cost.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/cost.rs"
+    },
+    {
+      "source": "database/src/repository/customer_center_receivable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/customer_center.rs"
+    },
+    {
+      "source": "database/src/repository/extensions/cost.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/extensions/cost.rs"
+    },
+    {
+      "source": "database/src/repository/extensions/payable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/extensions/payable.rs"
+    },
+    {
+      "source": "database/src/repository/extensions/receivable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/extensions/receivable.rs"
+    },
+    {
+      "source": "database/src/repository/payable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/invoicing.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/invoicing.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/mod.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/query.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/query.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/settlement.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/settlement.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/tests.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/tests.rs"
+    },
+    {
+      "source": "database/src/repository/payable/account/write.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/account/write.rs"
+    },
+    {
+      "source": "database/src/repository/payable/allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/allocation.rs"
+    },
+    {
+      "source": "database/src/repository/payable/command.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/command.rs"
+    },
+    {
+      "source": "database/src/repository/payable/entry.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/entry.rs"
+    },
+    {
+      "source": "database/src/repository/payable/payment.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/payable/payment.rs"
+    },
+    {
+      "source": "database/src/repository/receivable.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable.rs"
+    },
+    {
+      "source": "database/src/repository/receivable/account.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/account.rs"
+    },
+    {
+      "source": "database/src/repository/receivable/command.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/command.rs"
+    },
+    {
+      "source": "database/src/repository/receivable/entry.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/entry.rs"
+    },
+    {
+      "source": "database/src/repository/receivable/invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/invoice.rs"
+    },
+    {
+      "source": "database/src/repository/receivable/receipt.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable/receipt.rs"
+    },
+    {
+      "source": "database/src/repository/receivable_card_funds.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable_card_funds.rs"
+    },
+    {
+      "source": "database/src/repository/receivable_sales_order_summary.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/repository/receivable_sales_order_summary.rs"
+    },
+    {
+      "source": "entities/src/cost/cost_allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/cost/cost_allocation.rs"
+    },
+    {
+      "source": "entities/src/cost/cost_allocation_set.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/cost/cost_allocation_set.rs"
+    },
+    {
+      "source": "entities/src/cost/cost_entry.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/cost/cost_entry.rs"
+    },
+    {
+      "source": "entities/src/cost/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/cost/mod.rs"
+    },
+    {
+      "source": "entities/src/payable/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/mod.rs"
+    },
+    {
+      "source": "entities/src/payable/payable_account.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/payable_account.rs"
+    },
+    {
+      "source": "entities/src/payable/payable_entry.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/payable_entry.rs"
+    },
+    {
+      "source": "entities/src/payable/payable_entry_offset.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/payable_entry_offset.rs"
+    },
+    {
+      "source": "entities/src/payable/payment_allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/payment_allocation.rs"
+    },
+    {
+      "source": "entities/src/payable/payment_allocation_ledger.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/payment_allocation_ledger.rs"
+    },
+    {
+      "source": "entities/src/payable/purchase_invoice_allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/purchase_invoice_allocation.rs"
+    },
+    {
+      "source": "entities/src/payable/purchase_invoice_allocation_plan.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/purchase_invoice_allocation_plan.rs"
+    },
+    {
+      "source": "entities/src/payable/supplier_payment.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/payable/supplier_payment.rs"
+    },
+    {
+      "source": "entities/src/receivable/card_funds_receipt.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/card_funds_receipt.rs"
+    },
+    {
+      "source": "entities/src/receivable/card_funds_review_decision.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/card_funds_review_decision.rs"
+    },
+    {
+      "source": "entities/src/receivable/customer_receipt.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/customer_receipt.rs"
+    },
+    {
+      "source": "entities/src/receivable/funds_ledger.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/funds_ledger.rs"
+    },
+    {
+      "source": "entities/src/receivable/funds_review_chain.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/funds_review_chain.rs"
+    },
+    {
+      "source": "entities/src/receivable/funds_snapshot.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/funds_snapshot.rs"
+    },
+    {
+      "source": "entities/src/receivable/invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/invoice.rs"
+    },
+    {
+      "source": "entities/src/receivable/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/mod.rs"
+    },
+    {
+      "source": "entities/src/receivable/receipt_allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/receipt_allocation.rs"
+    },
+    {
+      "source": "entities/src/receivable/receivable_account.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/receivable_account.rs"
+    },
+    {
+      "source": "entities/src/receivable/receivable_entry.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/receivable_entry.rs"
+    },
+    {
+      "source": "entities/src/receivable/receivable_entry_offset.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/receivable_entry_offset.rs"
+    },
+    {
+      "source": "entities/src/receivable/receivable_funds_review.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/receivable_funds_review.rs"
+    },
+    {
+      "source": "entities/src/receivable/sales_change_delta.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/sales_change_delta.rs"
+    },
+    {
+      "source": "entities/src/receivable/sales_invoice_allocation.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/sales_invoice_allocation.rs"
+    },
+    {
+      "source": "entities/src/receivable/sales_invoice_allocation_plan.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/sales_invoice_allocation_plan.rs"
+    },
+    {
+      "source": "entities/src/receivable/sales_order_amount_summary.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/entity/receivable/sales_order_amount_summary.rs"
+    },
+    {
+      "source": "services/src/cost/dto.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/cost.rs"
+    },
+    {
+      "source": "services/src/cost/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/cost/mod.rs"
+    },
+    {
+      "source": "services/src/payable/account.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/account.rs"
+    },
+    {
+      "source": "services/src/payable/display.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/display.rs"
+    },
+    {
+      "source": "services/src/payable/dto.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/payable.rs"
+    },
+    {
+      "source": "services/src/payable/invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/invoice.rs"
+    },
+    {
+      "source": "services/src/payable/mapping.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/mapping.rs"
+    },
+    {
+      "source": "services/src/payable/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/mod.rs"
+    },
+    {
+      "source": "services/src/payable/payment.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/payment.rs"
+    },
+    {
+      "source": "services/src/payable/payment_task.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/payable/payment_task.rs"
+    },
+    {
+      "source": "services/src/receivable/account.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/account.rs"
+    },
+    {
+      "source": "services/src/receivable/adapter.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/adapter.rs"
+    },
+    {
+      "source": "services/src/receivable/cancel_approval.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/cancel_approval.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_decision.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_decision.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_identity.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_identity.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_receipt.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_receipt.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_register.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_register.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_review.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_review.rs"
+    },
+    {
+      "source": "services/src/receivable/card_funds_task.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/card_funds_task.rs"
+    },
+    {
+      "source": "services/src/receivable/customer_receipt.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/customer_receipt.rs"
+    },
+    {
+      "source": "services/src/receivable/customer_receipt_commit.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/customer_receipt_commit.rs"
+    },
+    {
+      "source": "services/src/receivable/dto.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/receivable.rs"
+    },
+    {
+      "source": "services/src/receivable/dto/card_funds.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/receivable/card_funds.rs"
+    },
+    {
+      "source": "services/src/receivable/dto/command.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/receivable/command.rs"
+    },
+    {
+      "source": "services/src/receivable/dto/invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/receivable/invoice.rs"
+    },
+    {
+      "source": "services/src/receivable/dto/query.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/dto/receivable/query.rs"
+    },
+    {
+      "source": "services/src/receivable/invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/invoice.rs"
+    },
+    {
+      "source": "services/src/receivable/invoice_commit.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/invoice_commit.rs"
+    },
+    {
+      "source": "services/src/receivable/invoice_task.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/invoice_task.rs"
+    },
+    {
+      "source": "services/src/receivable/mapping.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/mapping.rs"
+    },
+    {
+      "source": "services/src/receivable/mod.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/mod.rs"
+    },
+    {
+      "source": "services/src/receivable/red_invoice.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/red_invoice.rs"
+    },
+    {
+      "source": "services/src/receivable/start_approval.rs",
+      "old_source_exists": false,
+      "planned_target": "crates/erp-finance/src/service/receivable/start_approval.rs"
+    }
+  ]
+}

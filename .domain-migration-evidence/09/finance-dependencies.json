@@ -1,0 +1,187 @@
+{
+  "phase": "09",
+  "crate": "erp-finance",
+  "direct_edges_all_kinds": [
+    {
+      "name": "application-core",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "async-trait",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "bson",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "chrono",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "entity-core",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "entity-macros",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "erp-core",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "futures-util",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "hex",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "id-generator",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "mongodb",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "persistence-core",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "rust_decimal",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "serde",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "serde_json",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "sha2",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "thiserror",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "tokio",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "tracing",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "validator",
+      "kinds": [
+        {
+          "kind": null,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "normal_build_dev_no_business_domain_or_legacy_edge": true
+}
