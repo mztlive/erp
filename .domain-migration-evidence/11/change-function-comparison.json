@@ -1,0 +1,102 @@
+[
+  {
+    "symbol": "persist_started_change",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "start_change_approval",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "dispatch_change_start",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "recover_purchase_change_start",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_cancelled_change",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_created_change_order",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "cancel_change_approval",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "load_bound_definition_graph",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "engine_graph",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "load_start_receipt",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "replay_purchase_change_start_with_executor",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "build_purchase_change_start_input",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "map_start_plan_error",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_purchase_change_start",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_runtime_writes",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "list_projection_from_execution",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_open_tasks",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "load_cancel_runtime",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "build_purchase_change_cancel_input",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "map_cancel_plan_error",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_purchase_change_cancel",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "persist_cancel_runtime",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "close_open_tasks",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "cancel_list_projection",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  },
+  {
+    "symbol": "require_cas_applied",
+    "body_equal_after_path_and_domain_receiver_normalization": true
+  }
+]

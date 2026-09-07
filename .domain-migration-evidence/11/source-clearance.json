@@ -1,0 +1,362 @@
+{
+  "phase": "11",
+  "source_count": 87,
+  "all_old_sources_removed": true,
+  "remaining_old_sources": [],
+  "sources": [
+    {
+      "source": "database/src/indexes/procurement_responsibility.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/indexes/purchase_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/procurement_responsibility.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/purchase_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/catalog.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/ids.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/isolation_tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/list.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/procurement_responsibility/rule_list_isolation_tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/allocation.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/center_facts.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/change.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/common.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/coverage.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/creation_basis.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/list_facts.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/purchase_order/submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/procurement_responsibility/catalog.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/procurement_responsibility/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/procurement_responsibility/resolution.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/procurement_responsibility/rule.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/procurement_responsibility/rule_list.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/allocation.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/change_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/command_receipt.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/coverage.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/creation_basis.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/draft_edit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/line_amounts.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/line_common.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/purchase_revision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/purchase_submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/snapshot.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/sourcing_plan/assignment.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/sourcing_plan/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/sourcing_plan/plan.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/sourcing_plan/stock.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/sourcing_plan/tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/purchase_order/types.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/procurement_responsibility/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/procurement_responsibility/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/procurement_responsibility/resolver.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/procurement_responsibility/rule_list.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/procurement_responsibility/service.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/adapter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/allocation_maintenance.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/approval_query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/authorization.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/cancel_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change/effect.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change/mapping.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change/submit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change_adapter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change_cancel.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/change_start.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/coverage.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/create_submit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/creation_basis.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/creation_basis/create.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/creation_basis/mapping.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/creation_basis/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/draft_edit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/dto/change_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/dto/command.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/dto/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/formalization.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/line_input.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/procurement_task_sync.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/query.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/review.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/shared.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/sourcing_create.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/start_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/submission.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/view_mapping.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/purchase_order/void_order.rs",
+      "old_source_exists": false
+    }
+  ],
+  "additional_owned_migrations": [
+    "10 owned repositories",
+    "erp-sales/src/entity/sales_order/{procurement.rs,mod.rs}: coverage summary single owner",
+    "database/src/repository/supplier_names.rs and all consumers",
+    "supplier_fulfillment detail read composition"
+  ]
+}

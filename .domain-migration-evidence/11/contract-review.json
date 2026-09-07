@@ -1,0 +1,27 @@
+{
+  "phase": "11",
+  "code_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 48,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "evidence": "parser-limitations-review.json",
+      "result": "逐项核对未动文件字节与迁移后的采购责任动态索引定义"
+    },
+    {
+      "raw_items": 2,
+      "idempotency_symbols": 18,
+      "transaction_symbols": 7,
+      "evidence": "idempotency-transaction-review.json",
+      "result": "25条分类项及20个唯一符号按实际生产调用链复核，未发现可观察漂移"
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

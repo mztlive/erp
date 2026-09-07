@@ -1,0 +1,19 @@
+{
+  "command_preview_dto_structs": [
+    "CreateProcurementResponsibilityRuleRequest",
+    "UpdateProcurementResponsibilityRuleRequest",
+    "ProcurementResponsibilityResolveLineRequest",
+    "ProcurementResponsibilityResolveRequest",
+    "ProcurementResponsibilityResolutionView",
+    "ProcurementResponsibilityResolveLineView",
+    "ProcurementResponsibilityResolveView"
+  ],
+  "field_comments_attributes_equal_after_whitespace_normalization": true,
+  "into_data_and_into_parts_equal_except_visibility": true,
+  "domain_external_dependencies_in_owned_service_dto_ports": 0,
+  "preserved_service_tests": 5,
+  "new_real_port_tests": 12,
+  "directed_rustfmt": "passed",
+  "cargo_tests": "not run; root integrator owns all Cargo gates",
+  "database": "not run"
+}

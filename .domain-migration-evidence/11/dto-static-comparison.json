@@ -1,0 +1,887 @@
+{
+  "count": 48,
+  "issues": [],
+  "before": {
+    "PageParams": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub page : u64 , pub page_size : u32 , pub sort_by : & ' static str , pub sort_dir : SortDir ,",
+        "attrs": [
+          "derive ( Debug , Clone , Copy , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderListParams": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub q : Option < String > , pub sales_order_id : Option < String > , pub supplier_id : Option < String > , pub status : Option < PurchaseOrderStatus > , pub review_status : Option < PurchaseReviewStatus > , # [ validate ( range ( min = 1 , message = \"页码必须大于0\" ) ) ] pub page : Option < u64 > , # [ validate ( range ( min = 1 , max = 100 , message = \"分页大小必须在1-100之间\" ) ) ] pub page_size : Option < u32 > , pub sort_by : Option < String > , pub sort_dir : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseOrderListQuery": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub q : Option < String > , pub sales_order_id : Option < String > , pub supplier_id : Option < String > , pub status : Option < PurchaseOrderStatus > , pub review_status : Option < PurchaseReviewStatus > , pub paging : PageParams ,",
+        "attrs": [
+          "derive ( Debug , Clone , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderListItemView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub id : String , pub purchase_no : String , pub sales_order_id : String , pub sales_order_no : String , pub supplier_id : String , pub supplier_name : String , pub purchase_type : PurchaseType , pub payment_term_code : String , pub owner_user_id : Option < String > , pub owner_name : String , pub status : PurchaseOrderStatus , pub review_status : PurchaseReviewStatus , pub gross_amount : String , pub net_amount : String , pub tax_amount : String , pub payment_progress : ProgressStatus , pub invoice_progress : ProgressStatus , pub fulfillment_progress : ProgressStatus , pub current_submission_id : Option < String > , pub current_revision_id : Option < String > , pub version : u64 , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderLineView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub line_id : String , pub line_no : u32 , pub line_type : PurchaseLineType , pub procurement_confirmation_line_id : Option < String > , pub sku_id : Option < String > , pub sku_revision_id : Option < String > , pub product_name : Option < String > , pub specification : Option < String > , pub quantity : Option < String > , pub base_unit_code : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > , pub gross_amount : String , pub net_amount : String , pub tax_amount : String , pub expected_delivery_date : Option < String > , pub sales_order_line_id : Option < String > , pub sales_order_revision_line_id : Option < String > , pub sales_order_submission_line_id : Option < String > , pub allocated_quantity : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseSalesAllocationView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub id : String , pub purchase_order_revision_line_id : String , pub sales_order_revision_line_id : String , pub allocated_quantity : String , pub allocated_cost_gross : String , pub allocated_cost_net : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseChangeSummaryView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub change_id : String , pub status : String , pub base_revision_id : String , pub effective_revision_id : Option < String > , pub reason : String , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseActionBlockerView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub action : String , pub code : String , pub message : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderCenterView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub id : String , pub purchase_no : String , pub status : PurchaseOrderStatus , pub review_status : PurchaseReviewStatus , pub version : u64 , pub sales_order_id : String , pub sales_order_no : String , pub supplier_id : String , pub supplier_name : String , pub purchase_type : PurchaseType , pub payment_term_code : String , pub fulfillment_responsibility : FulfillmentResponsibility , pub owner_user_id : String , pub owner_name : String , pub target_warehouse_id : Option < String > , pub payment_progress : ProgressStatus , pub invoice_progress : ProgressStatus , pub fulfillment_progress : ProgressStatus , pub current_submission_id : Option < String > , pub current_revision_id : Option < String > , pub revision_no : Option < u32 > , pub content_source : String , pub lines : Vec < PurchaseOrderLineView > , pub totals : TotalsView , pub allocations : Vec < PurchaseSalesAllocationView > , pub changes : Vec < PurchaseChangeSummaryView > , pub payable_summary : Option < PurchaseOrderPayableSummaryView > , pub approval : DocumentApprovalView , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderPayableSummaryView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub payable_open_amount : Amount , pub paid_allocated_amount : Amount , pub purchase_invoice_allocated_amount : Amount ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub requirement : String , pub definition : Option < DocumentApprovalDefinitionView > , pub instance : Option < DocumentApprovalInstanceView > , pub recent_history : Vec < DocumentApprovalHistoryItemView > , pub history_page : DocumentApprovalHistoryPageView , pub allowed_actions : Vec < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalDefinitionView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub id : String , pub name : String , pub version : u32 , pub nodes : Vec < DocumentApprovalNodeView > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalNodeView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub key : String , pub name : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalInstanceView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub id : String , pub status : String , pub current_round_no : u32 , pub current_node : Option < String > , pub current_node_name : Option < String > , pub current_assignee : Option < String > , pub current_assignee_name : Option < String > , pub latest_rejection : Option < String > , pub process_version : Option < u32 > , pub blocker_code : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalHistoryItemView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub execution_id : String , pub round_no : u32 , pub execution_no : u32 , pub node_key : String , pub node_name : String , pub result : String , pub assignee_name : Option < String > , pub decided_by : Option < String > , pub decision_reason : Option < String > , pub decided_at : Option < i64 > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalHistoryPageView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub next_cursor : Option < String > , pub has_more : bool ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "TotalsView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub gross : String , pub net : String , pub tax : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CreationBasisListParams": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub sales_order_id : Option < String > , pub work_item_id : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Default , Serialize , Deserialize )"
+        ]
+      }
+    ],
+    "CreationBasisLineView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub sales_order_line_id : String , pub sales_order_revision_line_id : String , pub sales_line_no : u32 , pub supplier_id : String , pub sales_quantity : String , pub covered_quantity : String , pub remaining_quantity : String , pub max_create_quantity : String , pub confirmed_quantity : String , pub latest_cost_gross : String , pub input_tax_rate : String , pub expected_delivery_date : String , pub sales_delivery_deadline : String , pub product_name : Option < String > , pub specification : Option < String > , pub unit : Option < String > , pub gross_amount : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CreationBasisView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/query.rs",
+        "fields": "pub work_item_id : String , pub basis_id : String , pub source_type : SupplySourceType , pub sales_order_id : String , pub sales_order_no : String , pub customer_name : String , pub contract_no : Option < String > , pub sales_owner_name : Option < String > , pub sales_order_revision_id : String , pub supplier_id : String , pub supplier_name : String , pub stock_balance_id : Option < String > , pub warehouse_id : Option < String > , pub warehouse_name : Option < String > , pub source_available_quantity : Option < String > , pub purchase_type : String , pub fulfillment_responsibility : String , pub payment_term_code : String , pub business_category : Option < String > , pub lines : Vec < CreationBasisLineView > , pub estimated_gross : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CancelPurchaseOrderApprovalRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( length ( min = 1 , max = 512 , message = \"撤回原因不能为空\" ) ) ] pub reason : String , # [ validate ( length ( min = 1 , max = 128 , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderLineRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"销售行不能为空\" ) ) ] pub sales_order_line_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"本次数量不能为空\" ) ) ] pub quantity : String , # [ validate ( custom ( function = \"non_blank\" , message = \"预计交付日不能为空\" ) ) ] pub expected_delivery_date : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderFromBasisRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"供给分配任务不能为空\" ) ) ] pub work_item_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"创建依据不能为空\" ) ) ] pub basis_id : String , pub purchase_type : PurchaseType , # [ validate ( custom ( function = \"non_blank\" , message = \"付款条件不能为空\" ) ) ] pub payment_term_code : String , # [ serde ( default ) ] # [ validate ( length ( min = 1 , max = 128 , message = \"目标仓库长度必须在1-128个字符之间\" ) ) ] pub target_warehouse_id : Option < String > , # [ validate ( length ( min = 1 , max = 200 , message = \"本次采购明细必须在1-200行之间\" ) , nested ) ] pub lines : Vec < CreatePurchaseOrderLineRequest > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub purchase_order_id : String , pub purchase_no : String , pub lock_version : u64 , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SourcingLineAssignment": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"销售行不能为空\" ) ) ] pub sales_order_line_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"履约方案不能为空\" ) ) ] pub basis_id : String , # [ serde ( default ) ] pub source_type : SupplySourceType , # [ serde ( default ) ] # [ validate ( length ( min = 1 , max = 128 , message = \"目标仓库长度必须在1-128个字符之间\" ) ) ] pub target_warehouse_id : Option < String > , # [ validate ( custom ( function = \"non_blank\" , message = \"本次分配数量不能为空\" ) ) ] pub quantity : String , # [ validate ( custom ( function = \"non_blank\" , message = \"预计交付日不能为空\" ) ) ] pub expected_delivery_date : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrdersFromSourcingRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"供给分配任务不能为空\" ) ) ] pub work_item_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"销售单不能为空\" ) ) ] pub sales_order_id : String , # [ validate ( length ( min = 1 , max = 200 , message = \"本次供给分配明细必须在1-200行之间\" ) , nested ) ] pub lines : Vec < SourcingLineAssignment > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrdersFromSourcingResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub orders : Vec < CreatePurchaseOrderResult > , pub stock_reservations : Vec < ExistingStockReservationResult > , pub work_item_status : String , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "ExistingStockReservationResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub stock_reservation_id : String , pub sales_order_line_id : String , pub stock_balance_id : String , pub warehouse_id : String , pub quantity : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderDraftRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , # [ serde ( default ) ] pub lines : Vec < SavePurchaseOrderLine > , # [ serde ( default ) ] pub line_patches : Vec < SavePurchaseOrderLinePatch > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SaveDraftFingerprintPayload": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "expected_lock_version : u64 , payment_term_code : Option < & ' a str > , lines : & ' a [ SavePurchaseOrderLine ] , line_patches : & ' a [ SavePurchaseOrderLinePatch ] ,",
+        "attrs": [
+          "derive ( Serialize )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderLinePatch": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"草稿行 ID 不能为空\" ) ) ] pub line_id : String , pub line_type : PurchaseLineType , pub quantity : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderLine": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub line_type : PurchaseLineType , pub procurement_confirmation_line_id : Option < String > , pub sku_id : Option < String > , pub sku_revision_id : Option < String > , pub product_name : Option < String > , pub specification : Option < String > , pub quantity : Option < String > , pub base_unit_code : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > , pub expected_delivery_date : Option < String > , pub sales_order_line_id : Option < String > , pub sales_order_revision_line_id : Option < String > , pub sales_order_submission_line_id : Option < String > , pub allocated_quantity : Option < String > , pub gross_amount : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderDraftResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub lock_version : u64 , pub totals : TotalsView , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "VoidPurchaseOrderRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"作废原因不能为空\" ) ) ] # [ validate ( length ( max = 512 , message = \"作废原因过长\" ) ) ] pub reason : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "VoidDraftFingerprintPayload": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "expected_lock_version : u64 , reason : & ' a str ,",
+        "attrs": [
+          "derive ( Serialize )"
+        ]
+      }
+    ],
+    "VoidPurchaseOrderResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub purchase_order_id : String , pub status : String , pub lock_version : u64 , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SubmitPurchaseOrderRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , # [ serde ( default ) ] pub line_patches : Vec < SavePurchaseOrderLinePatch > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SubmitPurchaseOrderResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub purchase_order_id : String , pub purchase_no : String , pub submission_id : String , pub submission_no : String , pub work_item_id : String , pub task_version : u64 , pub subject_version : String , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseReviewResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/command.rs",
+        "fields": "pub work_item_id : String , pub work_item_status : String , pub task_version : String , pub subject_version : String , pub review_result : String , pub revision_id : Option < String > , pub revision_no : Option < u32 > , pub payable_entry_id : Option < String > , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CancelPurchaseChangeApprovalRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( length ( min = 1 , max = 512 , message = \"撤回原因不能为空\" ) ) ] pub reason : String , # [ validate ( length ( min = 1 , max = 128 , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "StartPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"变更原因不能为空\" ) ) ] pub reason : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "StartPurchaseChangeResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "pub change_id : String , pub base_revision_id : String , pub base_revision_no : u32 , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SubmitPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , pub lines : Vec < SavePurchaseOrderLine > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseChangeSubmitResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "pub change_id : String , pub submission_id : String , pub submission_no : String , pub status : String , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "EffectPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"提交ID不能为空\" ) ) ] pub submission_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseChangeEffectResult": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "pub change_id : String , pub revision_id : String , pub revision_no : u32 , pub payable_delta_entry_id : Option < String > , pub purchase_order_lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseChangeOrderListParams": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "pub purchase_order_id : Option < String > , pub status : Option < String > , # [ validate ( range ( min = 1 , message = \"页码必须大于0\" ) ) ] pub page : Option < u64 > , # [ validate ( range ( min = 1 , max = 100 , message = \"分页大小必须在1-100之间\" ) ) ] pub page_size : Option < u32 > , pub sort_by : Option < String > , pub sort_dir : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseChangeOrderView": [
+      {
+        "path": "/private/tmp/procurement11-readmodels-source/services/src/purchase_order/dto/change_order.rs",
+        "fields": "pub id : String , pub purchase_order_id : String , pub base_revision_id : String , pub reason : String , pub status : String , pub current_submission_id : Option < String > , pub effective_revision_id : Option < String > , pub version : u64 , pub created_at : u64 , pub approval : DocumentApprovalView ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ]
+  },
+  "after": {
+    "CancelPurchaseOrderApprovalRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( length ( min = 1 , max = 512 , message = \"撤回原因不能为空\" ) ) ] pub reason : String , # [ validate ( length ( min = 1 , max = 128 , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderLineRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"销售行不能为空\" ) ) ] pub sales_order_line_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"本次数量不能为空\" ) ) ] pub quantity : String , # [ validate ( custom ( function = \"non_blank\" , message = \"预计交付日不能为空\" ) ) ] pub expected_delivery_date : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderFromBasisRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"供给分配任务不能为空\" ) ) ] pub work_item_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"创建依据不能为空\" ) ) ] pub basis_id : String , pub purchase_type : PurchaseType , # [ validate ( custom ( function = \"non_blank\" , message = \"付款条件不能为空\" ) ) ] pub payment_term_code : String , # [ serde ( default ) ] # [ validate ( length ( min = 1 , max = 128 , message = \"目标仓库长度必须在1-128个字符之间\" ) ) ] pub target_warehouse_id : Option < String > , # [ validate ( length ( min = 1 , max = 200 , message = \"本次采购明细必须在1-200行之间\" ) , nested ) ] pub lines : Vec < CreatePurchaseOrderLineRequest > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrderResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub purchase_order_id : String , pub purchase_no : String , pub lock_version : u64 , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SourcingLineAssignment": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"销售行不能为空\" ) ) ] pub sales_order_line_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"履约方案不能为空\" ) ) ] pub basis_id : String , # [ serde ( default ) ] pub source_type : SupplySourceType , # [ serde ( default ) ] # [ validate ( length ( min = 1 , max = 128 , message = \"目标仓库长度必须在1-128个字符之间\" ) ) ] pub target_warehouse_id : Option < String > , # [ validate ( custom ( function = \"non_blank\" , message = \"本次分配数量不能为空\" ) ) ] pub quantity : String , # [ validate ( custom ( function = \"non_blank\" , message = \"预计交付日不能为空\" ) ) ] pub expected_delivery_date : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrdersFromSourcingRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"供给分配任务不能为空\" ) ) ] pub work_item_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"销售单不能为空\" ) ) ] pub sales_order_id : String , # [ validate ( length ( min = 1 , max = 200 , message = \"本次供给分配明细必须在1-200行之间\" ) , nested ) ] pub lines : Vec < SourcingLineAssignment > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "CreatePurchaseOrdersFromSourcingResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub orders : Vec < CreatePurchaseOrderResult > , pub stock_reservations : Vec < ExistingStockReservationResult > , pub work_item_status : String , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "ExistingStockReservationResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub stock_reservation_id : String , pub sales_order_line_id : String , pub stock_balance_id : String , pub warehouse_id : String , pub quantity : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderDraftRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , # [ serde ( default ) ] pub lines : Vec < SavePurchaseOrderLine > , # [ serde ( default ) ] pub line_patches : Vec < SavePurchaseOrderLinePatch > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SaveDraftFingerprintPayload": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "expected_lock_version : u64 , payment_term_code : Option < & ' a str > , lines : & ' a [ SavePurchaseOrderLine ] , line_patches : & ' a [ SavePurchaseOrderLinePatch ] ,",
+        "attrs": [
+          "derive ( Serialize )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderLinePatch": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( custom ( function = \"non_blank\" , message = \"草稿行 ID 不能为空\" ) ) ] pub line_id : String , pub line_type : PurchaseLineType , pub quantity : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderLine": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub line_type : PurchaseLineType , pub procurement_confirmation_line_id : Option < String > , pub sku_id : Option < String > , pub sku_revision_id : Option < String > , pub product_name : Option < String > , pub specification : Option < String > , pub quantity : Option < String > , pub base_unit_code : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > , pub expected_delivery_date : Option < String > , pub sales_order_line_id : Option < String > , pub sales_order_revision_line_id : Option < String > , pub sales_order_submission_line_id : Option < String > , pub allocated_quantity : Option < String > , pub gross_amount : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SavePurchaseOrderDraftResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub lock_version : u64 , pub totals : TotalsView , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "VoidPurchaseOrderRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"作废原因不能为空\" ) ) ] # [ validate ( length ( max = 512 , message = \"作废原因过长\" ) ) ] pub reason : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "VoidDraftFingerprintPayload": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "expected_lock_version : u64 , reason : & ' a str ,",
+        "attrs": [
+          "derive ( Serialize )"
+        ]
+      }
+    ],
+    "VoidPurchaseOrderResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub purchase_order_id : String , pub status : String , pub lock_version : u64 , pub replayed : bool , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SubmitPurchaseOrderRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , # [ serde ( default ) ] pub line_patches : Vec < SavePurchaseOrderLinePatch > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] # [ validate ( length ( max = 128 , message = \"幂等键过长\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "SubmitPurchaseOrderResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub purchase_order_id : String , pub purchase_no : String , pub submission_id : String , pub submission_no : String , pub work_item_id : String , pub task_version : u64 , pub subject_version : String , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseReviewResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/command.rs",
+        "fields": "pub work_item_id : String , pub work_item_status : String , pub task_version : String , pub subject_version : String , pub review_result : String , pub revision_id : Option < String > , pub revision_no : Option < u32 > , pub payable_entry_id : Option < String > , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CancelPurchaseChangeApprovalRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( length ( min = 1 , max = 512 , message = \"撤回原因不能为空\" ) ) ] pub reason : String , # [ validate ( length ( min = 1 , max = 128 , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )",
+          "serde ( deny_unknown_fields )"
+        ]
+      }
+    ],
+    "StartPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"变更原因不能为空\" ) ) ] pub reason : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "StartPurchaseChangeResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "pub change_id : String , pub base_revision_id : String , pub base_revision_no : u32 , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "SubmitPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , pub payment_term_code : Option < String > , pub lines : Vec < SavePurchaseOrderLine > , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseChangeSubmitResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "pub change_id : String , pub submission_id : String , pub submission_no : String , pub status : String , pub lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "EffectPurchaseChangeRequest": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "# [ validate ( range ( min = 1 , message = \"乐观锁版本必须大于 0\" ) ) ] pub expected_lock_version : u64 , # [ validate ( custom ( function = \"non_blank\" , message = \"提交ID不能为空\" ) ) ] pub submission_id : String , # [ validate ( custom ( function = \"non_blank\" , message = \"幂等键不能为空\" ) ) ] pub idempotency_key : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseChangeEffectResult": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "pub change_id : String , pub revision_id : String , pub revision_no : u32 , pub payable_delta_entry_id : Option < String > , pub purchase_order_lock_version : u64 , pub reference : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseChangeOrderListParams": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/change_order.rs",
+        "fields": "pub purchase_order_id : Option < String > , pub status : Option < String > , # [ validate ( range ( min = 1 , message = \"页码必须大于0\" ) ) ] pub page : Option < u64 > , # [ validate ( range ( min = 1 , max = 100 , message = \"分页大小必须在1-100之间\" ) ) ] pub page_size : Option < u32 > , pub sort_by : Option < String > , pub sort_dir : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PageParams": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub page : u64 , pub page_size : u32 , pub sort_by : & ' static str , pub sort_dir : SortDir ,",
+        "attrs": [
+          "derive ( Debug , Clone , Copy , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderListParams": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub q : Option < String > , pub sales_order_id : Option < String > , pub supplier_id : Option < String > , pub status : Option < PurchaseOrderStatus > , pub review_status : Option < PurchaseReviewStatus > , # [ validate ( range ( min = 1 , message = \"页码必须大于0\" ) ) ] pub page : Option < u64 > , # [ validate ( range ( min = 1 , max = 100 , message = \"分页大小必须在1-100之间\" ) ) ] pub page_size : Option < u32 > , pub sort_by : Option < String > , pub sort_dir : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , Deserialize , Validate )"
+        ]
+      }
+    ],
+    "PurchaseOrderListQuery": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub q : Option < String > , pub sales_order_id : Option < String > , pub supplier_id : Option < String > , pub status : Option < PurchaseOrderStatus > , pub review_status : Option < PurchaseReviewStatus > , pub paging : PageParams ,",
+        "attrs": [
+          "derive ( Debug , Clone , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderLineView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub line_id : String , pub line_no : u32 , pub line_type : PurchaseLineType , pub procurement_confirmation_line_id : Option < String > , pub sku_id : Option < String > , pub sku_revision_id : Option < String > , pub product_name : Option < String > , pub specification : Option < String > , pub quantity : Option < String > , pub base_unit_code : Option < String > , pub unit_cost_gross : Option < String > , pub input_tax_rate : Option < String > , pub gross_amount : String , pub net_amount : String , pub tax_amount : String , pub expected_delivery_date : Option < String > , pub sales_order_line_id : Option < String > , pub sales_order_revision_line_id : Option < String > , pub sales_order_submission_line_id : Option < String > , pub allocated_quantity : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseSalesAllocationView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub id : String , pub purchase_order_revision_line_id : String , pub sales_order_revision_line_id : String , pub allocated_quantity : String , pub allocated_cost_gross : String , pub allocated_cost_net : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseChangeSummaryView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub change_id : String , pub status : String , pub base_revision_id : String , pub effective_revision_id : Option < String > , pub reason : String , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "TotalsView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/dto/purchase_order/query.rs",
+        "fields": "pub gross : String , pub net : String , pub tax : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderListItemView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub id : String , pub purchase_no : String , pub sales_order_id : String , pub sales_order_no : String , pub supplier_id : String , pub supplier_name : String , pub purchase_type : PurchaseType , pub payment_term_code : String , pub owner_user_id : Option < String > , pub owner_name : String , pub status : PurchaseOrderStatus , pub review_status : PurchaseReviewStatus , pub gross_amount : String , pub net_amount : String , pub tax_amount : String , pub payment_progress : ProgressStatus , pub invoice_progress : ProgressStatus , pub fulfillment_progress : ProgressStatus , pub current_submission_id : Option < String > , pub current_revision_id : Option < String > , pub version : u64 , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseActionBlockerView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub action : String , pub code : String , pub message : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderCenterView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub id : String , pub purchase_no : String , pub status : PurchaseOrderStatus , pub review_status : PurchaseReviewStatus , pub version : u64 , pub sales_order_id : String , pub sales_order_no : String , pub supplier_id : String , pub supplier_name : String , pub purchase_type : PurchaseType , pub payment_term_code : String , pub fulfillment_responsibility : FulfillmentResponsibility , pub owner_user_id : String , pub owner_name : String , pub target_warehouse_id : Option < String > , pub payment_progress : ProgressStatus , pub invoice_progress : ProgressStatus , pub fulfillment_progress : ProgressStatus , pub current_submission_id : Option < String > , pub current_revision_id : Option < String > , pub revision_no : Option < u32 > , pub content_source : String , pub lines : Vec < PurchaseOrderLineView > , pub totals : TotalsView , pub allocations : Vec < PurchaseSalesAllocationView > , pub changes : Vec < PurchaseChangeSummaryView > , pub payable_summary : Option < PurchaseOrderPayableSummaryView > , pub approval : DocumentApprovalView , pub created_at : u64 ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseOrderPayableSummaryView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub payable_open_amount : Amount , pub paid_allocated_amount : Amount , pub purchase_invoice_allocated_amount : Amount ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub requirement : String , pub definition : Option < DocumentApprovalDefinitionView > , pub instance : Option < DocumentApprovalInstanceView > , pub recent_history : Vec < DocumentApprovalHistoryItemView > , pub history_page : DocumentApprovalHistoryPageView , pub allowed_actions : Vec < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalDefinitionView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub id : String , pub name : String , pub version : u32 , pub nodes : Vec < DocumentApprovalNodeView > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalNodeView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub key : String , pub name : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalInstanceView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub id : String , pub status : String , pub current_round_no : u32 , pub current_node : Option < String > , pub current_node_name : Option < String > , pub current_assignee : Option < String > , pub current_assignee_name : Option < String > , pub latest_rejection : Option < String > , pub process_version : Option < u32 > , pub blocker_code : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalHistoryItemView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub execution_id : String , pub round_no : u32 , pub execution_no : u32 , pub node_key : String , pub node_name : String , pub result : String , pub assignee_name : Option < String > , pub decided_by : Option < String > , pub decision_reason : Option < String > , pub decided_at : Option < i64 > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "DocumentApprovalHistoryPageView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub next_cursor : Option < String > , pub has_more : bool ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CreationBasisListParams": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub sales_order_id : Option < String > , pub work_item_id : Option < String > ,",
+        "attrs": [
+          "derive ( Debug , Clone , Default , Serialize , Deserialize )"
+        ]
+      }
+    ],
+    "CreationBasisLineView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub sales_order_line_id : String , pub sales_order_revision_line_id : String , pub sales_line_no : u32 , pub supplier_id : String , pub sales_quantity : String , pub covered_quantity : String , pub remaining_quantity : String , pub max_create_quantity : String , pub confirmed_quantity : String , pub latest_cost_gross : String , pub input_tax_rate : String , pub expected_delivery_date : String , pub sales_delivery_deadline : String , pub product_name : Option < String > , pub specification : Option < String > , pub unit : Option < String > , pub gross_amount : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "CreationBasisView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub work_item_id : String , pub basis_id : String , pub source_type : SupplySourceType , pub sales_order_id : String , pub sales_order_no : String , pub customer_name : String , pub contract_no : Option < String > , pub sales_owner_name : Option < String > , pub sales_order_revision_id : String , pub supplier_id : String , pub supplier_name : String , pub stock_balance_id : Option < String > , pub warehouse_id : Option < String > , pub warehouse_name : Option < String > , pub source_available_quantity : Option < String > , pub purchase_type : String , pub fulfillment_responsibility : String , pub payment_term_code : String , pub business_category : Option < String > , pub lines : Vec < CreationBasisLineView > , pub estimated_gross : String ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ],
+    "PurchaseChangeOrderView": [
+      {
+        "path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-read-models/src/purchase_center/dto.rs",
+        "fields": "pub id : String , pub purchase_order_id : String , pub base_revision_id : String , pub reason : String , pub status : String , pub current_submission_id : Option < String > , pub effective_revision_id : Option < String > , pub version : u64 , pub created_at : u64 , pub approval : DocumentApprovalView ,",
+        "attrs": [
+          "derive ( Debug , Clone , Serialize , PartialEq , Eq )"
+        ]
+      }
+    ]
+  },
+  "evidence": "static Rust field/serde token comparison, not serialization runtime proof"
+}

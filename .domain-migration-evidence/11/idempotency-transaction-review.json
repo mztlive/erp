@@ -1,0 +1,2129 @@
+{
+  "schema_version": 1,
+  "phase": "11",
+  "raw_report": "/private/tmp/erp-procurement11-contract-sealed/missing-drift-report.json",
+  "raw_report_sha256": "9e11a42768da677b287e2ecef84ed9a2cc46dbefdb348c5807b5b69484d013b6",
+  "before_repo": "/private/tmp/erp-domain-crate-10-sales",
+  "before_revision": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+  "after_repo": "/private/tmp/erp-domain-crate-11-procurement",
+  "after_head": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "status": "source_review_complete",
+  "raw_status_not_overwritten": "needs_review",
+  "counts": {
+    "idempotency": 18,
+    "transaction": 7,
+    "per_raw_symbol_entries": 25,
+    "unique_raw_symbols": 20,
+    "body_checks": 46,
+    "body_checks_equal_after_documented_normalization": 46,
+    "raw_referenced_source_files_verified": 19
+  },
+  "entries": [
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::apply",
+      "raw_sources": {
+        "before": [],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+            "line": 509,
+            "token_sha256": "b919c56ad518f55d7d78f74453474fa94c28c102b807654019be76851dec6f01",
+            "source_sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3"
+          }
+        ]
+      },
+      "review_group": "start",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/start_approval.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs"
+        ]
+      },
+      "treatment": "原函数仍由独立提交和创建后提交两种入口调用；After wrapper 本体不再包含收据关键词而未入词法选集，实际生产写段迁到 StartPosting::apply；该 apply 与其他流程同名方法及测试替身分别识别。",
+      "preserved_contract": [
+        "PreparedExecution 非 Apply 立即返回 None，不产生写入",
+        "Receipt 首写 → 正式号 DocumentGuard → 可选销售 procurement guard 与覆盖重验 → 冻结提交/行/订单 → superseded draft → runtime/快照/开放任务 → 补 first_task 的业务审计回执",
+        "所有步骤使用传入 Executor；独立提交只由外层 with_transaction 开事务，创建后提交复用创建根 session",
+        "原缺入口执行错误、采购启动守卫冲突、回执首写映射和首次任务返回保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_purchase_order_start_with_session",
+        "execute_start_steps",
+        "StartPosting::apply",
+        "erp_procurement::service::purchase_order::start_approval::{persist_started_submission,persist_superseded_draft}",
+        "persist_runtime_writes"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_from_basis_in_transaction",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/creation_basis/create.rs",
+            "line": 212,
+            "token_sha256": "e4a0eb8920dad25d12bff5bea973e5f95d075bd5e58f8d04860ddfe9a4b2fe91",
+            "source_sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+            "line": 202,
+            "token_sha256": "2d8b4849a10833688f00e0456c90059161df3d8e30080e6863aae17d463c9dc3",
+            "source_sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad"
+          }
+        ]
+      },
+      "review_group": "basis",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/creation_basis/create.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/creation_basis/supplier.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/creation_basis/submission.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/payment_term.rs",
+          "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs"
+        ]
+      },
+      "treatment": "来源销售完整实体只在组合层持有，find_requested_group/basis_id_for 改传原 base.id 与 guard 的窄事实；域规则和实际 provider 逐层展开核验。",
+      "preserved_contract": [
+        "事务前授权快照后回放；根 run_authorized_policy_transaction 内先校验账号并再次回放",
+        "原开放本人任务及冻结责任范围 → 已生效销售 → 初次依据/范围 → 销售 guard CAS → 再读依据和供给事实 → 数量校验 → 创建",
+        "目标仓库和初始履约负责人资格先于 basis ID、采购 ID 和实体构造；供应商商务指针和付款解析先于提交 ID；各行 ID 按原行序",
+        "绑定、采购单、BusinessDocument、草稿头和行、任务同步后，以同 session 冻结提交和启动审批；最终创建回执保存正式号及提交后 version",
+        "任意事务错误只回读一次相同创建收据；未命中保留原错误"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::create_from_basis",
+        "create_from_basis_in_transaction",
+        "persist_basis_draft",
+        "CreationBasisSupplierAdapter::supplier_role",
+        "build_draft_submission",
+        "submit_created_draft_in_session",
+        "write_creation_receipt"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::create_from_sourcing_in_transaction",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/sourcing_create.rs",
+            "line": 229,
+            "token_sha256": "13a580264fd70b257f2eba716b3a0d1bdf75edf29fcd5edd7183a808ac818ea9",
+            "source_sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+            "line": 215,
+            "token_sha256": "fc7e4a6476b30a78609cd4722ae982af5187d3d5245b59c7f0a366d750eadd4d",
+            "source_sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5"
+          }
+        ]
+      },
+      "review_group": "sourcing",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/sourcing_create.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+          "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs"
+        ]
+      },
+      "treatment": "SourcingPlan 和 basis_id_for 的销售输入替换为无副作用窄事实投影；库存写入函数抽真实 Port；原供给顺序未改变。",
+      "preserved_contract": [
+        "事务内回放 → 本人开放采购任务 → 生效销售 → 采购和库存初次依据 → plan → 单次销售 guard CAS",
+        "最新库存依据重验 → 顺序库存预占/分录 → 按仓归组仓发草稿 → 最新采购供给依据重验",
+        "按原 purchase_plans 顺序构造每单 basis ID 与原 sourcing-item 收据身份，再复用 persist_basis_draft 同 session 建单并提交",
+        "全部采购完成后同步任务、读取同步后 task status、写整批 sourcing 收据；库存/订单响应行序与参考身份保持",
+        "原授权策略事务、账号重验、任意错误后一次同收据回放保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::create_from_sourcing",
+        "create_from_sourcing_in_transaction",
+        "SourcingPlan::plan",
+        "persist_stock_allocations",
+        "create_stock_delivery_drafts",
+        "persist_basis_draft",
+        "write_sourcing_receipt"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::execute_save_draft_transaction",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/draft_edit.rs",
+            "line": 144,
+            "token_sha256": "66d1a93d1466885861b506d2c870359dc9a80d04c92cf1a5029a467728940167",
+            "source_sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+            "line": 131,
+            "token_sha256": "268a8a5c4c885538b27f609257467edea6700705b3955b19c705f90b0196e830",
+            "source_sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075"
+          }
+        ]
+      },
+      "review_group": "save_root",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/draft_edit.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/authorization.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs"
+        ]
+      },
+      "treatment": "旧 Service 接收者改为 Process；事务函数体按路径归一后相同，采购纯校验/仓储移领域，副作用仍由根编排。",
+      "preserved_contract": [
+        "req validate/shape → 原授权 → 排除幂等键的指纹与收据身份 → 事务外回放",
+        "policy revision 授权事务内账号校验 → 事务内回放 → 采购创建人 → version → status → 付款条件不得改变",
+        "读取旧草稿 → 销售 guard/覆盖 → 全量请求行编辑校验 → 金额和新草稿头/行 ID → 原订单 touch、旧草稿 supersede、当前指针",
+        "任何事务错误只作一次 NoTransaction 相同收据回放；没有回执保留原错误"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "execute_save_draft_transaction",
+        "save_draft_in_transaction",
+        "replace_current_draft",
+        "ensure_save_target",
+        "recover_saved_draft"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::execute_void_draft_transaction",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/void_order.rs",
+            "line": 116,
+            "token_sha256": "a577b8975956eeac48e34b62f4f164f06ec845bbd79cc3ea50a7e015e5d8fed6",
+            "source_sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+            "line": 123,
+            "token_sha256": "96eeacdc1c814cb85d2a5e8fee6e42660ac09fb8ad848e12b672a15dc2616c5f",
+            "source_sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84"
+          }
+        ]
+      },
+      "review_group": "void_root",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/void_order.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/authorization.rs"
+        ]
+      },
+      "treatment": "旧 Service 接收者改为 Process；授权根函数体相同，状态约束和采购 CAS 移领域。",
+      "preserved_contract": [
+        "validate → 原授权 → 指纹/身份 → 外部回放；policy 授权事务内再次验证账号与回放",
+        "创建人优先；已 Voided 且无匹配回执先返回冲突，再比较 version 和 Draft；当前提交必须仍 Draft",
+        "任意事务失败后只回放一次；只有稳定回执命中且当前单据 Voided、version 不倒退才返回 replayed=true"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "execute_void_draft_transaction",
+        "void_draft_in_transaction",
+        "ensure_void_target",
+        "recover_void_draft"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::freeze_change_submission",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/change/submit.rs",
+            "line": 347,
+            "token_sha256": "584b7fbb344ad68cf2b0002125271916d6055fa355a0a111ba2734be1bc25ff6",
+            "source_sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+            "line": 270,
+            "token_sha256": "f93a4c25d7c5cfdc41fde150d22c515f6b67b9869f49efd68a83e94ab049a449",
+            "source_sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0"
+          }
+        ]
+      },
+      "review_group": "change_freeze",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/change/submit.rs",
+          "backend/services/src/purchase_order/change/mapping.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+          "backend/crates/erp-read-models/src/purchase_center/repository/supplier_names.rs"
+        ]
+      },
+      "treatment": "原数据库跨供应商/主体名称helper迁唯一readmodel；本域行恢复与header构造移领域；函数体按明确路径和receiver归一相同。",
+      "preserved_contract": [
+        "基准版本 → 空行时原版本行 → 当前供应商名称 → 行/金额/付款代码 → 付款解析 → next_no → submission ID",
+        "其后来源销售当前版本行 → enrich → line ID → submit(Instant::now) → 原normalized_request.lines的Debug/SipHash指纹",
+        "原采购头、基准供应商修订/快照、付款None回退及原idempotency_key保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::freeze_change_submission",
+        "PurchaseOrderProcess::build_change_submission",
+        "prepare_submission_header",
+        "PurchaseOrderService::build_change_submission",
+        "content_fingerprint"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_draft_replacement",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/draft_edit.rs",
+            "line": 477,
+            "token_sha256": "7208dd39ed68fd4b8cf5af53656159f3de721ebcfe5c43c464ab1ba963e1c4c0",
+            "source_sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+            "line": 313,
+            "token_sha256": "12fa3bea64c3666ac1334b5efc56856eaaabe8bd80b371b68e075b169c85341f",
+            "source_sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075"
+          }
+        ]
+      },
+      "review_group": "save_write",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/draft_edit.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs"
+        ]
+      },
+      "treatment": "前四个采购写操作抽入 persist_replacement；展开后与原 persist_draft_replacement 写段等价。",
+      "preserved_contract": [
+        "旧草稿 CAS → 新草稿头 → 按原行序逐行创建 → 采购单 CAS → 采购任务同步",
+        "Repository 更新后的 version 与新草稿三金额形成原 SaveDraftReceipt",
+        "相同 action/resource/receipt_id/fingerprint 编码审计回执；审计末写；失败停止，不另开事务",
+        "新草稿 ID、DRAFT 后缀 ID、逐行 ID 与原金额校验位置保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_draft_replacement",
+        "erp_procurement::service::purchase_order::draft_edit::persist_replacement",
+        "SaveDraftReceipt::from_saved",
+        "PurchaseCommandReceipt::encode_message"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_purchase_order_start_with_session",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/start_approval.rs",
+            "line": 449,
+            "token_sha256": "490da916bba9f11f99605b0e2aad213a1e7bcc0908a57186faa720045a429e01",
+            "source_sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497"
+          }
+        ],
+        "after": []
+      },
+      "review_group": "start",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/start_approval.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs"
+        ]
+      },
+      "treatment": "原函数仍由独立提交和创建后提交两种入口调用；After wrapper 本体不再包含收据关键词而未入词法选集，实际生产写段迁到 StartPosting::apply；该 apply 与其他流程同名方法及测试替身分别识别。",
+      "preserved_contract": [
+        "PreparedExecution 非 Apply 立即返回 None，不产生写入",
+        "Receipt 首写 → 正式号 DocumentGuard → 可选销售 procurement guard 与覆盖重验 → 冻结提交/行/订单 → superseded draft → runtime/快照/开放任务 → 补 first_task 的业务审计回执",
+        "所有步骤使用传入 Executor；独立提交只由外层 with_transaction 开事务，创建后提交复用创建根 session",
+        "原缺入口执行错误、采购启动守卫冲突、回执首写映射和首次任务返回保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_purchase_order_start_with_session",
+        "execute_start_steps",
+        "StartPosting::apply",
+        "erp_procurement::service::purchase_order::start_approval::{persist_started_submission,persist_superseded_draft}",
+        "persist_runtime_writes"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_stock_allocations",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/sourcing_create.rs",
+            "line": 434,
+            "token_sha256": "cefbb8ad587e1198a81cd52e961b926d808b661e819a121c85c151dc25404f49",
+            "source_sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+            "line": 76,
+            "token_sha256": "4df18e7b1af6852a16af27d809f61aef26d521e2dd3109cba3b488c7067e0e05",
+            "source_sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a"
+          }
+        ]
+      },
+      "review_group": "stock",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/sourcing_create.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs"
+        ]
+      },
+      "treatment": "persist_stock_allocations 绑定真实 StockAllocationAdapter 并把原 session 原样传给 persist_with_port；该函数承接原写段，生产方法与替身测试分开辨识。",
+      "preserved_contract": [
+        "原plan和requested_lines顺序 → latest balance组和行存在性 → reserve_quantity CAS；false立即原Conflict",
+        "CAS成功后才算原 inventory.allocate_existing_stock 指纹（request_fingerprint/balance_id/稳定行/quantity）",
+        "随后 reservation ID/实体 → reservation.create → entry ID/实体 → entry.create → 原响应投影",
+        "原StockReservation来源ExistingStock、quantity及零consumed/released、None采购/收货关联和entry source_document_id=audit_id保持；同executor、任一错误停止"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_stock_allocations",
+        "persist_with_port",
+        "StockAllocationAdapter::reserve_quantity",
+        "StockAllocationAdapter::create_reservation",
+        "StockAllocationAdapter::create_entry"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::persist_with_port",
+      "raw_sources": {
+        "before": [],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+            "line": 97,
+            "token_sha256": "804a5e9cad57000a511673e4385ad8b31a310c56e00e0a105403b9c13316b434",
+            "source_sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a"
+          }
+        ]
+      },
+      "review_group": "stock",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/sourcing_create.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs"
+        ]
+      },
+      "treatment": "persist_stock_allocations 绑定真实 StockAllocationAdapter 并把原 session 原样传给 persist_with_port；该函数承接原写段，生产方法与替身测试分开辨识。",
+      "preserved_contract": [
+        "原plan和requested_lines顺序 → latest balance组和行存在性 → reserve_quantity CAS；false立即原Conflict",
+        "CAS成功后才算原 inventory.allocate_existing_stock 指纹（request_fingerprint/balance_id/稳定行/quantity）",
+        "随后 reservation ID/实体 → reservation.create → entry ID/实体 → entry.create → 原响应投影",
+        "原StockReservation来源ExistingStock、quantity及零consumed/released、None采购/收货关联和entry source_document_id=audit_id保持；同executor、任一错误停止"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_stock_allocations",
+        "persist_with_port",
+        "StockAllocationAdapter::reserve_quantity",
+        "StockAllocationAdapter::create_reservation",
+        "StockAllocationAdapter::create_entry"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::receipt",
+      "raw_sources": {
+        "before": [],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+            "line": 293,
+            "token_sha256": "a84a77d4ac386df0f9acbb339dc68f943246b69bbc8f0b02445aee271c986422",
+            "source_sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84"
+          }
+        ]
+      },
+      "review_group": "void_write",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/void_order.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs"
+        ]
+      },
+      "treatment": "void_order_and_persist 仍是生产入口但 wrapper 不含扫描关键词；原写段拆成 VoidPosting::apply 和 VoidPosting::receipt；receipt 是具体生产实现，不是 trait 声明或测试替身。",
+      "preserved_contract": [
+        "销售单读取/guard CAS → 采购 transition(Voided)/CAS → 任务同步 → 从更新后 version 与规范化 reason 形成收据",
+        "receipt_id/action/resource_type/resource_id/fingerprint 与 encode_message 保持；最终 audit.create 后返回 replayed=false",
+        "相同 executor 贯穿三个步骤和 receipt；任何步骤失败不调用后续 receipt"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "void_order_and_persist",
+        "execute_void_steps",
+        "VoidPosting::apply",
+        "VoidPosting::receipt",
+        "persist_voided_order"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::replay_creation",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/creation_basis/create.rs",
+            "line": 954,
+            "token_sha256": "93d007489fddf1beb2c1f1e25349955410f3525b9cc9f6d7596a2695f15afd9d",
+            "source_sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+            "line": 627,
+            "token_sha256": "da4822c8fe31d9f10068e64f42be69cbf4fb97a7e687754ca4bcc43c4a36c4c6",
+            "source_sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad"
+          }
+        ]
+      },
+      "review_group": "receipt_creation",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/creation_basis/create.rs",
+          "backend/entities/src/purchase_order/command_receipt.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+          "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+        ]
+      },
+      "treatment": "decode 输入改为六个原字段的 AuditReceiptFact；函数体除该无副作用投影外一致。",
+      "preserved_contract": [
+        "收据 audit 不存在返回 None；身份→消息形态→指纹→payload 解码顺序保持",
+        "IdentityMismatch/PayloadConflict 同映射原 Conflict 文案；Corrupted 仍 Internal",
+        "audit.resource_id 与payload采购ID一致 → 读取该采购单 → 主键一致；回放响应不重取订单号或version"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "replay_creation",
+        "audit_receipt_fact",
+        "PurchaseCommandReceipt::<CreationReceipt>::decode",
+        "CreationReceipt::into_result"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::replay_purchase_submit",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/submission.rs",
+            "line": 290,
+            "token_sha256": "b41b9298c8bad570f14fc83d426376aa1db902ee3698f39b7174736c0a94177d",
+            "source_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+            "line": 290,
+            "token_sha256": "3e23cd925edf21d88504637a8a8a48e5e492d86c84cc1bab17d3d6e5028862f0",
+            "source_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb"
+          }
+        ]
+      },
+      "review_group": "submit",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/submission.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs"
+        ]
+      },
+      "treatment": "submit 指定为 PurchaseOrderProcess::submit，不与采购提交实体的同名状态方法混用；主体除领域接收者无变化。replay 输入改原字段事实。",
+      "preserved_contract": [
+        "请求及patch校验 → 原fingerprint和WholeStringJoined旧收据候选 → 先回放 → 订单version/status、冻结binding、Draft及行、销售/组织资格",
+        "原正式号分配 → 注册行读取 → Instant::now → 注册号 → 旧草稿失效 → 可选补丁行金额和新冻结提交 → domain状态 → 审批snapshot/命令/graph/receipt/prepared → 审计 → 启动事务",
+        "patch只有非空时才重验付款不变、设置采购guard；原next_submission_no、submission ID、submit时间、行ID顺序保持",
+        "启动仅 command_may_have_committed 时最多8次fresh session验证业务/销售/绑定和BPM回执，再读取业务收据；其他错误直接返回，延迟和original_error保持",
+        "回放按identity.id_candidates顺序读，新旧ID兼容；身份错误Internal、同键异载荷Conflict、损坏Internal；只校验采购存在，仍返回回执字段；原reference=submission_no回放行为保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::submit",
+        "PurchaseOrderProcess::replay_purchase_submit",
+        "PurchaseOrderProcess::recover_purchase_submit_start",
+        "PurchaseOrderService::freeze_submission",
+        "PurchaseOrderService::freeze_submission_from_lines",
+        "PurchaseOrderService::next_submission_no",
+        "PurchaseSubmitReceipt::with_first_task"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::replay_saved_draft",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/draft_edit.rs",
+            "line": 527,
+            "token_sha256": "b41e9a2cefd7c243243d7970a06af64ed2ad36e4a12bd64da633b638c87b2492",
+            "source_sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+            "line": 356,
+            "token_sha256": "e99dc60eae34b5d2ca25e6fce4102cde77dae9ca2c36ad483368841b413d9f7d",
+            "source_sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075"
+          }
+        ]
+      },
+      "review_group": "receipt_save",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/draft_edit.rs",
+          "backend/entities/src/purchase_order/command_receipt.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+          "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+        ]
+      },
+      "treatment": "只替换 decode 的事实输入并使用迁后单域 load_purchase_order；字段投影和 typed 错误已展开核对。",
+      "preserved_contract": [
+        "同收据身份/指纹/解码规则；payload.purchase_order_id 必须匹配路径",
+        "当前采购 version 不得小于回执 lock_version；返回原回执金额和reference，不以当前行重算",
+        "事务前、事务内和失败后均复用同一函数与指定执行器"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "replay_saved_draft",
+        "audit_receipt_fact",
+        "PurchaseCommandReceipt::<SaveDraftReceipt>::decode",
+        "load_purchase_order"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::replay_sourcing",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/sourcing_create.rs",
+            "line": 699,
+            "token_sha256": "5fd16df7022bc9603a6366443c11fbdd2e2c4d6f5ebde87006fefb63d5a71251",
+            "source_sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+            "line": 609,
+            "token_sha256": "b86fb0ef037c8c8186d6d74f14b175e9bbaa3b76ebb80a026c4ff58d12978db4",
+            "source_sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5"
+          }
+        ]
+      },
+      "review_group": "receipt_sourcing",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/sourcing_create.rs",
+          "backend/entities/src/purchase_order/command_receipt.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+          "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+        ]
+      },
+      "treatment": "decode 的完整审计实体改六字段事实；其余函数体和新旧任务状态兼容函数相同。",
+      "preserved_contract": [
+        "identity target 固定sales_order_id，原sourcing action和指纹",
+        "新回执使用冻结 work_item_status；旧回执缺失时读取同工作项并验证类型/业务类型/销售ID，历史任务缺失回退Completed",
+        "旧Closed→Completed，新Closed→Internal；orders/stock_reservations顺序、replayed和reference保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "replay_sourcing",
+        "audit_receipt_fact",
+        "PurchaseCommandReceipt::<SourcingReceipt>::decode",
+        "sourcing_receipt_work_item_status",
+        "sourcing_work_item_status"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::replay_void_draft",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/void_order.rs",
+            "line": 379,
+            "token_sha256": "22cfba8761fb7ec7eafbf3b5ca6d775ab7eeedb25edecfae1dd40cb4d7f54547",
+            "source_sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+            "line": 328,
+            "token_sha256": "79f244da54c4f4f5e8a44c2ff4309dc3fa6906859a69b73824e68a0949ee6fff",
+            "source_sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84"
+          }
+        ]
+      },
+      "review_group": "receipt_void",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/void_order.rs",
+          "backend/entities/src/purchase_order/command_receipt.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+          "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+        ]
+      },
+      "treatment": "只替换 decode 的原字段事实输入；当前采购读取和状态约束保持。",
+      "preserved_contract": [
+        "身份或载荷不一致仍原 Conflict；形态损坏 Internal",
+        "payload采购ID匹配路径，当前状态必须Voided且version不小于回执",
+        "只有全部校验通过返回原回执并 replayed=true"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "replay_void_draft",
+        "audit_receipt_fact",
+        "PurchaseCommandReceipt::<VoidDraftReceipt>::decode",
+        "load_purchase_order"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::submit",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/submission.rs",
+            "line": 79,
+            "token_sha256": "6882caeae6e0bf1671edb3bc2aab98b3fd00004a6d2a4ec291d09abff5d56bab",
+            "source_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+            "line": 77,
+            "token_sha256": "caef9ecb4e2e8fc3c5fb8d28217d147dec5c9f3dc2489fd7b6efe2f1a1f139f5",
+            "source_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb"
+          }
+        ]
+      },
+      "review_group": "submit",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/submission.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs"
+        ]
+      },
+      "treatment": "submit 指定为 PurchaseOrderProcess::submit，不与采购提交实体的同名状态方法混用；主体除领域接收者无变化。replay 输入改原字段事实。",
+      "preserved_contract": [
+        "请求及patch校验 → 原fingerprint和WholeStringJoined旧收据候选 → 先回放 → 订单version/status、冻结binding、Draft及行、销售/组织资格",
+        "原正式号分配 → 注册行读取 → Instant::now → 注册号 → 旧草稿失效 → 可选补丁行金额和新冻结提交 → domain状态 → 审批snapshot/命令/graph/receipt/prepared → 审计 → 启动事务",
+        "patch只有非空时才重验付款不变、设置采购guard；原next_submission_no、submission ID、submit时间、行ID顺序保持",
+        "启动仅 command_may_have_committed 时最多8次fresh session验证业务/销售/绑定和BPM回执，再读取业务收据；其他错误直接返回，延迟和original_error保持",
+        "回放按identity.id_candidates顺序读，新旧ID兼容；身份错误Internal、同键异载荷Conflict、损坏Internal；只校验采购存在，仍返回回执字段；原reference=submission_no回放行为保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::submit",
+        "PurchaseOrderProcess::replay_purchase_submit",
+        "PurchaseOrderProcess::recover_purchase_submit_start",
+        "PurchaseOrderService::freeze_submission",
+        "PurchaseOrderService::freeze_submission_from_lines",
+        "PurchaseOrderService::next_submission_no",
+        "PurchaseSubmitReceipt::with_first_task"
+      ]
+    },
+    {
+      "category": "idempotency",
+      "raw_symbol": "fn::void_order_and_persist",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/void_order.rs",
+            "line": 328,
+            "token_sha256": "a1c5c319e55f05dbad42bdabf1e38b7eb0049ea064d9aa7a0528f28d967d1b37",
+            "source_sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a"
+          }
+        ],
+        "after": []
+      },
+      "review_group": "void_write",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/void_order.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs"
+        ]
+      },
+      "treatment": "void_order_and_persist 仍是生产入口但 wrapper 不含扫描关键词；原写段拆成 VoidPosting::apply 和 VoidPosting::receipt；receipt 是具体生产实现，不是 trait 声明或测试替身。",
+      "preserved_contract": [
+        "销售单读取/guard CAS → 采购 transition(Voided)/CAS → 任务同步 → 从更新后 version 与规范化 reason 形成收据",
+        "receipt_id/action/resource_type/resource_id/fingerprint 与 encode_message 保持；最终 audit.create 后返回 replayed=false",
+        "相同 executor 贯穿三个步骤和 receipt；任何步骤失败不调用后续 receipt"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "void_order_and_persist",
+        "execute_void_steps",
+        "VoidPosting::apply",
+        "VoidPosting::receipt",
+        "persist_voided_order"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::apply",
+      "raw_sources": {
+        "before": [],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+            "line": 509,
+            "token_sha256": "b919c56ad518f55d7d78f74453474fa94c28c102b807654019be76851dec6f01",
+            "source_sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3"
+          }
+        ]
+      },
+      "review_group": "start",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/start_approval.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs"
+        ]
+      },
+      "treatment": "原函数仍由独立提交和创建后提交两种入口调用；After wrapper 本体不再包含收据关键词而未入词法选集，实际生产写段迁到 StartPosting::apply；该 apply 与其他流程同名方法及测试替身分别识别。",
+      "preserved_contract": [
+        "PreparedExecution 非 Apply 立即返回 None，不产生写入",
+        "Receipt 首写 → 正式号 DocumentGuard → 可选销售 procurement guard 与覆盖重验 → 冻结提交/行/订单 → superseded draft → runtime/快照/开放任务 → 补 first_task 的业务审计回执",
+        "所有步骤使用传入 Executor；独立提交只由外层 with_transaction 开事务，创建后提交复用创建根 session",
+        "原缺入口执行错误、采购启动守卫冲突、回执首写映射和首次任务返回保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_purchase_order_start_with_session",
+        "execute_start_steps",
+        "StartPosting::apply",
+        "erp_procurement::service::purchase_order::start_approval::{persist_started_submission,persist_superseded_draft}",
+        "persist_runtime_writes"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::freeze_change_submission",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/change/submit.rs",
+            "line": 347,
+            "token_sha256": "584b7fbb344ad68cf2b0002125271916d6055fa355a0a111ba2734be1bc25ff6",
+            "source_sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+            "line": 270,
+            "token_sha256": "f93a4c25d7c5cfdc41fde150d22c515f6b67b9869f49efd68a83e94ab049a449",
+            "source_sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0"
+          }
+        ]
+      },
+      "review_group": "change_freeze",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/change/submit.rs",
+          "backend/services/src/purchase_order/change/mapping.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+          "backend/crates/erp-read-models/src/purchase_center/repository/supplier_names.rs"
+        ]
+      },
+      "treatment": "原数据库跨供应商/主体名称helper迁唯一readmodel；本域行恢复与header构造移领域；函数体按明确路径和receiver归一相同。",
+      "preserved_contract": [
+        "基准版本 → 空行时原版本行 → 当前供应商名称 → 行/金额/付款代码 → 付款解析 → next_no → submission ID",
+        "其后来源销售当前版本行 → enrich → line ID → submit(Instant::now) → 原normalized_request.lines的Debug/SipHash指纹",
+        "原采购头、基准供应商修订/快照、付款None回退及原idempotency_key保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::freeze_change_submission",
+        "PurchaseOrderProcess::build_change_submission",
+        "prepare_submission_header",
+        "PurchaseOrderService::build_change_submission",
+        "content_fingerprint"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_purchase_order_cancel",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/cancel_approval.rs",
+            "line": 367,
+            "token_sha256": "81af0c0bcfff51094822a3995dddee7f806d62bdb6090a095c4f27b326499d82",
+            "source_sha256": "da8380bb6f1064d5ca32de76a5606e8848be367b60041397e296aebb7ff02655"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+            "line": 368,
+            "token_sha256": "9d08dec924c72b15a5712cffd63312caf9e4fb72b624734aa02673a7d8a8d777",
+            "source_sha256": "c9dc1ae9a178227b1ad99af5823b525ff79f612411ba30a9aab073e8fed325df"
+          }
+        ]
+      },
+      "review_group": "cancel",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/cancel_approval.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/cancel_approval.rs"
+        ]
+      },
+      "treatment": "原Apply分支内事务写段抽成 CancelPosting::apply；Replay入口返回和任务关闭构造时点不变。",
+      "preserved_contract": [
+        "非Apply立即返回且不关闭任务",
+        "close_all_for_approval_cancellation在原事务前位置执行，使用原actor/reason/now",
+        "唯一with_transaction内 claim_and_persist_document_cancel_runtime（原receipt/runtime/CAS/tasks提供方）→采购CAS→审计；共用session、失败停止"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_purchase_order_cancel",
+        "execute_cancel_steps",
+        "CancelPosting::apply",
+        "claim_and_persist_document_cancel_runtime",
+        "persist_cancelled_order"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::persist_purchase_order_start_with_session",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/start_approval.rs",
+            "line": 449,
+            "token_sha256": "490da916bba9f11f99605b0e2aad213a1e7bcc0908a57186faa720045a429e01",
+            "source_sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497"
+          }
+        ],
+        "after": []
+      },
+      "review_group": "start",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/start_approval.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs"
+        ]
+      },
+      "treatment": "原函数仍由独立提交和创建后提交两种入口调用；After wrapper 本体不再包含收据关键词而未入词法选集，实际生产写段迁到 StartPosting::apply；该 apply 与其他流程同名方法及测试替身分别识别。",
+      "preserved_contract": [
+        "PreparedExecution 非 Apply 立即返回 None，不产生写入",
+        "Receipt 首写 → 正式号 DocumentGuard → 可选销售 procurement guard 与覆盖重验 → 冻结提交/行/订单 → superseded draft → runtime/快照/开放任务 → 补 first_task 的业务审计回执",
+        "所有步骤使用传入 Executor；独立提交只由外层 with_transaction 开事务，创建后提交复用创建根 session",
+        "原缺入口执行错误、采购启动守卫冲突、回执首写映射和首次任务返回保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "persist_purchase_order_start_with_session",
+        "execute_start_steps",
+        "StartPosting::apply",
+        "erp_procurement::service::purchase_order::start_approval::{persist_started_submission,persist_superseded_draft}",
+        "persist_runtime_writes"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::replay_purchase_submit",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/submission.rs",
+            "line": 290,
+            "token_sha256": "b41b9298c8bad570f14fc83d426376aa1db902ee3698f39b7174736c0a94177d",
+            "source_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+            "line": 290,
+            "token_sha256": "3e23cd925edf21d88504637a8a8a48e5e492d86c84cc1bab17d3d6e5028862f0",
+            "source_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb"
+          }
+        ]
+      },
+      "review_group": "submit",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/submission.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs"
+        ]
+      },
+      "treatment": "submit 指定为 PurchaseOrderProcess::submit，不与采购提交实体的同名状态方法混用；主体除领域接收者无变化。replay 输入改原字段事实。",
+      "preserved_contract": [
+        "请求及patch校验 → 原fingerprint和WholeStringJoined旧收据候选 → 先回放 → 订单version/status、冻结binding、Draft及行、销售/组织资格",
+        "原正式号分配 → 注册行读取 → Instant::now → 注册号 → 旧草稿失效 → 可选补丁行金额和新冻结提交 → domain状态 → 审批snapshot/命令/graph/receipt/prepared → 审计 → 启动事务",
+        "patch只有非空时才重验付款不变、设置采购guard；原next_submission_no、submission ID、submit时间、行ID顺序保持",
+        "启动仅 command_may_have_committed 时最多8次fresh session验证业务/销售/绑定和BPM回执，再读取业务收据；其他错误直接返回，延迟和original_error保持",
+        "回放按identity.id_candidates顺序读，新旧ID兼容；身份错误Internal、同键异载荷Conflict、损坏Internal；只校验采购存在，仍返回回执字段；原reference=submission_no回放行为保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::submit",
+        "PurchaseOrderProcess::replay_purchase_submit",
+        "PurchaseOrderProcess::recover_purchase_submit_start",
+        "PurchaseOrderService::freeze_submission",
+        "PurchaseOrderService::freeze_submission_from_lines",
+        "PurchaseOrderService::next_submission_no",
+        "PurchaseSubmitReceipt::with_first_task"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::submit",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/submission.rs",
+            "line": 79,
+            "token_sha256": "6882caeae6e0bf1671edb3bc2aab98b3fd00004a6d2a4ec291d09abff5d56bab",
+            "source_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+            "line": 77,
+            "token_sha256": "caef9ecb4e2e8fc3c5fb8d28217d147dec5c9f3dc2489fd7b6efe2f1a1f139f5",
+            "source_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb"
+          }
+        ]
+      },
+      "review_group": "submit",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/submission.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs"
+        ]
+      },
+      "treatment": "submit 指定为 PurchaseOrderProcess::submit，不与采购提交实体的同名状态方法混用；主体除领域接收者无变化。replay 输入改原字段事实。",
+      "preserved_contract": [
+        "请求及patch校验 → 原fingerprint和WholeStringJoined旧收据候选 → 先回放 → 订单version/status、冻结binding、Draft及行、销售/组织资格",
+        "原正式号分配 → 注册行读取 → Instant::now → 注册号 → 旧草稿失效 → 可选补丁行金额和新冻结提交 → domain状态 → 审批snapshot/命令/graph/receipt/prepared → 审计 → 启动事务",
+        "patch只有非空时才重验付款不变、设置采购guard；原next_submission_no、submission ID、submit时间、行ID顺序保持",
+        "启动仅 command_may_have_committed 时最多8次fresh session验证业务/销售/绑定和BPM回执，再读取业务收据；其他错误直接返回，延迟和original_error保持",
+        "回放按identity.id_candidates顺序读，新旧ID兼容；身份错误Internal、同键异载荷Conflict、损坏Internal；只校验采购存在，仍返回回执字段；原reference=submission_no回放行为保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "PurchaseOrderProcess::submit",
+        "PurchaseOrderProcess::replay_purchase_submit",
+        "PurchaseOrderProcess::recover_purchase_submit_start",
+        "PurchaseOrderService::freeze_submission",
+        "PurchaseOrderService::freeze_submission_from_lines",
+        "PurchaseOrderService::next_submission_no",
+        "PurchaseSubmitReceipt::with_first_task"
+      ]
+    },
+    {
+      "category": "transaction",
+      "raw_symbol": "fn::write_effective_change",
+      "raw_sources": {
+        "before": [
+          {
+            "path": "backend/services/src/purchase_order/change/effect.rs",
+            "line": 358,
+            "token_sha256": "a9ab4018fcecb97ccfec061fda463f7e9a6b1660f1edfe048f4f5968344b30ca",
+            "source_sha256": "d1a26626c60b6496e6854d78d51267ea37a276c008fd1778907603f06ce50def"
+          }
+        ],
+        "after": [
+          {
+            "path": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+            "line": 213,
+            "token_sha256": "d3b90a5093f11000091e41a85d439279a1a912b1eb64b7766ccb01907ac216a2",
+            "source_sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8"
+          }
+        ]
+      },
+      "review_group": "change_effect",
+      "resolved_sources": {
+        "before": [
+          "backend/services/src/purchase_order/change/effect.rs",
+          "backend/services/src/purchase_order/formalization.rs"
+        ],
+        "after": [
+          "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+          "backend/crates/erp-processes/src/procure_to_pay/change/posting.rs",
+          "backend/crates/erp-procurement/src/service/purchase_order/change/effect.rs",
+          "backend/crates/erp-finance/src/service/payable/purchase_change.rs"
+        ]
+      },
+      "treatment": "根with_transaction函数体相同，参数由混合EffectiveChangeWrite拆为各域独立计划EffectiveChangePosting；真实写步骤展开核对。",
+      "preserved_contract": [
+        "原准备NoTransaction查询与基准校验时点保持；不宣称准备读取已在事务中重验",
+        "财务差额零不ID/取时；非零先账户ID与账户校验再分录ID/date/posted_at；负差额原账户错误保持；原成本Vec恒空",
+        "事务内审计构造→mark_effective→SalesGuard→PrepareAllocations→Revision→Allocations→CurrentOrder→ProcurementTasks→Payable→Submission→Change→Audit",
+        "原entry/account来源、submission pending/匹配、基准当前性、CAS、返回order version与所有首错保持"
+      ],
+      "result": "source_reviewed_no_observable_drift",
+      "proof_level": "static_source_review_only",
+      "actual_after_symbols": [
+        "write_effective_change",
+        "write_effective_change_in_transaction",
+        "persist_effective_writes",
+        "MongoEffect::apply",
+        "EffectiveChangeWrite::mark_effective",
+        "PurchaseChangePayableWrite::persist"
+      ]
+    }
+  ],
+  "review_groups": {
+    "start": {
+      "title": "启动原事务写段与 StartPosting::apply",
+      "symbols": [
+        "apply",
+        "persist_purchase_order_start_with_session"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/start_approval.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs"
+      ],
+      "treatment": "原函数仍由独立提交和创建后提交两种入口调用；After wrapper 本体不再包含收据关键词而未入词法选集，实际生产写段迁到 StartPosting::apply；该 apply 与其他流程同名方法及测试替身分别识别。",
+      "preserved": [
+        "PreparedExecution 非 Apply 立即返回 None，不产生写入",
+        "Receipt 首写 → 正式号 DocumentGuard → 可选销售 procurement guard 与覆盖重验 → 冻结提交/行/订单 → superseded draft → runtime/快照/开放任务 → 补 first_task 的业务审计回执",
+        "所有步骤使用传入 Executor；独立提交只由外层 with_transaction 开事务，创建后提交复用创建根 session",
+        "原缺入口执行错误、采购启动守卫冲突、回执首写映射和首次任务返回保持"
+      ]
+    },
+    "basis": {
+      "title": "创建依据命令串行化与提交",
+      "symbols": [
+        "create_from_basis_in_transaction"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/creation_basis/create.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/creation_basis/supplier.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/creation_basis/submission.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/payment_term.rs",
+        "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs"
+      ],
+      "treatment": "来源销售完整实体只在组合层持有，find_requested_group/basis_id_for 改传原 base.id 与 guard 的窄事实；域规则和实际 provider 逐层展开核验。",
+      "preserved": [
+        "事务前授权快照后回放；根 run_authorized_policy_transaction 内先校验账号并再次回放",
+        "原开放本人任务及冻结责任范围 → 已生效销售 → 初次依据/范围 → 销售 guard CAS → 再读依据和供给事实 → 数量校验 → 创建",
+        "目标仓库和初始履约负责人资格先于 basis ID、采购 ID 和实体构造；供应商商务指针和付款解析先于提交 ID；各行 ID 按原行序",
+        "绑定、采购单、BusinessDocument、草稿头和行、任务同步后，以同 session 冻结提交和启动审批；最终创建回执保存正式号及提交后 version",
+        "任意事务错误只回读一次相同创建收据；未命中保留原错误"
+      ]
+    },
+    "sourcing": {
+      "title": "选源创建、库存与采购分批顺序",
+      "symbols": [
+        "create_from_sourcing_in_transaction"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/sourcing_create.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+        "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs"
+      ],
+      "treatment": "SourcingPlan 和 basis_id_for 的销售输入替换为无副作用窄事实投影；库存写入函数抽真实 Port；原供给顺序未改变。",
+      "preserved": [
+        "事务内回放 → 本人开放采购任务 → 生效销售 → 采购和库存初次依据 → plan → 单次销售 guard CAS",
+        "最新库存依据重验 → 顺序库存预占/分录 → 按仓归组仓发草稿 → 最新采购供给依据重验",
+        "按原 purchase_plans 顺序构造每单 basis ID 与原 sourcing-item 收据身份，再复用 persist_basis_draft 同 session 建单并提交",
+        "全部采购完成后同步任务、读取同步后 task status、写整批 sourcing 收据；库存/订单响应行序与参考身份保持",
+        "原授权策略事务、账号重验、任意错误后一次同收据回放保持"
+      ]
+    },
+    "save_root": {
+      "title": "保存草稿授权事务与错误恢复",
+      "symbols": [
+        "execute_save_draft_transaction"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/draft_edit.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/authorization.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs"
+      ],
+      "treatment": "旧 Service 接收者改为 Process；事务函数体按路径归一后相同，采购纯校验/仓储移领域，副作用仍由根编排。",
+      "preserved": [
+        "req validate/shape → 原授权 → 排除幂等键的指纹与收据身份 → 事务外回放",
+        "policy revision 授权事务内账号校验 → 事务内回放 → 采购创建人 → version → status → 付款条件不得改变",
+        "读取旧草稿 → 销售 guard/覆盖 → 全量请求行编辑校验 → 金额和新草稿头/行 ID → 原订单 touch、旧草稿 supersede、当前指针",
+        "任何事务错误只作一次 NoTransaction 相同收据回放；没有回执保留原错误"
+      ]
+    },
+    "save_write": {
+      "title": "保存草稿领域持久化拆分",
+      "symbols": [
+        "persist_draft_replacement"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/draft_edit.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs"
+      ],
+      "treatment": "前四个采购写操作抽入 persist_replacement；展开后与原 persist_draft_replacement 写段等价。",
+      "preserved": [
+        "旧草稿 CAS → 新草稿头 → 按原行序逐行创建 → 采购单 CAS → 采购任务同步",
+        "Repository 更新后的 version 与新草稿三金额形成原 SaveDraftReceipt",
+        "相同 action/resource/receipt_id/fingerprint 编码审计回执；审计末写；失败停止，不另开事务",
+        "新草稿 ID、DRAFT 后缀 ID、逐行 ID 与原金额校验位置保持"
+      ]
+    },
+    "void_root": {
+      "title": "作废授权事务与错误恢复",
+      "symbols": [
+        "execute_void_draft_transaction"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/void_order.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/authorization.rs"
+      ],
+      "treatment": "旧 Service 接收者改为 Process；授权根函数体相同，状态约束和采购 CAS 移领域。",
+      "preserved": [
+        "validate → 原授权 → 指纹/身份 → 外部回放；policy 授权事务内再次验证账号与回放",
+        "创建人优先；已 Voided 且无匹配回执先返回冲突，再比较 version 和 Draft；当前提交必须仍 Draft",
+        "任意事务失败后只回放一次；只有稳定回执命中且当前单据 Voided、version 不倒退才返回 replayed=true"
+      ]
+    },
+    "void_write": {
+      "title": "作废真实步骤及 VoidPosting::receipt",
+      "symbols": [
+        "void_order_and_persist",
+        "receipt"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/void_order.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs"
+      ],
+      "treatment": "void_order_and_persist 仍是生产入口但 wrapper 不含扫描关键词；原写段拆成 VoidPosting::apply 和 VoidPosting::receipt；receipt 是具体生产实现，不是 trait 声明或测试替身。",
+      "preserved": [
+        "销售单读取/guard CAS → 采购 transition(Voided)/CAS → 任务同步 → 从更新后 version 与规范化 reason 形成收据",
+        "receipt_id/action/resource_type/resource_id/fingerprint 与 encode_message 保持；最终 audit.create 后返回 replayed=false",
+        "相同 executor 贯穿三个步骤和 receipt；任何步骤失败不调用后续 receipt"
+      ]
+    },
+    "receipt_creation": {
+      "title": "创建回放与审计窄事实",
+      "symbols": [
+        "replay_creation"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/creation_basis/create.rs",
+        "backend/entities/src/purchase_order/command_receipt.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+        "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+      ],
+      "treatment": "decode 输入改为六个原字段的 AuditReceiptFact；函数体除该无副作用投影外一致。",
+      "preserved": [
+        "收据 audit 不存在返回 None；身份→消息形态→指纹→payload 解码顺序保持",
+        "IdentityMismatch/PayloadConflict 同映射原 Conflict 文案；Corrupted 仍 Internal",
+        "audit.resource_id 与payload采购ID一致 → 读取该采购单 → 主键一致；回放响应不重取订单号或version"
+      ]
+    },
+    "receipt_save": {
+      "title": "保存回放与版本下界",
+      "symbols": [
+        "replay_saved_draft"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/draft_edit.rs",
+        "backend/entities/src/purchase_order/command_receipt.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+        "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+      ],
+      "treatment": "只替换 decode 的事实输入并使用迁后单域 load_purchase_order；字段投影和 typed 错误已展开核对。",
+      "preserved": [
+        "同收据身份/指纹/解码规则；payload.purchase_order_id 必须匹配路径",
+        "当前采购 version 不得小于回执 lock_version；返回原回执金额和reference，不以当前行重算",
+        "事务前、事务内和失败后均复用同一函数与指定执行器"
+      ]
+    },
+    "receipt_void": {
+      "title": "作废回放与状态确认",
+      "symbols": [
+        "replay_void_draft"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/void_order.rs",
+        "backend/entities/src/purchase_order/command_receipt.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+        "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+      ],
+      "treatment": "只替换 decode 的原字段事实输入；当前采购读取和状态约束保持。",
+      "preserved": [
+        "身份或载荷不一致仍原 Conflict；形态损坏 Internal",
+        "payload采购ID匹配路径，当前状态必须Voided且version不小于回执",
+        "只有全部校验通过返回原回执并 replayed=true"
+      ]
+    },
+    "receipt_sourcing": {
+      "title": "选源回放与历史任务状态兼容",
+      "symbols": [
+        "replay_sourcing"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/sourcing_create.rs",
+        "backend/entities/src/purchase_order/command_receipt.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+        "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs"
+      ],
+      "treatment": "decode 的完整审计实体改六字段事实；其余函数体和新旧任务状态兼容函数相同。",
+      "preserved": [
+        "identity target 固定sales_order_id，原sourcing action和指纹",
+        "新回执使用冻结 work_item_status；旧回执缺失时读取同工作项并验证类型/业务类型/销售ID，历史任务缺失回退Completed",
+        "旧Closed→Completed，新Closed→Internal；orders/stock_reservations顺序、replayed和reference保持"
+      ]
+    },
+    "submit": {
+      "title": "独立采购提交与有界恢复",
+      "symbols": [
+        "submit",
+        "replay_purchase_submit"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/submission.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs"
+      ],
+      "treatment": "submit 指定为 PurchaseOrderProcess::submit，不与采购提交实体的同名状态方法混用；主体除领域接收者无变化。replay 输入改原字段事实。",
+      "preserved": [
+        "请求及patch校验 → 原fingerprint和WholeStringJoined旧收据候选 → 先回放 → 订单version/status、冻结binding、Draft及行、销售/组织资格",
+        "原正式号分配 → 注册行读取 → Instant::now → 注册号 → 旧草稿失效 → 可选补丁行金额和新冻结提交 → domain状态 → 审批snapshot/命令/graph/receipt/prepared → 审计 → 启动事务",
+        "patch只有非空时才重验付款不变、设置采购guard；原next_submission_no、submission ID、submit时间、行ID顺序保持",
+        "启动仅 command_may_have_committed 时最多8次fresh session验证业务/销售/绑定和BPM回执，再读取业务收据；其他错误直接返回，延迟和original_error保持",
+        "回放按identity.id_candidates顺序读，新旧ID兼容；身份错误Internal、同键异载荷Conflict、损坏Internal；只校验采购存在，仍返回回执字段；原reference=submission_no回放行为保持"
+      ]
+    },
+    "stock": {
+      "title": "现有库存预占实际 Port",
+      "symbols": [
+        "persist_stock_allocations",
+        "persist_with_port"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/sourcing_create.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs"
+      ],
+      "treatment": "persist_stock_allocations 绑定真实 StockAllocationAdapter 并把原 session 原样传给 persist_with_port；该函数承接原写段，生产方法与替身测试分开辨识。",
+      "preserved": [
+        "原plan和requested_lines顺序 → latest balance组和行存在性 → reserve_quantity CAS；false立即原Conflict",
+        "CAS成功后才算原 inventory.allocate_existing_stock 指纹（request_fingerprint/balance_id/稳定行/quantity）",
+        "随后 reservation ID/实体 → reservation.create → entry ID/实体 → entry.create → 原响应投影",
+        "原StockReservation来源ExistingStock、quantity及零consumed/released、None采购/收货关联和entry source_document_id=audit_id保持；同executor、任一错误停止"
+      ]
+    },
+    "cancel": {
+      "title": "采购撤回事务步骤",
+      "symbols": [
+        "persist_purchase_order_cancel"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/cancel_approval.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/cancel_approval.rs"
+      ],
+      "treatment": "原Apply分支内事务写段抽成 CancelPosting::apply；Replay入口返回和任务关闭构造时点不变。",
+      "preserved": [
+        "非Apply立即返回且不关闭任务",
+        "close_all_for_approval_cancellation在原事务前位置执行，使用原actor/reason/now",
+        "唯一with_transaction内 claim_and_persist_document_cancel_runtime（原receipt/runtime/CAS/tasks提供方）→采购CAS→审计；共用session、失败停止"
+      ]
+    },
+    "change_freeze": {
+      "title": "变更冻结提交的拆分",
+      "symbols": [
+        "freeze_change_submission"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/change/submit.rs",
+        "backend/services/src/purchase_order/change/mapping.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+        "backend/crates/erp-read-models/src/purchase_center/repository/supplier_names.rs"
+      ],
+      "treatment": "原数据库跨供应商/主体名称helper迁唯一readmodel；本域行恢复与header构造移领域；函数体按明确路径和receiver归一相同。",
+      "preserved": [
+        "基准版本 → 空行时原版本行 → 当前供应商名称 → 行/金额/付款代码 → 付款解析 → next_no → submission ID",
+        "其后来源销售当前版本行 → enrich → line ID → submit(Instant::now) → 原normalized_request.lines的Debug/SipHash指纹",
+        "原采购头、基准供应商修订/快照、付款None回退及原idempotency_key保持"
+      ]
+    },
+    "change_effect": {
+      "title": "变更生效根事务及实际写序",
+      "symbols": [
+        "write_effective_change"
+      ],
+      "before": [
+        "backend/services/src/purchase_order/change/effect.rs",
+        "backend/services/src/purchase_order/formalization.rs"
+      ],
+      "after": [
+        "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+        "backend/crates/erp-processes/src/procure_to_pay/change/posting.rs",
+        "backend/crates/erp-procurement/src/service/purchase_order/change/effect.rs",
+        "backend/crates/erp-finance/src/service/payable/purchase_change.rs"
+      ],
+      "treatment": "根with_transaction函数体相同，参数由混合EffectiveChangeWrite拆为各域独立计划EffectiveChangePosting；真实写步骤展开核对。",
+      "preserved": [
+        "原准备NoTransaction查询与基准校验时点保持；不宣称准备读取已在事务中重验",
+        "财务差额零不ID/取时；非零先账户ID与账户校验再分录ID/date/posted_at；负差额原账户错误保持；原成本Vec恒空",
+        "事务内审计构造→mark_effective→SalesGuard→PrepareAllocations→Revision→Allocations→CurrentOrder→ProcurementTasks→Payable→Submission→Change→Audit",
+        "原entry/account来源、submission pending/匹配、基准当前性、CAS、返回order version与所有首错保持"
+      ]
+    }
+  },
+  "body_normalizations": [
+    "仅移除空白；crate::errors 改 services，entities::purchase_order 改 erp_procurement::entity::purchase_order。",
+    "原旧service方法迁领域后的 self.domain(). 接收者解引用；不移除函数调用或判断。",
+    "AuditLog→AuditReceiptFact 显式投影六原字段；decode实现逐函数另比。",
+    "sales_order_basis_fact 仅复制原ID/版本guard等字段且无ID/时钟/I/O；对应无副作用事实调用归一。",
+    "workflow_compose、fulfillment公开出口指向同一原函数；supplier_names迁单一readmodel函数。",
+    "仅归一find_requested_group调用的尾部逗号；不统一tuple语法。"
+  ],
+  "body_checks_artifact": "/tmp/procurement11-source-body-checks.json",
+  "raw_source_fingerprint_artifact": "/tmp/procurement11-raw-source-fingerprints.json",
+  "file_fingerprints": [
+    {
+      "side": "before",
+      "path": "backend/entities/src/purchase_order/command_receipt.rs",
+      "sha256": "57c15684cac8fea803fd52e4cfab68724057cc30ea24e036758d496a629bf372"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/cancel_approval.rs",
+      "sha256": "da8380bb6f1064d5ca32de76a5606e8848be367b60041397e296aebb7ff02655"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/change/effect.rs",
+      "sha256": "d1a26626c60b6496e6854d78d51267ea37a276c008fd1778907603f06ce50def"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/change/mapping.rs",
+      "sha256": "76c3c3a8ba0a09133848a0e7468de5d247b48b5f6a217ad6e2ad753ab704524f"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/change/submit.rs",
+      "sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/creation_basis/create.rs",
+      "sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/draft_edit.rs",
+      "sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/formalization.rs",
+      "sha256": "63473f8692d4c710ec91addc46e7fac500fa3a1d4212cace99532b8ed3b84bce"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/sourcing_create.rs",
+      "sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/start_approval.rs",
+      "sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/submission.rs",
+      "sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579"
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/purchase_order/void_order.rs",
+      "sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-finance/src/service/payable/purchase_change.rs",
+      "sha256": "cebb8bcce8b26eb87f75f100c9c8c9121ce3121ae5025ac1082758ae6d4d24f6"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+      "sha256": "976f0ecf9047ba60e0f8bd312e6f3b0845a05fe715fa6cb51250a063efac3beb"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/adapters/payment_term.rs",
+      "sha256": "9648515edf15c3c5299887d81361ab338daeaf794195dea42563eaefd98d258e"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/authorization.rs",
+      "sha256": "7fd92326ead350a656e8587d9b5ec8535cf9b330fcebec3b70d21d5cc5dcfdc9"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+      "sha256": "c9dc1ae9a178227b1ad99af5823b525ff79f612411ba30a9aab073e8fed325df"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+      "sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+      "sha256": "d3fa182c438376c0fad218d2d844af14836cb92c962a479250bb592aed6db91f"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/posting.rs",
+      "sha256": "4916ae8e5fa2d7a69b8ff6776d250f3628131d1cd757198003d3a6c725eff590"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+      "sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+      "sha256": "c024c58806a64b6e08aaca28bb508286597d48cf5bb0dc2a94560db7aa699c19"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+      "sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/supplier.rs",
+      "sha256": "43fe8dd87ee1943583a575ade0a3203c46a090453b001e13da269b87e728f888"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+      "sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+      "sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+      "sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+      "sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+      "sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+      "sha256": "793458eaa7f19f8f239e2206e7f36c074a7ec2a934644c32086fb668d5efad7e"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/cancel_approval.rs",
+      "sha256": "803be22e53e0267f3ced0b6ed7e7a931955a0adb7ae25c5f573ef14b52239c49"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/effect.rs",
+      "sha256": "4a69bb01bb7d853c7b037b84a0acf977830502498bdab399b7c1bb67cb2c3055"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+      "sha256": "cf0da7efcbe9ee23ca444b8999bf8f6adcb1c65ee6459ef73ec713420dbe3433"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/creation_basis/submission.rs",
+      "sha256": "7b1458f999e897716cfed84f89ee46f535cfff51b21525cc9d8f6cb124f6b93e"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs",
+      "sha256": "d3c28d4191678f46c15f56252ebcf4ccc8d38d2ce823c953f0c5bfc869a1b139"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs",
+      "sha256": "2e081253c3bc4629be7716c260c5ee4feb94d14cc4da7e5a73cff87f99e1bda8"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+      "sha256": "92d9482e36787d55d059866cf70c820eedad9ee469fa09349a5cf18eb7665fdd"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs",
+      "sha256": "8fcbb6dc9f2e3099e58f793e1843b5c03f9ec939fe38e39d82225cca9aa17764"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs",
+      "sha256": "932c2fda2e8c6dbece4ab6684f11591144d020b90d3143d94f9e7dbea54f4333"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/purchase_center/repository/supplier_names.rs",
+      "sha256": "36bd3d967a4d0753edba46bcb726826316e69c499ed610b9933d7762e3f3849f"
+    }
+  ],
+  "real_database_verified": false,
+  "cargo_executed_by_reviewer": false,
+  "limitations": [
+    "Only the 18 idempotency and 7 transaction raw symbol entries are adjudicated here; all 46 lexical parser items are separately recorded in /private/tmp/procurement11-parser-limitations-review.json.",
+    "No execution, MongoDB rollback/concurrency or HTTP runtime claim.",
+    "Hash equality and function-body normalization are supporting static evidence; decomposed production paths were read and assessed separately.",
+    "Applicable to listed source fingerprints; relevant subsequent changes require review."
+  ],
+  "generic_symbol_disambiguation": {
+    "raw_apply": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs:509 :: StartPosting::apply",
+    "other_production_apply_reviewed_separately": [
+      "formalization_posting.rs::MongoPosting::apply",
+      "cancel_approval.rs::CancelPosting::apply",
+      "void_order.rs::VoidPosting::apply",
+      "change/posting.rs::MongoEffect::apply"
+    ],
+    "raw_receipt": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs:293 :: VoidPosting::receipt",
+    "raw_persist_with_port": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs:97 :: persist_with_port",
+    "excluded": "Trait declarations and cfg(test) recording fixtures are not treated as production writes."
+  },
+  "source_commit_after": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "sealed_confirmation": {
+    "verified_at_utc": "2026-09-07T03:40:41.184476+00:00",
+    "final_raw_and_sealed_raw_byte_equal": true,
+    "all_41_source_fingerprints_match_sealed_inventory_and_source_commits": true,
+    "source_checks": [
+      {
+        "side": "before",
+        "path": "backend/entities/src/purchase_order/command_receipt.rs",
+        "sha256": "57c15684cac8fea803fd52e4cfab68724057cc30ea24e036758d496a629bf372",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/cancel_approval.rs",
+        "sha256": "da8380bb6f1064d5ca32de76a5606e8848be367b60041397e296aebb7ff02655",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/change/effect.rs",
+        "sha256": "d1a26626c60b6496e6854d78d51267ea37a276c008fd1778907603f06ce50def",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/change/mapping.rs",
+        "sha256": "76c3c3a8ba0a09133848a0e7468de5d247b48b5f6a217ad6e2ad753ab704524f",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/change/submit.rs",
+        "sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/creation_basis/create.rs",
+        "sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/draft_edit.rs",
+        "sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/formalization.rs",
+        "sha256": "63473f8692d4c710ec91addc46e7fac500fa3a1d4212cace99532b8ed3b84bce",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/sourcing_create.rs",
+        "sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/start_approval.rs",
+        "sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/submission.rs",
+        "sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/services/src/purchase_order/void_order.rs",
+        "sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-finance/src/service/payable/purchase_change.rs",
+        "sha256": "cebb8bcce8b26eb87f75f100c9c8c9121ce3121ae5025ac1082758ae6d4d24f6",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/adapters/audit.rs",
+        "sha256": "976f0ecf9047ba60e0f8bd312e6f3b0845a05fe715fa6cb51250a063efac3beb",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/adapters/payment_term.rs",
+        "sha256": "9648515edf15c3c5299887d81361ab338daeaf794195dea42563eaefd98d258e",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/authorization.rs",
+        "sha256": "7fd92326ead350a656e8587d9b5ec8535cf9b330fcebec3b70d21d5cc5dcfdc9",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+        "sha256": "c9dc1ae9a178227b1ad99af5823b525ff79f612411ba30a9aab073e8fed325df",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+        "sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+        "sha256": "d3fa182c438376c0fad218d2d844af14836cb92c962a479250bb592aed6db91f",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/change/posting.rs",
+        "sha256": "4916ae8e5fa2d7a69b8ff6776d250f3628131d1cd757198003d3a6c725eff590",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+        "sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+        "sha256": "c024c58806a64b6e08aaca28bb508286597d48cf5bb0dc2a94560db7aa699c19",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+        "sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/supplier.rs",
+        "sha256": "43fe8dd87ee1943583a575ade0a3203c46a090453b001e13da269b87e728f888",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+        "sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+        "sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+        "sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+        "sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+        "sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+        "sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+        "sha256": "793458eaa7f19f8f239e2206e7f36c074a7ec2a934644c32086fb668d5efad7e",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/cancel_approval.rs",
+        "sha256": "803be22e53e0267f3ced0b6ed7e7a931955a0adb7ae25c5f573ef14b52239c49",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/change/effect.rs",
+        "sha256": "4a69bb01bb7d853c7b037b84a0acf977830502498bdab399b7c1bb67cb2c3055",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+        "sha256": "cf0da7efcbe9ee23ca444b8999bf8f6adcb1c65ee6459ef73ec713420dbe3433",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/creation_basis/submission.rs",
+        "sha256": "7b1458f999e897716cfed84f89ee46f535cfff51b21525cc9d8f6cb124f6b93e",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/draft_edit.rs",
+        "sha256": "d3c28d4191678f46c15f56252ebcf4ccc8d38d2ce823c953f0c5bfc869a1b139",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/start_approval.rs",
+        "sha256": "2e081253c3bc4629be7716c260c5ee4feb94d14cc4da7e5a73cff87f99e1bda8",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/submission.rs",
+        "sha256": "92d9482e36787d55d059866cf70c820eedad9ee469fa09349a5cf18eb7665fdd",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/service/purchase_order/void_order.rs",
+        "sha256": "8fcbb6dc9f2e3099e58f793e1843b5c03f9ec939fe38e39d82225cca9aa17764",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-read-models/src/purchase_center/repository/basis_sources.rs",
+        "sha256": "932c2fda2e8c6dbece4ab6684f11591144d020b90d3143d94f9e7dbea54f4333",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-read-models/src/purchase_center/repository/supplier_names.rs",
+        "sha256": "36bd3d967a4d0753edba46bcb726826316e69c499ed610b9933d7762e3f3849f",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      }
+    ]
+  }
+}

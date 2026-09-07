@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-09-07T03:35:27.541385+00:00",
+  "commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "rustc_verbose": "rustc 1.99.0-nightly (daf2e5e18 2026-07-13)\nbinary: rustc\ncommit-hash: daf2e5e18b3abc4311d9da3d96fd64138f43d508\ncommit-date: 2026-07-13\nhost: aarch64-apple-darwin\nrelease: 1.99.0-nightly\nLLVM version: 22.1.8",
+  "cargo_verbose": "cargo 1.99.0-nightly (59800466c 2026-07-07)\nrelease: 1.99.0-nightly\ncommit-hash: 59800466c5c41c444d264b1010b4d57e85a7117f\ncommit-date: 2026-07-07\nhost: aarch64-apple-darwin\nlibgit2: 1.9.4 (sys:0.21.0 vendored)\nlibcurl: 8.7.1 (sys:0.4.90+curl-8.21.0 system ssl:(SecureTransport) LibreSSL/3.3.6)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Mac OS 26.5.1 [64-bit]",
+  "active_toolchain": "nightly-aarch64-apple-darwin (overridden by '/private/tmp/erp-domain-crate-11-procurement/backend/rust-toolchain.toml')",
+  "toolchain_channel": "nightly",
+  "profile": "dev",
+  "codegen_backend": "cranelift (workspace packages; see .cargo/config.toml profile.dev)",
+  "features": "default (no --features)",
+  "RUSTFLAGS": null,
+  "CARGO_INCREMENTAL": null,
+  "CARGO_TERM_COLOR": "never",
+  "cpu_count": 12,
+  "loadavg": [
+    5.5029296875,
+    5.482421875,
+    6.12060546875
+  ],
+  "target_dir": "/Volumes/Kingston/erp-domain-crate-11-procurement-check",
+  "target_dir_df": "Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk7s1   466Gi   258Gi   208Gi    56%    293k  2.2G    0%   /Volumes/Kingston",
+  "cwd": "/private/tmp/erp-domain-crate-11-procurement/backend",
+  "notes": "未转储 config.toml / 环境变量全集 / 凭据"
+}

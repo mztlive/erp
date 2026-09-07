@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 11 |
-| 状态 | 未开始 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-procurement` |
-| 执行负责人 | 进入执行中前登记；该阶段只有一个共享注册文件集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 执行负责人 | Codex；唯一共享注册集成负责人 |
+| 输入/输出提交 | 输入 `3f5e8c0d`；实现 `0a297ab00d29b28047e05f780b4815c0a5456a2f`；测量与证据以本文件所属证据提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -76,17 +76,17 @@ procurement 不依赖 sales/finance/supplier/fulfillment 或旧三层；processe
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固定创建依据唯一性、采购责任解析、供货规划、销售分摊、金额守恒、提交快照与变更特征测试。
+1. [x] 固定创建依据唯一性、采购责任解析、供货规划、销售分摊、金额守恒、提交快照与变更特征测试。
 
-2. [ ] 迁入 purchase_order/procurement_responsibility 实体、DTO、拥有仓储与索引；本域仓储仅持有采购集合查询。
+2. [x] 迁入 purchase_order/procurement_responsibility 实体、DTO、拥有仓储与索引；本域仓储仅持有采购集合查询。
 
-3. [ ] list_facts/center_facts 中跨销售/供应商/财务的组合移 read-models；纯采购覆盖事实继续留 procurement。不得以 purchase repository 名义持有 sales collection 查询。
+3. [x] list_facts/center_facts 中跨销售/供应商/财务的组合移 read-models；纯采购覆盖事实继续留 procurement。不得以 purchase repository 名义持有 sales collection 查询。
 
-4. [ ] 在 processes::procure_to_pay 保留采购正式化、应付、成本、工作项、审计与回执的原事务顺序；跨履约步骤暂时调用旧履约接口。采购 Service 不直接调用 finance 或旧 fulfillment。
+4. [x] 在 processes::procure_to_pay 保留采购正式化、应付、成本、工作项、审计与回执的原事务顺序；跨履约步骤暂时调用旧履约接口。采购 Service 不直接调用 finance 或旧 fulfillment。
 
-5. [ ] 切换 purchase_order 与 admin/procurement_responsibility Handler、销售采购协作 adapter、审批动作分发与 WorkItem 责任查询；替换阶段 10 暂留的旧采购依赖。
+5. [x] 切换 purchase_order 与 admin/procurement_responsibility Handler、销售采购协作 adapter、审批动作分发与 WorkItem 责任查询；替换阶段 10 暂留的旧采购依赖。
 
-6. [ ] 删除旧采购模块、extensions 与索引声明；执行门禁并验证销售/财务不会因采购内部实现变化被重新编译。
+6. [x] 删除旧采购模块、extensions 与索引声明；执行门禁并验证销售/财务不会因采购内部实现变化被重新编译。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -154,15 +154,27 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 3f5e8c0d；chore/domain-crate-11-procurement 专用分支 | .domain-migration-evidence/11/input.json |
+| 文件与符号 | 87 个清单旧路径与 10 个 owned 准备文件清零；采购覆盖汇总规则唯一归采购；跨域名称、列表、详情归读模型 | source-clearance.json、files.tsv、order-symbols.md |
+| 依赖 | normal/build/dev 闭包：procurement、sales、finance 各自仅依赖本域与 erp-core；无其他领域或旧三层 | metadata.json、domain-dependencies.json、boundary.log |
+| 旧实现清零 | 旧采购实体、服务、仓储、索引及生产调用切换；供应商详情闭合至读模型 | source-clearance.json、files.tsv、supplier-detail-semantic-review.json |
+| 测试 | 3405 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | changed/missing/added 均为 0；46 个解析项与 18 个幂等、7 个事务符号完成逐项核销；权限无漂移 | contract-review.json、parser-limitations-review.json、dto-static-comparison.json、permissions.log |
+| 事务合同 | 采购正式化、保存/作废、提交/撤回、变更、创建依据/库存预占、责任授权保持原调用及 Executor；真实数据库运行未验证 | idempotency-transaction-review.json、source-body-checks.json、formalization-semantic-review.md、change-semantic-review.md、basis-body-review.json、responsibility-verification.json |
+| 公共门禁 | fmt/check/严格 clippy/lib tests/BPM/service/domain/permissions/git diff 全部 exit0；516 个第三方包未变 | quality-gates.log、dependency-lock.json |
+| 编译隔离 | 采购内部等价修改 5 次 check 样本，Sales/Finance 每次均 Fresh；源恢复、noop 与原始日志齐全 | compile/phase-summary.json、compile/procurement-check/ |
+| 阶段提交 | 实现 0a297ab0；证据以本文件提交记录为准；状态最高为本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/11/`。原始静态扫描保持 exit2、needs_review=48，必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- 采购领域持有采购/责任实体、覆盖与金额规则、冻结快照、版本校验、单域仓储和索引；采购不得读取销售、财务或供应商集合。
+- `procure_to_pay::PurchaseOrderProcess` 持有原根事务；正式化通过 `PurchaseOrderFormalizationProcess` 顺序调用采购、应付、付款任务、成本、履约与审计。每次失败必须停止后继步骤。
+- 供应商付款条件由唯一提供方解析；采购快照先分离历史编码附带类目，再在原校验位置调用解析回调。直接付款代码与快照解析不得混用。
+- 库存预占通过真实库存 Port；余额 CAS 失败或任一步异常均不得继续预占分录与后续业务写入。销售分配读取通过窄事实接口，保留原读取顺序。
+- 采购责任运行在原授权策略事务内；管理员特例、可登录状态、角色与数据范围不得绕过。
+- 真实数据库运行未验证；纯测试和源码合同复核不构成实际 MongoDB 回滚、并发或未知提交恢复证明。
+- 本阶段测量只证明采购修改时销售/财务保持 Fresh；最终性能收益及回退阈值统一在阶段 17 判定。

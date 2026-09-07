@@ -1,0 +1,144 @@
+{
+  "input": "07da7863",
+  "checked_functions": 21,
+  "same": 21,
+  "checks": [
+    {
+      "symbol": "compute_selected_lines",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "build_submission_line",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "find_requested_group",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_request_scope",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "validate_requested_quantities",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_expected_delivery_within_sales_due",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "parse_basis_sales_order_id",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "procurement_quantity_changed",
+      "before": "services/src/purchase_order/creation_basis/create.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "qualified_supplies_for_line",
+      "before": "services/src/purchase_order/creation_basis/mapping.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/mapping.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "business_date_of",
+      "before": "services/src/purchase_order/creation_basis/mapping.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/mapping.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "zero_quantity",
+      "before": "services/src/purchase_order/creation_basis/mapping.rs",
+      "after": "crates/erp-procurement/src/service/purchase_order/creation_basis/mapping.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "latest_stock_group",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "map_sourcing_plan_error",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "create_stock_delivery_drafts",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_stock_delivery_for_warehouse",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "append_stock_delivery_lines",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "build_stock_delivery_lines",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "write_sourcing_receipt",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "sourcing_receipt_work_item_status",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "sourcing_work_item_status",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+      "body_equal_after_path_whitespace_normalization": true
+    },
+    {
+      "symbol": "persist_stock_allocations",
+      "before": "services/src/purchase_order/sourcing_create.rs",
+      "after": "crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs::persist_with_port",
+      "body_equal_after_path_whitespace_normalization": false,
+      "body_equal_after_provider_interface_normalization": true,
+      "allowed_transformations": [
+        "db.stock_balances().reserve_quantity -> port.reserve_quantity",
+        "db.stock_reservations().create -> port.create_reservation",
+        "db.stock_reservation_entries().create -> port.create_entry",
+        "session argument renamed executor"
+      ]
+    }
+  ],
+  "limitations": [
+    "Body comparison is static evidence and excludes adapted loader/authorization/receipt boundaries.",
+    "No Cargo or database test executed by this partition."
+  ]
+}

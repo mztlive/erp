@@ -1,0 +1,25 @@
+{
+  "phase": "11",
+  "code_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "kinds": [
+    "normal",
+    "build",
+    "dev"
+  ],
+  "business_closures": {
+    "erp-procurement": [
+      "erp-core",
+      "erp-procurement"
+    ],
+    "erp-sales": [
+      "erp-core",
+      "erp-sales"
+    ],
+    "erp-finance": [
+      "erp-core",
+      "erp-finance"
+    ]
+  },
+  "forbidden_business_dependencies": [],
+  "evidence": "metadata.json"
+}

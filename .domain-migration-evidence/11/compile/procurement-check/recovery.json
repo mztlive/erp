@@ -1,0 +1,10 @@
+{
+  "source_path": "/private/tmp/erp-domain-crate-11-procurement/backend/crates/erp-procurement/src/entity/purchase_order/coverage_summary.rs",
+  "source_rel": "crates/erp-procurement/src/entity/purchase_order/coverage_summary.rs",
+  "sha256": "b0bb027bc029d0e55eb456d4866a5ec7131d096b26adfe86930d3fbff70730ee",
+  "mode": 420,
+  "backup_file": "source-backup",
+  "pid": 80790,
+  "created_at": "2026-09-07T03:35:27.465663+00:00",
+  "before_present": true
+}

@@ -1,0 +1,115 @@
+{
+  "source_commit_after": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "raw_capture_directory": "/private/tmp/erp-procurement11-contract-sealed",
+  "source_checks": [
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+      "sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/mapping.rs",
+      "sha256": "d3fa182c438376c0fad218d2d844af14836cb92c962a479250bb592aed6db91f",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/mod.rs",
+      "sha256": "cb19766eae95928443d893266c2de70fe751379f3f7301df9b4bee1f827356f6",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/posting.rs",
+      "sha256": "4916ae8e5fa2d7a69b8ff6776d250f3628131d1cd757198003d3a6c725eff590",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+      "sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change_adapter.rs",
+      "sha256": "a1fb6f64c9c23ac4baa9ca644ad0c52a2c31112b5da8e7ddb3e1358d5a142ba4",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change_cancel.rs",
+      "sha256": "128c8585230ceb73242251dcbf75f1cf5bb0c8242e7c3d20d41a8c72cca88004",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/procure_to_pay/change_start.rs",
+      "sha256": "7bc601ea26fac4afd6ae2fe6ba356e8a5582ad906d6f916972b5b914561f54d0",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/effect.rs",
+      "sha256": "4a69bb01bb7d853c7b037b84a0acf977830502498bdab399b7c1bb67cb2c3055",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/load.rs",
+      "sha256": "85a32d5912e65243946f9055d01220374ec5e906495c33111a896d7c3a038754",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/mapping.rs",
+      "sha256": "cf0da7efcbe9ee23ca444b8999bf8f6adcb1c65ee6459ef73ec713420dbe3433",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/mod.rs",
+      "sha256": "2d8c17d61158fa5ee58a6386b6688ca1c4e6005e947a3f23a90f104ddc66522f",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-procurement/src/service/purchase_order/change/state.rs",
+      "sha256": "77e2398f2ab79e5202cf52740ebc0839008840ff5480b47792a5a1bea38913d1",
+      "sealed_inventory_matches": true,
+      "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+      "source_commit_bytes_match": true
+    }
+  ],
+  "final_to_sealed_change_source_bytes_unchanged": true,
+  "evidence_kind": "source_freeze_binding_only",
+  "no_runtime_execution": true,
+  "earlier_function_comparison_artifact": "/tmp/procurement11-change-function-comparison.json",
+  "note": "This supplements the earlier function comparison; no runtime proof is implied."
+}

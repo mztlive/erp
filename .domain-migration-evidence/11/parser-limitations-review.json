@@ -1,0 +1,2637 @@
+{
+  "schema_version": 1,
+  "phase": "11",
+  "evidence_kind": "independent_read_only_source_review",
+  "captured_at_utc": "2026-09-07T03:38:16.100878+00:00",
+  "before_repo": "/private/tmp/erp-domain-crate-10-sales",
+  "after_repo": "/private/tmp/erp-domain-crate-11-procurement",
+  "before_head": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+  "after_head": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "raw_report_path": "/private/tmp/erp-procurement11-contract-sealed/missing-drift-report.json",
+  "raw_report_sha256_before": "9e11a42768da677b287e2ecef84ed9a2cc46dbefdb348c5807b5b69484d013b6",
+  "raw_report_sha256_after": "9e11a42768da677b287e2ecef84ed9a2cc46dbefdb348c5807b5b69484d013b6",
+  "raw_report_modified": false,
+  "raw_status_retained": "needs_review",
+  "allowlist_modified": false,
+  "scope": {
+    "raw_parser_items": 46,
+    "before_items": 23,
+    "after_items": 23,
+    "unique_contracts": 23,
+    "tuple_newtypes": 11,
+    "indexes": 12,
+    "logical_file_pairs": 9,
+    "same_path_file_pairs": 8,
+    "migrated_file_pairs": 1
+  },
+  "review_result": "All 46 parser limitations have source-level item evidence. No observable source contract drift identified within this scope; original raw needs_review remains unchanged.",
+  "limitations": [
+    "This is source review only; no Cargo, test, or MongoDB command was executed.",
+    "IndexModel descriptions are inferred directly from exact source and builder options; no claim is made about the live MongoDB index catalog.",
+    "Serde directions and String newtype shapes are source-derived; no serialization runtime was executed.",
+    "No raw needs_review item was removed or added to an allowlist.",
+    "File hashes and git-show byte comparisons bind the reviewed source to the recorded source commits; runtime behavior remains unexecuted."
+  ],
+  "file_pairs": [
+    {
+      "before_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "after_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+      "after_sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+      "before_bytes": 688,
+      "after_bytes": 688
+    },
+    {
+      "before_path": "backend/crates/application-core/src/command.rs",
+      "after_path": "backend/crates/application-core/src/command.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+      "after_sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+      "before_bytes": 17624,
+      "after_bytes": 17624
+    },
+    {
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+      "after_sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+      "before_bytes": 17695,
+      "after_bytes": 17695
+    },
+    {
+      "before_path": "backend/crates/bpm/src/model/mod.rs",
+      "after_path": "backend/crates/bpm/src/model/mod.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+      "after_sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+      "before_bytes": 18382,
+      "after_bytes": 18382
+    },
+    {
+      "before_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "after_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "after_sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+      "before_bytes": 23400,
+      "after_bytes": 23400
+    },
+    {
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "after_sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+      "before_bytes": 20059,
+      "after_bytes": 20059
+    },
+    {
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "moved": true,
+      "byte_equal": true,
+      "before_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "after_sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+      "before_bytes": 3068,
+      "after_bytes": 3068
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "after_sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+      "before_bytes": 7342,
+      "after_bytes": 7342
+    },
+    {
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "after_sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+      "before_bytes": 9637,
+      "after_bytes": 9637
+    }
+  ],
+  "dto_definitions": {
+    "UserID": {
+      "symbol": "UserID",
+      "source_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "declaration_line": 6,
+      "declaration_source": "#[derive(Debug, Clone, Default, Deserialize)]\npub struct UserID(pub String);",
+      "serde_implementation": "derived Deserialize only",
+      "serialization_shape": "None",
+      "contract": "Derived newtype String deserialization; no Serialize implementation is declared for this extractor.",
+      "before_after_file_pair": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "Account": {
+      "symbol": "Account",
+      "source_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "declaration_line": 10,
+      "declaration_source": "#[derive(Debug, Clone, Deserialize)]\npub struct Account(pub String);",
+      "serde_implementation": "derived Deserialize only",
+      "serialization_shape": "None",
+      "contract": "Derived newtype String deserialization; the tuple field is String, not AccountCore. No Serialize implementation is declared for this extractor.",
+      "before_after_file_pair": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "CommandFingerprint": {
+      "symbol": "CommandFingerprint",
+      "source_path": "backend/crates/application-core/src/command.rs",
+      "declaration_line": 11,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]\n#[serde(transparent)]\npub struct CommandFingerprint(String);",
+      "serde_implementation": "derived transparent Serialize plus manual Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Deserialize reads String then Self::parse; v1 prefix and 64 hexadecimal characters are required, accepted digest is lowercased.",
+      "before_after_file_pair": "backend/crates/application-core/src/command.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present.",
+      "manual_deserialize_source": "impl<'de> Deserialize<'de> for CommandFingerprint {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {\n        let value = String::deserialize(deserializer)?;\n        Self::parse(value).map_err(serde::de::Error::custom)\n    }\n}",
+      "manual_deserialize_line": 51
+    },
+    "IdempotencyKey": {
+      "symbol": "IdempotencyKey",
+      "source_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "declaration_line": 19,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]\n#[serde(transparent)]\npub struct IdempotencyKey(String);",
+      "serde_implementation": "derived transparent Serialize plus manual Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Deserialize reads String, calls Self::parse, then requires parsed value equal persisted value; noncanonical whitespace is rejected instead of silently normalized.",
+      "before_after_file_pair": "backend/crates/bpm/src/model/command_identity.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present.",
+      "manual_deserialize_source": "impl<'de> Deserialize<'de> for IdempotencyKey {\n    /// 持久化值必须已经规范化；反序列化不得静默改写索引身份。\n    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>\n    where\n        D: Deserializer<'de>,\n    {\n        let persisted = String::deserialize(deserializer)?;\n        let parsed = Self::parse(persisted.clone()).map_err(D::Error::custom)?;\n        if parsed.as_str() != persisted {\n            return Err(D::Error::custom(\"持久化幂等键不是规范形态\"));\n        }\n        Ok(parsed)\n    }\n}",
+      "manual_deserialize_line": 79
+    },
+    "CommandScope": {
+      "symbol": "CommandScope",
+      "source_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "declaration_line": 141,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]\n#[serde(transparent)]\npub struct CommandScope(String);",
+      "serde_implementation": "derived transparent Serialize only",
+      "serialization_shape": "String scalar",
+      "contract": "Source declares no Deserialize implementation; preserve this directionality. v3 constructor and namespace remain in the byte-identical source.",
+      "before_after_file_pair": "backend/crates/bpm/src/model/command_identity.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "CommandDigest": {
+      "symbol": "CommandDigest",
+      "source_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "declaration_line": 183,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]\n#[serde(transparent)]\npub struct CommandDigest(String);",
+      "serde_implementation": "derived transparent Serialize only",
+      "serialization_shape": "String scalar",
+      "contract": "Source declares no Deserialize implementation; preserve this directionality. Distinct digest namespace remains in the byte-identical source.",
+      "before_after_file_pair": "backend/crates/bpm/src/model/command_identity.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "ParticipantId": {
+      "symbol": "ParticipantId",
+      "source_path": "backend/crates/bpm/src/model/mod.rs",
+      "declaration_line": 227,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]\npub struct ParticipantId(String);",
+      "serde_implementation": "derived newtype Serialize plus manual Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Deserialize reads String then Self::new; empty and overlength identifiers are rejected without trimming.",
+      "before_after_file_pair": "backend/crates/bpm/src/model/mod.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present.",
+      "manual_deserialize_source": "impl<'de> Deserialize<'de> for ParticipantId {\n    /// 反序列化后走 [`ParticipantId::new`]，空值与超长标识不得绕过构造校验。\n    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {\n        let value = String::deserialize(deserializer)?;\n        Self::new(value).map_err(serde::de::Error::custom)\n    }\n}",
+      "manual_deserialize_line": 261
+    },
+    "ContentHmac": {
+      "symbol": "ContentHmac",
+      "source_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "declaration_line": 55,
+      "declaration_source": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct ContentHmac(String);",
+      "serde_implementation": "derived newtype Serialize and Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Derived Deserialize wraps the String directly; the separate parse constructor is not invoked by the derive. Preserve the existing contract.",
+      "before_after_file_pair": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "ElectronicRecipientFingerprint": {
+      "symbol": "ElectronicRecipientFingerprint",
+      "source_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "declaration_line": 20,
+      "declaration_source": "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]\npub struct ElectronicRecipientFingerprint(String);",
+      "serde_implementation": "derived newtype Serialize and Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Derived Deserialize wraps the String directly; constructor validation is not an added deserialization requirement.",
+      "before_after_file_pair": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "ServiceRecipientFingerprint": {
+      "symbol": "ServiceRecipientFingerprint",
+      "source_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "declaration_line": 29,
+      "declaration_source": "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]\npub struct ServiceRecipientFingerprint(String);",
+      "serde_implementation": "derived newtype Serialize and Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Derived Deserialize wraps the String directly; retain the distinct recipient newtype.",
+      "before_after_file_pair": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    },
+    "ServiceLocationFingerprint": {
+      "symbol": "ServiceLocationFingerprint",
+      "source_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "declaration_line": 63,
+      "declaration_source": "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]\npub struct ServiceLocationFingerprint(String);",
+      "serde_implementation": "derived newtype Serialize and Deserialize",
+      "serialization_shape": "String scalar",
+      "contract": "Derived Deserialize wraps the String directly; retain the distinct location newtype.",
+      "before_after_file_pair": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "review_method": "Read exact tuple field and serde attributes; verify whole-file bytes and manually inspect custom Deserialize where present."
+    }
+  },
+  "index_definitions": {
+    "idx_work_items_document_approval_owner_page": {
+      "name": "idx_work_items_document_approval_owner_page",
+      "builder_function": "document_approval_owner_page_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "owner_user_id",
+          1
+        ],
+        [
+          "assigned_at",
+          -1
+        ],
+        [
+          "id",
+          -1
+        ]
+      ],
+      "unique_option": null,
+      "partial_filter_expression": {
+        "deleted_at": {
+          "source_constant": "entity_core::NOT_DELETED_TIMESTAMP_BSON",
+          "value_i64": 0
+        },
+        "status": "OPEN",
+        "work_item_type": "DOCUMENT_APPROVAL"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": "Shared document_approval_page_partial_filter() is included in function_checks."
+    },
+    "idx_work_items_document_approval_owner_type_page": {
+      "name": "idx_work_items_document_approval_owner_type_page",
+      "builder_function": "document_approval_owner_type_page_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "owner_user_id",
+          1
+        ],
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "assigned_at",
+          -1
+        ],
+        [
+          "id",
+          -1
+        ]
+      ],
+      "unique_option": null,
+      "partial_filter_expression": {
+        "deleted_at": {
+          "source_constant": "entity_core::NOT_DELETED_TIMESTAMP_BSON",
+          "value_i64": 0
+        },
+        "status": "OPEN",
+        "work_item_type": "DOCUMENT_APPROVAL"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "idx_work_items_fulfillment_queue": {
+      "name": "idx_work_items_fulfillment_queue",
+      "builder_function": "fulfillment_queue_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "owner_user_id",
+          1
+        ],
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "reason_code",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ]
+      ],
+      "unique_option": null,
+      "partial_filter_expression": {
+        "deleted_at": {
+          "source_constant": "entity_core::NOT_DELETED_TIMESTAMP_BSON",
+          "value_i64": 0
+        },
+        "status": "OPEN",
+        "work_item_type": "FULFILLMENT_OPERATION"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_work_items_open_sales_invoice_execution_object": {
+      "name": "uk_work_items_open_sales_invoice_execution_object",
+      "builder_function": "unique_open_sales_invoice_execution_object_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ],
+        [
+          "work_item_type",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "OPEN",
+        "work_item_type": "SALES_INVOICE_EXECUTION"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_work_items_open_fulfillment_object": {
+      "name": "uk_work_items_open_fulfillment_object",
+      "builder_function": "unique_open_fulfillment_object_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ],
+        [
+          "work_item_type",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "OPEN",
+        "work_item_type": "FULFILLMENT_OPERATION"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_work_items_open_customer_acceptance_object": {
+      "name": "uk_work_items_open_customer_acceptance_object",
+      "builder_function": "unique_open_customer_acceptance_object_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ],
+        [
+          "work_item_type",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "OPEN",
+        "work_item_type": "CUSTOMER_ACCEPTANCE_REGISTRATION"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_work_items_open_payment_execution_object": {
+      "name": "uk_work_items_open_payment_execution_object",
+      "builder_function": "unique_open_payment_execution_object_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ],
+        [
+          "work_item_type",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "OPEN",
+        "work_item_type": "SUPPLIER_PAYMENT_EXECUTION"
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_work_items_open_object_type": {
+      "name": "uk_work_items_open_object_type",
+      "builder_function": "unique_open_object_type_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "business_object_type",
+          1
+        ],
+        [
+          "business_object_id",
+          1
+        ],
+        [
+          "work_item_type",
+          1
+        ],
+        [
+          "responsibility_key",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "OPEN",
+        "owner_user_id": {
+          "$type": "string"
+        }
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": "ensure first reconciles this named index: drop only when an existing index with this name fails exact current keys/unique/partial equality, then create current indexes."
+    },
+    "uk_work_items_approval_execution": {
+      "name": "uk_work_items_approval_execution",
+      "builder_function": "unique_approval_execution_index",
+      "collection": "work_items",
+      "keys_in_order": [
+        [
+          "approval_node_execution_id",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "approval_node_execution_id": {
+          "$type": "string"
+        }
+      },
+      "source_path_before": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "source_path_after": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "extra": null
+    },
+    "uk_procurement_responsibility_active_selector": {
+      "name": "uk_procurement_responsibility_active_selector",
+      "builder_function": "indexes",
+      "collection": "procurement_responsibility_rules",
+      "keys_in_order": [
+        [
+          "selector_key",
+          1
+        ]
+      ],
+      "unique_option": true,
+      "partial_filter_expression": {
+        "status": "active",
+        "deleted_at": {
+          "source_constant": "entity_core::NOT_DELETED_TIMESTAMP_BSON",
+          "value_i64": 0
+        }
+      },
+      "source_path_before": "backend/database/src/indexes/procurement_responsibility.rs",
+      "source_path_after": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "extra": null
+    },
+    "idx_procurement_responsibility_list": {
+      "name": "idx_procurement_responsibility_list",
+      "builder_function": "indexes + named_index",
+      "collection": "procurement_responsibility_rules",
+      "keys_in_order": [
+        [
+          "deleted_at",
+          1
+        ],
+        [
+          "status",
+          1
+        ],
+        [
+          "rule_type",
+          1
+        ],
+        [
+          "created_at",
+          1
+        ]
+      ],
+      "unique_option": null,
+      "partial_filter_expression": null,
+      "source_path_before": "backend/database/src/indexes/procurement_responsibility.rs",
+      "source_path_after": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "extra": "named_index only sets the name; unique remains None, not Some(false), and no partial filter is set."
+    },
+    "idx_procurement_responsibility_owner": {
+      "name": "idx_procurement_responsibility_owner",
+      "builder_function": "indexes + named_index",
+      "collection": "procurement_responsibility_rules",
+      "keys_in_order": [
+        [
+          "deleted_at",
+          1
+        ],
+        [
+          "owner_user_id",
+          1
+        ],
+        [
+          "status",
+          1
+        ]
+      ],
+      "unique_option": null,
+      "partial_filter_expression": null,
+      "source_path_before": "backend/database/src/indexes/procurement_responsibility.rs",
+      "source_path_after": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "extra": "named_index only sets the name; unique remains None, not Some(false), and no partial filter is set."
+    }
+  },
+  "function_checks": [
+    {
+      "symbol": "ensure",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 25,
+      "after_line": 25,
+      "source_equal": true,
+      "before_sha256": "af76e2ec7bbde2ae6e0d232cddd34e109a1571ae7328f092a3a18df23feaf67b",
+      "after_sha256": "af76e2ec7bbde2ae6e0d232cddd34e109a1571ae7328f092a3a18df23feaf67b",
+      "before_source": "fn ensure(db: &Database) -> Result<()> {\n    reconcile_open_object_type_index(db).await?;\n    db.collection::<Document>(WORK_ITEMS)\n        .create_indexes(work_item_indexes())\n        .await?;\n    db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)\n        .create_indexes(finance_responsibility_indexes())\n        .await?;\n    Ok(())\n}",
+      "after_source": "fn ensure(db: &Database) -> Result<()> {\n    reconcile_open_object_type_index(db).await?;\n    db.collection::<Document>(WORK_ITEMS)\n        .create_indexes(work_item_indexes())\n        .await?;\n    db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)\n        .create_indexes(finance_responsibility_indexes())\n        .await?;\n    Ok(())\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": []
+    },
+    {
+      "symbol": "reconcile_open_object_type_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 49,
+      "after_line": 49,
+      "source_equal": true,
+      "before_sha256": "0fa2d9969b33d70202f2547fe05b61f8fb7d83e6df7842baa245500b4e8153b6",
+      "after_sha256": "0fa2d9969b33d70202f2547fe05b61f8fb7d83e6df7842baa245500b4e8153b6",
+      "before_source": "fn reconcile_open_object_type_index(db: &Database) -> Result<()> {\n    let collection_names = db.list_collection_names().await?;\n    if !collection_names.iter().any(|name| name == WORK_ITEMS) {\n        return Ok(());\n    }\n    let collection = db.collection::<Document>(WORK_ITEMS);\n    let mut indexes = collection.list_indexes().await?;\n    while let Some(index) = indexes.try_next().await? {\n        let name = index.options.as_ref().and_then(|options| options.name.as_deref());\n        if name == Some(\"uk_work_items_open_object_type\") && !is_current_open_object_type_index(&index) {\n            collection.drop_index(\"uk_work_items_open_object_type\").await?;\n            break;\n        }\n    }\n    Ok(())\n}",
+      "after_source": "fn reconcile_open_object_type_index(db: &Database) -> Result<()> {\n    let collection_names = db.list_collection_names().await?;\n    if !collection_names.iter().any(|name| name == WORK_ITEMS) {\n        return Ok(());\n    }\n    let collection = db.collection::<Document>(WORK_ITEMS);\n    let mut indexes = collection.list_indexes().await?;\n    while let Some(index) = indexes.try_next().await? {\n        let name = index.options.as_ref().and_then(|options| options.name.as_deref());\n        if name == Some(\"uk_work_items_open_object_type\") && !is_current_open_object_type_index(&index) {\n            collection.drop_index(\"uk_work_items_open_object_type\").await?;\n            break;\n        }\n    }\n    Ok(())\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"uk_work_items_open_object_type\"",
+        "\"uk_work_items_open_object_type\""
+      ]
+    },
+    {
+      "symbol": "is_current_open_object_type_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 73,
+      "after_line": 73,
+      "source_equal": true,
+      "before_sha256": "3f11a019a116fac1f7215f9d210a415b8e077d9d6137331a63ea3ed2cd17a521",
+      "after_sha256": "3f11a019a116fac1f7215f9d210a415b8e077d9d6137331a63ea3ed2cd17a521",
+      "before_source": "fn is_current_open_object_type_index(index: &IndexModel) -> bool {\n    let Some(options) = index.options.as_ref() else {\n        return false;\n    };\n    index.keys\n        == doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n            \"responsibility_key\": 1,\n        }\n        && options.unique == Some(true)\n        && options.partial_filter_expression\n            == Some(doc! {\n                \"status\": \"OPEN\",\n                \"owner_user_id\": { \"$type\": \"string\" },\n            })\n}",
+      "after_source": "fn is_current_open_object_type_index(index: &IndexModel) -> bool {\n    let Some(options) = index.options.as_ref() else {\n        return false;\n    };\n    index.keys\n        == doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n            \"responsibility_key\": 1,\n        }\n        && options.unique == Some(true)\n        && options.partial_filter_expression\n            == Some(doc! {\n                \"status\": \"OPEN\",\n                \"owner_user_id\": { \"$type\": \"string\" },\n            })\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"responsibility_key\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"owner_user_id\"",
+        "\"$type\"",
+        "\"string\""
+      ]
+    },
+    {
+      "symbol": "work_item_indexes",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 92,
+      "after_line": 92,
+      "source_equal": true,
+      "before_sha256": "2ebb154b4f44347bb9cae40cb04f16102fffac7f11ba186705666303c8f4d401",
+      "after_sha256": "2ebb154b4f44347bb9cae40cb04f16102fffac7f11ba186705666303c8f4d401",
+      "before_source": "fn work_item_indexes() -> Vec<IndexModel> {\n    vec![\n        unique_open_object_type_index(),\n        unique_open_fulfillment_object_index(),\n        unique_open_customer_acceptance_object_index(),\n        unique_open_payment_execution_object_index(),\n        unique_open_sales_invoice_execution_object_index(),\n        unique_approval_execution_index(),\n        fulfillment_queue_index(),\n        document_approval_owner_page_index(),\n        document_approval_owner_type_page_index(),\n        named_index(\n            \"idx_work_items_mine\",\n            doc! { \"status\": 1, \"owner_user_id\": 1, \"due_at\": 1, \"id\": 1 },\n        ),\n        named_index(\n            \"idx_work_items_pending_approval\",\n            doc! { \"status\": 1, \"owner_user_id\": 1, \"assigned_at\": -1, \"id\": -1 },\n        ),\n        named_index(\n            \"idx_work_items_managed\",\n            doc! {\n                \"status\": 1,\n                \"owner_organization_id\": 1,\n                \"owner_user_id\": 1,\n                \"due_at\": 1,\n            },\n        ),\n        named_index(\n            \"idx_work_items_responsibility_history\",\n            doc! { \"status\": 1, \"responsibility_actor_ids\": 1, \"due_at\": 1 },\n        ),\n        named_index(\n            \"idx_work_items_procurement_object_history\",\n            doc! {\n                \"business_object_type\": 1,\n                \"business_object_id\": 1,\n                \"work_item_type\": 1,\n                \"updated_at\": -1,\n                \"created_at\": -1,\n            },\n        ),\n        named_index(\n            \"idx_work_items_completed_history\",\n            doc! { \"status\": 1, \"completed_by\": 1, \"completed_at\": -1 },\n        ),\n        named_index(\n            \"idx_work_items_closed_history\",\n            doc! { \"status\": 1, \"closed_by\": 1, \"closed_at\": -1 },\n        ),\n    ]\n}",
+      "after_source": "fn work_item_indexes() -> Vec<IndexModel> {\n    vec![\n        unique_open_object_type_index(),\n        unique_open_fulfillment_object_index(),\n        unique_open_customer_acceptance_object_index(),\n        unique_open_payment_execution_object_index(),\n        unique_open_sales_invoice_execution_object_index(),\n        unique_approval_execution_index(),\n        fulfillment_queue_index(),\n        document_approval_owner_page_index(),\n        document_approval_owner_type_page_index(),\n        named_index(\n            \"idx_work_items_mine\",\n            doc! { \"status\": 1, \"owner_user_id\": 1, \"due_at\": 1, \"id\": 1 },\n        ),\n        named_index(\n            \"idx_work_items_pending_approval\",\n            doc! { \"status\": 1, \"owner_user_id\": 1, \"assigned_at\": -1, \"id\": -1 },\n        ),\n        named_index(\n            \"idx_work_items_managed\",\n            doc! {\n                \"status\": 1,\n                \"owner_organization_id\": 1,\n                \"owner_user_id\": 1,\n                \"due_at\": 1,\n            },\n        ),\n        named_index(\n            \"idx_work_items_responsibility_history\",\n            doc! { \"status\": 1, \"responsibility_actor_ids\": 1, \"due_at\": 1 },\n        ),\n        named_index(\n            \"idx_work_items_procurement_object_history\",\n            doc! {\n                \"business_object_type\": 1,\n                \"business_object_id\": 1,\n                \"work_item_type\": 1,\n                \"updated_at\": -1,\n                \"created_at\": -1,\n            },\n        ),\n        named_index(\n            \"idx_work_items_completed_history\",\n            doc! { \"status\": 1, \"completed_by\": 1, \"completed_at\": -1 },\n        ),\n        named_index(\n            \"idx_work_items_closed_history\",\n            doc! { \"status\": 1, \"closed_by\": 1, \"closed_at\": -1 },\n        ),\n    ]\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"idx_work_items_mine\"",
+        "\"status\"",
+        "\"owner_user_id\"",
+        "\"due_at\"",
+        "\"id\"",
+        "\"idx_work_items_pending_approval\"",
+        "\"status\"",
+        "\"owner_user_id\"",
+        "\"assigned_at\"",
+        "\"id\"",
+        "\"idx_work_items_managed\"",
+        "\"status\"",
+        "\"owner_organization_id\"",
+        "\"owner_user_id\"",
+        "\"due_at\"",
+        "\"idx_work_items_responsibility_history\"",
+        "\"status\"",
+        "\"responsibility_actor_ids\"",
+        "\"due_at\"",
+        "\"idx_work_items_procurement_object_history\"",
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"updated_at\"",
+        "\"created_at\"",
+        "\"idx_work_items_completed_history\"",
+        "\"status\"",
+        "\"completed_by\"",
+        "\"completed_at\"",
+        "\"idx_work_items_closed_history\"",
+        "\"status\"",
+        "\"closed_by\"",
+        "\"closed_at\""
+      ]
+    },
+    {
+      "symbol": "document_approval_page_partial_filter",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 177,
+      "after_line": 177,
+      "source_equal": true,
+      "before_sha256": "85f5d3b9a674f84c7ab181544da7d38e3ce041dbc4fbfba00b29731f609be644",
+      "after_sha256": "85f5d3b9a674f84c7ab181544da7d38e3ce041dbc4fbfba00b29731f609be644",
+      "before_source": "fn document_approval_page_partial_filter() -> Document {\n    doc! {\n        \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n        \"status\": \"OPEN\",\n        \"work_item_type\": \"DOCUMENT_APPROVAL\",\n    }\n}",
+      "after_source": "fn document_approval_page_partial_filter() -> Document {\n    doc! {\n        \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n        \"status\": \"OPEN\",\n        \"work_item_type\": \"DOCUMENT_APPROVAL\",\n    }\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"deleted_at\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"DOCUMENT_APPROVAL\""
+      ]
+    },
+    {
+      "symbol": "document_approval_owner_page_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 146,
+      "after_line": 146,
+      "source_equal": true,
+      "before_sha256": "ca19837cc542e69ccfaccda6d523c239b6790bcc45259b611e4196eef4858479",
+      "after_sha256": "ca19837cc542e69ccfaccda6d523c239b6790bcc45259b611e4196eef4858479",
+      "before_source": "fn document_approval_owner_page_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! { \"owner_user_id\": 1, \"assigned_at\": -1, \"id\": -1 })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_document_approval_owner_page\".to_string())\n                .partial_filter_expression(document_approval_page_partial_filter())\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn document_approval_owner_page_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! { \"owner_user_id\": 1, \"assigned_at\": -1, \"id\": -1 })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_document_approval_owner_page\".to_string())\n                .partial_filter_expression(document_approval_page_partial_filter())\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"owner_user_id\"",
+        "\"assigned_at\"",
+        "\"id\"",
+        "\"idx_work_items_document_approval_owner_page\""
+      ]
+    },
+    {
+      "symbol": "document_approval_owner_type_page_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 159,
+      "after_line": 159,
+      "source_equal": true,
+      "before_sha256": "fccd3f0ab6c32903317d9b968790ac947074de5f552c67b774ecb8f5e0c9bec6",
+      "after_sha256": "fccd3f0ab6c32903317d9b968790ac947074de5f552c67b774ecb8f5e0c9bec6",
+      "before_source": "fn document_approval_owner_type_page_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"owner_user_id\": 1,\n            \"business_object_type\": 1,\n            \"assigned_at\": -1,\n            \"id\": -1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_document_approval_owner_type_page\".to_string())\n                .partial_filter_expression(document_approval_page_partial_filter())\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn document_approval_owner_type_page_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"owner_user_id\": 1,\n            \"business_object_type\": 1,\n            \"assigned_at\": -1,\n            \"id\": -1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_document_approval_owner_type_page\".to_string())\n                .partial_filter_expression(document_approval_page_partial_filter())\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"owner_user_id\"",
+        "\"business_object_type\"",
+        "\"assigned_at\"",
+        "\"id\"",
+        "\"idx_work_items_document_approval_owner_type_page\""
+      ]
+    },
+    {
+      "symbol": "fulfillment_queue_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 186,
+      "after_line": 186,
+      "source_equal": true,
+      "before_sha256": "5388f19430b348f37b83117b8726716a9998f3a1143e1f01114969ef4bbda90d",
+      "after_sha256": "5388f19430b348f37b83117b8726716a9998f3a1143e1f01114969ef4bbda90d",
+      "before_source": "fn fulfillment_queue_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"owner_user_id\": 1,\n            \"business_object_type\": 1,\n            \"reason_code\": 1,\n            \"business_object_id\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_fulfillment_queue\".to_string())\n                .partial_filter_expression(doc! {\n                    \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"FULFILLMENT_OPERATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn fulfillment_queue_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"owner_user_id\": 1,\n            \"business_object_type\": 1,\n            \"reason_code\": 1,\n            \"business_object_id\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"idx_work_items_fulfillment_queue\".to_string())\n                .partial_filter_expression(doc! {\n                    \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"FULFILLMENT_OPERATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"owner_user_id\"",
+        "\"business_object_type\"",
+        "\"reason_code\"",
+        "\"business_object_id\"",
+        "\"idx_work_items_fulfillment_queue\"",
+        "\"deleted_at\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"FULFILLMENT_OPERATION\""
+      ]
+    },
+    {
+      "symbol": "unique_open_sales_invoice_execution_object_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 208,
+      "after_line": 208,
+      "source_equal": true,
+      "before_sha256": "6dc6172749f81ee2deec9c60fdeec336c3c98a012646acec6bae038925ad8f36",
+      "after_sha256": "6dc6172749f81ee2deec9c60fdeec336c3c98a012646acec6bae038925ad8f36",
+      "before_source": "fn unique_open_sales_invoice_execution_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_sales_invoice_execution_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"SALES_INVOICE_EXECUTION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_open_sales_invoice_execution_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_sales_invoice_execution_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"SALES_INVOICE_EXECUTION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"uk_work_items_open_sales_invoice_execution_object\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"SALES_INVOICE_EXECUTION\""
+      ]
+    },
+    {
+      "symbol": "unique_open_fulfillment_object_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 277,
+      "after_line": 277,
+      "source_equal": true,
+      "before_sha256": "dea0fd25e9ec9ffc1da197918123e24bd1bbefc9ce3b1cbde4dba12f5f2a958f",
+      "after_sha256": "dea0fd25e9ec9ffc1da197918123e24bd1bbefc9ce3b1cbde4dba12f5f2a958f",
+      "before_source": "fn unique_open_fulfillment_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_fulfillment_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"FULFILLMENT_OPERATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_open_fulfillment_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_fulfillment_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"FULFILLMENT_OPERATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"uk_work_items_open_fulfillment_object\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"FULFILLMENT_OPERATION\""
+      ]
+    },
+    {
+      "symbol": "unique_open_customer_acceptance_object_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 298,
+      "after_line": 298,
+      "source_equal": true,
+      "before_sha256": "5639bdc67771bc96d0afc28fe50c5d7194f48f9972e85825a7c054506e5f1ca7",
+      "after_sha256": "5639bdc67771bc96d0afc28fe50c5d7194f48f9972e85825a7c054506e5f1ca7",
+      "before_source": "fn unique_open_customer_acceptance_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_customer_acceptance_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"CUSTOMER_ACCEPTANCE_REGISTRATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_open_customer_acceptance_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_customer_acceptance_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"CUSTOMER_ACCEPTANCE_REGISTRATION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"uk_work_items_open_customer_acceptance_object\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"CUSTOMER_ACCEPTANCE_REGISTRATION\""
+      ]
+    },
+    {
+      "symbol": "unique_open_payment_execution_object_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 319,
+      "after_line": 319,
+      "source_equal": true,
+      "before_sha256": "170418d426871244b28dcdb9932d88b88e09d3766f62acc8a7e4978f96c03f25",
+      "after_sha256": "170418d426871244b28dcdb9932d88b88e09d3766f62acc8a7e4978f96c03f25",
+      "before_source": "fn unique_open_payment_execution_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_payment_execution_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"SUPPLIER_PAYMENT_EXECUTION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_open_payment_execution_object_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_payment_execution_object\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"work_item_type\": \"SUPPLIER_PAYMENT_EXECUTION\",\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"uk_work_items_open_payment_execution_object\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"work_item_type\"",
+        "\"SUPPLIER_PAYMENT_EXECUTION\""
+      ]
+    },
+    {
+      "symbol": "unique_open_object_type_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 255,
+      "after_line": 255,
+      "source_equal": true,
+      "before_sha256": "a4b7bcb8d1342a34ffafd75cfe8d39c4c84b2813e3fe50a47bfb18d0b6d7bf4c",
+      "after_sha256": "a4b7bcb8d1342a34ffafd75cfe8d39c4c84b2813e3fe50a47bfb18d0b6d7bf4c",
+      "before_source": "fn unique_open_object_type_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n            \"responsibility_key\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_object_type\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"owner_user_id\": { \"$type\": \"string\" },\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_open_object_type_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! {\n            \"business_object_type\": 1,\n            \"business_object_id\": 1,\n            \"work_item_type\": 1,\n            \"responsibility_key\": 1,\n        })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_open_object_type\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"status\": \"OPEN\",\n                    \"owner_user_id\": { \"$type\": \"string\" },\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"business_object_type\"",
+        "\"business_object_id\"",
+        "\"work_item_type\"",
+        "\"responsibility_key\"",
+        "\"uk_work_items_open_object_type\"",
+        "\"status\"",
+        "\"OPEN\"",
+        "\"owner_user_id\"",
+        "\"$type\"",
+        "\"string\""
+      ]
+    },
+    {
+      "symbol": "unique_approval_execution_index",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "before_line": 339,
+      "after_line": 339,
+      "source_equal": true,
+      "before_sha256": "b545458776907c7b37df197bb27d21c636bff1f44051e30c3484a52d8eeefb39",
+      "after_sha256": "b545458776907c7b37df197bb27d21c636bff1f44051e30c3484a52d8eeefb39",
+      "before_source": "fn unique_approval_execution_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! { \"approval_node_execution_id\": 1 })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_approval_execution\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"approval_node_execution_id\": { \"$type\": \"string\" },\n                })\n                .build(),\n        )\n        .build()\n}",
+      "after_source": "fn unique_approval_execution_index() -> IndexModel {\n    IndexModel::builder()\n        .keys(doc! { \"approval_node_execution_id\": 1 })\n        .options(\n            IndexOptions::builder()\n                .name(\"uk_work_items_approval_execution\".to_string())\n                .unique(true)\n                .partial_filter_expression(doc! {\n                    \"approval_node_execution_id\": { \"$type\": \"string\" },\n                })\n                .build(),\n        )\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"approval_node_execution_id\"",
+        "\"uk_work_items_approval_execution\"",
+        "\"approval_node_execution_id\"",
+        "\"$type\"",
+        "\"string\""
+      ]
+    },
+    {
+      "symbol": "ensure",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "before_line": 23,
+      "after_line": 23,
+      "source_equal": true,
+      "before_sha256": "59d96a0dcb02d8d70ba9dee2ff14f20598a3b1cbab9ef5e136dddbba94620aa0",
+      "after_sha256": "59d96a0dcb02d8d70ba9dee2ff14f20598a3b1cbab9ef5e136dddbba94620aa0",
+      "before_source": "fn ensure(db: &Database) -> Result<()> {\n    db.collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES)\n        .create_indexes(indexes())\n        .await?;\n    Ok(())\n}",
+      "after_source": "fn ensure(db: &Database) -> Result<()> {\n    db.collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES)\n        .create_indexes(indexes())\n        .await?;\n    Ok(())\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": []
+    },
+    {
+      "symbol": "indexes",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "before_line": 34,
+      "after_line": 34,
+      "source_equal": true,
+      "before_sha256": "9fdfd133f00957764dcd44c2c309894e7d5ef7363890a31a2cb00456f78c3f2c",
+      "after_sha256": "9fdfd133f00957764dcd44c2c309894e7d5ef7363890a31a2cb00456f78c3f2c",
+      "before_source": "fn indexes() -> Vec<IndexModel> {\n    vec![\n        IndexModel::builder()\n            .keys(doc! { \"selector_key\": 1 })\n            .options(\n                IndexOptions::builder()\n                    .name(\"uk_procurement_responsibility_active_selector\".to_string())\n                    .unique(true)\n                    .partial_filter_expression(doc! {\n                        \"status\": \"active\",\n                        \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n                    })\n                    .build(),\n            )\n            .build(),\n        named_index(\n            \"idx_procurement_responsibility_list\",\n            doc! { \"deleted_at\": 1, \"status\": 1, \"rule_type\": 1, \"created_at\": 1 },\n        ),\n        named_index(\n            \"idx_procurement_responsibility_owner\",\n            doc! { \"deleted_at\": 1, \"owner_user_id\": 1, \"status\": 1 },\n        ),\n    ]\n}",
+      "after_source": "fn indexes() -> Vec<IndexModel> {\n    vec![\n        IndexModel::builder()\n            .keys(doc! { \"selector_key\": 1 })\n            .options(\n                IndexOptions::builder()\n                    .name(\"uk_procurement_responsibility_active_selector\".to_string())\n                    .unique(true)\n                    .partial_filter_expression(doc! {\n                        \"status\": \"active\",\n                        \"deleted_at\": NOT_DELETED_TIMESTAMP_BSON,\n                    })\n                    .build(),\n            )\n            .build(),\n        named_index(\n            \"idx_procurement_responsibility_list\",\n            doc! { \"deleted_at\": 1, \"status\": 1, \"rule_type\": 1, \"created_at\": 1 },\n        ),\n        named_index(\n            \"idx_procurement_responsibility_owner\",\n            doc! { \"deleted_at\": 1, \"owner_user_id\": 1, \"status\": 1 },\n        ),\n    ]\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": [
+        "\"selector_key\"",
+        "\"uk_procurement_responsibility_active_selector\"",
+        "\"status\"",
+        "\"active\"",
+        "\"deleted_at\"",
+        "\"idx_procurement_responsibility_list\"",
+        "\"deleted_at\"",
+        "\"status\"",
+        "\"rule_type\"",
+        "\"created_at\"",
+        "\"idx_procurement_responsibility_owner\"",
+        "\"deleted_at\"",
+        "\"owner_user_id\"",
+        "\"status\""
+      ]
+    },
+    {
+      "symbol": "named_index",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "before_line": 68,
+      "after_line": 68,
+      "source_equal": true,
+      "before_sha256": "19cd59cdd6f6bf276ad740dc9774ddf61bd8afed8e72ce021449bc3101d6e2e5",
+      "after_sha256": "19cd59cdd6f6bf276ad740dc9774ddf61bd8afed8e72ce021449bc3101d6e2e5",
+      "before_source": "fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {\n    IndexModel::builder()\n        .keys(keys)\n        .options(IndexOptions::builder().name(name.into()).build())\n        .build()\n}",
+      "after_source": "fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {\n    IndexModel::builder()\n        .keys(keys)\n        .options(IndexOptions::builder().name(name.into()).build())\n        .build()\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": []
+    }
+  ],
+  "collection_resolution": {
+    "procurement_responsibility_rules": {
+      "before": {
+        "path": "backend/database/src/repository/extensions/procurement_responsibility.rs",
+        "line": 20,
+        "declaration": "const PROCUREMENT_RESPONSIBILITY_RULES: &'static str = \"procurement_responsibility_rules\";",
+        "value": "procurement_responsibility_rules",
+        "database_impl_line": 92,
+        "database_impl_uses_trait_default_constant": true,
+        "file_sha256": "cd1ec5323bb961d13bc2a5b0a4f655d38f57799a0e4fdfc79498bf7d3cfdef77"
+      },
+      "after": {
+        "path": "backend/crates/erp-procurement/src/repository/extensions/procurement_responsibility.rs",
+        "line": 12,
+        "declaration": "const PROCUREMENT_RESPONSIBILITY_RULES: &'static str = \"procurement_responsibility_rules\";",
+        "value": "procurement_responsibility_rules",
+        "database_impl_line": 24,
+        "database_impl_uses_trait_default_constant": true,
+        "file_sha256": "5de30e38d9cb7792dca3de8a9b3f185ff5d5a1f3669ec6f59094bbfeb646092b"
+      },
+      "ensure_collection_expression": "<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES"
+    },
+    "work_items": {
+      "before": {
+        "path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+        "line": 16,
+        "declaration": "const WORK_ITEMS: &'static str = \"work_items\";",
+        "value": "work_items",
+        "database_impl_line": 36,
+        "database_impl_uses_trait_default_constant": true,
+        "file_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630"
+      },
+      "after": {
+        "path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+        "line": 16,
+        "declaration": "const WORK_ITEMS: &'static str = \"work_items\";",
+        "value": "work_items",
+        "database_impl_line": 36,
+        "database_impl_uses_trait_default_constant": true,
+        "file_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630"
+      },
+      "ensure_collection_expression": "WORK_ITEMS -> <mongodb::Database as WorkItemExt>::WORK_ITEMS"
+    }
+  },
+  "registration_review": {
+    "before_global": {
+      "path": "backend/database/src/indexes/mod.rs",
+      "function": {
+        "line": 25,
+        "source": "fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {\n    erp_identity::indexes::ensure(db).await?;\n    erp_audit::indexes::ensure(db).await?;\n    erp_workflow::indexes::ensure(db).await?;\n    erp_support::indexes::ensure(db).await?;\n    erp_catalog::indexes::ensure(db).await?;\n    erp_contract::indexes::ensure(db).await?;\n    erp_finance::indexes::ensure(db).await?;\n    erp_customer::indexes::ensure(db).await?;\n    fulfillment::ensure(db).await?;\n    integration_ops::ensure(db).await?;\n    erp_inventory::indexes::ensure(db).await?;\n    erp_import::indexes::ensure(db).await?;\n    erp_party::indexes::ensure(db).await?;\n    procurement_responsibility::ensure(db).await?;\n    purchase_order::ensure(db).await?;\n    returns::ensure(db).await?;\n    erp_sales::indexes::ensure(db).await?;\n    erp_supplier::indexes::ensure(db).await?;\n    supplier_api::ensure(db).await?;\n    supplier_offering::ensure(db).await?;\n    supplier_fulfillment::ensure(db).await?;\n    supplier_settlement::ensure(db).await?;\n    erp_warehouse::indexes::ensure(db).await?;\n    Ok(())\n}"
+      },
+      "sha256": "53838a2d94ee02f26cda01b291e902e398a400d0b631f94231caef644c9827b6",
+      "calls_in_order": [
+        "erp_identity::indexes",
+        "erp_audit::indexes",
+        "erp_workflow::indexes",
+        "erp_support::indexes",
+        "erp_catalog::indexes",
+        "erp_contract::indexes",
+        "erp_finance::indexes",
+        "erp_customer::indexes",
+        "fulfillment",
+        "integration_ops",
+        "erp_inventory::indexes",
+        "erp_import::indexes",
+        "erp_party::indexes",
+        "procurement_responsibility",
+        "purchase_order",
+        "returns",
+        "erp_sales::indexes",
+        "erp_supplier::indexes",
+        "supplier_api",
+        "supplier_offering",
+        "supplier_fulfillment",
+        "supplier_settlement",
+        "erp_warehouse::indexes"
+      ]
+    },
+    "after_global": {
+      "path": "backend/database/src/indexes/mod.rs",
+      "function": {
+        "line": 23,
+        "source": "fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {\n    erp_identity::indexes::ensure(db).await?;\n    erp_audit::indexes::ensure(db).await?;\n    erp_workflow::indexes::ensure(db).await?;\n    erp_support::indexes::ensure(db).await?;\n    erp_catalog::indexes::ensure(db).await?;\n    erp_contract::indexes::ensure(db).await?;\n    erp_finance::indexes::ensure(db).await?;\n    erp_customer::indexes::ensure(db).await?;\n    fulfillment::ensure(db).await?;\n    integration_ops::ensure(db).await?;\n    erp_inventory::indexes::ensure(db).await?;\n    erp_import::indexes::ensure(db).await?;\n    erp_party::indexes::ensure(db).await?;\n    erp_procurement::indexes::ensure(db).await?;\n    returns::ensure(db).await?;\n    erp_sales::indexes::ensure(db).await?;\n    erp_supplier::indexes::ensure(db).await?;\n    supplier_api::ensure(db).await?;\n    supplier_offering::ensure(db).await?;\n    supplier_fulfillment::ensure(db).await?;\n    supplier_settlement::ensure(db).await?;\n    erp_warehouse::indexes::ensure(db).await?;\n    Ok(())\n}"
+      },
+      "sha256": "3d9efe539dc721b393e4225078b8ba1e6c79887c59c8d8d75b37327259e41a91",
+      "calls_in_order": [
+        "erp_identity::indexes",
+        "erp_audit::indexes",
+        "erp_workflow::indexes",
+        "erp_support::indexes",
+        "erp_catalog::indexes",
+        "erp_contract::indexes",
+        "erp_finance::indexes",
+        "erp_customer::indexes",
+        "fulfillment",
+        "integration_ops",
+        "erp_inventory::indexes",
+        "erp_import::indexes",
+        "erp_party::indexes",
+        "erp_procurement::indexes",
+        "returns",
+        "erp_sales::indexes",
+        "erp_supplier::indexes",
+        "supplier_api",
+        "supplier_offering",
+        "supplier_fulfillment",
+        "supplier_settlement",
+        "erp_warehouse::indexes"
+      ]
+    },
+    "after_procurement_aggregator": {
+      "path": "backend/crates/erp-procurement/src/indexes/mod.rs",
+      "file_sha256": "bdf79a885376c477b42281bc7b7f128ff64c34095d5c87f78fa25c4165a33864",
+      "source": "//! 采购集合索引注册。\n\nmod procurement_responsibility;\nmod purchase_order;\n\n/// 按原相对顺序注册采购责任规则与采购单索引。\n///\n/// # Errors\n/// 数据违反唯一约束或 MongoDB 索引操作失败时返回错误。\npub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {\n    procurement_responsibility::ensure(db).await?;\n    purchase_order::ensure(db).await\n}\n",
+      "calls_in_order": [
+        "procurement_responsibility",
+        "purchase_order"
+      ]
+    },
+    "after_expanded_calls_equal_before": true,
+    "after_expanded_calls": [
+      "erp_identity::indexes",
+      "erp_audit::indexes",
+      "erp_workflow::indexes",
+      "erp_support::indexes",
+      "erp_catalog::indexes",
+      "erp_contract::indexes",
+      "erp_finance::indexes",
+      "erp_customer::indexes",
+      "fulfillment",
+      "integration_ops",
+      "erp_inventory::indexes",
+      "erp_import::indexes",
+      "erp_party::indexes",
+      "procurement_responsibility",
+      "purchase_order",
+      "returns",
+      "erp_sales::indexes",
+      "erp_supplier::indexes",
+      "supplier_api",
+      "supplier_offering",
+      "supplier_fulfillment",
+      "supplier_settlement",
+      "erp_warehouse::indexes"
+    ],
+    "procurement_registration_count_before": 1,
+    "procurement_registration_count_after_expanded": 1,
+    "old_index_path_exists_after": false,
+    "workflow_aggregator": {
+      "symbol": "ensure",
+      "before_path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+      "before_line": 18,
+      "after_line": 18,
+      "source_equal": true,
+      "before_sha256": "991d0a3219d9edcc9247e6ff68c7b4b7757e1b79557231686bef0e6209d03ad3",
+      "after_sha256": "991d0a3219d9edcc9247e6ff68c7b4b7757e1b79557231686bef0e6209d03ad3",
+      "before_source": "fn ensure(db: &Database) -> Result<()> {\n    approval_integration::ensure(db).await?;\n    bpm::ensure(db).await?;\n    document_registry::ensure(db).await?;\n    work_item::ensure(db).await?;\n    Ok(())\n}",
+      "after_source": "fn ensure(db: &Database) -> Result<()> {\n    approval_integration::ensure(db).await?;\n    bpm::ensure(db).await?;\n    document_registry::ensure(db).await?;\n    work_item::ensure(db).await?;\n    Ok(())\n}",
+      "ordered_string_tokens_equal": true,
+      "ordered_string_tokens": []
+    },
+    "error_order_contract": "Global calls remain sequential. New procurement ensure awaits responsibility with ?, then returns purchase_order ensure; global awaits that result with ?. Expanding the crate call preserves first-error propagation and ordering relative to party and returns."
+  },
+  "supplemental_unchanged_files": [
+    {
+      "before_path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+      "after_sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+      "before_bytes": 1739,
+      "after_bytes": 1739
+    },
+    {
+      "before_path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "1e502ee1f1f051c59dc364d7cde152962a4686249620a8e7e0c46d56c2ca6e13",
+      "after_sha256": "1e502ee1f1f051c59dc364d7cde152962a4686249620a8e7e0c46d56c2ca6e13",
+      "before_bytes": 559,
+      "after_bytes": 559
+    },
+    {
+      "before_path": "backend/crates/entity-core/src/lib.rs",
+      "after_path": "backend/crates/entity-core/src/lib.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "1a1b77eee35d3d9f229865773bd789d6a48ed15d278cb8d70da6d9f1b5b58184",
+      "after_sha256": "1a1b77eee35d3d9f229865773bd789d6a48ed15d278cb8d70da6d9f1b5b58184",
+      "before_bytes": 1881,
+      "after_bytes": 1881
+    },
+    {
+      "before_path": "backend/crates/erp-workflow/src/repository/mod.rs",
+      "after_path": "backend/crates/erp-workflow/src/repository/mod.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "26289add349f5d56e24ce36337075667c41d96d6763364b3a1c13a01c075b7a2",
+      "after_sha256": "26289add349f5d56e24ce36337075667c41d96d6763364b3a1c13a01c075b7a2",
+      "before_bytes": 674,
+      "after_bytes": 674
+    },
+    {
+      "before_path": "backend/crates/erp-workflow/src/repository/extensions/mod.rs",
+      "after_path": "backend/crates/erp-workflow/src/repository/extensions/mod.rs",
+      "moved": false,
+      "byte_equal": true,
+      "before_sha256": "dab345215778f56c02200bc95cc50ef24f5ddd763591f73722ab297e411a72bd",
+      "after_sha256": "dab345215778f56c02200bc95cc50ef24f5ddd763591f73722ab297e411a72bd",
+      "before_bytes": 289,
+      "after_bytes": 289
+    }
+  ],
+  "items": [
+    {
+      "raw_needs_review_index": 0,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct UserID needs review",
+        "source": {
+          "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+          "line": 7
+        }
+      },
+      "counterpart_raw_needs_review_index": 23,
+      "counterpart_source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 7
+      },
+      "symbol": "UserID",
+      "before_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "after_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "file_pair_ref": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "definition_ref": "dto_definitions.UserID",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 1,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct Account needs review",
+        "source": {
+          "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+          "line": 11
+        }
+      },
+      "counterpart_raw_needs_review_index": 24,
+      "counterpart_source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 11
+      },
+      "symbol": "Account",
+      "before_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "after_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "file_pair_ref": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "definition_ref": "dto_definitions.Account",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 2,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandFingerprint needs review",
+        "source": {
+          "path": "backend/crates/application-core/src/command.rs",
+          "line": 13
+        }
+      },
+      "counterpart_raw_needs_review_index": 25,
+      "counterpart_source": {
+        "path": "backend/crates/application-core/src/command.rs",
+        "line": 13
+      },
+      "symbol": "CommandFingerprint",
+      "before_path": "backend/crates/application-core/src/command.rs",
+      "after_path": "backend/crates/application-core/src/command.rs",
+      "file_pair_ref": "backend/crates/application-core/src/command.rs",
+      "definition_ref": "dto_definitions.CommandFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 3,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct IdempotencyKey needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 21
+        }
+      },
+      "counterpart_raw_needs_review_index": 26,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 21
+      },
+      "symbol": "IdempotencyKey",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.IdempotencyKey",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 4,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandScope needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 143
+        }
+      },
+      "counterpart_raw_needs_review_index": 27,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 143
+      },
+      "symbol": "CommandScope",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.CommandScope",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 5,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandDigest needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 185
+        }
+      },
+      "counterpart_raw_needs_review_index": 28,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 185
+      },
+      "symbol": "CommandDigest",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.CommandDigest",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 6,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ParticipantId needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/mod.rs",
+          "line": 228
+        }
+      },
+      "counterpart_raw_needs_review_index": 29,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "line": 228
+      },
+      "symbol": "ParticipantId",
+      "before_path": "backend/crates/bpm/src/model/mod.rs",
+      "after_path": "backend/crates/bpm/src/model/mod.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/mod.rs",
+      "definition_ref": "dto_definitions.ParticipantId",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 7,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ContentHmac needs review",
+        "source": {
+          "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+          "line": 56
+        }
+      },
+      "counterpart_raw_needs_review_index": 33,
+      "counterpart_source": {
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "line": 56
+      },
+      "symbol": "ContentHmac",
+      "before_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "after_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "file_pair_ref": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "definition_ref": "dto_definitions.ContentHmac",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 8,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_page",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 34,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_document_approval_owner_page",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_document_approval_owner_page",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 9,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_type_page",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 35,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_document_approval_owner_type_page",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_document_approval_owner_type_page",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 10,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_fulfillment_queue",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 36,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_fulfillment_queue",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_fulfillment_queue",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 11,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_sales_invoice_execution_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 37,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_sales_invoice_execution_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_sales_invoice_execution_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 12,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_object_type",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 38,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_object_type",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_object_type",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 13,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_fulfillment_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 39,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_fulfillment_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_fulfillment_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 14,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_customer_acceptance_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 40,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_customer_acceptance_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_customer_acceptance_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 15,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_payment_execution_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 41,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_payment_execution_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_payment_execution_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 16,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_approval_execution",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 42,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_approval_execution",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_approval_execution",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 17,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_list",
+        "source": {
+          "path": "backend/database/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 30,
+      "counterpart_source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "idx_procurement_responsibility_list",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.idx_procurement_responsibility_list",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 18,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_owner",
+        "source": {
+          "path": "backend/database/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 31,
+      "counterpart_source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "idx_procurement_responsibility_owner",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.idx_procurement_responsibility_owner",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 19,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_procurement_responsibility_active_selector",
+        "source": {
+          "path": "backend/database/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 32,
+      "counterpart_source": {
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "uk_procurement_responsibility_active_selector",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.uk_procurement_responsibility_active_selector",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 20,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ElectronicRecipientFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+          "line": 21
+        }
+      },
+      "counterpart_raw_needs_review_index": 43,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+        "line": 21
+      },
+      "symbol": "ElectronicRecipientFingerprint",
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "definition_ref": "dto_definitions.ElectronicRecipientFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 21,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ServiceRecipientFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+          "line": 30
+        }
+      },
+      "counterpart_raw_needs_review_index": 44,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "line": 30
+      },
+      "symbol": "ServiceRecipientFingerprint",
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "definition_ref": "dto_definitions.ServiceRecipientFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 22,
+      "raw_entry": {
+        "side": "before",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ServiceLocationFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+          "line": 64
+        }
+      },
+      "counterpart_raw_needs_review_index": 45,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "line": 64
+      },
+      "symbol": "ServiceLocationFingerprint",
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "definition_ref": "dto_definitions.ServiceLocationFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 23,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct UserID needs review",
+        "source": {
+          "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+          "line": 7
+        }
+      },
+      "counterpart_raw_needs_review_index": 0,
+      "counterpart_source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 7
+      },
+      "symbol": "UserID",
+      "before_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "after_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "file_pair_ref": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "definition_ref": "dto_definitions.UserID",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 24,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct Account needs review",
+        "source": {
+          "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+          "line": 11
+        }
+      },
+      "counterpart_raw_needs_review_index": 1,
+      "counterpart_source": {
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "line": 11
+      },
+      "symbol": "Account",
+      "before_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "after_path": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "file_pair_ref": "backend/apps/web-api/src/core/extractor/mod.rs",
+      "definition_ref": "dto_definitions.Account",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 25,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandFingerprint needs review",
+        "source": {
+          "path": "backend/crates/application-core/src/command.rs",
+          "line": 13
+        }
+      },
+      "counterpart_raw_needs_review_index": 2,
+      "counterpart_source": {
+        "path": "backend/crates/application-core/src/command.rs",
+        "line": 13
+      },
+      "symbol": "CommandFingerprint",
+      "before_path": "backend/crates/application-core/src/command.rs",
+      "after_path": "backend/crates/application-core/src/command.rs",
+      "file_pair_ref": "backend/crates/application-core/src/command.rs",
+      "definition_ref": "dto_definitions.CommandFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 26,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct IdempotencyKey needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 21
+        }
+      },
+      "counterpart_raw_needs_review_index": 3,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 21
+      },
+      "symbol": "IdempotencyKey",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.IdempotencyKey",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 27,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandScope needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 143
+        }
+      },
+      "counterpart_raw_needs_review_index": 4,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 143
+      },
+      "symbol": "CommandScope",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.CommandScope",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 28,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct CommandDigest needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/command_identity.rs",
+          "line": 185
+        }
+      },
+      "counterpart_raw_needs_review_index": 5,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "line": 185
+      },
+      "symbol": "CommandDigest",
+      "before_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "after_path": "backend/crates/bpm/src/model/command_identity.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/command_identity.rs",
+      "definition_ref": "dto_definitions.CommandDigest",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 29,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ParticipantId needs review",
+        "source": {
+          "path": "backend/crates/bpm/src/model/mod.rs",
+          "line": 228
+        }
+      },
+      "counterpart_raw_needs_review_index": 6,
+      "counterpart_source": {
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "line": 228
+      },
+      "symbol": "ParticipantId",
+      "before_path": "backend/crates/bpm/src/model/mod.rs",
+      "after_path": "backend/crates/bpm/src/model/mod.rs",
+      "file_pair_ref": "backend/crates/bpm/src/model/mod.rs",
+      "definition_ref": "dto_definitions.ParticipantId",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 30,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_list",
+        "source": {
+          "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 17,
+      "counterpart_source": {
+        "path": "backend/database/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "idx_procurement_responsibility_list",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.idx_procurement_responsibility_list",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 31,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection/uniqueness for idx_procurement_responsibility_owner",
+        "source": {
+          "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 18,
+      "counterpart_source": {
+        "path": "backend/database/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "idx_procurement_responsibility_owner",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.idx_procurement_responsibility_owner",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 32,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_procurement_responsibility_active_selector",
+        "source": {
+          "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 19,
+      "counterpart_source": {
+        "path": "backend/database/src/indexes/procurement_responsibility.rs"
+      },
+      "symbol": "uk_procurement_responsibility_active_selector",
+      "before_path": "backend/database/src/indexes/procurement_responsibility.rs",
+      "after_path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+      "file_pair_ref": "backend/database/src/indexes/procurement_responsibility.rs",
+      "definition_ref": "index_definitions.uk_procurement_responsibility_active_selector",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 33,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ContentHmac needs review",
+        "source": {
+          "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+          "line": 56
+        }
+      },
+      "counterpart_raw_needs_review_index": 7,
+      "counterpart_source": {
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "line": 56
+      },
+      "symbol": "ContentHmac",
+      "before_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "after_path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "file_pair_ref": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+      "definition_ref": "dto_definitions.ContentHmac",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 34,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_page",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 8,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_document_approval_owner_page",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_document_approval_owner_page",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 35,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_document_approval_owner_type_page",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 9,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_document_approval_owner_type_page",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_document_approval_owner_type_page",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 36,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index idx_work_items_fulfillment_queue",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 10,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "idx_work_items_fulfillment_queue",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.idx_work_items_fulfillment_queue",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 37,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_sales_invoice_execution_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 11,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_sales_invoice_execution_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_sales_invoice_execution_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 38,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_object_type",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 12,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_object_type",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_object_type",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 39,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_fulfillment_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 13,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_fulfillment_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_fulfillment_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 40,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_customer_acceptance_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 14,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_customer_acceptance_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_customer_acceptance_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 41,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_open_payment_execution_object",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 15,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_open_payment_execution_object",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_open_payment_execution_object",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 42,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "indexes",
+        "message": "Unresolved collection for direct index uk_work_items_approval_execution",
+        "source": {
+          "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+        }
+      },
+      "counterpart_raw_needs_review_index": 16,
+      "counterpart_source": {
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs"
+      },
+      "symbol": "uk_work_items_approval_execution",
+      "before_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "after_path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "file_pair_ref": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+      "definition_ref": "index_definitions.uk_work_items_approval_execution",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual index builder, ordered string tokens, MongoDB collection trait constant, helper options, and live registration-source review; no database execution."
+    },
+    {
+      "raw_needs_review_index": 43,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ElectronicRecipientFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+          "line": 21
+        }
+      },
+      "counterpart_raw_needs_review_index": 20,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+        "line": 21
+      },
+      "symbol": "ElectronicRecipientFingerprint",
+      "before_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+      "definition_ref": "dto_definitions.ElectronicRecipientFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 44,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ServiceRecipientFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+          "line": 30
+        }
+      },
+      "counterpart_raw_needs_review_index": 21,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "line": 30
+      },
+      "symbol": "ServiceRecipientFingerprint",
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "definition_ref": "dto_definitions.ServiceRecipientFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    },
+    {
+      "raw_needs_review_index": 45,
+      "raw_entry": {
+        "side": "after",
+        "status": "needs_review",
+        "category": "dto",
+        "message": "Tuple/unit serialized struct ServiceLocationFingerprint needs review",
+        "source": {
+          "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+          "line": 64
+        }
+      },
+      "counterpart_raw_needs_review_index": 22,
+      "counterpart_source": {
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "line": 64
+      },
+      "symbol": "ServiceLocationFingerprint",
+      "before_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "after_path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "file_pair_ref": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+      "definition_ref": "dto_definitions.ServiceLocationFingerprint",
+      "review_status": "source_reviewed_no_observed_drift",
+      "raw_status_retained": "needs_review",
+      "treatment": "Manual newtype/serde source review and exact file-byte comparison."
+    }
+  ],
+  "verification": {
+    "all_46_have_exactly_one_counterpart": true,
+    "nine_mapped_files_byte_equal": true,
+    "index_function_checks": 17,
+    "all_index_functions_and_ordered_string_tokens_equal": true,
+    "registration_expansion_preserves_order": true,
+    "raw_bytes_unchanged": true,
+    "source_files_modified_by_review": false,
+    "cargo_run": false,
+    "real_database_verified": false
+  },
+  "source_commit_after": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "sealed_confirmation": {
+    "verified_at_utc": "2026-09-07T03:40:40.673158+00:00",
+    "sealed_capture_directory": "/private/tmp/erp-procurement11-contract-sealed",
+    "final_raw_and_sealed_raw_byte_equal": true,
+    "final_transaction_and_sealed_transaction_byte_equal": true,
+    "final_vs_sealed_inventory_changes": [
+      {
+        "side": "after",
+        "path": "backend/crates/erp-read-models/src/workbench/purchase_review_brief.rs",
+        "final_sha256": "7fa740938747cbf28b437e5f5816f9a4eae33bf6ee971355b42acbaac8a5cfd6",
+        "sealed_sha256": "9d1476eae9c5c46a08f7af540f0625e119212b256b5742e1a1a030fcdf166e03"
+      }
+    ],
+    "inventory_changes_outside_reviewed_paths": true,
+    "source_fingerprint_checks": [
+      {
+        "side": "before",
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/apps/web-api/src/core/extractor/mod.rs",
+        "sha256": "49086f15fb2a719311660aff64f09ca262fa481168188518b23c4f631d46d196",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/application-core/src/command.rs",
+        "sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/application-core/src/command.rs",
+        "sha256": "606633a4c45560ad8b8994aa6f6d933a4264e1558b6f7ec2111b8e5837adfa73",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/bpm/src/model/command_identity.rs",
+        "sha256": "bbd04f45ebd2f64227b909d9683efea5b3b4d0e2eb34171623255366573daa86",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/bpm/src/model/mod.rs",
+        "sha256": "70abd1bfc7d40e3d488fde8d6d742d90aa58070d7bb2190efc97ab876c101153",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-support/src/entity/file_asset/entity.rs",
+        "sha256": "67836e971b43a794d211542b4f0b6618444f89f54b64f5dcebfe46d35d2492e8",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+        "sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-workflow/src/indexes/work_item.rs",
+        "sha256": "defee8bf4f6c512bf5558c1b5499ef87a5115ca01d23f1aba9021219fd7189c7",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/database/src/indexes/procurement_responsibility.rs",
+        "sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/indexes/procurement_responsibility.rs",
+        "sha256": "32c8870e8069afffed9c8005b36fd2ed0358dcba430328c49e713f09dc8d71bf",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+        "sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/entities/src/fulfillment/electronic_delivery_draft.rs",
+        "sha256": "b3b6f1802cd0115eb6626278e1ab3fa9fdbcf81ab47bc272a94f5e217acc1db2",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/entities/src/fulfillment/service_fulfillment_draft.rs",
+        "sha256": "bb9c58229ed45f2eb1f56b9bcac6da21d7f0c400b36bb45f3d184d22669ebf3c",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+        "sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-workflow/src/repository/extensions/work_item.rs",
+        "sha256": "a2ebfd5961a041d98cbf80ea8a5b26237a42285ad7dade2793df9ea010cdd630",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+        "sha256": "1e502ee1f1f051c59dc364d7cde152962a4686249620a8e7e0c46d56c2ca6e13",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-workflow/src/indexes/mod.rs",
+        "sha256": "1e502ee1f1f051c59dc364d7cde152962a4686249620a8e7e0c46d56c2ca6e13",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/entity-core/src/lib.rs",
+        "sha256": "1a1b77eee35d3d9f229865773bd789d6a48ed15d278cb8d70da6d9f1b5b58184",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/entity-core/src/lib.rs",
+        "sha256": "1a1b77eee35d3d9f229865773bd789d6a48ed15d278cb8d70da6d9f1b5b58184",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-workflow/src/repository/mod.rs",
+        "sha256": "26289add349f5d56e24ce36337075667c41d96d6763364b3a1c13a01c075b7a2",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-workflow/src/repository/mod.rs",
+        "sha256": "26289add349f5d56e24ce36337075667c41d96d6763364b3a1c13a01c075b7a2",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/crates/erp-workflow/src/repository/extensions/mod.rs",
+        "sha256": "dab345215778f56c02200bc95cc50ef24f5ddd763591f73722ab297e411a72bd",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-workflow/src/repository/extensions/mod.rs",
+        "sha256": "dab345215778f56c02200bc95cc50ef24f5ddd763591f73722ab297e411a72bd",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/database/src/repository/extensions/procurement_responsibility.rs",
+        "sha256": "cd1ec5323bb961d13bc2a5b0a4f655d38f57799a0e4fdfc79498bf7d3cfdef77",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/repository/extensions/procurement_responsibility.rs",
+        "sha256": "5de30e38d9cb7792dca3de8a9b3f185ff5d5a1f3669ec6f59094bbfeb646092b",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "before",
+        "path": "backend/database/src/indexes/mod.rs",
+        "sha256": "53838a2d94ee02f26cda01b291e902e398a400d0b631f94231caef644c9827b6",
+        "sealed_inventory_matches": true,
+        "source_commit": "3f5e8c0daefc5a234f30e496b850cbcbb7a7e8ba",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/database/src/indexes/mod.rs",
+        "sha256": "3d9efe539dc721b393e4225078b8ba1e6c79887c59c8d8d75b37327259e41a91",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      },
+      {
+        "side": "after",
+        "path": "backend/crates/erp-procurement/src/indexes/mod.rs",
+        "sha256": "bdf79a885376c477b42281bc7b7f128ff64c34095d5c87f78fa25c4165a33864",
+        "sealed_inventory_matches": true,
+        "source_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+        "source_commit_bytes_match": true
+      }
+    ],
+    "all_reviewed_files_match_sealed_inventory_and_source_commits": true
+  }
+}

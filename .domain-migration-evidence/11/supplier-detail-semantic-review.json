@@ -1,0 +1,83 @@
+{
+  "scope": "phase11 extra supplier fulfillment detail read composition",
+  "normalizations": [
+    "whitespace",
+    "load_order receiver delegated to existing injected SupplierFulfillmentService",
+    "supplier name helper module path",
+    "item view DTO import path",
+    "read-only InvestigationEvidenceRecord accessors; string clone becomes borrowed str to_string; getter bodies individually checked as direct field reads"
+  ],
+  "function_count": 16,
+  "functions": [
+    {
+      "symbol": "supplier_fulfillment_order_detail",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "project_supplier_order_actions",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "refund_views_for_order",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "supplier_order_blocker",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "block_supplier_order_domain_actions",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "investigation_evidence_view",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "supplier_fulfillment_order_list",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "load_order",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "item_view",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_task_actor_eligible",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "capability_for_action",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_replay_safe",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "verified_terminal_evidence",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "parse_investigation_evidence",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "ensure_capability",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    },
+    {
+      "symbol": "refund_fact_view",
+      "body_equal_after_path_receiver_accessor_and_whitespace_normalization": true
+    }
+  ],
+  "original_false_expression_retained": true,
+  "dto_definitions_unchanged": "wire fields/types/serde preserved; only SupplierOrderAllowedAction::as_str visibility widened",
+  "historical_test_files_touched": false,
+  "cargo_not_run": "root owns workspace validation",
+  "investigation_evidence_record_fields_visibility_types_and_order_equal_to_original": true,
+  "investigation_evidence_getters_direct_read_only": true
+}

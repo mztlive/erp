@@ -1,0 +1,135 @@
+[
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/change/submit.rs",
+    "raw_sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b",
+    "current_sha256": "4b0fb97db7be7ea7757721608f729fd06a8391a58800d25829c96f1a50c6e46b",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "raw_sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8",
+    "current_sha256": "a0ea2f038d117e213743c5eb3f77eef68f97d494eb9a4b16a042960c907e42e8",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/draft_edit.rs",
+    "raw_sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc",
+    "current_sha256": "0f14e9ec5fc489adf854fe337588275fbd49431a724e5fbdd8e65987fd6869fc",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "raw_sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0",
+    "current_sha256": "5dfd4b111101fbb737aa1b84f58cd863ab2977e83ac9430edec62aeebf4144d0",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/start_approval.rs",
+    "raw_sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497",
+    "current_sha256": "27dcdd460334bb24cc7ed5a8a4929abe772badce370fc63f93ab61886bb81497",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/submission.rs",
+    "raw_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579",
+    "current_sha256": "22b59ecb9a6b4580dd589a4a0c26edf3e1c669a9d2e6b682a7ca76b09a13a579",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/void_order.rs",
+    "raw_sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a",
+    "current_sha256": "a0855e4387865749edf2b59952cc21ac3c7cec072a7e7aea2b6c045be1cf002a",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+    "raw_sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0",
+    "current_sha256": "fa07c7006e0d7e88d503b2fb1b4780b7cfa802b357edde0b3857ce24165895b0",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "raw_sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad",
+    "current_sha256": "68785483153102f8cbb04a5fe472e6741bbecc9c872d21e731c7b2844a9e4cad",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "raw_sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075",
+    "current_sha256": "61148a7040deacf8b52ec1e8881cc552411c510b6adda2584d41fb46ed940075",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create/stock_posting.rs",
+    "raw_sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a",
+    "current_sha256": "8e2b593826dd7d145a44c2c7c9e1a266e77b9f636bea8ffe7347882a1510a31a",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "raw_sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5",
+    "current_sha256": "a8fe1d438eb56c7aee5656b12feef959fd7239093a10a094b73bbd3b92fb91c5",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+    "raw_sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3",
+    "current_sha256": "00266549fc8505996a59564e771a901e8c56cc35fbd5c75ad409c656418f58a3",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+    "raw_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb",
+    "current_sha256": "5ea61f20ca1ee5cd99ded3e135b1e09c98034985ffc056eb1be6349bdc15baeb",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "raw_sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84",
+    "current_sha256": "3a510367fb3435f99778fc365703d5adf0660541771d784299ae0aef4a78ce84",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/cancel_approval.rs",
+    "raw_sha256": "da8380bb6f1064d5ca32de76a5606e8848be367b60041397e296aebb7ff02655",
+    "current_sha256": "da8380bb6f1064d5ca32de76a5606e8848be367b60041397e296aebb7ff02655",
+    "equal": true
+  },
+  {
+    "side": "before",
+    "source": "backend/services/src/purchase_order/change/effect.rs",
+    "raw_sha256": "d1a26626c60b6496e6854d78d51267ea37a276c008fd1778907603f06ce50def",
+    "current_sha256": "d1a26626c60b6496e6854d78d51267ea37a276c008fd1778907603f06ce50def",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/cancel_approval.rs",
+    "raw_sha256": "c9dc1ae9a178227b1ad99af5823b525ff79f612411ba30a9aab073e8fed325df",
+    "current_sha256": "c9dc1ae9a178227b1ad99af5823b525ff79f612411ba30a9aab073e8fed325df",
+    "equal": true
+  },
+  {
+    "side": "after",
+    "source": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+    "raw_sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8",
+    "current_sha256": "cf3c785b3265df6d2882921ab9757b6fbfed579042a142254695468b02a779f8",
+    "equal": true
+  }
+]

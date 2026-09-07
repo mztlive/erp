@@ -1,0 +1,22 @@
+{
+  "package": "erp-procurement",
+  "reverse_closure": [
+    "cli",
+    "database",
+    "entities",
+    "erp-processes",
+    "erp-procurement",
+    "erp-read-models",
+    "services",
+    "test-support",
+    "web-api"
+  ],
+  "direct_dependents": [
+    "database",
+    "entities",
+    "erp-processes",
+    "erp-read-models",
+    "services",
+    "web-api"
+  ]
+}

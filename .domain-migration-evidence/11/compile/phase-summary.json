@@ -1,0 +1,26 @@
+{
+  "phase": "11",
+  "code_commit": "0a297ab00d29b28047e05f780b4815c0a5456a2f",
+  "purpose": "采购内部等价修改时销售和财务的编译隔离",
+  "mode": "check",
+  "sample_count": 5,
+  "median_seconds": 4.440965832909569,
+  "domain_fresh_in_all_samples": {
+    "erp-sales": true,
+    "erp-finance": true
+  },
+  "dirty_packages": [
+    "database",
+    "entities",
+    "erp-processes",
+    "erp-procurement",
+    "erp-read-models",
+    "services",
+    "web-api"
+  ],
+  "source_restored": true,
+  "noop_all_business_units_fresh": true,
+  "evidence": "compile/procurement-check",
+  "interpretation": "补充隔离探针不计入最终Customer/Sales/Finance三个场景的收益阈值；阶段17统一判定性能。",
+  "real_database_verified": false
+}

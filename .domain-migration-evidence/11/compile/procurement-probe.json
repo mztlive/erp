@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "probes": [
+    {
+      "id": "procurement",
+      "baseline_path": "entities/src/sales_order/procurement.rs",
+      "final_path": "crates/erp-procurement/src/entity/purchase_order/coverage_summary.rs",
+      "baseline_package": "entities",
+      "final_package": "erp-procurement",
+      "symbol": "coverage_progress",
+      "before": ".round_dp(6)",
+      "after": ".round_dp(6_u32)",
+      "equivalence": "round_dp参数的推断u32整数6与显式6_u32相同；不改精度或运算。本补充探针只验证采购变更时Sales/Finance Fresh，不计入阶段17三个性能场景。"
+    }
+  ]
+}

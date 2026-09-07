@@ -1,0 +1,29 @@
+{
+  "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
+  "files": [
+    {
+      "path": "fmt.log",
+      "raw_attachment": "fmt.log.raw.gz",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "dto-static-comparison.json",
+      "raw_attachment": "dto-static-comparison.json.raw.gz",
+      "raw_sha256": "3c562ab6bc4def1db5da95c39fd9fc1e627ac69735ee27ed61f78b933323630c",
+      "normalized_sha256": "a7b5af27b59a6e8eb3e95fbd5c49eaf30216eb52b2240f6010c53a735366e0a2"
+    },
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "91a3cc524da2d95330d4024382fb4ab68ecd9d9193715fdad77c9c48f33ee666",
+      "normalized_sha256": "5136b0aff0d847b3dd62371e129b1d4034ffc5643a8fd59cff7cef547165b600"
+    },
+    {
+      "path": "compile/procurement-check/noop/timings.html",
+      "raw_attachment": "compile/procurement-check/noop/timings.html.raw.gz",
+      "raw_sha256": "62408ced775766f51f5dda8d95eb57b8b81f594067d0509177584da64509658a",
+      "normalized_sha256": "91684b3c32f56afceb4e68b60273a07174dcb0767abe0db61ba944bbe6d0f6fd"
+    }
+  ]
+}

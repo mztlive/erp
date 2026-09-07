@@ -1,0 +1,370 @@
+[
+  {
+    "symbol": "create_from_basis",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "b119b35975c08292ec37f7d6f5189981254119bd1a13e485b7cfe3eef41ae749",
+    "after_body_sha256": "b119b35975c08292ec37f7d6f5189981254119bd1a13e485b7cfe3eef41ae749"
+  },
+  {
+    "symbol": "create_from_basis_in_transaction",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "08093caac9f14cfa6db4daea27ae7652a2491bc3010f567147a73d964c514392",
+    "after_body_sha256": "a6086062e79d984c9d32badfb6ecc068eca0dc159ffa868070afa513f626791f"
+  },
+  {
+    "symbol": "replay_creation",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "9b3eb43889e20d8d8b521ba026e7c560d7cbfdb290b7b79de41fe13f0873eb61",
+    "after_body_sha256": "0b2d72b8bb4592187440a62d7180655b7875a18f6355c1a197a2c6bef90d8e1b"
+  },
+  {
+    "symbol": "write_creation_receipt",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "09c3d8872aa21f57c76087313c339a0c894e3a3bef686a6a2ded7036b07506ef",
+    "after_body_sha256": "09c3d8872aa21f57c76087313c339a0c894e3a3bef686a6a2ded7036b07506ef"
+  },
+  {
+    "symbol": "write_prepared_draft",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "8cf3dae78a05c11ca70fc020e2eb9f6cb094c92ed7e75e55829a3265786f9dc5",
+    "after_body_sha256": "29a1cdcdccef370d63f4a032a7c7b102e85812e0477a709dae5f540945dc8b66"
+  },
+  {
+    "symbol": "resolve_target_warehouse",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "10e19b2008f10fb170c95f36e09d6dcb189caa3f161353002fcf1dcb3de33097",
+    "after_body_sha256": "fca9e795443324391752b867acdd0a6ba3c95bf5ef3a6f5c5167c8d806817b5d"
+  },
+  {
+    "symbol": "ensure_initial_purchase_order_owner",
+    "before_source": "backend/services/src/purchase_order/creation_basis/create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/creation_basis/create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "b4def31d376afc06ca265a3b6535d4207b687f1acc7ebc8f82e6a715f9863257",
+    "after_body_sha256": "6739ad7de2de2417a2249a5beb406441dfbf81d6774c696f42a580097cf85847"
+  },
+  {
+    "symbol": "create_from_sourcing",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "9af27ea2d77650fd285afb9c17655ac60070b2bf0ba9ef00b2b467671862a7ec",
+    "after_body_sha256": "9af27ea2d77650fd285afb9c17655ac60070b2bf0ba9ef00b2b467671862a7ec"
+  },
+  {
+    "symbol": "create_from_sourcing_in_transaction",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "da4a9f159c88aaea42c44b598ba12845c907beaa3c17dee734b7cce5d2ccd16c",
+    "after_body_sha256": "f9ffaafcb037cf780d267f62853c358d9d5f1b0c3b4abde5f5c3809424862917"
+  },
+  {
+    "symbol": "replay_sourcing",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "2c0e59e16afd6e5d6dda72e5206cc975bc1db97bfcc1f62465e1440e341c3c14",
+    "after_body_sha256": "15ff3946ea526d76f89d88281b50086ec5c532ba50acd00a2ed90f98e895cce6"
+  },
+  {
+    "symbol": "sourcing_receipt_work_item_status",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "7a9091ced828d4fc0f46c4d64b612aacbb8ee59a67a27dd1e6998bd14c24a99b",
+    "after_body_sha256": "7a9091ced828d4fc0f46c4d64b612aacbb8ee59a67a27dd1e6998bd14c24a99b"
+  },
+  {
+    "symbol": "sourcing_work_item_status",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "c9b6587b73b7d8f813ec3caf739743e119bf4471299b3cac08d393cff2b80e69",
+    "after_body_sha256": "c9b6587b73b7d8f813ec3caf739743e119bf4471299b3cac08d393cff2b80e69"
+  },
+  {
+    "symbol": "write_sourcing_receipt",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "fccacf4625b4bd47daf8275d6696c89a9c2d7f6340cf2094fbd4813fefa05618",
+    "after_body_sha256": "fccacf4625b4bd47daf8275d6696c89a9c2d7f6340cf2094fbd4813fefa05618"
+  },
+  {
+    "symbol": "create_stock_delivery_drafts",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "1a10a0f4455fb9f4845347a0acc350a6fd54c6efcce1eee3bc4336bb0735da51",
+    "after_body_sha256": "1a10a0f4455fb9f4845347a0acc350a6fd54c6efcce1eee3bc4336bb0735da51"
+  },
+  {
+    "symbol": "ensure_stock_delivery_for_warehouse",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "7f18a706f2766c9ec3e16fbff9a2299ce3ffd01d41b1000e2deed39bec648d50",
+    "after_body_sha256": "4739319ad22b231cf48558eeafa0a65b7269f90a9e6b6771ec171d4e3f1e96ba"
+  },
+  {
+    "symbol": "append_stock_delivery_lines",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "99a83bb8664c2a1d136905736817813c8238a8d401735de30c834d4426162891",
+    "after_body_sha256": "99a83bb8664c2a1d136905736817813c8238a8d401735de30c834d4426162891"
+  },
+  {
+    "symbol": "build_stock_delivery_lines",
+    "before_source": "backend/services/src/purchase_order/sourcing_create.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/sourcing_create.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "0432c4860837d56a9f161ab13a304be1ad44ddc8302f54065f01e5c76a8b2857",
+    "after_body_sha256": "0432c4860837d56a9f161ab13a304be1ad44ddc8302f54065f01e5c76a8b2857"
+  },
+  {
+    "symbol": "save_draft",
+    "before_source": "backend/services/src/purchase_order/draft_edit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "55f94d35c2b1a007949839f6514794db84c0383032578fbeca66360cfca4d34a",
+    "after_body_sha256": "55f94d35c2b1a007949839f6514794db84c0383032578fbeca66360cfca4d34a"
+  },
+  {
+    "symbol": "execute_save_draft_transaction",
+    "before_source": "backend/services/src/purchase_order/draft_edit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "febacc75b5fc299068d9faf951e889309c17ad2760ffc1853c3cfcdadcecf1a1",
+    "after_body_sha256": "febacc75b5fc299068d9faf951e889309c17ad2760ffc1853c3cfcdadcecf1a1"
+  },
+  {
+    "symbol": "save_draft_in_transaction",
+    "before_source": "backend/services/src/purchase_order/draft_edit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "833ed340a0791e128891bfcbe88c16d41526e56e6d4293d8f103828cc587af84",
+    "after_body_sha256": "833ed340a0791e128891bfcbe88c16d41526e56e6d4293d8f103828cc587af84"
+  },
+  {
+    "symbol": "replay_saved_draft",
+    "before_source": "backend/services/src/purchase_order/draft_edit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "03051655fa7ef060644fd876d769b91b8804e7610ccd89d4fafed22e4b1808c8",
+    "after_body_sha256": "4917110dc08dffd424dc8b5d5a4b752d52a092cdefdff7b3df2b071d689b0139"
+  },
+  {
+    "symbol": "recover_saved_draft",
+    "before_source": "backend/services/src/purchase_order/draft_edit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/draft_edit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "240f8c436f4cac04b64ccbdc14e5d41ae7aa2664aa7bcf82ca6f5af9b11c8df8",
+    "after_body_sha256": "240f8c436f4cac04b64ccbdc14e5d41ae7aa2664aa7bcf82ca6f5af9b11c8df8"
+  },
+  {
+    "symbol": "void_draft",
+    "before_source": "backend/services/src/purchase_order/void_order.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "b17352d0a220213f92a6974682866550923c5fb8f053fd759a70593fe1a1e4d5",
+    "after_body_sha256": "b17352d0a220213f92a6974682866550923c5fb8f053fd759a70593fe1a1e4d5"
+  },
+  {
+    "symbol": "execute_void_draft_transaction",
+    "before_source": "backend/services/src/purchase_order/void_order.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "be230a22e9e9b3fee09270100e336098951e58f00e4e7f965c9dfc3d9b21e2af",
+    "after_body_sha256": "be230a22e9e9b3fee09270100e336098951e58f00e4e7f965c9dfc3d9b21e2af"
+  },
+  {
+    "symbol": "void_draft_in_transaction",
+    "before_source": "backend/services/src/purchase_order/void_order.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "78dd6f7ead543c54291c1b7201070ee44917e083b014cef503ca63cb75b1e738",
+    "after_body_sha256": "78dd6f7ead543c54291c1b7201070ee44917e083b014cef503ca63cb75b1e738"
+  },
+  {
+    "symbol": "replay_void_draft",
+    "before_source": "backend/services/src/purchase_order/void_order.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "9d1750dcbf6a5976416fdaf11f98a0dee6684215e627eeadbd7e69f5324ef935",
+    "after_body_sha256": "833d483486f269e98c11832261feeefef7a6d4e61e369bb400fa46b205306a74"
+  },
+  {
+    "symbol": "recover_void_draft",
+    "before_source": "backend/services/src/purchase_order/void_order.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/void_order.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "4df3152779c33b4c1c37d850b31afa735121c008777063d2947f15615d826a93",
+    "after_body_sha256": "4df3152779c33b4c1c37d850b31afa735121c008777063d2947f15615d826a93"
+  },
+  {
+    "symbol": "submit",
+    "before_source": "backend/services/src/purchase_order/submission.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "e3e84118e09f53936bb09cc4b3e253070060ad7fdb6a09604a245672ad11d7c4",
+    "after_body_sha256": "4547812a22358377a963641732926c70743681d51cfce5434e057e04b9ade0cd"
+  },
+  {
+    "symbol": "replay_purchase_submit",
+    "before_source": "backend/services/src/purchase_order/submission.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "43b39b50acca1faa0257e8adc6ffba8d53ff760da692dcd2789022fa56840982",
+    "after_body_sha256": "76ff4da839756b055388d53119cf4cba636db3146565c270fcd23f73aade05d0"
+  },
+  {
+    "symbol": "recover_purchase_submit_start",
+    "before_source": "backend/services/src/purchase_order/submission.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/submission.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "48f8ce3455035ed0f1a76d948befce681445a2bb6845134f075c38c4de4b8966",
+    "after_body_sha256": "57b92e42bb147a5f79952464024bc1f983c70d9468ef4ab8e45bf09ac982b06c"
+  },
+  {
+    "symbol": "freeze_change_submission",
+    "before_source": "backend/services/src/purchase_order/change/submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "658e9ff2ddf376a9e4f512950e6bbc5be375f3c72ffe238b9e5cccd5dcfa71bb",
+    "after_body_sha256": "4eaed5c1197bb58716bad1e71ced4e51d19c1d263cf18445219c326f21f647fe"
+  },
+  {
+    "symbol": "recover_purchase_change_start",
+    "before_source": "backend/services/src/purchase_order/change/submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/change/submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "61293f378031f00293d9f9f2acc3950afbe840c9602b7e89c7a8b387c12ce742",
+    "after_body_sha256": "a4f57cf5c537e93c7a3dd0fe37ee6d6f91771d56a662937a76eaf3cfe2f41b28"
+  },
+  {
+    "symbol": "write_effective_change",
+    "before_source": "backend/services/src/purchase_order/change/effect.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/change/effect.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "ac9377aef94c72f469a12905c4e5d6315b4cf2307e1e9a2b0dbf7b0acaa1c48e",
+    "after_body_sha256": "ac9377aef94c72f469a12905c4e5d6315b4cf2307e1e9a2b0dbf7b0acaa1c48e"
+  },
+  {
+    "symbol": "persist_purchase_order_start",
+    "before_source": "backend/services/src/purchase_order/start_approval.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "fc732c0e73f355ba410e9c0bfd843c835c0b560fe62fd8424afb4b1c49a38f14",
+    "after_body_sha256": "fc732c0e73f355ba410e9c0bfd843c835c0b560fe62fd8424afb4b1c49a38f14"
+  },
+  {
+    "symbol": "replay_purchase_order_start_with_executor",
+    "before_source": "backend/services/src/purchase_order/start_approval.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "6aee71a640c0c43a7a0cd90b132bd87f4eb412643137c9d3cb6d20a49c3d4d0f",
+    "after_body_sha256": "6aee71a640c0c43a7a0cd90b132bd87f4eb412643137c9d3cb6d20a49c3d4d0f"
+  },
+  {
+    "symbol": "load_start_receipt",
+    "before_source": "backend/services/src/purchase_order/start_approval.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "16675aacfd66a64d27184d9b92d4c226ed5a39b66b10451789460c89a74fbd2d",
+    "after_body_sha256": "16675aacfd66a64d27184d9b92d4c226ed5a39b66b10451789460c89a74fbd2d"
+  },
+  {
+    "symbol": "persist_runtime_writes",
+    "before_source": "backend/services/src/purchase_order/start_approval.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/start_approval.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "b1474eaca24d936c068f66097a5add8892fc584aff4b2050bae6e46540ecba2d",
+    "after_body_sha256": "b1474eaca24d936c068f66097a5add8892fc584aff4b2050bae6e46540ecba2d"
+  },
+  {
+    "symbol": "submit_created_draft_in_session",
+    "before_source": "backend/services/src/purchase_order/create_submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "2389deb92b4066afdd5557d49f429d9793b562b7effdde90e2f23585bf53e103",
+    "after_body_sha256": "2389deb92b4066afdd5557d49f429d9793b562b7effdde90e2f23585bf53e103"
+  },
+  {
+    "symbol": "persist_created_order_start",
+    "before_source": "backend/services/src/purchase_order/create_submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "cfe3857cbbdbe84362319f11cdaf8c9e699e5db0965efcf188f008a9914a3f9f",
+    "after_body_sha256": "cfe3857cbbdbe84362319f11cdaf8c9e699e5db0965efcf188f008a9914a3f9f"
+  },
+  {
+    "symbol": "prepare_created_order_start",
+    "before_source": "backend/services/src/purchase_order/create_submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "af4206d3525edf303033c112b3449acf07938019c604d6a8f013c67fb0ed6cd2",
+    "after_body_sha256": "4e1720f0b6d05b03ab19c4f3e870d69ae85d87472f700ca9e85dd0cfc0a69bd5"
+  },
+  {
+    "symbol": "persist_frozen_created_order_start",
+    "before_source": "backend/services/src/purchase_order/create_submit.rs",
+    "after_source": "backend/crates/erp-processes/src/procure_to_pay/create_submit.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "8805b22a779e91c27b4fcb828759b78ad73287d0cf441d60acd7527083029bf7",
+    "after_body_sha256": "8805b22a779e91c27b4fcb828759b78ad73287d0cf441d60acd7527083029bf7"
+  },
+  {
+    "symbol": "identity",
+    "before_source": "backend/entities/src/purchase_order/command_receipt.rs",
+    "after_source": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "4355e5c26b959fbf58a387e046e526c75d0302ab14d57300ee5cfe30630a4cef",
+    "after_body_sha256": "4355e5c26b959fbf58a387e046e526c75d0302ab14d57300ee5cfe30630a4cef"
+  },
+  {
+    "symbol": "decode",
+    "before_source": "backend/entities/src/purchase_order/command_receipt.rs",
+    "after_source": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "6db348e684ca82736a7e703b806546633305a7f45af7fd84842b83468b7811d1",
+    "after_body_sha256": "6db348e684ca82736a7e703b806546633305a7f45af7fd84842b83468b7811d1"
+  },
+  {
+    "symbol": "encode_message",
+    "before_source": "backend/entities/src/purchase_order/command_receipt.rs",
+    "after_source": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "1ba256c24f349d6888659cffaa2226f16ecaadd0d41b39b1c083b6416125db45",
+    "after_body_sha256": "1ba256c24f349d6888659cffaa2226f16ecaadd0d41b39b1c083b6416125db45"
+  },
+  {
+    "symbol": "digest_parts",
+    "before_source": "backend/entities/src/purchase_order/command_receipt.rs",
+    "after_source": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "a473a6d89ff66aad63d8dc0a843e5b28726cdcd618d568f0b7a38ad57d82769b",
+    "after_body_sha256": "a473a6d89ff66aad63d8dc0a843e5b28726cdcd618d568f0b7a38ad57d82769b"
+  },
+  {
+    "symbol": "payload_fingerprint",
+    "before_source": "backend/entities/src/purchase_order/command_receipt.rs",
+    "after_source": "backend/crates/erp-procurement/src/entity/purchase_order/command_receipt.rs",
+    "body_equal_after_documented_normalization": true,
+    "before_body_sha256": "e0b431b2d35e0546810a8ed99ebf820c338f0cebf559f3981f5e5f3665c60347",
+    "after_body_sha256": "e0b431b2d35e0546810a8ed99ebf820c338f0cebf559f3981f5e5f3665c60347"
+  }
+]
