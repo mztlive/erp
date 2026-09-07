@@ -1,25 +1,16 @@
 //! 销售单最终通过：包装既有 `formalize_submission` 仓储端口。
 
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
-use database::{ReceivableExt, SalesOrderExt};
-use entities::receivable::{
-    AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
-    ReceivableEntryData, ReceivableEntryType,
-};
+use database::SalesOrderExt;
+
 use entities::sales_order::{
     procurement_responsibility_key, FormalRevisionContext, FormalRevisionIdentities,
     FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder,
     SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
-use erp_audit::AuditExt;
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::ids::{
-    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId,
-    WorkItemId,
-};
-use erp_core::money::Amount;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId, WorkItemId};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
@@ -27,10 +18,9 @@ use erp_workflow::DocumentRegistryExt;
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::adapter::{ensure_final_approve_formalize, sales_order_responsible_org_id};
-use super::dto::SalesOrderDetailView;
 use super::procurement::submission_procurement_inputs;
 use super::SalesOrderService;
 use crate::errors::{Error, Result};
@@ -39,7 +29,6 @@ use crate::procurement_responsibility::{
 };
 use crate::purchase_order::sync_procurement_tasks_for_sales_order;
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 struct ProcurementFormalizationPlan {
@@ -48,7 +37,7 @@ struct ProcurementFormalizationPlan {
 }
 
 /// 销售形式化事务需要一次性消费的完整写入上下文。
-struct FormalizedSubmissionWrite {
+pub struct FormalizedSubmissionWrite {
     db: Database,
     rbac: erp_identity::SharedRbacService,
     order_id: String,
@@ -57,53 +46,33 @@ struct FormalizedSubmissionWrite {
     aggregate: SalesOrderRevisionAggregate,
     procurement: Option<ProcurementFormalizationPlan>,
     procurement_items: Vec<WorkItem>,
-    audit: erp_audit::AuditLog,
     now: Instant,
 }
 
 impl SalesOrderService {
-    /// 最终通过并形式化已批准提交。
-    ///
-    /// 只包装既有 `repository formalize_submission`：先把销售单推进到
-    /// `EFFECTIVE` / `APPROVED`，再写入正式修订。
-    /// 不得 `$set` 绕过领域不变式，也不得按卡券运营节点写专用副作用分支。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回形式化后的销售单详情。
+    /// 准备最终通过的销售事实；重复形式化返回 `None`，由外层流程复用原回执。
     ///
     /// # 错误
-    /// 非审批中、缺少提交或仓储失败时返回错误。
-    #[tracing::instrument(
-        name = "sales_order.formalize_approved_submission",
-        skip_all,
-        fields(
-            layer = "service",
-            domain = "sales_order",
-            operation = "formalize_approved_submission"
-        )
-    )]
-    pub async fn formalize_approved_submission(
+    /// 状态、提交或采购责任授权不满足原合同则失败。
+    pub async fn prepare_approved_submission(
         &self,
         id: &str,
         actor: &AuditActor,
-    ) -> Result<SalesOrderDetailView> {
+        executor: &mut dyn Executor,
+    ) -> Result<Option<FormalizedSubmissionWrite>> {
         let mut order = self
             .db
             .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         if order.is_fully_formalized() {
-            return self.sales_order_detail(id, None).await;
+            return Ok(None);
         }
         ensure_final_approve_formalize(&order)?;
-        let (submission, lines) = load_latest_submission(&self.db, id, &mut NoTransaction).await?;
+        let (submission, lines) = load_latest_submission(&self.db, id, executor).await?;
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
-        persist_formalized_submission(
+        prepare_formalized_submission_write(
             &self.db,
             self.require_rbac()?.clone(),
             &mut order,
@@ -112,50 +81,7 @@ impl SalesOrderService {
             procurement,
             actor,
         )
-        .await?;
-        self.sales_order_detail(id, None).await
-    }
-
-    /// 在审批运行时持有的事务内形式化最终通过的销售单。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `actor` - 已认证操作人
-    /// * `session` - 审批运行时持有的唯一事务会话
-    ///
-    /// # 返回
-    /// 正式版本、应收、供给任务和成功审计全部写入时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
-    pub async fn formalize_approved_submission_in_transaction(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        session: &mut mongodb::ClientSession,
-    ) -> Result<()> {
-        let mut order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, session)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if order.is_fully_formalized() {
-            return Ok(());
-        }
-        ensure_final_approve_formalize(&order)?;
-        let (submission, lines) = load_latest_submission(&self.db, id, session).await?;
-        let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
-        let write = prepare_formalized_submission_write(
-            &self.db,
-            self.require_rbac()?.clone(),
-            &mut order,
-            submission,
-            lines,
-            procurement,
-            actor,
-        )?;
-        persist_formalized_submission_write(write, session).await
+        .map(Some)
     }
 
     /// 为实物及服务销售单构造事务外授权的采购责任计划。
@@ -208,49 +134,6 @@ async fn load_latest_submission(
     Ok((submission, lines))
 }
 
-/// 在同一提交边界内推进状态并调用既有 `formalize_submission`。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 共享授权服务
-/// * `order` - 待生效销售单
-/// * `submission` - 最新冻结提交
-/// * `lines` - 最新冻结提交行
-/// * `procurement` - 可选采购责任授权计划
-/// * `actor` - 已认证审计操作人
-///
-/// # 返回
-/// 销售形式化与全部副作用原子提交后返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不允许、采购授权版本变化、行字段缺失或写入失败时返回错误。
-async fn persist_formalized_submission(
-    db: &Database,
-    rbac: erp_identity::SharedRbacService,
-    order: &mut SalesOrder,
-    submission: SalesOrderSubmission,
-    lines: Vec<SalesOrderSubmissionLine>,
-    procurement: Option<ProcurementFormalizationPlan>,
-    actor: &AuditActor,
-) -> Result<()> {
-    let policy_revision = procurement.as_ref().map(|plan| plan.resolution.policy_revision);
-    let write =
-        prepare_formalized_submission_write(db, rbac.clone(), order, submission, lines, procurement, actor)?;
-    let client = db.client().clone();
-    if let Some(policy_revision) = policy_revision {
-        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
-            Box::pin(persist_formalized_submission_write(write, session))
-        })
-        .await?;
-    } else {
-        client
-            .with_transaction(move |session| Box::pin(persist_formalized_submission_write(write, session)))
-            .await?;
-    }
-    let _ = SalesOrderId::new(order.base.id.clone());
-    Ok(())
-}
-
 /// 完成销售形式化的纯领域计算并生成待写上下文。
 ///
 /// # 错误
@@ -274,9 +157,6 @@ fn prepare_formalized_submission_write(
     order.approve(now, actor.id())?;
     order.attach_revision(aggregate.revision.base.id.clone(), actor.id());
     submission.approve(actor.id())?;
-    let audit = actor
-        .clone()
-        .resource_log("sales_order.formalize", "sales_order", order.base.id.clone())?;
     Ok(FormalizedSubmissionWrite {
         db: db.clone(),
         rbac: rbac.clone(),
@@ -286,26 +166,25 @@ fn prepare_formalized_submission_write(
         aggregate,
         procurement,
         procurement_items,
-        audit,
         now,
     })
 }
 
-/// 在调用方选定的事务边界内写入销售形式化的全部业务事实。
+/// 在调用方选定的事务边界内写入销售形式化及既有供给事实。
 ///
 /// # 参数
 /// * `write` - 已完成领域计算的销售形式化写入上下文
 /// * `session` - MongoDB 事务会话
 ///
 /// # 返回
-/// 全部业务事实与审计写入成功时返回 `Ok(())`。
+/// 返回已写入的销售单、正式版本与冻结时间，供组合层继续写入财务和审计。
 ///
 /// # 错误
-/// 采购责任重验、正式版本、应收或审计任一写入失败时返回错误。
+/// 采购责任重验、正式版本或提交任一写入失败时返回错误。
 async fn persist_formalized_submission_write(
     mut write: FormalizedSubmissionWrite,
     session: &mut mongodb::ClientSession,
-) -> Result<()> {
+) -> Result<(SalesOrder, SalesOrderRevisionAggregate, Instant)> {
     if let Some(plan) = write.procurement.as_ref() {
         ProcurementResponsibilityService::new(write.db.clone(), write.rbac.clone())
             .revalidate_plan(&plan.inputs, &plan.resolution, session)
@@ -350,11 +229,7 @@ async fn persist_formalized_submission_write(
         .sales_order_submissions()
         .update(&mut write.submission, session)
         .await?;
-    // 销售单生效即形成原始应收（§6.8/§8.1.1）：子账 + 原始应收分录原子写入。
-    // 后续销售变更差额由 sales_review 生效路径另行入账，本路径只写首次生效。
-    create_original_receivable(&write.db, &write.order, &write.aggregate, write.now, session).await?;
-    write.db.audit_logs().create(&write.audit, session).await?;
-    Ok(())
+    Ok((write.order, write.aggregate, write.now))
 }
 
 /// 按负责人分组构造供给分配任务。
@@ -461,76 +336,6 @@ async fn persist_procurement_work_items(
     Ok(())
 }
 
-/// 构建并写入销售单生效的应收往来子账与原始应收分录（§6.8/§8.1.1）。
-///
-/// 只应由首次生效（最终审批通过）路径调用：子账 `account_seq = 1`，分录类型
-/// 为原始应收（增加方向，金额 = 版本含税合计）；后续销售变更差额由
-/// `sales_review` 生效路径写入。写在同一事务内，重复生效由提交状态守卫拦截。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `order` - 已生效的销售单（事务内最新版本）
-/// * `aggregate` - 生效版本聚合
-/// * `posted_at` - 入账时间
-/// * `session` - 事务会话执行器
-///
-/// # 返回
-/// 无返回值；写入失败时返回错误。
-async fn create_original_receivable(
-    db: &Database,
-    order: &SalesOrder,
-    aggregate: &SalesOrderRevisionAggregate,
-    posted_at: Instant,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let account_id = ReceivableAccountId::new(next_id());
-    let entry_id = ReceivableEntryId::new(next_id());
-    let revision_id = aggregate.revision.base.id.clone();
-    let gross = aggregate.revision.gross_amount;
-    let account = ReceivableAccount::new(
-        account_id.clone(),
-        ReceivableAccountData {
-            sales_order_id: order.base.id.clone().into(),
-            account_seq: 1,
-            customer_id: order.customer_id.clone(),
-            counterparty_party_id: order.settlement_party_id.clone(),
-            source_sales_order_revision_id: revision_id.clone().into(),
-            review_status: AccountReviewStatus::initial_for_sales_business_type(order.business_type),
-            reviewed_by: None,
-            reviewed_at: None,
-            review_evidence_reference: None,
-            gross_total: gross,
-            settled_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-            invoiceable_total: gross,
-            invoiced_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-        },
-        "system",
-    )
-    .map_err(Error::Logic)?;
-    let entry = ReceivableEntry::new(
-        entry_id,
-        ReceivableEntryData {
-            receivable_account_id: account_id,
-            entry_type: ReceivableEntryType::Original,
-            direction: EntryDirection::Increase,
-            amount: gross,
-            due_date: BusinessDate::today(),
-            source_fact_type: "sales_order".to_string(),
-            source_document_id: order.base.id.clone(),
-            source_revision_id: revision_id,
-            source_sequence: 1,
-            posted_at,
-        },
-    )
-    .map_err(Error::Logic)?;
-    db.receivable()
-        .create_receivable_with_entry(&account, &entry, session)
-        .await?;
-    crate::receivable::card_funds_task::ensure_initial_card_funds_review_task(db, &account, session).await?;
-    crate::receivable::invoice_task::ensure_sales_invoice_task(db, &account, session).await?;
-    Ok(())
-}
-
 /// 为提交行分配正式版本头、公共行和子类型身份。
 ///
 /// # 参数
@@ -584,13 +389,38 @@ fn build_revision_for_order(
     .map_err(Error::Logic)
 }
 
+impl FormalizedSubmissionWrite {
+    /// 待形式化销售单标识，供组合层在入事务前创建原审计记录。
+    pub fn order_id(&self) -> &str {
+        &self.order_id
+    }
+
+    /// 本次冻结采购责任的授权版本，供流程保持原 CAS 事务栅栏。
+    pub fn policy_revision(&self) -> Option<u64> {
+        self.procurement
+            .as_ref()
+            .map(|plan| plan.resolution.policy_revision)
+    }
+
+    /// 写入正式销售版本、提交与既有供给任务，返回财务过账所需的冻结销售事实。
+    ///
+    /// # 错误
+    /// 责任重验或销售事实持久化失败时，错误交由外层同一事务传播。
+    pub async fn persist_in_transaction(
+        self,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<(SalesOrder, SalesOrderRevisionAggregate, Instant)> {
+        persist_formalized_submission_write(self, session).await
+    }
+}
+
 /// 验证销售形式化事务的状态、仓储与供给任务合同。
 #[cfg(test)]
 mod tests {
     use super::{ensure_final_approve_formalize, procurement_responsibility_key};
-    use entities::receivable::AccountReviewStatus;
     use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
     use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use erp_finance::entity::receivable::{AccountReviewStatus, SalesBusinessTypeFact};
 
     fn draft_order() -> SalesOrder {
         SalesOrder::new(
@@ -615,7 +445,10 @@ mod tests {
     /// 生产代码必须只接受审批中状态，并通过 policy CAS 提交采购责任授权快照。
     #[test]
     fn formalize_wraps_repository_and_only_accepts_in_approval() {
-        let source = include_str!("formalize.rs");
+        let source = concat!(
+            include_str!("../../../crates/erp-processes/src/order_to_cash/mod.rs"),
+            include_str!("formalize.rs")
+        );
         let production = source.split("/// 验证销售形式化事务").next().expect("生产代码");
         let formalize_at = production
             .find(".formalize_submission(")
@@ -667,11 +500,11 @@ mod tests {
         assert_eq!(order.review_status, ReviewStatus::InApproval);
         assert!(ensure_final_approve_formalize(&order).is_ok());
         assert_eq!(
-            AccountReviewStatus::initial_for_sales_business_type(order.business_type),
+            AccountReviewStatus::initial_for_sales_business_type(SalesBusinessTypeFact::Voucher),
             AccountReviewStatus::OpeningPending
         );
         assert_eq!(
-            AccountReviewStatus::initial_for_sales_business_type(BusinessType::GoodsService),
+            AccountReviewStatus::initial_for_sales_business_type(SalesBusinessTypeFact::GoodsService),
             AccountReviewStatus::NotApplicable
         );
     }

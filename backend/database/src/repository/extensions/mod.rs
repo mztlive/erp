@@ -3,14 +3,11 @@
 //! 本文件 P0 后冻结：新增域的访问器一律写在自己的 `extensions/<domain>.rs`，
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
-mod cost;
 mod fulfillment;
 mod integration_ops;
 
-mod payable;
 mod procurement_responsibility;
 mod purchase_order;
-mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
@@ -19,14 +16,11 @@ mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_settlement;
 
-pub use cost::CostExt;
 pub use fulfillment::FulfillmentExt;
 pub use integration_ops::IntegrationOpsExt;
 
-pub use payable::PayableExt;
 pub use procurement_responsibility::ProcurementResponsibilityExt;
 pub use purchase_order::PurchaseOrderExt;
-pub use receivable::ReceivableExt;
 pub use returns::ReturnsExt;
 pub use sales_order::SalesOrderExt;
 pub use sales_review::SalesReviewExt;
@@ -47,7 +41,7 @@ pub trait DatabaseExt:
     + erp_support::BulkJobExt
     + erp_catalog::CatalogExt
     + erp_contract::ContractExt
-    + CostExt
+    + erp_finance::repository::CostExt
     + erp_customer::CustomerExt
     + erp_workflow::DocumentRegistryExt
     + erp_support::FileAssetExt
@@ -56,10 +50,10 @@ pub trait DatabaseExt:
     + erp_inventory::InventoryExt
     + erp_import::LegacyImportExt
     + erp_party::PartyExt
-    + PayableExt
+    + erp_finance::repository::PayableExt
     + ProcurementResponsibilityExt
     + PurchaseOrderExt
-    + ReceivableExt
+    + erp_finance::repository::ReceivableExt
     + ReturnsExt
     + SalesOrderExt
     + SalesReviewExt
@@ -82,7 +76,7 @@ impl<
             + erp_support::BulkJobExt
             + erp_catalog::CatalogExt
             + erp_contract::ContractExt
-            + CostExt
+            + erp_finance::repository::CostExt
             + erp_customer::CustomerExt
             + erp_workflow::DocumentRegistryExt
             + erp_support::FileAssetExt
@@ -91,10 +85,10 @@ impl<
             + erp_inventory::InventoryExt
             + erp_import::LegacyImportExt
             + erp_party::PartyExt
-            + PayableExt
+            + erp_finance::repository::PayableExt
             + ProcurementResponsibilityExt
             + PurchaseOrderExt
-            + ReceivableExt
+            + erp_finance::repository::ReceivableExt
             + ReturnsExt
             + SalesOrderExt
             + SalesReviewExt

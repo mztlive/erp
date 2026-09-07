@@ -1,7 +1,7 @@
 //! 域 D19 `payable` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::payable` 的 DTO。
+//! 直接复用 `erp_finance::dto::payable` 的 DTO。
 
 use application_core::AuditActor;
 use axum::{
@@ -14,14 +14,24 @@ use axum::{
     response::Response,
     Extension, Json,
 };
+use erp_finance::dto::payable::CommitSupplierPaymentRequest;
+use erp_finance::dto::payable::CreatePayableAccountRequest;
+use erp_finance::dto::payable::PageView;
+use erp_finance::dto::payable::PayableAccountListParams;
+use erp_finance::dto::payable::PayableAccountSummaryView;
+use erp_finance::dto::payable::PayableAccountView;
+use erp_finance::dto::payable::PaymentRecipientRevealView;
+use erp_finance::dto::payable::PurchaseInvoiceAllocationListParams;
+use erp_finance::dto::payable::PurchaseInvoiceAllocationView;
+use erp_finance::dto::payable::PurchaseInvoiceRegisteredView;
+use erp_finance::dto::payable::RegisterPurchaseInvoiceRequest;
+use erp_finance::dto::payable::RevealPaymentRecipientRequest;
+use erp_finance::dto::payable::SupplierPaymentListParams;
+use erp_finance::dto::payable::SupplierPaymentView;
+use erp_finance::service::payable::PayableService as PayableQueryService;
+use erp_processes::finance_posting::payable::PayableService;
+use erp_read_models::finance::payable::PayableReadService;
 use erp_support::{SecurityScanStatus, SensitivityClass};
-use services::payable::{
-    CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
-    PayableAccountSummaryView, PayableAccountView, PayableService, PaymentRecipientRevealView,
-    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
-    RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
-    SupplierPaymentView,
-};
 use tracing::error;
 
 use crate::{
@@ -55,8 +65,7 @@ pub async fn payable_account_list(
     State(state): State<AppState>,
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<PageView<PayableAccountSummaryView>> {
-    let page = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = PayableReadService::new(state.db())
         .payable_account_list(&params)
         .await?;
 
@@ -82,8 +91,7 @@ pub async fn payable_account_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PayableAccountView> {
-    let view = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = PayableReadService::new(state.db())
         .payable_account_detail(&id)
         .await?;
 
@@ -170,8 +178,7 @@ pub async fn supplier_payment_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<PageView<SupplierPaymentView>> {
-    let page = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = PayableReadService::new(state.db())
         .supplier_payment_list(&params)
         .await?;
 
@@ -197,8 +204,7 @@ pub async fn supplier_payment_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierPaymentView> {
-    let view = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = PayableReadService::new(state.db())
         .supplier_payment_detail(&id)
         .await?;
 
@@ -399,8 +405,7 @@ pub async fn purchase_invoice_allocation_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<PageView<PurchaseInvoiceAllocationView>> {
-    let page = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = PayableQueryService::new(state.db())
         .purchase_invoice_allocation_list(&params)
         .await?;
 
@@ -409,7 +414,7 @@ pub async fn purchase_invoice_allocation_list(
 
 #[cfg(test)]
 mod tests {
-    use services::payable::CommitSupplierPaymentRequest;
+    use erp_finance::dto::payable::CommitSupplierPaymentRequest;
 
     use super::validate_bank_receipt_upload;
     use crate::core::handler::file_asset::{AssetFile, PendingAssetFile};

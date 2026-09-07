@@ -24,3 +24,5 @@ pub use workbench::{
     FulfillmentQueuePageView, FulfillmentQueueWarehouseView, WorkItemListParams, WorkItemPageView,
     WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
 };
+
+pub mod finance;

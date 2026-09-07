@@ -28,7 +28,7 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{ReceivableExt, ReturnsExt};
+use database::ReturnsExt;
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::CommandReceiptServiceExt as _;
@@ -38,6 +38,7 @@ use erp_core::ids::{
     ReceivableEntryOffsetId,
 };
 use erp_customer::CustomerExt;
+use erp_finance::repository::ReceivableExt;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -49,13 +50,18 @@ use erp_workflow::service::document_registry::{find_approval_binding, new_regist
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
-use entities::receivable::{
-    AllocationAction as ReceivableAllocationAction, CustomerReceiptStatus,
-    EntryDirection as ReceivableEntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
-    ReceivableEntryData, ReceivableEntryOffset, ReceivableEntryOffsetData, ReceivableEntryType,
-};
 use entities::returns::{CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus};
 use erp_core::money::Amount;
+use erp_finance::entity::receivable::AllocationAction as ReceivableAllocationAction;
+use erp_finance::entity::receivable::CustomerReceiptStatus;
+use erp_finance::entity::receivable::EntryDirection as ReceivableEntryDirection;
+use erp_finance::entity::receivable::ReceiptAllocation;
+use erp_finance::entity::receivable::ReceiptAllocationData;
+use erp_finance::entity::receivable::ReceivableEntry;
+use erp_finance::entity::receivable::ReceivableEntryData;
+use erp_finance::entity::receivable::ReceivableEntryOffset;
+use erp_finance::entity::receivable::ReceivableEntryOffsetData;
+use erp_finance::entity::receivable::ReceivableEntryType;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -985,7 +991,7 @@ async fn apply_customer_refund_posting(
 async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &CustomerRefund,
-    receipt: &entities::receivable::CustomerReceipt,
+    receipt: &erp_finance::entity::receivable::CustomerReceipt,
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -1024,9 +1030,9 @@ async fn persist_refund_offsets_and_reversals(
 async fn create_decrease_offsets(
     db: &Database,
     refund: &CustomerRefund,
-    receipt: &entities::receivable::CustomerReceipt,
+    receipt: &erp_finance::entity::receivable::CustomerReceipt,
     actor_id: &str,
-    chunks: &[entities::receivable::ReceiptReverseChunk],
+    chunks: &[erp_finance::entity::receivable::ReceiptReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<ReceivableEntry>> {
     let facts = load_receivable_offset_facts(
@@ -1065,7 +1071,7 @@ async fn create_decrease_offsets(
 async fn revert_customer_refund_settlement(
     db: &Database,
     entry: &ReceivableEntry,
-    chunk: &entities::receivable::ReceiptReverseChunk,
+    chunk: &erp_finance::entity::receivable::ReceiptReverseChunk,
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -1111,7 +1117,7 @@ fn build_customer_refund_decrease_entry(
 async fn persist_customer_refund_decrease_offset(
     db: &Database,
     decrease_entry: Option<&ReceivableEntry>,
-    chunk: &entities::receivable::ReceiptReverseChunk,
+    chunk: &erp_finance::entity::receivable::ReceiptReverseChunk,
     offset_index: usize,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {

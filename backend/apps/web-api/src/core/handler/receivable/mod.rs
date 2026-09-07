@@ -1,22 +1,40 @@
 //! 域 D18 `receivable` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_finance::dto::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::receivable::{
-    CancelCustomerReceiptApprovalRequest, CardFundsRegistrationResult, CardFundsReviewDetailParams,
-    CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
-    CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CreateCustomerReceiptRequest,
-    CreateInvoiceRequest, CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView,
-    InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
-    ReceivableAccountListParams, ReceivableAccountSummaryView, ReceivableAccountView, ReceivableService,
-    RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SubmitCustomerReceiptRequest,
-};
+use erp_finance::dto::receivable::CancelCustomerReceiptApprovalRequest;
+use erp_finance::dto::receivable::CardFundsRegistrationResult;
+use erp_finance::dto::receivable::CardFundsReviewDetailParams;
+use erp_finance::dto::receivable::CommitCustomerReceiptRequest;
+use erp_finance::dto::receivable::CommitInvoiceRequest;
+use erp_finance::dto::receivable::CommitRedInvoiceRequest;
+use erp_finance::dto::receivable::CompleteCardFundsReviewCommand;
+use erp_finance::dto::receivable::CompleteCardFundsReviewResult;
+use erp_finance::dto::receivable::CreateCustomerReceiptRequest;
+use erp_finance::dto::receivable::CreateInvoiceRequest;
+use erp_finance::dto::receivable::CreateReceivableAccountRequest;
+use erp_finance::dto::receivable::CustomerReceiptListParams;
+use erp_finance::dto::receivable::InvoiceListParams;
+use erp_finance::dto::receivable::InvoiceView;
+use erp_finance::dto::receivable::PageView;
+use erp_finance::dto::receivable::PostCustomerReceiptRequest;
+use erp_finance::dto::receivable::PostInvoiceRequest;
+use erp_finance::dto::receivable::ReceivableAccountListParams;
+use erp_finance::dto::receivable::ReceivableAccountSummaryView;
+use erp_finance::dto::receivable::RegisterCardFundsInvoiceRequest;
+use erp_finance::dto::receivable::RegisterCardFundsReceiptRequest;
+use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
+use erp_finance::service::receivable::ReceivableService;
+use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_read_models::finance::dto::CustomerReceiptView;
+use erp_read_models::finance::dto::ReceivableAccountView;
+use erp_read_models::finance::receivable::ReceivableReadService;
 
 use crate::{
     app_state::AppState,
@@ -42,8 +60,7 @@ pub async fn receivable_account_list(
     State(state): State<AppState>,
     Query(params): Query<ReceivableAccountListParams>,
 ) -> Result<PageView<ReceivableAccountSummaryView>> {
-    let page = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = ReceivableReadService::new(state.db())
         .receivable_account_list(&params)
         .await?;
 
@@ -73,8 +90,7 @@ pub async fn receivable_account_detail(
     Path(id): Path<String>,
     Query(params): Query<CardFundsReviewDetailParams>,
 ) -> Result<ReceivableAccountView> {
-    let view = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReceivableReadService::new(state.db())
         .receivable_account_detail_with_actions(&id, &params, &actor, state.rbac())
         .await?;
 
@@ -102,7 +118,7 @@ pub async fn receivable_account_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateReceivableAccountRequest>,
 ) -> Result<ReceivableAccountView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_receivable_account(req, &actor)
         .await?;
@@ -131,7 +147,7 @@ pub async fn receivable_funds_review_complete(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<CompleteCardFundsReviewCommand>,
 ) -> Result<CompleteCardFundsReviewResult> {
-    let result = ReceivableService::new(state.db())
+    let result = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .complete_card_funds_review(command, &actor)
         .await?;
@@ -152,7 +168,7 @@ pub async fn card_funds_receipt_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterCardFundsReceiptRequest>,
 ) -> Result<CardFundsRegistrationResult> {
-    let result = ReceivableService::new(state.db())
+    let result = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .register_card_funds_receipt(req, &actor)
         .await?;
@@ -172,7 +188,7 @@ pub async fn card_funds_invoice_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterCardFundsInvoiceRequest>,
 ) -> Result<CardFundsRegistrationResult> {
-    let result = ReceivableService::new(state.db())
+    let result = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .register_card_funds_invoice(req, &actor)
         .await?;
@@ -198,8 +214,7 @@ pub async fn customer_receipt_list(
     State(state): State<AppState>,
     Query(params): Query<CustomerReceiptListParams>,
 ) -> Result<PageView<CustomerReceiptView>> {
-    let page = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = ReceivableReadService::new(state.db())
         .customer_receipt_list(&params)
         .await?;
 
@@ -225,8 +240,7 @@ pub async fn customer_receipt_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = ReceivableReadService::new(state.db())
         .customer_receipt_detail(&id)
         .await?;
 
@@ -254,7 +268,7 @@ pub async fn customer_receipt_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_customer_receipt(req, &actor)
         .await?;
@@ -283,7 +297,7 @@ pub async fn customer_receipt_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_customer_receipt(req, &actor)
         .await?;
@@ -314,7 +328,7 @@ pub async fn customer_receipt_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .submit_customer_receipt(&id, req, &actor)
         .await?;
@@ -345,7 +359,7 @@ pub async fn customer_receipt_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelCustomerReceiptApprovalRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .cancel_customer_receipt_approval(&id, req, &actor)
         .await?;
@@ -376,7 +390,7 @@ pub async fn customer_receipt_post(
     Path(_id): Path<String>,
     Json(_req): Json<PostCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    match ReceivableService::reject_client_post() {
+    match ReceivableProcess::reject_client_post() {
         Err(error) => Err(error.into()),
         Ok(result) => Ok(ApiResponse::ok_with_data(result)),
     }
@@ -401,10 +415,7 @@ pub async fn invoice_list(
     State(state): State<AppState>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<PageView<InvoiceView>> {
-    let page = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .invoice_list(&params)
-        .await?;
+    let page = ReceivableService::new(state.db()).invoice_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -425,10 +436,7 @@ pub async fn invoice_list(
 /// # 返回
 /// 返回发票视图。
 pub async fn invoice_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .invoice_detail(&id)
-        .await?;
+    let view = ReceivableService::new(state.db()).invoice_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -454,7 +462,7 @@ pub async fn invoice_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .create_invoice(req, &actor)
         .await?;
@@ -483,7 +491,7 @@ pub async fn invoice_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_invoice(req, &actor)
         .await?;
@@ -514,7 +522,7 @@ pub async fn invoice_post(
     Path(id): Path<String>,
     Json(req): Json<PostInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .post_invoice(&id, req, &actor)
         .await?;
@@ -545,7 +553,7 @@ pub async fn invoice_red_issue(
     Path(id): Path<String>,
     Json(req): Json<CommitRedInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db())
+    let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .issue_red_invoice(&id, req, &actor)
         .await?;
@@ -555,7 +563,8 @@ pub async fn invoice_red_issue(
 
 #[cfg(test)]
 mod tests {
-    use services::receivable::{CreateInvoiceRequest, SubmitCustomerReceiptRequest};
+    use erp_finance::dto::receivable::CreateInvoiceRequest;
+    use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
 
     /// 发票 HTTP 只暴露创建/过账/红冲，不得提交审批或选择定义。
     #[test]

@@ -2,7 +2,7 @@
 // 销售变更单（W05 变更轨；§8.1.3 本批部分）
 // ---------------------------------------------------------------------
 
-use database::{ReceivableExt, SalesOrderExt, SalesReviewExt};
+use database::{SalesOrderExt, SalesReviewExt};
 use entities::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
@@ -11,10 +11,10 @@ use entities::sales_review::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    BusinessDocumentId, ReceivableAccountId, SalesChangeOrderId, SalesChangeSubmissionId,
-    SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-    SalesOrderWorkingCopyId,
+    BusinessDocumentId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
+    SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
 };
+use erp_finance::repository::ReceivableExt;
 use erp_workflow::entity::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
@@ -58,6 +58,30 @@ use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 
 impl SalesReviewService {
+    /// 校验最终通过动作并准备销售修订及应收差额；本方法不写入跨域副作用。
+    ///
+    /// # 错误
+    /// 状态、基准版本或正式修订不满足原合同则失败。
+    pub async fn prepare_effective_change(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> Result<EffectiveChangeWrite> {
+        let change_order = self
+            .db
+            .sales_change_orders()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
+        execute_sales_change_domain_action(
+            &mut change_order.clone(),
+            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
+            actor.id(),
+        )?;
+        prepare_effective_change_write(&self.db, change_order, actor).await
+    }
+
     /// 分页查询销售变更单。
     ///
     /// # 参数
@@ -501,64 +525,6 @@ impl SalesReviewService {
         )
         .await?;
         self.sales_change_order_detail(id).await
-    }
-
-    /// 最终通过并生效：生成生效修订并改写销售单。
-    ///
-    /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工中间旁路。
-    ///
-    /// # 参数
-    /// * `id` - 变更单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回生效后的变更单详情。
-    ///
-    /// # 错误
-    /// 非审批中、缺少提交、基准版本漂移或仓储失败时返回错误。
-    pub async fn apply_effective_change(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<SalesChangeOrderDetailView> {
-        let change_order = self
-            .db
-            .sales_change_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        execute_sales_change_domain_action(
-            &mut change_order.clone(),
-            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
-            actor.id(),
-        )?;
-        persist_effective_change(&self.db, change_order, actor).await?;
-        self.sales_change_order_detail(id).await
-    }
-
-    /// 在审批运行时持有的事务内生效销售变更。
-    ///
-    /// # 错误
-    /// 状态、基准版本、应收差额或持久化不变量失败时返回错误。
-    pub async fn apply_effective_change_in_transaction(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        session: &mut ClientSession,
-    ) -> Result<()> {
-        let change_order = self
-            .db
-            .sales_change_orders()
-            .find_by_id(id, session)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        execute_sales_change_domain_action(
-            &mut change_order.clone(),
-            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
-            actor.id(),
-        )?;
-        let write = prepare_effective_change_write(&self.db, change_order, actor).await?;
-        persist_effective_writes_in_transaction(&self.db, write, session).await
     }
 
     /// 冻结提交并启动统一审批。
@@ -1046,19 +1012,6 @@ async fn latest_change_submission_no(db: &mongodb::Database, change_order_id: &s
         .await?)
 }
 
-/// 在同一事务内生成生效修订并改写销售单。
-///
-/// # 错误
-/// 基准版本漂移、缺少提交或写入失败时返回错误。
-async fn persist_effective_change(
-    db: &mongodb::Database,
-    change_order: SalesChangeOrder,
-    actor: &AuditActor,
-) -> Result<()> {
-    let write = prepare_effective_change_write(db, change_order, actor).await?;
-    persist_effective_writes(db, write).await
-}
-
 /// 读取销售变更来源并完成生效写入计划的领域计算。
 ///
 /// # 错误
@@ -1138,103 +1091,69 @@ async fn prepare_effective_revision_write(
         now,
         actor.id(),
     )?;
-    let audit = actor.clone().resource_log(
-        "sales_change_order.effective",
-        "sales_change_order",
-        change_order.base.id.clone(),
-    )?;
     Ok(EffectiveChangeWrite {
         order: order_for_tx,
         change: change_for_tx,
         revision,
         delta,
-        audit,
     })
 }
 
 /// 销售变更最终生效的完整事务写入上下文。
-struct EffectiveChangeWrite {
+pub struct EffectiveChangeWrite {
     order: entities::sales_order::SalesOrder,
     change: SalesChangeOrder,
     revision: super::formalization::RevisionAggregate,
     delta: Option<(
-        entities::receivable::ReceivableAccount,
-        entities::receivable::ReceivableEntry,
+        erp_finance::entity::receivable::ReceivableAccount,
+        erp_finance::entity::receivable::ReceivableEntry,
     )>,
-    audit: erp_audit::AuditLog,
 }
 
-/// 持久化生效修订、应收差额与变更单状态。
-///
-/// # 错误
-/// 仓储失败时返回错误。
-async fn persist_effective_writes(db: &mongodb::Database, write: EffectiveChangeWrite) -> Result<()> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_effective_writes_in_transaction(&db, write, session).await })
-        })
-        .await
-}
-
-/// 在调用方事务内写入销售变更正式版本、应收差额、状态和成功审计。
-///
-/// # 错误
-/// 任一仓储写入失败时返回错误。
-async fn persist_effective_writes_in_transaction(
-    db: &mongodb::Database,
-    mut write: EffectiveChangeWrite,
-    session: &mut ClientSession,
-) -> Result<()> {
-    db.sales_order()
-        .formalize_submission(
-            &mut write.order,
-            &write.revision.revision,
-            &write.revision.lines,
-            &write.revision.goods_lines,
-            &write.revision.voucher_lines,
-            session,
-        )
-        .await?;
-    if let Some((account, entry)) = write.delta {
-        write_receivable_delta(db, account, entry, session).await?;
+impl EffectiveChangeWrite {
+    /// 待最终生效的销售变更单标识。
+    pub fn change_id(&self) -> &str {
+        &self.change.base.id
     }
-    db.sales_change_orders()
-        .update(&mut write.change, session)
-        .await?;
-    db.audit_logs().create(&write.audit, session).await?;
-    Ok(())
-}
 
-/// 写入应收差额分录。
-///
-/// # 错误
-/// 仓储失败时返回错误。
-async fn write_receivable_delta(
-    db: &mongodb::Database,
-    mut account: entities::receivable::ReceivableAccount,
-    entry: entities::receivable::ReceivableEntry,
-    session: &mut ClientSession,
-) -> Result<()> {
-    let subject_version = entry.source_revision_id.to_string();
-    db.receivable_entries().create(&entry, session).await?;
-    db.receivable_accounts().update(&mut account, session).await?;
-    crate::receivable::card_funds_task::ensure_card_funds_review_task(
-        db,
-        &account,
-        &subject_version,
-        session,
-    )
-    .await?;
-    let account_id = ReceivableAccountId::new(account.base.id.clone());
-    crate::receivable::invoice_task::sync_sales_invoice_task(
-        db,
-        &account_id,
-        crate::receivable::invoice_task::SalesInvoiceTaskChange::ReceivableChanged,
-        session,
-    )
-    .await
+    /// 写入正式销售版本；外层流程随后写入差额，再推进变更单。
+    pub async fn persist_revision(
+        &mut self,
+        db: &mongodb::Database,
+        session: &mut dyn persistence_core::Executor,
+    ) -> Result<()> {
+        db.sales_order()
+            .formalize_submission(
+                &mut self.order,
+                &self.revision.revision,
+                &self.revision.lines,
+                &self.revision.goods_lines,
+                &self.revision.voucher_lines,
+                session,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// 移交由销售版本差额计算得到的财务事实，保证每份计划只消费一次。
+    pub fn take_receivable_delta(
+        &mut self,
+    ) -> Option<(
+        erp_finance::entity::receivable::ReceivableAccount,
+        erp_finance::entity::receivable::ReceivableEntry,
+    )> {
+        self.delta.take()
+    }
+
+    /// 在差额与工作项成功后写回销售变更状态，不创建新的事务。
+    pub async fn persist_change(
+        &mut self,
+        db: &mongodb::Database,
+        session: &mut dyn persistence_core::Executor,
+    ) -> Result<()> {
+        db.sales_change_orders().update(&mut self.change, session).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1242,7 +1161,10 @@ mod tests {
     /// 创建必须注册 BusinessDocument 并调用统一绑定端口。
     #[test]
     fn create_registers_document_and_binds_published_definition() {
-        let source = include_str!("sales_change_order.rs");
+        let source = concat!(
+            include_str!("sales_change_order.rs"),
+            include_str!("../../../crates/erp-processes/src/sales_change/mod.rs")
+        );
         assert!(source.contains("bind_published_definition_on_document_create"));
         assert!(source.contains("new_registered_document"));
     }
@@ -1250,7 +1172,10 @@ mod tests {
     /// 提交必须调用 start_approval，且版本取 submission_no。
     #[test]
     fn submit_calls_start_approval_with_submission_no() {
-        let source = include_str!("sales_change_order.rs");
+        let source = concat!(
+            include_str!("sales_change_order.rs"),
+            include_str!("../../../crates/erp-processes/src/sales_change/mod.rs")
+        );
         assert!(source.contains("start_change_approval"));
         assert!(source.contains("submission.submission_no"));
         assert!(source.contains("sales_change_start_command"));
@@ -1259,7 +1184,10 @@ mod tests {
     /// 最终动作唯一为 apply_effective_change。
     #[test]
     fn final_action_is_apply_effective_change() {
-        let source = include_str!("sales_change_order.rs");
+        let source = concat!(
+            include_str!("sales_change_order.rs"),
+            include_str!("../../../crates/erp-processes/src/sales_change/mod.rs")
+        );
         assert!(source.contains("pub async fn apply_effective_change"));
         assert!(source.contains("change_for_tx.apply_effective"));
     }
@@ -1267,7 +1195,10 @@ mod tests {
     /// 撤回必须调用统一 cancel 并回到草稿。
     #[test]
     fn cancel_uses_unified_port() {
-        let source = include_str!("sales_change_order.rs");
+        let source = concat!(
+            include_str!("sales_change_order.rs"),
+            include_str!("../../../crates/erp-processes/src/sales_change/mod.rs")
+        );
         assert!(source.contains("pub async fn cancel_approval"));
         assert!(source.contains("prepare_cancel"));
         assert!(source.contains("adapter.cancel_action"));
@@ -1276,7 +1207,10 @@ mod tests {
     /// 撤回后再提交使用语义仓储，并由实体递增版本、处理重复锁定。
     #[test]
     fn cancel_then_resubmit_uses_repository_and_entity_rules() {
-        let source = include_str!("sales_change_order.rs");
+        let source = concat!(
+            include_str!("sales_change_order.rs"),
+            include_str!("../../../crates/erp-processes/src/sales_change/mod.rs")
+        );
         assert!(source.contains("find_resubmittable_sales_change_copy"));
         assert!(source.contains("latest_submission_no_by_change_order"));
         assert!(source.contains("SalesChangeSubmission::next_submission_no"));

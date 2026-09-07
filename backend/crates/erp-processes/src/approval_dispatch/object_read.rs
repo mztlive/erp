@@ -71,8 +71,11 @@ fn adapter_object_read_for_type(
             .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::CustomerReceipt => Ok(Some(
-            services::receivable::customer_receipt_object_readable(organization_id, assignee_user_id)
-                .map_err(map_workflow_error)?,
+            crate::finance_posting::receivable::customer_receipt_object_readable(
+                organization_id,
+                assignee_user_id,
+            )
+            .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::CustomerRefund => Ok(Some(
             services::returns::customer_refund_object_readable(organization_id, assignee_user_id)

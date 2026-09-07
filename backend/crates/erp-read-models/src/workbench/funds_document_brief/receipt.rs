@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use database::{ReceivableExt, ReturnsExt};
+use database::ReturnsExt;
+use erp_finance::repository::ReceivableExt;
 use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, join_list_summary, non_empty};

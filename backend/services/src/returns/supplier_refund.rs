@@ -28,12 +28,7 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{PayableExt, ReturnsExt};
-use entities::payable::{
-    AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableEntry,
-    PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType, PaymentAllocation,
-    PaymentAllocationData, SupplierPaymentStatus,
-};
+use database::ReturnsExt;
 use entities::returns::{CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus};
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
@@ -44,6 +39,17 @@ use erp_core::ids::{
     SupplierRefundId,
 };
 use erp_core::money::Amount;
+use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
+use erp_finance::entity::payable::EntryDirection as PayableEntryDirection;
+use erp_finance::entity::payable::PayableEntry;
+use erp_finance::entity::payable::PayableEntryData;
+use erp_finance::entity::payable::PayableEntryOffset;
+use erp_finance::entity::payable::PayableEntryOffsetData;
+use erp_finance::entity::payable::PayableEntryType;
+use erp_finance::entity::payable::PaymentAllocation;
+use erp_finance::entity::payable::PaymentAllocationData;
+use erp_finance::entity::payable::SupplierPaymentStatus;
+use erp_finance::repository::PayableExt;
 use erp_identity::SharedRbacService;
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
@@ -933,7 +939,7 @@ async fn apply_supplier_refund_posting(
 async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &SupplierRefund,
-    payment: &entities::payable::SupplierPayment,
+    payment: &erp_finance::entity::payable::SupplierPayment,
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -972,9 +978,9 @@ async fn persist_refund_offsets_and_reversals(
 async fn create_decrease_offsets(
     db: &Database,
     refund: &SupplierRefund,
-    payment: &entities::payable::SupplierPayment,
+    payment: &erp_finance::entity::payable::SupplierPayment,
     actor_id: &str,
-    chunks: &[entities::payable::PaymentReverseChunk],
+    chunks: &[erp_finance::entity::payable::PaymentReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<PayableEntry>> {
     let facts = load_payable_offset_facts(
@@ -1012,7 +1018,7 @@ async fn create_decrease_offsets(
 async fn revert_supplier_refund_settlement(
     db: &Database,
     entry: &PayableEntry,
-    chunk: &entities::payable::PaymentReverseChunk,
+    chunk: &erp_finance::entity::payable::PaymentReverseChunk,
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -1058,7 +1064,7 @@ fn build_decrease_entry(
 async fn persist_decrease_offset(
     db: &Database,
     decrease_entry: Option<&PayableEntry>,
-    chunk: &entities::payable::PaymentReverseChunk,
+    chunk: &erp_finance::entity::payable::PaymentReverseChunk,
     offset_index: usize,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {

@@ -1,0 +1,445 @@
+//! 应收查询参数、列表/详情视图与分页归一化。
+
+use crate::entity::receivable::{
+    AccountReviewStatus, AllocationAction, CustomerReceiptStatus, EntryDirection, FundsReviewType,
+    InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus, ReceivableEntryType, ReviewResult,
+};
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
+use erp_core::money::Amount;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+use super::{normalize_sort, SortDir};
+use crate::Result;
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+
+/// 应收往来子账列表允许的排序字段白名单（api-contract §4：Service 层校验）。
+pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[
+    "account_seq",
+    "gross_total",
+    "settled_total",
+    "open_total",
+    "open_invoiceable_total",
+    "created_at",
+];
+/// 客户回款单列表允许的排序字段白名单。
+pub(crate) const CUSTOMER_RECEIPT_SORT_FIELDS: &[&str] = &["received_at", "amount", "created_at"];
+/// 发票列表允许的排序字段白名单。
+pub(crate) const INVOICE_SORT_FIELDS: &[&str] = &["invoice_date", "gross_amount", "net_amount", "created_at"];
+
+/// 归一化后的分页查询 DTO（Service → Repository 共用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageParams {
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数（已 clamp 到 1–100）。
+    pub page_size: u32,
+    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
+    pub sort_by: &'static str,
+    /// 排序方向。
+    pub sort_dir: SortDir,
+}
+
+// ---------------------------------------------------------------------------
+// 应收往来子账（receivable_account）
+// ---------------------------------------------------------------------------
+
+/// 应收分录响应视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceivableEntryView {
+    /// 实体主键。
+    pub id: String,
+    /// 分录类型。
+    pub entry_type: ReceivableEntryType,
+    /// 分录方向。
+    pub direction: EntryDirection,
+    /// 正数含税金额。
+    pub amount: Amount,
+    /// 到期日（`YYYY-MM-DD`）。
+    pub due_date: BusinessDate,
+    /// 来源单据 ID。
+    pub source_document_id: String,
+    /// 来源内序号。
+    pub source_sequence: u32,
+    /// 入账时间（秒级时间戳）。
+    pub posted_at: Instant,
+    /// 累计被冲减金额（抵销合计）。
+    pub offset_total: Amount,
+}
+
+/// 应收往来子账列表摘要。
+///
+/// 列表只返回本页展示与建立核销目标所需字段；复核链、票款事实版本和当前任务
+/// 等操作上下文由详情接口按单据读取。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceivableAccountSummaryView {
+    /// 实体主键。
+    pub id: String,
+    /// 来源销售单。
+    pub sales_order_id: String,
+    /// 销售单业务单号。
+    pub sales_order_no: String,
+    /// 往来子账序号。
+    pub account_seq: u32,
+    /// 企业客户经营归属。
+    pub customer_id: String,
+    /// 当前销售版本冻结的客户名称。
+    pub customer_name: String,
+    /// 收款和开票往来主体。
+    pub counterparty_party_id: String,
+    /// 当前销售版本冻结的往来主体名称。
+    pub counterparty_party_name: Option<String>,
+    /// 卡券票款复核状态缓存。
+    pub review_status: AccountReviewStatus,
+    /// 含税应收总额。
+    pub gross_total: Amount,
+    /// 已核销含税总额。
+    pub settled_total: Amount,
+    /// 剩余开放含税余额。
+    pub open_total: Amount,
+    /// 可开票含税总额。
+    pub invoiceable_total: Amount,
+    /// 净已开含税总额。
+    pub invoiced_total: Amount,
+    /// 剩余可开票含税额度。
+    pub open_invoiceable_total: Amount,
+    /// 子账状态。
+    pub status: ReceivableAccountStatus,
+    /// 乐观锁版本。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 建立回款/发票核销目标所需的应收分录。
+    pub entries: Vec<ReceivableEntryView>,
+}
+
+/// 卡券票款复核记录视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct FundsReviewView {
+    /// 实体主键。
+    pub id: String,
+    /// 子账内递增复核号。
+    pub review_no: u32,
+    /// 复核类型。
+    pub review_type: FundsReviewType,
+    /// 复核结果。
+    pub review_result: ReviewResult,
+    /// 财务复核人。
+    pub reviewed_by: String,
+    /// 复核时间（秒级时间戳）。
+    pub reviewed_at: Instant,
+    /// 复核证据引用。
+    pub evidence_reference: Option<String>,
+}
+
+/// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ReceivableAccountListParams {
+    /// 子账、销售单、客户或往来主体关键字。
+    pub q: Option<String>,
+    /// 子账主键筛选。
+    pub account_id: Option<ReceivableAccountId>,
+    /// 企业客户经营归属筛选。
+    pub customer_id: Option<CustomerAccountId>,
+    /// 收款和开票往来主体筛选。
+    pub counterparty_party_id: Option<PartyId>,
+    /// 子账状态筛选。
+    pub status: Option<ReceivableAccountStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 卡券票款复核状态筛选。
+    pub review_status: Option<AccountReviewStatus>,
+    /// 页码（1 起）。
+    #[validate(range(min = 1, message = "页码必须大于0"))]
+    pub page: Option<u64>,
+    /// 单页条数（1–100）。
+    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
+    pub page_size: Option<u32>,
+    /// 排序字段（白名单：`account_seq`/`gross_total`/`open_total` 等）。
+    pub sort_by: Option<String>,
+    /// 排序方向（`asc`/`desc`）。
+    pub sort_dir: Option<String>,
+}
+
+/// 归一化后的应收往来子账列表查询参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceivableAccountListQuery {
+    /// 子账、销售单、客户或往来主体关键字。
+    pub q: Option<String>,
+    /// 子账主键筛选。
+    pub account_id: Option<ReceivableAccountId>,
+    /// 企业客户经营归属筛选。
+    pub customer_id: Option<CustomerAccountId>,
+    /// 收款和开票往来主体筛选。
+    pub counterparty_party_id: Option<PartyId>,
+    /// 子账状态筛选。
+    pub status: Option<ReceivableAccountStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 卡券票款复核状态筛选。
+    pub review_status: Option<AccountReviewStatus>,
+    /// 分页与排序参数。
+    pub paging: PageParams,
+}
+
+impl ReceivableAccountListParams {
+    /// 归一化应收往来子账列表查询参数。
+    ///
+    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 返回
+    /// 返回不依赖仓储类型的规范化查询参数。
+    ///
+    /// # 错误
+    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    pub fn normalized(&self) -> Result<ReceivableAccountListQuery> {
+        let (sort_by, sort_dir) =
+            normalize_sort(&self.sort_by, &self.sort_dir, RECEIVABLE_ACCOUNT_SORT_FIELDS)?;
+        Ok(ReceivableAccountListQuery {
+            q: normalized_text(self.q.as_deref()),
+            account_id: self.account_id.clone(),
+            customer_id: self.customer_id.clone(),
+            counterparty_party_id: self.counterparty_party_id.clone(),
+            status: self.status,
+            sales_order_id: normalized_text(self.sales_order_id.as_deref()),
+            review_status: self.review_status,
+            paging: PageParams {
+                page: page_or_default(self.page),
+                page_size: page_size_or_default(self.page_size),
+                sort_by,
+                sort_dir,
+            },
+        })
+    }
+}
+
+/// 回款核销分配视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceiptAllocationView {
+    /// 实体主键。
+    pub id: String,
+    /// 回款单内追加序号。
+    pub allocation_seq: u32,
+    /// 分配动作。
+    pub allocation_action: AllocationAction,
+    /// 被核销应收分录。
+    pub receivable_entry_id: String,
+    /// 本次核销金额。
+    pub allocated_amount: Amount,
+    /// 核销时间（秒级时间戳）。
+    pub allocated_at: Instant,
+    /// `REVERSE` 引用的原 `APPLY` 分配。
+    pub reverses_allocation_id: Option<String>,
+}
+
+/// 客户回款单列表查询参数（分页参数与筛选字段扁平传递）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CustomerReceiptListParams {
+    /// 回款单号模糊筛选。
+    pub receipt_no: Option<String>,
+    /// 实际付款往来主体筛选。
+    pub counterparty_party_id: Option<PartyId>,
+    /// 回款单状态筛选。
+    pub status: Option<CustomerReceiptStatus>,
+    /// 来源销售单筛选；由 Service 解析核销分配关系。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选；由 Service 解析核销分配关系。
+    pub receivable_account_id: Option<ReceivableAccountId>,
+    /// 页码（1 起）。
+    #[validate(range(min = 1, message = "页码必须大于0"))]
+    pub page: Option<u64>,
+    /// 单页条数（1–100）。
+    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
+    pub page_size: Option<u32>,
+    /// 排序字段（白名单：`received_at`/`amount`/`created_at`）。
+    pub sort_by: Option<String>,
+    /// 排序方向（`asc`/`desc`）。
+    pub sort_dir: Option<String>,
+}
+
+/// 归一化后的客户回款单列表查询参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomerReceiptListQuery {
+    /// 回款单号模糊筛选。
+    pub receipt_no: Option<String>,
+    /// 实际付款往来主体筛选。
+    pub counterparty_party_id: Option<PartyId>,
+    /// 回款单状态筛选。
+    pub status: Option<CustomerReceiptStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选。
+    pub receivable_account_id: Option<ReceivableAccountId>,
+    /// 分页与排序参数。
+    pub paging: PageParams,
+}
+
+impl CustomerReceiptListParams {
+    /// 归一化客户回款单列表查询参数。
+    ///
+    /// # 返回
+    /// 返回不依赖仓储类型的规范化查询参数。
+    ///
+    /// # 错误
+    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    pub fn normalized(&self) -> Result<CustomerReceiptListQuery> {
+        let (sort_by, sort_dir) =
+            normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_RECEIPT_SORT_FIELDS)?;
+        Ok(CustomerReceiptListQuery {
+            receipt_no: normalized_text(self.receipt_no.as_deref()),
+            counterparty_party_id: self.counterparty_party_id.clone(),
+            status: self.status,
+            sales_order_id: normalized_text(self.sales_order_id.as_deref()),
+            receivable_account_id: self.receivable_account_id.clone(),
+            paging: PageParams {
+                page: page_or_default(self.page),
+                page_size: page_size_or_default(self.page_size),
+                sort_by,
+                sort_dir,
+            },
+        })
+    }
+}
+
+/// 销项发票分配视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesInvoiceAllocationView {
+    /// 实体主键。
+    pub id: String,
+    /// 发票内追加序号。
+    pub allocation_seq: u32,
+    /// 分配动作。
+    pub allocation_action: AllocationAction,
+    /// 销售单可开票对象（应收往来子账）。
+    pub receivable_account_id: String,
+    /// 分配含税金额。
+    pub allocated_gross_amount: Amount,
+    /// 分配不含税金额。
+    pub allocated_net_amount: Amount,
+    /// 分配税额。
+    pub allocated_tax_amount: Amount,
+    /// 红票反向分配引用的原蓝票分配。
+    pub reverses_allocation_id: Option<String>,
+}
+
+/// 发票响应视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct InvoiceView {
+    /// 实体主键。
+    pub id: String,
+    /// 发票方向。
+    pub invoice_direction: InvoiceDirection,
+    /// 蓝红类型。
+    pub invoice_kind: InvoiceKind,
+    /// 客户或供应商。
+    pub party_id: String,
+    /// 发票代码。
+    pub invoice_code: Option<String>,
+    /// 发票号码。
+    pub invoice_no: String,
+    /// 开票日期（`YYYY-MM-DD`）。
+    pub invoice_date: BusinessDate,
+    /// 含税金额。
+    pub gross_amount: Amount,
+    /// 不含税金额。
+    pub net_amount: Amount,
+    /// 税额。
+    pub tax_amount: Amount,
+    /// 发票尾差。
+    pub rounding_adjustment_amount: Amount,
+    /// 尾差原因。
+    pub rounding_reason: Option<String>,
+    /// 红票原蓝票。
+    pub original_invoice_id: Option<String>,
+    /// 发票状态。
+    pub status: InvoiceStatus,
+    /// 乐观锁版本。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 已分配含税合计（净）。
+    pub allocated_total: Amount,
+    /// 未分配含税余额。
+    pub unallocated_amount: Amount,
+    /// 发票分配行。
+    pub allocations: Vec<SalesInvoiceAllocationView>,
+}
+
+/// 发票列表查询参数（分页参数与筛选字段扁平传递）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct InvoiceListParams {
+    /// 发票方向筛选（销项/进项；D19 进项列表复用）。
+    pub invoice_direction: Option<InvoiceDirection>,
+    /// 蓝红类型筛选。
+    pub invoice_kind: Option<InvoiceKind>,
+    /// 客户或供应商筛选。
+    pub party_id: Option<PartyId>,
+    /// 发票号码模糊筛选。
+    pub invoice_no: Option<String>,
+    /// 发票状态筛选。
+    pub status: Option<InvoiceStatus>,
+    /// 来源销售单筛选；由 Service 解析发票分配关系。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选；由 Service 解析发票分配关系。
+    pub receivable_account_id: Option<ReceivableAccountId>,
+    /// 页码（1 起）。
+    #[validate(range(min = 1, message = "页码必须大于0"))]
+    pub page: Option<u64>,
+    /// 单页条数（1–100）。
+    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
+    pub page_size: Option<u32>,
+    /// 排序字段（白名单：`invoice_date`/`gross_amount`/`net_amount`/`created_at`）。
+    pub sort_by: Option<String>,
+    /// 排序方向（`asc`/`desc`）。
+    pub sort_dir: Option<String>,
+}
+
+/// 归一化后的发票列表查询参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceListQuery {
+    /// 发票方向筛选。
+    pub invoice_direction: Option<InvoiceDirection>,
+    /// 蓝红类型筛选。
+    pub invoice_kind: Option<InvoiceKind>,
+    /// 客户或供应商筛选。
+    pub party_id: Option<PartyId>,
+    /// 发票号码模糊筛选。
+    pub invoice_no: Option<String>,
+    /// 发票状态筛选。
+    pub status: Option<InvoiceStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选。
+    pub receivable_account_id: Option<ReceivableAccountId>,
+    /// 分页与排序参数。
+    pub paging: PageParams,
+}
+
+impl InvoiceListParams {
+    /// 归一化发票列表查询参数。
+    ///
+    /// # 返回
+    /// 返回不依赖仓储类型的规范化查询参数。
+    ///
+    /// # 错误
+    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    pub fn normalized(&self) -> Result<InvoiceListQuery> {
+        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, INVOICE_SORT_FIELDS)?;
+        Ok(InvoiceListQuery {
+            invoice_direction: self.invoice_direction,
+            invoice_kind: self.invoice_kind,
+            party_id: self.party_id.clone(),
+            invoice_no: normalized_text(self.invoice_no.as_deref()),
+            status: self.status,
+            sales_order_id: normalized_text(self.sales_order_id.as_deref()),
+            receivable_account_id: self.receivable_account_id.clone(),
+            paging: PageParams {
+                page: page_or_default(self.page),
+                page_size: page_size_or_default(self.page_size),
+                sort_by,
+                sort_dir,
+            },
+        })
+    }
+}

@@ -93,3 +93,6 @@ pub async fn cancel_approval_in_transaction(
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
+
+/// 销售变更最终通过的单次事务写入计划。
+pub use sales_change_order::EffectiveChangeWrite;

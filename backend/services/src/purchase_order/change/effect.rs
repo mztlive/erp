@@ -1,8 +1,11 @@
-use database::{CostExt, PayableExt, PurchaseOrderExt, SalesOrderExt};
+use database::PurchaseOrderExt;
+use database::SalesOrderExt;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use erp_audit::AuditExt;
+use erp_finance::repository::CostExt;
+use erp_finance::repository::PayableExt;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -266,8 +269,11 @@ impl PurchaseOrderService {
 
 /// 采购变更生效时一次性追加的应付与成本差额。
 type EffectiveChangeDelta = (
-    Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
-    Vec<entities::cost::CostEntry>,
+    Option<(
+        erp_finance::entity::payable::PayableAccount,
+        erp_finance::entity::payable::PayableEntry,
+    )>,
+    Vec<erp_finance::entity::cost::CostEntry>,
 );
 
 /// 已准备的采购变更生效事务写聚合与响应引用。

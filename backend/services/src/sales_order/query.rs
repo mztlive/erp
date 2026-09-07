@@ -3,12 +3,15 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt};
+use database::PurchaseOrderExt;
+use database::SalesOrderExt;
+use database::SalesReviewExt;
 use entities::sales_order::{
     BusinessType, ReviewStatus, SalesOrderRevision, SalesOrderRevisionLine, SalesOrderSubmissionLine,
     SalesOrderWorkingCopy, WorkingPurpose,
 };
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use erp_finance::repository::ReceivableExt;
 use erp_identity::AccessControlExt;
 use erp_identity::Permission;
 use erp_workflow::WorkItemExt;

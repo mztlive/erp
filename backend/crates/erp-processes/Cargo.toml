@@ -5,6 +5,10 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+sha2 = { workspace = true }
+hex = { workspace = true }
+erp-read-models = { workspace = true }
+erp-finance = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 bpm = { workspace = true }

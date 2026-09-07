@@ -1,9 +1,10 @@
 //! 销售单回款/开票进度与关闭状态的派生刷新（§9.3）。
 
-use database::{ReceivableExt, SalesOrderExt};
+use database::SalesOrderExt;
 use entities::sales_order::{CollectionProgress, FulfillmentProgress, InvoiceProgress};
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
+use erp_finance::repository::ReceivableExt;
 use mongodb::Database;
 
 use crate::errors::{Error, Result};
@@ -27,9 +28,9 @@ use crate::errors::{Error, Result};
 ///
 /// # 错误
 /// 销售单不存在或仓储写入失败时返回错误。
-pub(crate) async fn update_sales_order_money_progress(
+pub async fn update_sales_order_money_progress(
     db: &Database,
-    session: &mut mongodb::ClientSession,
+    session: &mut dyn persistence_core::Executor,
     sales_order_id: &SalesOrderId,
     actor_id: String,
     fulfillment: Option<FulfillmentProgress>,

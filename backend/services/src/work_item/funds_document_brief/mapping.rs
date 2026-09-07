@@ -1,6 +1,6 @@
 //! Payable-account fact mapping for remaining-domain authorization.
 
-use entities::payable::PayableAccount;
+use erp_finance::entity::payable::PayableAccount;
 
 use super::super::amount::format_yuan;
 use super::super::ObjectFact;

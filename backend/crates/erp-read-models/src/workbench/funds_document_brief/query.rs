@@ -2,13 +2,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PayableExt, PurchaseOrderExt, ReceivableExt, SalesOrderExt};
-use entities::payable::{PayableAccount, SupplierPayment};
-use entities::receivable::{CustomerReceipt, ReceivableAccount};
+use database::PurchaseOrderExt;
+use database::SalesOrderExt;
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
 use erp_customer::CustomerExt;
+use erp_finance::entity::payable::PayableAccount;
+use erp_finance::entity::payable::SupplierPayment;
+use erp_finance::entity::receivable::CustomerReceipt;
+use erp_finance::entity::receivable::ReceivableAccount;
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::ReceivableExt;
 use erp_party::Party;
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;

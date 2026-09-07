@@ -26,11 +26,7 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{ReceivableExt, ReturnsExt};
-use entities::receivable::{
-    AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
-    ReceiptAllocation, ReceiptAllocationData,
-};
+use database::ReturnsExt;
 use entities::returns::{CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
@@ -38,6 +34,12 @@ use erp_audit::CommandReceiptServiceExt as _;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId, ReceiptAllocationId, ReceiptReversalId};
 use erp_core::money::Amount;
+use erp_finance::entity::receivable::AllocationAction as ReceivableAllocationAction;
+use erp_finance::entity::receivable::CustomerReceipt;
+use erp_finance::entity::receivable::CustomerReceiptStatus;
+use erp_finance::entity::receivable::ReceiptAllocation;
+use erp_finance::entity::receivable::ReceiptAllocationData;
+use erp_finance::repository::ReceivableExt;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -809,7 +811,7 @@ async fn persist_reversal_offsets_and_mark_receipt(
 /// 分录缺失或超额冲减时返回错误。
 async fn revert_receipt_settlements(
     db: &Database,
-    chunks: &[entities::receivable::ReceiptReverseChunk],
+    chunks: &[erp_finance::entity::receivable::ReceiptReverseChunk],
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -891,7 +893,7 @@ async fn persist_reverse_allocations(
     db: &Database,
     reversal: &ReceiptReversal,
     receipt: &CustomerReceipt,
-    reverse_rows: &[entities::receivable::ReceiptReversePlanRow],
+    reverse_rows: &[erp_finance::entity::receivable::ReceiptReversePlanRow],
     seqs: &[u32],
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {

@@ -1,0 +1,34 @@
+//! 财务实体拥有仓储，通用存储操作委托给 persistence-core。
+
+mod cost_allocation;
+mod cost_entry;
+mod customer_receipt;
+mod invoice;
+mod payable_account;
+mod payable_entry;
+mod payable_entry_offset;
+mod payment_allocation;
+mod purchase_invoice_allocation;
+mod receipt_allocation;
+mod receivable_account;
+mod receivable_entry;
+mod receivable_entry_offset;
+mod receivable_funds_review;
+mod sales_invoice_allocation;
+mod supplier_payment;
+pub use cost_allocation::CostAllocationRepository;
+pub use cost_entry::CostEntryRepository;
+pub use customer_receipt::CustomerReceiptRepository;
+pub use invoice::InvoiceRepository;
+pub use payable_account::PayableAccountRepository;
+pub use payable_entry::PayableEntryRepository;
+pub use payable_entry_offset::PayableEntryOffsetRepository;
+pub use payment_allocation::PaymentAllocationRepository;
+pub use purchase_invoice_allocation::PurchaseInvoiceAllocationRepository;
+pub use receipt_allocation::ReceiptAllocationRepository;
+pub use receivable_account::ReceivableAccountRepository;
+pub use receivable_entry::ReceivableEntryRepository;
+pub use receivable_entry_offset::ReceivableEntryOffsetRepository;
+pub use receivable_funds_review::ReceivableFundsReviewRepository;
+pub use sales_invoice_allocation::SalesInvoiceAllocationRepository;
+pub use supplier_payment::SupplierPaymentRepository;

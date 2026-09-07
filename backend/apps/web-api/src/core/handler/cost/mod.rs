@@ -1,17 +1,20 @@
 //! 域 D20 `cost` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::cost` 的 DTO。
+//! 直接复用 `erp_finance::dto::cost` 的 DTO。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::cost::{
-    CostAllocationListParams, CostAllocationView, CostEntryListParams, CostEntryView, CostService,
-    CreateCostEntryRequest, PageView,
-};
+use erp_finance::dto::cost::CostAllocationListParams;
+use erp_finance::dto::cost::CostAllocationView;
+use erp_finance::dto::cost::CostEntryListParams;
+use erp_finance::dto::cost::CostEntryView;
+use erp_finance::dto::cost::CreateCostEntryRequest;
+use erp_finance::dto::cost::PageView;
+use erp_finance::service::cost::CostService;
 
 use crate::{
     app_state::AppState,
@@ -87,7 +90,7 @@ pub async fn cost_entry_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCostEntryRequest>,
 ) -> Result<CostEntryView> {
-    let view = CostService::new(state.db())
+    let view = erp_processes::finance_posting::cost::CostService::new(state.db())
         .create_cost_entry(req, &actor)
         .await?;
 

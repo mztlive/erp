@@ -56,7 +56,8 @@ pub use self::dto::{
     SalesOrderStageSummary, SalesOrderView, SalesOrderWorkingCopyLineView, SalesProcurementCoverageView,
     SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
-pub(crate) use self::progress::update_sales_order_money_progress;
+pub use self::formalize::FormalizedSubmissionWrite;
+pub use self::progress::update_sales_order_money_progress;
 
 fn sales_business_kind(business_type: BusinessType) -> SalesBusinessKind {
     match business_type {

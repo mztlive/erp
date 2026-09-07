@@ -186,16 +186,6 @@ pub async fn finalize_approved_return_in_transaction(
             )
             .await
         }
-        DocumentType::PaymentReversal => {
-            payment_reversal::apply_payment_reversal_final_post(
-                db,
-                business_object_id,
-                actor_id,
-                actor,
-                session,
-            )
-            .await
-        }
         other => Err(Error::BusinessLogicError(format!(
             "单据类型 {} 不属于退款冲正最终动作",
             other.label()
@@ -266,6 +256,9 @@ pub async fn cancel_approval_in_transaction(
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
+
+/// 逆向财务流程批量读取应付冲减事实的窄查询合同。
+pub use offset_batch::{load_payable_offset_facts, OffsetFacts};
 
 #[cfg(test)]
 mod tests {

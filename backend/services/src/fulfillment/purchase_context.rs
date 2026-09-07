@@ -1,11 +1,13 @@
 use std::str::FromStr;
 
-use database::{FulfillmentExt, PayableExt, PurchaseOrderExt};
+use database::FulfillmentExt;
+use database::PurchaseOrderExt;
 use entities::fulfillment::PurchaseFulfillmentEligibility;
-use entities::payable::AllocationAction as PayableAllocationAction;
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use erp_core::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId};
 use erp_core::money::Amount;
+use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
+use erp_finance::repository::PayableExt;
 use mongodb::Database;
 
 use crate::errors::{Error, Result};

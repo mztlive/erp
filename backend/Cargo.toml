@@ -20,6 +20,7 @@ members = [
   "crates/erp-contract",
   "crates/erp-import",
   "crates/erp-inventory",
+  "crates/erp-finance",
   "crates/entity-macros", # 过程宏项目
   "crates/entity-core",
   "crates/permission-macros",
@@ -54,6 +55,7 @@ erp-warehouse = { path = "crates/erp-warehouse" }
 erp-contract = { path = "crates/erp-contract" }
 erp-import = { path = "crates/erp-import" }
 erp-inventory = { path = "crates/erp-inventory" }
+erp-finance = { path = "crates/erp-finance" }
 config = { path = "config" }
 database = { path = "database" }
 entities = { path = "entities" }

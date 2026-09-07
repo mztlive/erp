@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::{CostExt, FulfillmentExt, PayableExt, PurchaseOrderExt};
+use database::{FulfillmentExt, PurchaseOrderExt};
 use entities::fulfillment::{
     Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
@@ -13,7 +13,6 @@ use entities::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision,
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use erp_audit::AuditExt;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -23,7 +22,7 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 
 use super::allocation_maintenance::{persist_current_sales_allocations, prepare_current_sales_allocations};
 use super::dto::PurchaseReviewResult;
@@ -31,54 +30,13 @@ use super::shared::{zero_amount, zero_rate};
 use super::PurchaseOrderService;
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 
 impl PurchaseOrderService {
-    /// 最终通过并生效：形成采购版本、应付与成本事实。
-    ///
-    /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工财务审核旁路。
-    ///
-    /// # 参数
-    /// * `id` - 采购单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回生效结果。
-    ///
-    /// # 错误
-    /// 非审批中、缺少提交、来源复验失败或仓储失败时返回错误。
-    pub async fn formalize_approved_order(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<PurchaseReviewResult> {
-        use erp_workflow::service::approval::policy::ApprovalDomainAction;
-
-        let PreparedFormalizedOrder { persist, result } = self.prepare_formalized_order(id, actor).await?;
-        persist_formalized_order(&self.db, persist, actor).await?;
-        let _ = ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder;
-        Ok(result)
-    }
-
-    /// 在审批运行时持有的事务内形式化最终通过的采购单。
-    ///
-    /// # 错误
-    /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。
-    pub async fn formalize_approved_order_in_transaction(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        session: &mut mongodb::ClientSession,
-    ) -> Result<()> {
-        let prepared = self.prepare_formalized_order(id, actor).await?;
-        persist_formalized_order_write(&self.db, prepared.persist, actor, session).await
-    }
-
     /// 读取并完成采购形式化的事务外领域计算。
     ///
     /// # 错误
     /// 单据、提交或来源事实不完整时返回错误。
-    async fn prepare_formalized_order(
+    pub async fn prepare_formalized_order(
         &self,
         id: &str,
         actor: &AuditActor,
@@ -158,7 +116,10 @@ impl PurchaseOrderService {
         submission: &PurchaseOrderSubmission,
         submission_lines: &[PurchaseOrderSubmissionLine],
         actor_id: &str,
-    ) -> Result<(entities::payable::PayableAccount, entities::payable::PayableEntry)> {
+    ) -> Result<(
+        erp_finance::entity::payable::PayableAccount,
+        erp_finance::entity::payable::PayableEntry,
+    )> {
         let expected_delivery_on = submission_lines
             .iter()
             .filter(|line| line.line_type == PurchaseLineType::ItemService)
@@ -171,12 +132,12 @@ impl PurchaseOrderService {
                 expected_delivery_on,
             )
             .map_err(Error::Logic)?;
-        let account = entities::payable::PayableAccount::new(
+        let account = erp_finance::entity::payable::PayableAccount::new(
             erp_core::ids::PayableAccountId::new(next_id()),
-            entities::payable::PayableAccountData {
+            erp_finance::entity::payable::PayableAccountData {
                 source_document_id: order.base.id.clone(),
                 supplier_id: order.supplier_id.clone(),
-                source_type: entities::payable::PayableSourceType::PurchaseOrder,
+                source_type: erp_finance::entity::payable::PayableSourceType::PurchaseOrder,
                 gross_total: submission.gross_amount,
                 settled_total: zero_amount(),
                 invoiceable_total: submission.gross_amount,
@@ -184,12 +145,12 @@ impl PurchaseOrderService {
             },
             actor_id,
         )?;
-        let entry = entities::payable::PayableEntry::new(
+        let entry = erp_finance::entity::payable::PayableEntry::new(
             PayableEntryId::new(next_id()),
-            entities::payable::PayableEntryData {
+            erp_finance::entity::payable::PayableEntryData {
                 payable_account_id: account.base.id.clone().into(),
-                entry_type: entities::payable::PayableEntryType::Original,
-                direction: entities::payable::EntryDirection::Increase,
+                entry_type: erp_finance::entity::payable::PayableEntryType::Original,
+                direction: erp_finance::entity::payable::EntryDirection::Increase,
                 amount: submission.gross_amount,
                 due_date,
                 source_fact_type: "purchase_order".to_string(),
@@ -208,20 +169,20 @@ impl PurchaseOrderService {
         submission: &PurchaseOrderSubmission,
         lines: &[PurchaseOrderSubmissionLine],
         revision_no: u32,
-    ) -> Result<Vec<entities::cost::CostEntry>> {
+    ) -> Result<Vec<erp_finance::entity::cost::CostEntry>> {
         let mut entries = Vec::new();
         for line in lines {
             let tax_rate = line.input_tax_rate.unwrap_or_else(zero_rate);
-            entries.push(entities::cost::CostEntry::new(
+            entries.push(erp_finance::entity::cost::CostEntry::new(
                 CostEntryId::new(next_id()),
-                entities::cost::CostEntryData {
+                erp_finance::entity::cost::CostEntryData {
                     cost_type: if line.line_type == PurchaseLineType::LogisticsFee {
-                        entities::cost::CostType::Logistics
+                        erp_finance::entity::cost::CostType::Logistics
                     } else {
-                        entities::cost::CostType::Product
+                        erp_finance::entity::cost::CostType::Product
                     },
-                    cost_stage: entities::cost::CostStage::Confirmed,
-                    cost_scope: entities::cost::CostScope::NonVoucherFulfillment,
+                    cost_stage: erp_finance::entity::cost::CostStage::Confirmed,
+                    cost_scope: erp_finance::entity::cost::CostScope::NonVoucherFulfillment,
                     cost_basis: None,
                     supplier_id: Some(submission.supplier_id.clone()),
                     gross_amount: line.gross_amount,
@@ -259,14 +220,15 @@ impl PurchaseOrderService {
 ///
 /// # 关键业务约束
 /// 提交必须仍为待审核；来源复验失败必须回滚。
-struct PreparedFormalizedOrder {
+pub struct PreparedFormalizedOrder {
     /// 事务内待写事实。
     persist: FormalizedOrderPersist,
     /// 兼容现有服务调用方的结果视图。
     result: PurchaseReviewResult,
 }
 
-struct FormalizedOrderPersist {
+/// 采购正式版本与财务事实的冻结计划；只能由组合流程消费。
+pub struct FormalizedOrderPersist {
     /// 待正式化的采购单。
     order: PurchaseOrder,
     /// 待记录结论的提交。
@@ -278,121 +240,12 @@ struct FormalizedOrderPersist {
     /// 生效版本行。
     revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
     /// 应付账户与分录。
-    payable: (entities::payable::PayableAccount, entities::payable::PayableEntry),
+    payable: (
+        erp_finance::entity::payable::PayableAccount,
+        erp_finance::entity::payable::PayableEntry,
+    ),
     /// 确认成本分录。
-    cost_entries: Vec<entities::cost::CostEntry>,
-}
-
-/// 在同一事务内写入生效版本、采购单、提交结论、应付与成本。
-///
-/// # 用途
-/// 正式化已通过审核的采购提交。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `persist` - 采购单、提交、版本、应付与成本
-/// * `actor` - 审计操作人
-///
-/// # 返回
-/// 写入成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不允许、来源复验失败或仓储失败时返回错误。
-///
-/// # 关键业务约束
-/// 必须与审核结论同一事务写入。
-async fn persist_formalized_order(
-    db: &mongodb::Database,
-    persist: FormalizedOrderPersist,
-    actor: &AuditActor,
-) -> Result<()> {
-    let db = db.clone();
-    let client = db.client().clone();
-    let actor = actor.clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_formalized_order_write(&db, persist, &actor, session).await })
-        })
-        .await
-}
-
-/// 在调用方选定的事务边界内写入采购形式化全部事实。
-///
-/// # 错误
-/// 来源复验、应付/成本/履约写入或成功审计失败时返回错误。
-async fn persist_formalized_order_write(
-    db: &mongodb::Database,
-    persist: FormalizedOrderPersist,
-    actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let FormalizedOrderPersist {
-        order,
-        submission,
-        submission_lines,
-        revision,
-        mut revision_lines,
-        payable,
-        cost_entries,
-    } = persist;
-    let fulfillment_responsibility = order.fulfillment_responsibility;
-    let actor_id = actor.id().to_string();
-    let audit = actor.clone().resource_log(
-        "purchase_order.formalize",
-        "purchase_order",
-        order.base.id.clone(),
-    )?;
-    ensure_purchase_review_sources(db, &order, &submission, &submission_lines, session).await?;
-    let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
-    db.purchase_order()
-        .create_effective_revision(&revision, &revision_lines, session)
-        .await?;
-    persist_current_sales_allocations(db, &allocations, session).await?;
-    let mut order_mut = order;
-    order_mut.formalize_with_revision(revision.base.id.clone().into(), &actor_id)?;
-    let mut submission_mut = submission;
-    submission_mut.record_review(
-        PurchaseOrderReviewDecision::Approved { comment: None },
-        Instant::now(),
-        &actor_id,
-    )?;
-    db.purchase_order_submissions()
-        .update(&mut submission_mut, session)
-        .await?;
-    db.purchase_orders().update(&mut order_mut, session).await?;
-    db.payable()
-        .create_payable_with_entry(&payable.0, &payable.1, session)
-        .await?;
-    crate::payable::payment_task::ensure_purchase_payment_task(db, &payable.0, &payable.1, session).await?;
-    for entry in &cost_entries {
-        db.cost()
-            .create_cost_entry_with_allocations(entry, Vec::new(), session)
-            .await?;
-    }
-    if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
-        create_receipt_draft_for_order(db, &order_mut, &revision_lines, session).await?;
-    } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
-        create_delivery_draft_for_order(
-            db,
-            &order_mut,
-            &revision_lines,
-            &allocations.by_purchase_line,
-            session,
-        )
-        .await?;
-    } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
-        create_service_fulfillment_draft_for_order(
-            db,
-            &order_mut,
-            &revision_lines,
-            &allocations.by_purchase_line,
-            &actor_id,
-            session,
-        )
-        .await?;
-    }
-    db.audit_logs().create(&audit, session).await?;
-    Ok(())
+    cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
 }
 
 /// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。
@@ -618,6 +471,134 @@ async fn ensure_purchase_review_sources(
     submission
         .ensure_line_totals(lines)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))
+}
+
+impl PreparedFormalizedOrder {
+    /// 将计算结果与一次性写入计划交给采购形式化流程。
+    pub fn into_parts(self) -> (FormalizedOrderPersist, PurchaseReviewResult) {
+        (self.persist, self.result)
+    }
+}
+
+/// 已写入采购版本后，等待财务和履约消费的冻结事实。
+pub struct FormalizedPurchaseEffects {
+    order: PurchaseOrder,
+    revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
+    allocations_by_line: HashMap<String, PurchaseLineSalesAllocationId>,
+    payable: (
+        erp_finance::entity::payable::PayableAccount,
+        erp_finance::entity::payable::PayableEntry,
+    ),
+    cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
+}
+
+impl FormalizedOrderPersist {
+    /// 本次正式化的采购单标识，供组合层创建原成功审计。
+    pub fn order_id(&self) -> &str {
+        &self.order.base.id
+    }
+
+    /// 重验采购来源、持久化正式版本和销售分配并推进采购状态。
+    ///
+    /// # 错误
+    /// 来源、版本或 CAS 校验失败时，在调用方唯一事务内传播错误。
+    pub async fn persist_order(
+        self,
+        db: &mongodb::Database,
+        actor: &AuditActor,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<FormalizedPurchaseEffects> {
+        let persist = self;
+        let FormalizedOrderPersist {
+            order,
+            submission,
+            submission_lines,
+            revision,
+            mut revision_lines,
+            payable,
+            cost_entries,
+        } = persist;
+        let actor_id = actor.id().to_string();
+        ensure_purchase_review_sources(db, &order, &submission, &submission_lines, session).await?;
+        let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
+        db.purchase_order()
+            .create_effective_revision(&revision, &revision_lines, session)
+            .await?;
+        persist_current_sales_allocations(db, &allocations, session).await?;
+        let mut order_mut = order;
+        order_mut.formalize_with_revision(revision.base.id.clone().into(), &actor_id)?;
+        let mut submission_mut = submission;
+        submission_mut.record_review(
+            PurchaseOrderReviewDecision::Approved { comment: None },
+            Instant::now(),
+            &actor_id,
+        )?;
+        db.purchase_order_submissions()
+            .update(&mut submission_mut, session)
+            .await?;
+        db.purchase_orders().update(&mut order_mut, session).await?;
+
+        Ok(FormalizedPurchaseEffects {
+            order: order_mut,
+            revision_lines,
+            allocations_by_line: allocations.by_purchase_line,
+            payable,
+            cost_entries,
+        })
+    }
+}
+
+impl FormalizedPurchaseEffects {
+    /// 本次原始应付账户与分录；须先写入后创建付款工作项。
+    pub fn payable(
+        &self,
+    ) -> &(
+        erp_finance::entity::payable::PayableAccount,
+        erp_finance::entity::payable::PayableEntry,
+    ) {
+        &self.payable
+    }
+
+    /// 按原采购提交顺序产生的确认成本分录。
+    pub fn cost_entries(&self) -> &[erp_finance::entity::cost::CostEntry] {
+        &self.cost_entries
+    }
+
+    /// 财务成功后按冻结履约责任创建原履约草稿及履约任务。
+    ///
+    /// # 错误
+    /// 履约事实不完整或持久化失败时传播给调用方事务。
+    pub async fn persist_fulfillment(
+        self,
+        db: &mongodb::Database,
+        actor_id: &str,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<()> {
+        if self.order.fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
+            create_receipt_draft_for_order(db, &self.order, &self.revision_lines, session).await?;
+        } else if self.order.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
+            create_delivery_draft_for_order(
+                db,
+                &self.order,
+                &self.revision_lines,
+                &self.allocations_by_line,
+                session,
+            )
+            .await?;
+        } else if self.order.fulfillment_responsibility == FulfillmentResponsibility::Service {
+            create_service_fulfillment_draft_for_order(
+                db,
+                &self.order,
+                &self.revision_lines,
+                &self.allocations_by_line,
+                actor_id,
+                session,
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -6,10 +6,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PayableExt, ReceivableExt};
-use entities::payable::{PayableAccount, PayableEntry};
-use entities::receivable::{ReceivableAccount, ReceivableEntry};
 use erp_core::ids::{PayableAccountId, PayableEntryId, ReceivableEntryId};
+use erp_finance::entity::payable::PayableAccount;
+use erp_finance::entity::payable::PayableEntry;
+use erp_finance::entity::receivable::ReceivableAccount;
+use erp_finance::entity::receivable::ReceivableEntry;
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::ReceivableExt;
 use mongodb::Database;
 use persistence_core::Executor;
 

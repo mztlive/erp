@@ -5,6 +5,9 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+serde_json = { workspace = true }
+erp-support = { workspace = true }
+erp-finance = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 bpm = { workspace = true }

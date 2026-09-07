@@ -191,3 +191,6 @@ pub async fn cancel_change_approval_in_transaction(
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
+
+/// 采购最终通过向组合层交付的冻结写入合同。
+pub use review::{FormalizedOrderPersist, FormalizedPurchaseEffects, PreparedFormalizedOrder};

@@ -3,14 +3,11 @@
 //!
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
-mod cost;
 mod fulfillment;
 mod integration_ops;
 
-mod payable;
 mod procurement_responsibility;
 mod purchase_order;
-mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
@@ -33,17 +30,15 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     erp_support::indexes::ensure(db).await?;
     erp_catalog::indexes::ensure(db).await?;
     erp_contract::indexes::ensure(db).await?;
-    cost::ensure(db).await?;
+    erp_finance::indexes::ensure(db).await?;
     erp_customer::indexes::ensure(db).await?;
     fulfillment::ensure(db).await?;
     integration_ops::ensure(db).await?;
     erp_inventory::indexes::ensure(db).await?;
     erp_import::indexes::ensure(db).await?;
     erp_party::indexes::ensure(db).await?;
-    payable::ensure(db).await?;
     procurement_responsibility::ensure(db).await?;
     purchase_order::ensure(db).await?;
-    receivable::ensure(db).await?;
     returns::ensure(db).await?;
     sales_order::ensure(db).await?;
     sales_review::ensure(db).await?;

@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use database::{PayableExt, ReceivableExt};
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::ReceivableExt;
 use persistence_core::Executor;
 
 use super::super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};

@@ -55,21 +55,27 @@ async fn dispatch_action(
         ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
         | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission => {
             let session = require_transaction(executor)?;
-            services::sales_order::SalesOrderService::with_rbac(registry.db.clone(), registry.rbac.clone())
-                .formalize_approved_submission_in_transaction(context.business_object_id(), actor, session)
-                .await
+            crate::order_to_cash::SalesOrderFormalizationProcess::new(
+                registry.db.clone(),
+                registry.rbac.clone(),
+            )
+            .formalize_approved_submission_in_transaction(context.business_object_id(), actor, session)
+            .await
         }
         ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange => {
             let session = require_transaction(executor)?;
-            services::sales_review::SalesReviewService::new(registry.db.clone())
+            crate::sales_change::SalesChangeProcess::new(registry.db.clone(), registry.rbac.clone())
                 .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                 .await
         }
         ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
             let session = require_transaction(executor)?;
-            services::purchase_order::PurchaseOrderService::new(registry.db.clone())
-                .formalize_approved_order_in_transaction(context.business_object_id(), actor, session)
-                .await
+            crate::procure_to_pay::PurchaseOrderFormalizationProcess::new(
+                registry.db.clone(),
+                registry.rbac.clone(),
+            )
+            .formalize_approved_order_in_transaction(context.business_object_id(), actor, session)
+            .await
         }
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             let session = require_transaction(executor)?;
@@ -88,7 +94,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::CustomerReceiptPost => {
             let session = require_transaction(executor)?;
-            services::receivable::post_customer_receipt_in_transaction(
+            crate::finance_posting::receivable::post_customer_receipt_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 actor,
@@ -98,8 +104,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::CustomerRefundPost
         | ApprovalDomainAction::SupplierRefundPost
-        | ApprovalDomainAction::ReceiptReversalPost
-        | ApprovalDomainAction::PaymentReversalPost => {
+        | ApprovalDomainAction::ReceiptReversalPost => {
             let session = require_transaction(executor)?;
             services::returns::finalize_approved_return_in_transaction(
                 &registry.db,
@@ -109,6 +114,12 @@ async fn dispatch_action(
                 session,
             )
             .await
+        }
+        ApprovalDomainAction::PaymentReversalPost => {
+            let session = require_transaction(executor)?;
+            crate::reverse_flow::PaymentReversalProcess::new(registry.db.clone(), registry.rbac.clone())
+                .post_payment_reversal_in_transaction(context.business_object_id(), actor, session)
+                .await
         }
         ApprovalDomainAction::SalesOrderCancelApprovalSubmission
         | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
@@ -162,7 +173,7 @@ async fn dispatch_action(
             .await
         }
         ApprovalDomainAction::CustomerReceiptCancelApproval => {
-            services::receivable::cancel_customer_receipt_approval_in_transaction(
+            crate::finance_posting::receivable::cancel_customer_receipt_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 action,

@@ -99,20 +99,23 @@ impl PurchaseOrderService {
         base_revision: &PurchaseOrderRevision,
         new_revision: &PurchaseOrderRevision,
     ) -> Result<(
-        Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
-        Vec<entities::cost::CostEntry>,
+        Option<(
+            erp_finance::entity::payable::PayableAccount,
+            erp_finance::entity::payable::PayableEntry,
+        )>,
+        Vec<erp_finance::entity::cost::CostEntry>,
     )> {
         let delta_amount = Amount::try_from(
             new_revision.gross_amount.to_decimal() - base_revision.gross_amount.to_decimal(),
         )
         .expect("金额差值小数位不超过 2 位");
         let payable_delta = if delta_amount.to_decimal() != zero_amount().to_decimal() {
-            let account = entities::payable::PayableAccount::new(
+            let account = erp_finance::entity::payable::PayableAccount::new(
                 erp_core::ids::PayableAccountId::new(next_id()),
-                entities::payable::PayableAccountData {
+                erp_finance::entity::payable::PayableAccountData {
                     source_document_id: order.base.id.clone(),
                     supplier_id: order.supplier_id.clone(),
-                    source_type: entities::payable::PayableSourceType::PurchaseOrder,
+                    source_type: erp_finance::entity::payable::PayableSourceType::PurchaseOrder,
                     gross_total: delta_amount,
                     settled_total: zero_amount(),
                     invoiceable_total: delta_amount,
@@ -120,15 +123,15 @@ impl PurchaseOrderService {
                 },
                 "system",
             )?;
-            let entry = entities::payable::PayableEntry::new(
+            let entry = erp_finance::entity::payable::PayableEntry::new(
                 PayableEntryId::new(next_id()),
-                entities::payable::PayableEntryData {
+                erp_finance::entity::payable::PayableEntryData {
                     payable_account_id: account.base.id.clone().into(),
-                    entry_type: entities::payable::PayableEntryType::ChangeDelta,
+                    entry_type: erp_finance::entity::payable::PayableEntryType::ChangeDelta,
                     direction: if delta_amount.to_decimal() > zero_amount().to_decimal() {
-                        entities::payable::EntryDirection::Increase
+                        erp_finance::entity::payable::EntryDirection::Increase
                     } else {
-                        entities::payable::EntryDirection::Decrease
+                        erp_finance::entity::payable::EntryDirection::Decrease
                     },
                     amount: Amount::try_from(delta_amount.to_decimal().abs())
                         .expect("差额绝对值小数位不超过 2 位"),

@@ -7,15 +7,17 @@
 //! 审批 Repository 提供，本模块不读取审批定义、实例与历史，不做任何审批
 //! 政策判断。
 
-use entities::payable::PayableAccount;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
+use erp_finance::entity::payable::PayableAccount;
 use mongodb::Database;
 
-use crate::repository::extensions::{PayableExt, PurchaseOrderExt, SalesOrderExt};
+use crate::repository::extensions::PurchaseOrderExt;
+use crate::repository::extensions::SalesOrderExt;
+use erp_finance::repository::PayableExt;
 use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::Result;

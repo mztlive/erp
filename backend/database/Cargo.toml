@@ -5,6 +5,7 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+erp-finance = { workspace = true }
 mongodb = { workspace = true }
 casbin = { workspace = true }
 async-trait = { workspace = true }

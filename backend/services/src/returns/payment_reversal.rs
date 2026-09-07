@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::adapter::{
     build_payment_reversal_snapshot, ensure_payment_reversal_final_approve_posting,
     execute_payment_reversal_domain_action, payment_reversal_adapter, payment_reversal_approval_view,
@@ -16,7 +14,6 @@ use super::dto::{
     PaymentReversalView, SubmitPaymentReversalRequest,
 };
 
-use super::offset_batch::load_payable_offset_facts;
 use super::start_approval::{
     build_payment_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
@@ -28,18 +25,15 @@ use super::{return_command_no, ReturnsService};
 use crate::errors::{Error, Result};
 use application_core::AuditActor;
 use application_core::CommandReceipt;
-use database::{PayableExt, ReturnsExt};
-use entities::payable::{
-    AllocationAction as PayableAllocationAction, PaymentAllocation, PaymentAllocationData, SupplierPayment,
-    SupplierPaymentStatus,
-};
-use entities::returns::{CumulativeAmountLimit, PaymentReversal, PaymentReversalData, PaymentReversalStatus};
+use database::ReturnsExt;
+use entities::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
 use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::CommandReceiptServiceExt as _;
 use erp_core::common::time::Instant;
-use erp_core::ids::{PaymentAllocationId, PaymentReversalId, SupplierAccountId, SupplierPaymentId};
-use erp_core::money::Amount;
+use erp_core::ids::{PaymentReversalId, SupplierAccountId, SupplierPaymentId};
+use erp_finance::entity::payable::SupplierPaymentStatus;
+use erp_finance::repository::PayableExt;
 use erp_identity::SharedRbacService;
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
@@ -56,6 +50,31 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 impl ReturnsService {
+    /// 读取付款冲正并执行最终通过状态闸门；由逆向流程持有实际过账事务。
+    ///
+    /// # 错误
+    /// 冲正不存在、已冲正或状态不允许过账时返回原领域错误。
+    pub async fn prepare_payment_reversal_post(
+        db: &Database,
+        reversal_id: &str,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<PaymentReversal> {
+        let mut reversal = db
+            .payment_reversals()
+            .find_by_id(reversal_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
+        if reversal.status == PaymentReversalStatus::Reversed {
+            return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
+        }
+        ensure_payment_reversal_final_approve_posting(&reversal)?;
+        execute_payment_reversal_domain_action(
+            &mut reversal,
+            erp_workflow::service::approval::policy::ApprovalDomainAction::PaymentReversalPost,
+        )?;
+        Ok(reversal)
+    }
+
     // -----------------------------------------------------------------------
     // 付款冲正
     // -----------------------------------------------------------------------
@@ -476,43 +495,6 @@ impl ReturnsService {
         load_payment_reversal_context(&self.db, original_payment_id).await
     }
 
-    /// 最终通过过账（§8.3-3 事务不变量，应付侧镜像）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 按原付款核销分配反向写入 `REVERSE` 分配并原子冲减应付子账已核销进度；
-    /// 原付款迁移为已冲正；冲正单迁移为已过账。任一校验失败整体回滚。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单或原付款不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 累计冲正超原付款、重复过账或超额冲减
-    pub async fn post_payment_reversal(&self, id: &str, actor: &AuditActor) -> Result<PaymentReversalView> {
-        let db = self.db.clone();
-        let _object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let actor_id = actor.id().to_string();
-        let reversal_id = id.to_string();
-        let detail_id = reversal_id.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    apply_payment_reversal_final_post(&db, &reversal_id, &actor_id, &actor_owned, session)
-                        .await
-                })
-            })
-            .await?;
-
-        self.payment_reversal_detail(&detail_id).await
-    }
-
     // -----------------------------------------------------------------------
     // 私有视图装配
     // -----------------------------------------------------------------------
@@ -696,165 +678,6 @@ async fn persist_bound_payment_reversal_document(
     Ok(binding)
 }
 
-/// 在最终通过事务内执行过账副作用并写回冲正单。
-///
-/// # 错误
-/// 非审批中、原付款不存在或仓储失败时返回错误。
-pub(super) async fn apply_payment_reversal_final_post(
-    db: &Database,
-    reversal_id: &str,
-    actor_id: &str,
-    actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let mut reversal = db
-        .payment_reversals()
-        .find_by_id(reversal_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
-    if reversal.status == PaymentReversalStatus::Reversed {
-        return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
-    }
-    ensure_payment_reversal_final_approve_posting(&reversal)?;
-    execute_payment_reversal_domain_action(
-        &mut reversal,
-        erp_workflow::service::approval::policy::ApprovalDomainAction::PaymentReversalPost,
-    )?;
-    apply_payment_reversal_posting(db, &reversal, actor_id, session).await?;
-    reversal.mark_posted()?;
-    db.payment_reversals().update(&mut reversal, session).await?;
-    let audit = actor.clone().resource_log(
-        "payment_reversal.post",
-        "payment_reversal",
-        reversal.base.id.clone(),
-    )?;
-    db.audit_logs().create(&audit, session).await?;
-    Ok(())
-}
-
-/// 在调用方事务内写入冲正副作用。
-///
-/// # 错误
-/// 原付款不存在、累计超额或仓储失败时返回错误。
-async fn apply_payment_reversal_posting(
-    db: &Database,
-    reversal: &PaymentReversal,
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let original_id = reversal.original_supplier_payment_id.clone();
-    let payment = db
-        .supplier_payments()
-        .find_by_id(&original_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("原付款不存在".to_string()))?;
-    if payment.status != SupplierPaymentStatus::Posted {
-        return Err(Error::BusinessLogicError("只有已过账付款可以冲正".to_string()));
-    }
-    let reversed_before: Amount = db
-        .payment_reversals()
-        .posted_reversal_total_by_payment(&original_id, &reversal.base.id, session)
-        .await?;
-    CumulativeAmountLimit::ensure_within_limit(payment.amount, reversed_before, reversal.amount)
-        .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原付款金额".to_string()))?;
-    persist_reversal_offsets_and_mark_payment(db, reversal, payment, actor_id, session).await
-}
-
-/// 写入反向核销分配、冲减进度并把原付款置为已冲正。
-///
-/// # 错误
-/// 超额冲减或仓储失败时返回错误。
-async fn persist_reversal_offsets_and_mark_payment(
-    db: &Database,
-    reversal: &PaymentReversal,
-    payment: SupplierPayment,
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let allocations = db
-        .payment_allocations()
-        .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
-        .await?;
-    let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, reversal.amount)?;
-    let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
-    revert_payment_settlements(db, &chunks, actor_id, session).await?;
-    persist_reverse_allocations(db, reversal, &payment, &reverse_rows, &seqs, session).await?;
-    let mut payment = payment;
-    payment.transition(SupplierPaymentStatus::Reversed)?;
-    db.supplier_payments().update(&mut payment, session).await?;
-    Ok(())
-}
-
-/// 按冲减块回冲应付子账已核销进度。
-///
-/// # 错误
-/// 分录缺失或超额冲减时返回错误。
-async fn revert_payment_settlements(
-    db: &Database,
-    chunks: &[entities::payable::PaymentReverseChunk],
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let facts = load_payable_offset_facts(
-        db,
-        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
-        session,
-    )
-    .await?;
-    let mut affected_accounts = HashSet::new();
-    for chunk in chunks {
-        let entry = facts
-            .entries
-            .get(chunk.increase_entry_id.as_ref())
-            .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
-        if !facts.accounts.contains_key(entry.payable_account_id.as_ref()) {
-            return Err(Error::NotFound("应付往来子账不存在".to_string()));
-        }
-        let reverted = db
-            .payable_accounts()
-            .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
-            .await?;
-        if !reverted {
-            return Err(Error::BusinessLogicError("冲正冲减超过已核销金额".to_string()));
-        }
-        affected_accounts.insert(entry.payable_account_id.clone());
-    }
-    for account_id in affected_accounts {
-        crate::payable::payment_task::sync_purchase_payment_task(db, &account_id, session).await?;
-    }
-    Ok(())
-}
-
-/// 写入反向核销分配。
-///
-/// # 错误
-/// 仓储失败时返回错误。
-async fn persist_reverse_allocations(
-    db: &Database,
-    reversal: &PaymentReversal,
-    payment: &SupplierPayment,
-    reverse_rows: &[entities::payable::PaymentReversePlanRow],
-    seqs: &[u32],
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
-        let allocation = PaymentAllocation::new(
-            PaymentAllocationId::new(next_id()),
-            PaymentAllocationData {
-                supplier_payment_id: payment.base.id.clone().into(),
-                payable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: *seq,
-                allocation_action: PayableAllocationAction::Reverse,
-                allocated_amount: reverse.amount,
-                allocated_at: reversal.occurred_at,
-                reverses_allocation_id: Some(reverse.original_id.clone()),
-            },
-        )?;
-        db.payment_allocations().create(&allocation, session).await?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod payment_reversal_approval_tests {
     use super::{execute_payment_reversal_domain_action, start_payment_reversal_approval, ReturnsService};
@@ -887,7 +710,10 @@ mod payment_reversal_approval_tests {
     /// 创建必须注册 BusinessDocument 并绑定发布定义。
     #[test]
     fn create_registers_document_and_binds_published_definition() {
-        let source = include_str!("payment_reversal.rs");
+        let source = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        );
         assert!(source.contains("bind_published_definition_on_document_create"));
         assert!(source.contains("new_registered_document"));
         assert!(source.contains("DocumentType::PaymentReversal"));
@@ -899,10 +725,13 @@ mod payment_reversal_approval_tests {
     fn create_path_calls_local_object_readable() {
         use super::super::adapter::payment_reversal_object_readable;
 
-        let production = include_str!("payment_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        )
+        .split("#[cfg(test)]")
+        .next()
+        .expect("生产代码");
         assert!(production.contains("payment_reversal_object_readable"));
         assert!(!production.contains("adapter_object_read_decision"));
         assert!(payment_reversal_object_readable("org-1", "u1").unwrap());
@@ -913,7 +742,10 @@ mod payment_reversal_approval_tests {
     /// 提交必须锁定单据、递增 approval_subject_version 并调用 start_approval。
     #[test]
     fn submit_calls_start_approval_with_subject_version() {
-        let source = include_str!("payment_reversal.rs");
+        let source = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        );
         assert!(source.contains("pub async fn submit_payment_reversal"));
         assert!(source.contains("payment_reversal_start_command"));
         assert!(source.contains("reversal.approval_subject_version"));
@@ -923,7 +755,10 @@ mod payment_reversal_approval_tests {
     /// 最终动作唯一为 post_payment_reversal，且客户端过账旁路关闭。
     #[test]
     fn final_action_is_post_payment_reversal() {
-        let source = include_str!("payment_reversal.rs");
+        let source = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        );
         assert!(source.contains("pub async fn post_payment_reversal"));
         assert!(source.contains("reversal.mark_posted"));
         assert!(source.contains("PaymentReversalPost"));
@@ -933,7 +768,10 @@ mod payment_reversal_approval_tests {
     /// 撤回必须调用统一 cancel 并回到草稿。
     #[test]
     fn cancel_uses_unified_port() {
-        let source = include_str!("payment_reversal.rs");
+        let source = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        );
         assert!(source.contains("pub async fn cancel_payment_reversal_approval"));
         assert!(source.contains("prepare_cancel"));
         assert!(source.contains("persist_payment_reversal_cancel"));
@@ -952,10 +790,13 @@ mod payment_reversal_approval_tests {
     /// 生产代码不得保留草稿直接过账或待复核旁路。
     #[test]
     fn production_closes_draft_post_and_pending_review() {
-        let production = include_str!("payment_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        )
+        .split("#[cfg(test)]")
+        .next()
+        .expect("生产代码");
         assert!(!production.contains("PaymentReversalStatus::PendingReview"));
         assert!(!production.contains("Draft =>"));
         assert!(!production.contains("pending_review"));
@@ -964,22 +805,28 @@ mod payment_reversal_approval_tests {
     /// 提交/撤回必须使用实体 matches_version，并删除旧 helper。
     #[test]
     fn version_lock_uses_entity_matches_version() {
-        let production = include_str!("payment_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        )
+        .split("#[cfg(test)]")
+        .next()
+        .expect("生产代码");
         assert!(production.contains("reversal.matches_version(req.expected_version)"));
         assert!(production.contains("conflict_if_stale_version"));
         assert!(!production.contains("fn ensure_expected_version"));
     }
 
-    /// 冲减必须批量读取分录与账户，任务同步仍留在 Service。
+    /// 冲减必须批量读取分录与账户，任务同步由同事务逆向流程完成。
     #[test]
     fn revert_settlements_batch_entry_and_account_reads() {
-        let production = include_str!("payment_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = concat!(
+            include_str!("../../../crates/erp-processes/src/reverse_flow/mod.rs"),
+            include_str!("payment_reversal.rs")
+        )
+        .split("#[cfg(test)]")
+        .next()
+        .expect("生产代码");
         assert!(production.contains("load_payable_offset_facts"));
         assert!(production.contains("revert_settlement"));
         assert!(production.contains("sync_purchase_payment_task"));

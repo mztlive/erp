@@ -139,7 +139,7 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
         ".mark_approval_started(",
     );
     assert_start_write_order(
-        include_str!("../../../../services/src/receivable/start_approval.rs"),
+        include_str!("../finance_posting/receivable/start_approval.rs"),
         1,
         ".mark_approval_started(",
     );
@@ -164,7 +164,7 @@ fn generic_start_replay_paths_return_before_transaction_writes() {
         include_str!("../../../../services/src/sales_review/start_approval.rs"),
         include_str!("../../../../services/src/purchase_order/start_approval.rs"),
         include_str!("../../../../services/src/purchase_order/change_start.rs"),
-        include_str!("../../../../services/src/receivable/start_approval.rs"),
+        include_str!("../finance_posting/receivable/start_approval.rs"),
         include_str!("../../../../services/src/returns/start_approval/customer_refund.rs"),
         include_str!("../../../../services/src/returns/start_approval/supplier_refund.rs"),
         include_str!("../../../../services/src/returns/start_approval/receipt_reversal.rs"),

@@ -125,17 +125,17 @@ pub(super) fn build_receivable_delta(
     order: &SalesOrder,
     revision: &RevisionAggregate,
     current_gross: Amount,
-    existing_account: Option<entities::receivable::ReceivableAccount>,
+    existing_account: Option<erp_finance::entity::receivable::ReceivableAccount>,
     posted_at: Instant,
     updated_by: &str,
 ) -> Result<
     Option<(
-        entities::receivable::ReceivableAccount,
-        entities::receivable::ReceivableEntry,
+        erp_finance::entity::receivable::ReceivableAccount,
+        erp_finance::entity::receivable::ReceivableEntry,
     )>,
 > {
     let new_gross = revision_gross(revision)?;
-    let delta = entities::receivable::ReceivableDelta::try_from_gross(new_gross, current_gross)
+    let delta = erp_finance::entity::receivable::ReceivableDelta::try_from_gross(new_gross, current_gross)
         .map_err(Error::Logic)?;
     let Some(delta) = delta else {
         return Ok(None);
@@ -143,14 +143,24 @@ pub(super) fn build_receivable_delta(
     let mut account = existing_account
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少正式应收子账，不能生效销售变更".to_string()))?;
     let account_update = account
-        .sales_change_delta_update(order.business_type, new_gross)
+        .sales_change_delta_update(
+            match order.business_type {
+                entities::sales_order::BusinessType::GoodsService => {
+                    erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
+                }
+                entities::sales_order::BusinessType::Voucher => {
+                    erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
+                }
+            },
+            new_gross,
+        )
         .map_err(Error::Logic)?;
     account.update(account_update, updated_by).map_err(Error::Logic)?;
-    let entry = entities::receivable::ReceivableEntry::new(
+    let entry = erp_finance::entity::receivable::ReceivableEntry::new(
         ReceivableEntryId::new(next_id()),
-        entities::receivable::ReceivableEntryData {
+        erp_finance::entity::receivable::ReceivableEntryData {
             receivable_account_id: account.base.id.clone().into(),
-            entry_type: entities::receivable::ReceivableEntryType::SalesChangeDelta,
+            entry_type: erp_finance::entity::receivable::ReceivableEntryType::SalesChangeDelta,
             direction: delta.direction(),
             amount: delta.absolute_amount(),
             due_date: BusinessDate::today(),
