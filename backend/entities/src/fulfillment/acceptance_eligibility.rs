@@ -9,9 +9,9 @@
 
 use rust_decimal::Decimal;
 
-use crate::sales_order::FulfillmentProgress;
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use erp_sales::entity::sales_order::FulfillmentProgress;
 
 use super::acceptance_fulfillment_allocation::AcceptanceFulfillmentAllocation;
 

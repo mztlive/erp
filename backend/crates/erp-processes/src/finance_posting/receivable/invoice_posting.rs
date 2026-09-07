@@ -150,7 +150,7 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
         sales_order_ids.sort();
         sales_order_ids.dedup();
         for id in sales_order_ids {
-            services::sales_order::update_sales_order_money_progress(
+            crate::order_to_cash::progress::update_sales_order_money_progress(
                 self.db,
                 executor,
                 &SalesOrderId::new(id),

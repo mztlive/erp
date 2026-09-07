@@ -2,16 +2,16 @@
 //!
 //! 单次聚合返回跨页指标和最近摘要；页面不得逐页拉取合同、销售单后自行计数。
 
-use entities::sales_order::{CloseStatus, CommercialStatus};
 use erp_contract::ContractStatus;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
 use serde::Deserialize;
+use {erp_sales::entity::sales_order::CloseStatus, erp_sales::entity::sales_order::CommercialStatus};
 
-use database::SalesOrderExt;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_contract::ContractExt;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
 use persistence_core::{Error, Result};
 

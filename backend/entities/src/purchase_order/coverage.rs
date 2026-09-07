@@ -13,15 +13,17 @@ use std::collections::{HashMap, HashSet};
 
 use rust_decimal::Decimal;
 
-use crate::sales_order::{
-    LineType, ProcurementCoverageSummary, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
-    SalesOrderRevisionLine,
-};
 use erp_catalog::{Product, ProductKind, Sku};
 use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
 use erp_inventory::StockReservation;
+use {
+    erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::ProcurementCoverageSummary,
+    erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevision,
+    erp_sales::entity::sales_order::SalesOrderRevision,
+    erp_sales::entity::sales_order::SalesOrderRevisionLine,
+};
 
 use super::allocation::PurchaseLineSalesAllocation;
 use super::order::{PurchaseOrder, PurchaseOrderStatus};
@@ -590,10 +592,6 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use crate::sales_order::revision::{
-        SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
-    };
-    use crate::sales_order::{LineType, ProcurementCoverageSummary, RevisionSource};
     use erp_catalog::entity::catalog::product::ProductData;
     use erp_catalog::entity::catalog::sku::SkuData;
     use erp_catalog::{EnableStatus, ListingStatus, Product, Sku};
@@ -608,6 +606,15 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate};
     use erp_inventory::{
         ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
+    };
+    use {
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
+    };
+    use {
+        erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::ProcurementCoverageSummary,
+        erp_sales::entity::sales_order::RevisionSource,
     };
 
     use super::{
@@ -666,16 +673,20 @@ mod tests {
             content_hash: format!("hash-{id}"),
             customer_revision_id: None,
             contract_revision_id: None,
-            customer_snapshot: crate::sales_order::snapshot::CustomerSnapshot::new("客户").unwrap(),
+            customer_snapshot: erp_sales::entity::sales_order::snapshot::CustomerSnapshot::new("客户")
+                .unwrap(),
             contract_snapshot: None,
             settlement_party_snapshot: None,
-            payment_term_snapshot: crate::sales_order::snapshot::PaymentTermSnapshot::new("NET-30", "净30天")
-                .unwrap(),
-            invoice_requirement_snapshot: crate::sales_order::snapshot::InvoiceRequirementSnapshot::new(
-                "增值税专用发票",
-                "13",
+            payment_term_snapshot: erp_sales::entity::sales_order::snapshot::PaymentTermSnapshot::new(
+                "NET-30", "净30天",
             )
             .unwrap(),
+            invoice_requirement_snapshot:
+                erp_sales::entity::sales_order::snapshot::InvoiceRequirementSnapshot::new(
+                    "增值税专用发票",
+                    "13",
+                )
+                .unwrap(),
             project_name: None,
             business_remark: None,
             voucher_category_sku_id: None,

@@ -5,6 +5,7 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+erp-sales = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 bpm = { workspace = true }

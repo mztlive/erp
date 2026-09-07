@@ -13,11 +13,11 @@ use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrd
 use mongodb::Database;
 
 use super::order::PurchaseOrderFilter;
-use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
 use erp_identity::AccessControlExt;
 use persistence_core::Executor;
 use persistence_core::PageResult;
 use persistence_core::Result;
+use {crate::repository::extensions::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 /// 采购单列表关联事实。
 ///

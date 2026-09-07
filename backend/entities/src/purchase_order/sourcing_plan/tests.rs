@@ -1,11 +1,5 @@
 use std::str::FromStr;
 
-use crate::sales_order::revision::{
-    SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
-    SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
-};
-use crate::sales_order::snapshot::HeaderSnapshotData;
-use crate::sales_order::{CommercialStatus, LineType, ProcurementCoverageSummary, RevisionSource};
 use crate::supplier_offering::{
     AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, PrefillSourceRefs, SupplierOffering,
     SupplierOfferingAvailability, SupplierOfferingAvailabilityData, SupplierOfferingData,
@@ -18,6 +12,20 @@ use erp_core::ids::{
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_inventory::{StockBalance, StockBalanceData};
+use erp_sales::entity::sales_order::snapshot::HeaderSnapshotData;
+use {
+    erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
+    erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevisionData,
+    erp_sales::entity::sales_order::revision::SalesOrderRevision,
+    erp_sales::entity::sales_order::revision::SalesOrderRevisionData,
+    erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
+    erp_sales::entity::sales_order::revision::SalesOrderRevisionLineData,
+};
+use {
+    erp_sales::entity::sales_order::CommercialStatus, erp_sales::entity::sales_order::LineType,
+    erp_sales::entity::sales_order::ProcurementCoverageSummary,
+    erp_sales::entity::sales_order::RevisionSource,
+};
 
 use super::{
     stock_basis_id_for, SourcingAssignment, SourcingAssignmentSet, SourcingPlan, SourcingPlanError,
@@ -198,13 +206,13 @@ fn line_supply(offering_id: &str, supplier_id: &str, available: &str) -> LineSup
 }
 
 /// 构造销售稳定单。
-fn sales_order(id: &str) -> crate::sales_order::SalesOrder {
-    let mut order = crate::sales_order::SalesOrder::new(
+fn sales_order(id: &str) -> erp_sales::entity::sales_order::SalesOrder {
+    let mut order = erp_sales::entity::sales_order::SalesOrder::new(
         SalesOrderId::new(id),
-        crate::sales_order::SalesOrderData {
+        erp_sales::entity::sales_order::SalesOrderData {
             order_no: format!("SO-{id}"),
-            business_type: crate::sales_order::BusinessType::GoodsService,
-            origin_system: crate::sales_order::OriginSystem::Erp,
+            business_type: erp_sales::entity::sales_order::BusinessType::GoodsService,
+            origin_system: erp_sales::entity::sales_order::OriginSystem::Erp,
             source_identity_id: None,
             customer_id: erp_core::ids::CustomerAccountId::new("customer-1"),
             contract_id: None,

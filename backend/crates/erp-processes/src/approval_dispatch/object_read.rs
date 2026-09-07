@@ -52,11 +52,11 @@ fn adapter_object_read_for_type(
     }
     match document_type {
         WorkflowDocumentType::SalesOrder | WorkflowDocumentType::VoucherSalesOrder => Ok(Some(
-            services::sales_order::sales_order_object_readable(organization_id, assignee_user_id)
+            crate::order_to_cash::sales_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::SalesChangeOrder => Ok(Some(
-            services::sales_review::sales_change_order_object_readable(organization_id, assignee_user_id)
+            crate::sales_change::sales_change_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
         WorkflowDocumentType::PurchaseOrder => Ok(Some(

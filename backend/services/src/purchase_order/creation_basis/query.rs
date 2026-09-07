@@ -1,16 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     BasisGroup, CreationBasisFacts, SalesProcurementCoverage, StockBasisGroup, StockBasisLine,
 };
-use entities::sales_order::{CommercialStatus, SalesOrder};
 use erp_catalog::ProductKind;
 use erp_core::ids::{SalesOrderId, SkuId};
 use erp_inventory::InventoryExt;
 use erp_warehouse::WarehouseExt;
 use erp_workflow::WorkItemExt;
 use persistence_core::{Executor, NoTransaction};
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use {erp_sales::entity::sales_order::CommercialStatus, erp_sales::entity::sales_order::SalesOrder};
 
 use super::super::coverage::load_sales_procurement_coverage;
 use super::super::dto::{CreationBasisListParams, CreationBasisView};

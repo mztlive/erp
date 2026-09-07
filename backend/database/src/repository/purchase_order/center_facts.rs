@@ -16,9 +16,9 @@ use erp_finance::entity::payable::PayableAccount;
 use mongodb::Database;
 
 use crate::repository::extensions::PurchaseOrderExt;
-use crate::repository::extensions::SalesOrderExt;
 use erp_finance::repository::PayableExt;
 use erp_identity::AccessControlExt;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
 use persistence_core::Result;
 

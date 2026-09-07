@@ -15,7 +15,7 @@ pub use dto::{
     ProcurementResponsibilityRuleListParams, ProcurementResponsibilityRulePageView,
     ProcurementResponsibilityRuleView, UpdateProcurementResponsibilityRuleRequest,
 };
-pub(crate) use resolver::{AuthorizedResolutionPlan, ResolutionInput};
+pub use resolver::{AuthorizedResolutionPlan, ResolutionInput};
 
 /// 采购责任服务。
 pub struct ProcurementResponsibilityService {

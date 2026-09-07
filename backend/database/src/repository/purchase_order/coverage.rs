@@ -10,18 +10,18 @@ use std::collections::HashMap;
 
 use entities::purchase_order::ProcurementCoverageFacts;
 use entities::purchase_order::{PurchaseLineType, PurchaseOrderStatus};
-use entities::sales_order::LineType;
 use erp_core::ids::{
     PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId,
     SalesOrderRevisionId, SalesOrderRevisionLineId,
 };
+use erp_sales::entity::sales_order::LineType;
 use mongodb::Database;
 
-use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
 use erp_catalog::CatalogExt;
 use erp_inventory::InventoryExt;
 use persistence_core::Executor;
 use persistence_core::Result;
+use {crate::repository::extensions::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 /// 批量加载采购覆盖计算所需的最小持久化事实。
 ///
@@ -220,12 +220,6 @@ mod isolation_tests {
         PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
         PurchaseType, SupplierSnapshot,
     };
-    use entities::sales_order::revision::{
-        SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
-        SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
-    };
-    use entities::sales_order::snapshot::HeaderSnapshotData;
-    use entities::sales_order::{LineType, RevisionSource};
     use erp_catalog::entity::catalog::product::ProductData;
     use erp_catalog::entity::catalog::sku::SkuData;
     use erp_catalog::{EnableStatus, ListingStatus, Product, Sku};
@@ -240,13 +234,23 @@ mod isolation_tests {
     use erp_inventory::{
         ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
+    use erp_sales::entity::sales_order::snapshot::HeaderSnapshotData;
     use test_support::{require_mongo, TestDb};
+    use {
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevisionData,
+        erp_sales::entity::sales_order::revision::SalesOrderRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionData,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLineData,
+    };
+    use {erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::RevisionSource};
 
     use crate::ensure_indexes;
-    use crate::repository::extensions::{PurchaseOrderExt, SalesOrderExt};
     use erp_catalog::CatalogExt;
     use erp_inventory::InventoryExt;
     use persistence_core::{NoTransaction, Transactional};
+    use {crate::repository::extensions::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
     use super::load_procurement_coverage_facts;
 

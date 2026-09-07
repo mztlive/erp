@@ -1,8 +1,8 @@
 //! Sales `BusinessType` adapters onto workflow document-type mapping.
 
 use bpm::SubjectRef;
-use entities::sales_order::BusinessType;
 use erp_core::Result;
+use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::approval_integration::{
     document_type_of_sales_business as map_kind, subject_ref_for_sales_business as subject_kind,
     SalesBusinessKind,

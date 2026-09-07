@@ -8,20 +8,23 @@
 
 use database::PurchaseOrderExt;
 use database::ReturnsExt;
-use database::SalesOrderExt;
-use database::SalesReviewExt;
 use entities::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
-use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
-use entities::sales_review::SalesChangeOrderStatus;
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use erp_customer::CustomerExt;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::ReceivableExt;
 use erp_inventory::InventoryExt;
+use erp_sales::entity::sales_review::SalesChangeOrderStatus;
+use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::SalesReviewExt;
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;
+use {
+    erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::CommercialStatus,
+    erp_sales::entity::sales_order::ReviewStatus,
+};
 
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::policy::require_process_required;
@@ -677,7 +680,7 @@ fn ensure_goods_service_source(actual: BusinessType, target: DocumentType) -> Re
     Ok(())
 }
 
-fn ensure_initial_sales_order_state(order: &entities::sales_order::SalesOrder) -> Result<()> {
+fn ensure_initial_sales_order_state(order: &erp_sales::entity::sales_order::SalesOrder) -> Result<()> {
     if order.commercial_status != CommercialStatus::Draft
         || order.review_status != ReviewStatus::NotSubmitted
         || order.stable.status != CommercialStatus::Draft
@@ -690,7 +693,9 @@ fn ensure_initial_sales_order_state(order: &entities::sales_order::SalesOrder) -
     Ok(())
 }
 
-fn ensure_initial_sales_change_state(change: &entities::sales_review::SalesChangeOrder) -> Result<()> {
+fn ensure_initial_sales_change_state(
+    change: &erp_sales::entity::sales_review::SalesChangeOrder,
+) -> Result<()> {
     if change.stable.status != SalesChangeOrderStatus::Draft
         || change.current_submission_id.is_some()
         || change.target_content_hash.is_some()

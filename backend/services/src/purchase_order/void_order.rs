@@ -1,6 +1,5 @@
 //! 采购草稿作废与采购覆盖释放。
 
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use erp_audit::AuditExt;
@@ -8,6 +7,7 @@ use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::dto::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult, VOID_ACTION};

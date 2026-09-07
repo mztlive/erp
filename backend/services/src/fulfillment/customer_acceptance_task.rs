@@ -4,17 +4,17 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
-use database::SalesOrderExt;
-use entities::sales_order::{BusinessType, SalesOrder};
 use erp_core::ids::SalesOrderId;
 use erp_identity::AccessControlExt;
 use erp_identity::{Permission, PermissionSet};
+use erp_sales::repository::SalesOrderExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
+use {erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::SalesOrder};
 
 use crate::errors::{Error, Result};
 use erp_identity::SharedRbacService;
@@ -24,7 +24,7 @@ const OWNER_ROLE: &str = "sales_order_owner";
 
 /// 客户验收责任本次形成的业务原因。
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum CustomerAcceptanceTaskReason {
+pub enum CustomerAcceptanceTaskReason {
     /// 发货或交付已经形成可验收事实。
     DeliveryAvailable,
     /// 已过账验收被冲正，重新释放可验收事实。
@@ -41,7 +41,7 @@ impl CustomerAcceptanceTaskReason {
 }
 
 /// 为销售单当前可验收交付建立唯一开放验收任务。
-pub(crate) async fn ensure_customer_acceptance_task(
+pub async fn ensure_customer_acceptance_task(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     reason: CustomerAcceptanceTaskReason,
@@ -66,7 +66,7 @@ pub(crate) async fn ensure_customer_acceptance_task(
 }
 
 /// 为验收正式命令加载当前任务并校验责任、任务身份和可选乐观锁。
-pub(crate) async fn prepare_customer_acceptance_task_command(
+pub async fn prepare_customer_acceptance_task_command(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     actor_id: &str,
@@ -88,7 +88,7 @@ pub(crate) async fn prepare_customer_acceptance_task_command(
 }
 
 /// 按过账后的剩余可验收事实持久化任务活动或完成事实。
-pub(crate) async fn persist_customer_acceptance_task_after_posting(
+pub async fn persist_customer_acceptance_task_after_posting(
     db: &mongodb::Database,
     mut task: WorkItem,
     actor_id: &str,

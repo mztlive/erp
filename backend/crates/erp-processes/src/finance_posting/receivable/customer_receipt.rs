@@ -652,7 +652,7 @@ pub async fn post_customer_receipt_in_transaction(
     sales_order_ids.sort();
     sales_order_ids.dedup();
     for sales_order_id in sales_order_ids {
-        services::sales_order::update_sales_order_money_progress(
+        crate::order_to_cash::progress::update_sales_order_money_progress(
             db,
             session,
             &SalesOrderId::new(sales_order_id),

@@ -5,13 +5,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::SalesOrderExt;
-use entities::sales_order::{SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine, SubmissionStatus};
 use erp_core::ids::SalesOrderSubmissionId;
 use erp_core::money::Amount;
 #[cfg(test)]
 use erp_core::money::Quantity;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
+use {
+    erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderSubmission,
+    erp_sales::entity::sales_order::SalesOrderSubmissionLine,
+    erp_sales::entity::sales_order::SubmissionStatus,
+};
 
 use super::brief::{
     format_instant_due_label, format_quantity, join_list_summary, line_title, non_empty, push_section,

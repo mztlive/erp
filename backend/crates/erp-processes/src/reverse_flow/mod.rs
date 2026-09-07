@@ -1,5 +1,8 @@
 //! 付款冲正、应付冲减、付款工作项与审计的同事务逆向流程。
 
+mod receipt_reversal;
+pub use receipt_reversal::ReceiptReversalProcess;
+
 use application_core::AuditActor;
 use database::ReturnsExt;
 use entities::returns::{CumulativeAmountLimit, PaymentReversal};

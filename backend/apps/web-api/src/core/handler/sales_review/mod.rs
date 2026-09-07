@@ -7,11 +7,14 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::sales_review::{
-    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeOrderDetailView,
-    SalesChangeOrderListParams, SalesChangeOrderView, SalesReviewService, SubmitSalesChangeRequest,
-    VoidSalesChangeOrderRequest,
+use erp_sales::dto::sales_review::{
+    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeOrderListParams,
+    SalesChangeOrderView, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
+
+use erp_processes::sales_change::SalesChangeProcess;
+use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesChangeReadService};
+use erp_sales::service::sales_review::SalesReviewService;
 
 use crate::{
     app_state::AppState,
@@ -38,7 +41,6 @@ pub async fn sales_change_order_list(
     Query(params): Query<SalesChangeOrderListParams>,
 ) -> Result<PageView<SalesChangeOrderView>> {
     let page = SalesReviewService::new(state.db())
-        .with_object_read(state.approval_object_read())
         .sales_change_order_list(&params)
         .await?;
 
@@ -64,8 +66,7 @@ pub async fn sales_change_order_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesReviewService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let view = SalesChangeReadService::new(state.db())
         .sales_change_order_detail(&id)
         .await?;
 
@@ -94,7 +95,7 @@ pub async fn sales_change_order_create(
     Json(req): Json<CreateSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
     let rbac = state.rbac();
-    let view = SalesReviewService::new(state.db())
+    let view = SalesChangeProcess::new(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .create_sales_change_order(req, &actor, &rbac)
         .await?;
@@ -125,7 +126,7 @@ pub async fn sales_change_order_submit_impact(
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesChangeRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesReviewService::new(state.db())
+    let view = SalesChangeProcess::new(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .submit_sales_change(&id, req, &actor)
         .await?;
@@ -156,7 +157,7 @@ pub async fn sales_change_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesReviewService::new(state.db())
+    let view = SalesChangeProcess::new(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .void_sales_change(&id, req, &actor)
         .await?;
@@ -187,7 +188,7 @@ pub async fn sales_change_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSalesChangeApprovalRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesReviewService::new(state.db())
+    let view = SalesChangeProcess::new(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .cancel_approval(&id, req, &actor)
         .await?;

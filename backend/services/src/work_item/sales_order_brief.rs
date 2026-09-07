@@ -2,9 +2,12 @@
 
 use std::collections::HashSet;
 
-use database::SalesOrderExt;
-use entities::sales_order::{SalesOrder, SalesOrderSubmission, SubmissionStatus};
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
+use {
+    erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderSubmission,
+    erp_sales::entity::sales_order::SubmissionStatus,
+};
 
 use super::amount::non_empty;
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};

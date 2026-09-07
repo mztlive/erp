@@ -11,8 +11,8 @@
 
 use database::PurchaseOrderExt;
 use entities::purchase_order::{build_procurement_coverage, SalesProcurementCoverage};
-use entities::sales_order::SalesOrder;
 use erp_core::ids::SalesOrderRevisionId;
+use erp_sales::entity::sales_order::SalesOrder;
 use persistence_core::Executor;
 
 use crate::errors::{Error, Result};

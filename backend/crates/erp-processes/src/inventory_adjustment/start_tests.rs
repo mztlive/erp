@@ -119,12 +119,12 @@ fn list_projection_copies_entry_assignee() {
 #[test]
 fn all_process_required_start_paths_are_receipt_first_and_guarded() {
     assert_start_write_order(
-        include_str!("../../../../services/src/sales_order/start_approval.rs"),
+        include_str!("../order_to_cash/start_approval.rs"),
         1,
         ".mark_approval_started(",
     );
     assert_start_write_order(
-        include_str!("../../../../services/src/sales_review/start_approval.rs"),
+        include_str!("../sales_change/start_approval.rs"),
         1,
         ".mark_approval_started(",
     );
@@ -160,8 +160,8 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
 #[test]
 fn generic_start_replay_paths_return_before_transaction_writes() {
     for source in [
-        include_str!("../../../../services/src/sales_order/start_approval.rs"),
-        include_str!("../../../../services/src/sales_review/start_approval.rs"),
+        include_str!("../order_to_cash/start_approval.rs"),
+        include_str!("../sales_change/start_approval.rs"),
         include_str!("../../../../services/src/purchase_order/start_approval.rs"),
         include_str!("../../../../services/src/purchase_order/change_start.rs"),
         include_str!("../finance_posting/receivable/start_approval.rs"),

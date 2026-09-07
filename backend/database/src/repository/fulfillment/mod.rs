@@ -52,7 +52,6 @@ use entities::fulfillment::{
     DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
     PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
 };
-use entities::sales_order::{SalesOrderLine, SalesOrderRevisionLine};
 use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
     PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
@@ -62,11 +61,14 @@ use erp_core::money::Quantity;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::payable::PayableSourceType;
 use erp_inventory::StockReservation;
+use {
+    erp_sales::entity::sales_order::SalesOrderLine, erp_sales::entity::sales_order::SalesOrderRevisionLine,
+};
 
 use super::extensions::FulfillmentExt;
-use super::extensions::SalesOrderExt;
 use erp_finance::repository::PayableExt;
 use erp_inventory::InventoryExt;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 

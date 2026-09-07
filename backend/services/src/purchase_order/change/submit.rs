@@ -1,4 +1,3 @@
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseOrder,
     PurchaseOrderRevision,
@@ -12,6 +11,7 @@ use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::super::change_adapter::{
     build_purchase_change_snapshot, execute_purchase_change_domain_action, purchase_change_order_adapter,
@@ -679,7 +679,7 @@ struct ChangeStartDispatch<'a> {
     /// 已进入审批中的变更单。
     change: PurchaseChangeOrder,
     /// 来源销售单。
-    sales_order: entities::sales_order::SalesOrder,
+    sales_order: erp_sales::entity::sales_order::SalesOrder,
     /// 冻结提交。
     prepared: FrozenChangeSubmission,
     /// 采购变更审批适配器。

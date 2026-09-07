@@ -2,13 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
-use entities::{
-    purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrderRevision},
-    sales_order::SalesOrderRevision,
-    sales_review::{SalesChangeOrder, SalesChangeSubmission},
-};
 use persistence_core::Executor;
+use {
+    database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt, erp_sales::repository::SalesReviewExt,
+};
+use {
+    entities::purchase_order::PurchaseChangeOrder, entities::purchase_order::PurchaseChangeSubmission,
+    entities::purchase_order::PurchaseOrderRevision, erp_sales::entity::sales_order::SalesOrderRevision,
+    erp_sales::entity::sales_review::SalesChangeOrder,
+    erp_sales::entity::sales_review::SalesChangeSubmission,
+};
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;

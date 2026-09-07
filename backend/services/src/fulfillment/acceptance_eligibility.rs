@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use database::{FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{
     AcceptanceFactEligibility, AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery,
     DeliveryLine, ElectronicDelivery, FulfillmentFactType, ServiceFulfillment,
@@ -9,6 +8,7 @@ use entities::fulfillment::{
 use erp_core::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
 use erp_core::money::Quantity;
 use persistence_core::NoTransaction;
+use {database::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
 use crate::errors::{Error, Result};
 
@@ -169,7 +169,7 @@ impl FulfillmentService {
 /// # 返回
 /// 返回销售稳定明细 ID 集合。
 pub(super) fn so_line_ids(
-    revision_lines: &[entities::sales_order::SalesOrderRevisionLine],
+    revision_lines: &[erp_sales::entity::sales_order::SalesOrderRevisionLine],
 ) -> Vec<SalesOrderLineId> {
     revision_lines
         .iter()
@@ -195,9 +195,10 @@ pub(super) fn so_line_ids(
 /// 事实/分配由数据模型 §6.7 固定为三类来源，字段不可压缩。
 pub(super) struct EligibilityGroupSources<'a> {
     /// 销售版本公共行。
-    pub(super) revision_lines: &'a [entities::sales_order::SalesOrderRevisionLine],
+    pub(super) revision_lines: &'a [erp_sales::entity::sales_order::SalesOrderRevisionLine],
     /// 实物及服务行（数量/单位）。
-    pub(super) goods_service_lines: &'a [entities::sales_order::SalesOrderGoodsServiceLineRevision],
+    pub(super) goods_service_lines:
+        &'a [erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevision],
     /// 有效发货单。
     pub(super) deliveries: &'a [Delivery],
     /// 发货行。
@@ -478,10 +479,6 @@ mod acceptance_eligibility_rule_source_tests {
         FulfillmentFactType, FulfillmentResult, ServiceFulfillment, ServiceFulfillmentData,
         ServiceFulfillmentState,
     };
-    use entities::sales_order::{
-        FulfillmentProgress, LineType, SalesOrderGoodsServiceLineRevision,
-        SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
-    };
     use erp_core::common::source::SourceType;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -492,6 +489,13 @@ mod acceptance_eligibility_rule_source_tests {
         WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use {
+        erp_sales::entity::sales_order::FulfillmentProgress, erp_sales::entity::sales_order::LineType,
+        erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevision,
+        erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevisionData,
+        erp_sales::entity::sales_order::SalesOrderRevisionLine,
+        erp_sales::entity::sales_order::SalesOrderRevisionLineData,
+    };
 
     use super::{build_eligibility_views, build_line_eligibilities, EligibilityGroupSources};
 
@@ -1023,9 +1027,9 @@ mod acceptance_eligibility_rule_source_tests {
             .next()
             .expect("生产代码");
         let progress_update = posting
-            .split("async fn update_sales_order_fulfillment_progress")
+            .split("pub async fn load_customer_acceptance_progress")
             .nth(1)
-            .expect("update_sales_order_fulfillment_progress 生产片段");
+            .expect("load_customer_acceptance_progress 生产片段");
         assert!(progress_update.contains("list_confirmed_service_fulfillments"));
         assert!(progress_update.contains(".filter(ServiceFulfillment::is_acceptance_eligible)"));
         assert!(progress_update.contains("build_line_eligibilities"));

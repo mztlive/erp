@@ -1,4 +1,3 @@
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseOrder,
     PurchaseOrderRevision,
@@ -7,6 +6,7 @@ use erp_core::ids::PurchaseChangeSubmissionId;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::super::change_adapter::document_approval_view;
 use super::super::dto::{PurchaseChangeOrderView, SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
@@ -183,7 +183,7 @@ impl PurchaseOrderService {
 /// 商品行 `allocated_quantity` 恒等于变更后的 `quantity`，物流行清空销售关联。
 fn enrich_change_lines(
     lines: &[SavePurchaseOrderLine],
-    sales_lines: &std::collections::HashMap<String, entities::sales_order::SalesOrderRevisionLine>,
+    sales_lines: &std::collections::HashMap<String, erp_sales::entity::sales_order::SalesOrderRevisionLine>,
 ) -> Result<Vec<SavePurchaseOrderLine>> {
     let mut enriched = lines.to_vec();
     for line in &mut enriched {

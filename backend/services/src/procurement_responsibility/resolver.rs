@@ -23,7 +23,7 @@ use erp_identity::subject;
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 /// 内部批量解析输入；实体负责行键与区域规范化。
-pub(crate) type ResolutionInput = ProcurementResponsibilityResolutionLine;
+pub type ResolutionInput = ProcurementResponsibilityResolutionLine;
 
 /// 已授权的批量解析行：领域身份与展示姓名分离持有.
 ///
@@ -40,7 +40,7 @@ pub(crate) type ResolutionInput = ProcurementResponsibilityResolutionLine;
 /// # 约束
 /// 姓名变化不得影响计划身份；行顺序、负责人、规则 ID 或规则类型任一变化必须拒绝.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AuthorizedResolutionLine {
+pub struct AuthorizedResolutionLine {
     /// 忽略展示姓名的稳定责任身份.
     pub identity: ProcurementResponsibilityResolutionIdentity,
     /// 负责人当前展示姓名.
@@ -62,7 +62,7 @@ pub(crate) struct AuthorizedResolutionLine {
 /// # 约束
 /// 计划直接持有 `ProcurementResponsibilityResolutionIdentity`；展示姓名和 API View 只在最后一跳映射.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AuthorizedResolutionPlan {
+pub struct AuthorizedResolutionPlan {
     /// 按输入顺序排列的逐行授权结果.
     pub lines: Vec<AuthorizedResolutionLine>,
     /// 校验负责人权限使用的策略版本.
@@ -135,10 +135,7 @@ impl ProcurementResponsibilityService {
     ///
     /// # 错误
     /// 目录事实缺失、规则零/多命中、负责人不可登录或无采购建单权限时失败关闭。
-    pub(crate) async fn resolve_strict(
-        &self,
-        inputs: &[ResolutionInput],
-    ) -> Result<AuthorizedResolutionPlan> {
+    pub async fn resolve_strict(&self, inputs: &[ResolutionInput]) -> Result<AuthorizedResolutionPlan> {
         let candidates = self.resolve_candidates(inputs, &mut NoTransaction).await?;
         self.authorize_candidates(candidates).await
     }
@@ -155,7 +152,7 @@ impl ProcurementResponsibilityService {
     ///
     /// # 错误
     /// 任一事实或策略版本变化时失败关闭，使销售生效事务回滚。
-    pub(crate) async fn revalidate_plan(
+    pub async fn revalidate_plan(
         &self,
         inputs: &[ResolutionInput],
         expected: &AuthorizedResolutionPlan,

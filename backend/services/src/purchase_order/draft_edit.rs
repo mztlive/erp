@@ -1,6 +1,5 @@
 //! 人工保存采购草稿。
 
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     validate_draft_line_edits, DraftLineEditViolation, LegacyReceiptIdScheme, PurchaseCommandReceipt,
     PurchaseCommandReceiptError, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
@@ -14,6 +13,7 @@ use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::coverage::load_sales_procurement_coverage;

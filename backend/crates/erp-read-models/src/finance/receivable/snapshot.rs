@@ -1,9 +1,9 @@
 //! Sales snapshot adapter for finance posting and receivable detail composition.
 
-use database::SalesOrderExt;
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::ReceivableExt;
+use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use services::{Error, Result};

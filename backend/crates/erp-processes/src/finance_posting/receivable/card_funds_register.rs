@@ -211,7 +211,7 @@ impl ReceivableProcess {
                         ),
                     )?;
                     db.audit_logs().create(&receipt_audit, session).await?;
-                    services::sales_order::update_sales_order_money_progress(
+                    crate::order_to_cash::progress::update_sales_order_money_progress(
                         &db,
                         session,
                         &account.sales_order_id,
@@ -384,7 +384,7 @@ impl ReceivableProcess {
                         ),
                     )?;
                     db.audit_logs().create(&receipt_audit, session).await?;
-                    services::sales_order::update_sales_order_money_progress(
+                    crate::order_to_cash::progress::update_sales_order_money_progress(
                         &db,
                         session,
                         &account.sales_order_id,

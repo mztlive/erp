@@ -14,7 +14,6 @@ use super::dto::{
     ReceiptReversalView, SubmitReceiptReversalRequest,
 };
 
-use super::offset_batch::load_receivable_offset_facts;
 use super::start_approval::{
     build_receipt_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_receipt_reversal_start_receipt,
@@ -32,13 +31,9 @@ use erp_audit::AuditActorLogs;
 use erp_audit::AuditExt;
 use erp_audit::CommandReceiptServiceExt as _;
 use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerAccountId, CustomerReceiptId, ReceiptAllocationId, ReceiptReversalId};
+use erp_core::ids::{CustomerAccountId, CustomerReceiptId, ReceiptReversalId};
 use erp_core::money::Amount;
-use erp_finance::entity::receivable::AllocationAction as ReceivableAllocationAction;
-use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::entity::receivable::CustomerReceiptStatus;
-use erp_finance::entity::receivable::ReceiptAllocation;
-use erp_finance::entity::receivable::ReceiptAllocationData;
 use erp_finance::repository::ReceivableExt;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::BusinessDocument;
@@ -55,6 +50,58 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 impl ReturnsService {
+    /// 读取冲正单并执行最终通过守卫；本接口不修改财务或销售事实。
+    pub async fn prepare_receipt_reversal_post(
+        db: &Database,
+        reversal_id: &str,
+        session: &mut dyn Executor,
+    ) -> Result<ReceiptReversal> {
+        let mut reversal = db
+            .receipt_reversals()
+            .find_by_id(reversal_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
+        if reversal.status == ReceiptReversalStatus::Reversed {
+            return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
+        }
+        ensure_receipt_reversal_final_approve_posting(&reversal)?;
+        execute_receipt_reversal_domain_action(
+            &mut reversal,
+            erp_workflow::service::approval::policy::ApprovalDomainAction::ReceiptReversalPost,
+        )?;
+        Ok(reversal)
+    }
+
+    /// 原回款存在且已过账后检查累计冲正上限，保留旧读取与报错时点。
+    pub async fn validate_receipt_reversal_amount(
+        db: &Database,
+        reversal: &ReceiptReversal,
+        receipt_amount: Amount,
+        session: &mut dyn Executor,
+    ) -> Result<()> {
+        let reversed_before = db
+            .receipt_reversals()
+            .posted_reversal_total_by_receipt(
+                &reversal.original_customer_receipt_id,
+                &reversal.base.id,
+                session,
+            )
+            .await?;
+        CumulativeAmountLimit::ensure_within_limit(receipt_amount, reversed_before, reversal.amount)
+            .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原回款金额".to_string()))
+    }
+
+    /// 财务逆向分配成功后写回本域过账状态；审计与销售刷新由根流程继续执行。
+    pub async fn persist_posted_receipt_reversal(
+        db: &Database,
+        reversal: &mut ReceiptReversal,
+        session: &mut dyn Executor,
+    ) -> Result<()> {
+        reversal.mark_posted()?;
+        db.receipt_reversals().update(reversal, session).await?;
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // 回款冲正
     // -----------------------------------------------------------------------
@@ -485,43 +532,6 @@ impl ReturnsService {
         load_receipt_reversal_context(&self.db, original_receipt_id).await
     }
 
-    /// 最终通过过账（§8.3-3 事务不变量）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 按原回款核销分配反向写入 `REVERSE` 分配并原子冲减子账已核销进度；
-    /// 原回款迁移为已冲正；冲正单迁移为已过账。任一校验失败整体回滚。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单或原回款不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 累计冲正超原回款、重复过账或超额冲减
-    pub async fn post_receipt_reversal(&self, id: &str, actor: &AuditActor) -> Result<ReceiptReversalView> {
-        let db = self.db.clone();
-        let _object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let actor_id = actor.id().to_string();
-        let reversal_id = id.to_string();
-        let detail_id = reversal_id.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    apply_receipt_reversal_final_post(&db, &reversal_id, &actor_id, &actor_owned, session)
-                        .await
-                })
-            })
-            .await?;
-
-        self.receipt_reversal_detail(&detail_id).await
-    }
-
     // -----------------------------------------------------------------------
     // 私有视图装配
     // -----------------------------------------------------------------------
@@ -700,221 +710,6 @@ async fn persist_bound_receipt_reversal_document(
     Ok(binding)
 }
 
-/// 在最终通过事务内执行过账副作用并写回冲正单。
-///
-/// # 错误
-/// 非审批中、原回款不存在或仓储失败时返回错误。
-pub(super) async fn apply_receipt_reversal_final_post(
-    db: &Database,
-    reversal_id: &str,
-    actor_id: &str,
-    actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let mut reversal = db
-        .receipt_reversals()
-        .find_by_id(reversal_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-    if reversal.status == ReceiptReversalStatus::Reversed {
-        return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
-    }
-    ensure_receipt_reversal_final_approve_posting(&reversal)?;
-    execute_receipt_reversal_domain_action(
-        &mut reversal,
-        erp_workflow::service::approval::policy::ApprovalDomainAction::ReceiptReversalPost,
-    )?;
-    apply_receipt_reversal_posting(db, &reversal, actor_id, session).await?;
-    reversal.mark_posted()?;
-    db.receipt_reversals().update(&mut reversal, session).await?;
-    let audit = actor.clone().resource_log(
-        "receipt_reversal.post",
-        "receipt_reversal",
-        reversal.base.id.clone(),
-    )?;
-    db.audit_logs().create(&audit, session).await?;
-    // 冲正后刷新销售单回款进度与关闭状态（已结清可能退回部分回款）
-    let allocations = db
-        .receipt_allocations()
-        .find_allocations_by_receipts(&[reversal.original_customer_receipt_id.clone()], session)
-        .await?;
-    let sales_order_ids = sales_order_ids_for_receipt_allocations(db, &allocations, session).await?;
-    for sales_order_id in sales_order_ids {
-        crate::sales_order::update_sales_order_money_progress(
-            db,
-            session,
-            &erp_core::ids::SalesOrderId::new(sales_order_id),
-            actor_id.to_string(),
-            None,
-        )
-        .await?;
-    }
-    Ok(())
-}
-
-/// 在调用方事务内写入冲正副作用。
-///
-/// # 错误
-/// 原回款不存在、累计超额或仓储失败时返回错误。
-async fn apply_receipt_reversal_posting(
-    db: &Database,
-    reversal: &ReceiptReversal,
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let original_id = reversal.original_customer_receipt_id.clone();
-    let receipt = db
-        .customer_receipts()
-        .find_by_id(&original_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("原回款不存在".to_string()))?;
-    if receipt.status != CustomerReceiptStatus::Posted {
-        return Err(Error::BusinessLogicError("只有已过账回款可以冲正".to_string()));
-    }
-    let reversed_before: Amount = db
-        .receipt_reversals()
-        .posted_reversal_total_by_receipt(&original_id, &reversal.base.id, session)
-        .await?;
-    CumulativeAmountLimit::ensure_within_limit(receipt.amount, reversed_before, reversal.amount)
-        .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原回款金额".to_string()))?;
-    persist_reversal_offsets_and_mark_receipt(db, reversal, receipt, actor_id, session).await
-}
-
-/// 写入反向核销分配、冲减进度并把原回款置为已冲正。
-///
-/// # 错误
-/// 超额冲减或仓储失败时返回错误。
-async fn persist_reversal_offsets_and_mark_receipt(
-    db: &Database,
-    reversal: &ReceiptReversal,
-    receipt: CustomerReceipt,
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let allocations = db
-        .receipt_allocations()
-        .find_allocations_by_receipts(&[receipt.base.id.clone().into()], session)
-        .await?;
-    let (reverse_rows, chunks) = ReceiptAllocation::plan_reverse(&allocations, reversal.amount)?;
-    let seqs = ReceiptAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
-    revert_receipt_settlements(db, &chunks, actor_id, session).await?;
-    persist_reverse_allocations(db, reversal, &receipt, &reverse_rows, &seqs, session).await?;
-    let mut receipt = receipt;
-    receipt.transition(CustomerReceiptStatus::Reversed)?;
-    db.customer_receipts().update(&mut receipt, session).await?;
-    Ok(())
-}
-
-/// 按冲减块回冲应收子账已核销进度。
-///
-/// # 错误
-/// 分录缺失或超额冲减时返回错误。
-async fn revert_receipt_settlements(
-    db: &Database,
-    chunks: &[erp_finance::entity::receivable::ReceiptReverseChunk],
-    actor_id: &str,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let facts = load_receivable_offset_facts(
-        db,
-        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
-        session,
-    )
-    .await?;
-    for chunk in chunks {
-        let entry = facts
-            .entries
-            .get(chunk.increase_entry_id.as_ref())
-            .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        if !facts.accounts.contains_key(entry.receivable_account_id.as_ref()) {
-            return Err(Error::NotFound("应收往来子账不存在".to_string()));
-        }
-        let reverted = db
-            .receivable_accounts()
-            .revert_settlement(&entry.receivable_account_id, &chunk.amount, actor_id, session)
-            .await?;
-        if !reverted {
-            return Err(Error::BusinessLogicError("冲正冲减超过已核销金额".to_string()));
-        }
-    }
-    Ok(())
-}
-
-/// 由核销分配批量读取分录与账户，收集去重销售单 ID。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `allocations` - 原回款核销分配
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回排序去重后的销售单 ID。
-///
-/// # 错误
-/// 缺任一分录或账户时失败关闭。
-///
-/// # 约束
-/// 固定两次批量读取；进度刷新仍由 Service 逐单编排。
-async fn sales_order_ids_for_receipt_allocations(
-    db: &Database,
-    allocations: &[ReceiptAllocation],
-    session: &mut mongodb::ClientSession,
-) -> Result<Vec<String>> {
-    let facts = load_receivable_offset_facts(
-        db,
-        allocations
-            .iter()
-            .map(|allocation| allocation.receivable_entry_id.clone()),
-        session,
-    )
-    .await?;
-    let mut sales_order_ids = Vec::with_capacity(allocations.len());
-    for allocation in allocations {
-        let entry = facts
-            .entries
-            .get(allocation.receivable_entry_id.as_ref())
-            .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        let account = facts
-            .accounts
-            .get(entry.receivable_account_id.as_ref())
-            .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-        sales_order_ids.push(account.sales_order_id.to_string());
-    }
-    sales_order_ids.sort();
-    sales_order_ids.dedup();
-    Ok(sales_order_ids)
-}
-
-/// 写入反向核销分配。
-///
-/// # 错误
-/// 仓储失败时返回错误。
-async fn persist_reverse_allocations(
-    db: &Database,
-    reversal: &ReceiptReversal,
-    receipt: &CustomerReceipt,
-    reverse_rows: &[erp_finance::entity::receivable::ReceiptReversePlanRow],
-    seqs: &[u32],
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
-        let allocation = ReceiptAllocation::new(
-            ReceiptAllocationId::new(next_id()),
-            ReceiptAllocationData {
-                customer_receipt_id: receipt.base.id.clone().into(),
-                receivable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: *seq,
-                allocation_action: ReceivableAllocationAction::Reverse,
-                allocated_amount: reverse.amount,
-                allocated_at: reversal.occurred_at,
-                reverses_allocation_id: Some(reverse.original_id.clone()),
-            },
-        )?;
-        db.receipt_allocations().create(&allocation, session).await?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod receipt_reversal_approval_tests {
     use super::{execute_receipt_reversal_domain_action, start_receipt_reversal_approval, ReturnsService};
@@ -983,7 +778,10 @@ mod receipt_reversal_approval_tests {
     /// 最终动作唯一为 post_receipt_reversal，且客户端过账旁路关闭。
     #[test]
     fn final_action_is_post_receipt_reversal() {
-        let source = include_str!("receipt_reversal.rs");
+        let source = concat!(
+            include_str!("receipt_reversal.rs"),
+            include_str!("../../../crates/erp-processes/src/reverse_flow/receipt_reversal.rs")
+        );
         assert!(source.contains("pub async fn post_receipt_reversal"));
         assert!(source.contains("reversal.mark_posted"));
         assert!(source.contains("ReceiptReversalPost"));
@@ -1036,10 +834,11 @@ mod receipt_reversal_approval_tests {
     /// 过账与冲减必须批量读取分录与账户。
     #[test]
     fn reversal_paths_batch_entry_and_account_reads() {
-        let production = include_str!("receipt_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("../../../crates/erp-finance/src/service/receivable/receipt_reversal.rs")
+                .split("#[cfg(test)]")
+                .next()
+                .expect("生产代码");
         assert!(production.contains("load_receivable_offset_facts"));
         assert!(production.contains("sales_order_ids_for_receipt_allocations"));
         assert!(production.contains("revert_settlement"));

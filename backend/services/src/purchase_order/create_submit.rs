@@ -2,9 +2,9 @@
 
 use database::PurchaseOrderExt;
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
-use entities::sales_order::SalesOrder;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
+use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};

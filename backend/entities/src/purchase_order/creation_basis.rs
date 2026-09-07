@@ -10,7 +10,6 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use crate::sales_order::{SalesOrder, SalesOrderRevision};
 use crate::supplier_offering::{SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision};
 use erp_catalog::ProductKind;
 use erp_core::common::time::BusinessDate;
@@ -18,6 +17,7 @@ use erp_core::ids::{SupplierAccountId, WarehouseId};
 use erp_core::money::{Quantity, UnitPrice};
 use erp_core::{Error, Result};
 use erp_supplier::{SupplierAccount, SupplierCommercialProfileRevision};
+use {erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderRevision};
 
 use super::command_receipt::digest_parts;
 use super::coverage::SalesProcurementCoverageLine;
@@ -400,12 +400,6 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
-    use crate::sales_order::revision::{
-        SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
-        SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
-    };
-    use crate::sales_order::snapshot::HeaderSnapshotData;
-    use crate::sales_order::{CommercialStatus, LineType, ProcurementCoverageSummary, RevisionSource};
     use crate::supplier_offering::{
         AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, PrefillSourceRefs, SupplierOffering,
         SupplierOfferingAvailability, SupplierOfferingAvailabilityData, SupplierOfferingData,
@@ -417,6 +411,20 @@ mod tests {
         SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId, WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_sales::entity::sales_order::snapshot::HeaderSnapshotData;
+    use {
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevisionData,
+        erp_sales::entity::sales_order::revision::SalesOrderRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionData,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLineData,
+    };
+    use {
+        erp_sales::entity::sales_order::CommercialStatus, erp_sales::entity::sales_order::LineType,
+        erp_sales::entity::sales_order::ProcurementCoverageSummary,
+        erp_sales::entity::sales_order::RevisionSource,
+    };
 
     use super::{
         basis_id_for, basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
@@ -594,13 +602,13 @@ mod tests {
     }
 
     /// 构造销售稳定单。
-    fn sales_order(id: &str) -> crate::sales_order::SalesOrder {
-        let mut order = crate::sales_order::SalesOrder::new(
+    fn sales_order(id: &str) -> erp_sales::entity::sales_order::SalesOrder {
+        let mut order = erp_sales::entity::sales_order::SalesOrder::new(
             SalesOrderId::new(id),
-            crate::sales_order::SalesOrderData {
+            erp_sales::entity::sales_order::SalesOrderData {
                 order_no: format!("SO-{id}"),
-                business_type: crate::sales_order::BusinessType::GoodsService,
-                origin_system: crate::sales_order::OriginSystem::Erp,
+                business_type: erp_sales::entity::sales_order::BusinessType::GoodsService,
+                origin_system: erp_sales::entity::sales_order::OriginSystem::Erp,
                 source_identity_id: None,
                 customer_id: erp_core::ids::CustomerAccountId::new("customer-1"),
                 contract_id: None,

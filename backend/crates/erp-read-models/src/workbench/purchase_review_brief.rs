@@ -5,7 +5,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
@@ -14,6 +13,7 @@ use erp_core::ids::PurchaseOrderSubmissionId;
 use erp_core::money::{Amount, Quantity};
 use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 use persistence_core::Executor;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,

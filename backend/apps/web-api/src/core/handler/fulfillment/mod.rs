@@ -50,6 +50,17 @@ fn service(state: &AppState) -> FulfillmentService {
     .with_object_read(state.approval_object_read())
 }
 
+fn acceptance_process(
+    state: &AppState,
+) -> erp_processes::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess {
+    erp_processes::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess::new(
+        state.db(),
+        service(state),
+        state.rbac(),
+        state.approval_object_read(),
+    )
+}
+
 #[permission_macros::permission(
     group = "履约",
     group_desc = "采购入库、发货、交付、服务与客户验收管理",
@@ -673,7 +684,9 @@ pub async fn customer_acceptance_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerAcceptanceRequest>,
 ) -> Result<CommitCustomerAcceptanceView> {
-    let view = service(&state).commit_customer_acceptance(req, &actor).await?;
+    let view = acceptance_process(&state)
+        .commit_customer_acceptance(req, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -701,7 +714,9 @@ pub async fn customer_acceptance_post(
     Path(id): Path<String>,
     Json(req): Json<PostCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = service(&state).post_customer_acceptance(&id, req, &actor).await?;
+    let view = acceptance_process(&state)
+        .post_customer_acceptance(&id, req, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -729,7 +744,7 @@ pub async fn customer_acceptance_reverse(
     Path(id): Path<String>,
     Json(req): Json<ReverseCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = service(&state)
+    let view = acceptance_process(&state)
         .reverse_customer_acceptance(&id, req, &actor)
         .await?;
 

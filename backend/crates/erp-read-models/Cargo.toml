@@ -5,6 +5,7 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+erp-sales = { workspace = true }
 serde_json = { workspace = true }
 erp-support = { workspace = true }
 erp-finance = { workspace = true }

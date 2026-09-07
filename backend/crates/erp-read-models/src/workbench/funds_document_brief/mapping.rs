@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use entities::sales_order::{SalesOrderRevisionLine, SalesOrderVoucherLineRevision};
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::payable::PayableEntry;
 use erp_finance::entity::payable::PaymentAllocation;
@@ -10,6 +9,10 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::entity::receivable::PendingReceiptAllocation;
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::entity::receivable::ReceivableEntry;
+use {
+    erp_sales::entity::sales_order::SalesOrderRevisionLine,
+    erp_sales::entity::sales_order::SalesOrderVoucherLineRevision,
+};
 
 use super::super::brief::{
     format_instant_date, join_list_summary, line_title, non_empty, push_section, BriefLine,

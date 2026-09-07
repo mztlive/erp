@@ -58,3 +58,5 @@ pub use sales_invoice_allocation_plan::*;
 pub use sales_order_amount_summary::SalesOrderReceivableAmountSummary;
 
 pub use external_facts::{ReviewEvidenceAssetFact, SalesBusinessTypeFact};
+
+pub mod money_progress_facts;

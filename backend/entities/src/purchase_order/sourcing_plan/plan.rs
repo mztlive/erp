@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
-use crate::sales_order::SalesOrder;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
+use erp_sales::entity::sales_order::SalesOrder;
 
 use super::super::creation_basis::{
     basis_id_for, basis_scope_key, stable_line_id, BasisGroup, RequestedLine,

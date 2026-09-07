@@ -1,0 +1,29 @@
+//! 销售实体拥有仓储，通用存储操作委托给 persistence-core。
+
+mod sales_change_order;
+mod sales_change_submission;
+mod sales_change_submission_line;
+mod sales_order;
+mod sales_order_goods_service_line_revision;
+mod sales_order_line;
+mod sales_order_revision;
+mod sales_order_revision_line;
+mod sales_order_submission;
+mod sales_order_submission_line;
+mod sales_order_voucher_line_revision;
+mod sales_order_working_copy;
+mod sales_order_working_copy_line;
+
+pub use sales_change_order::SalesChangeOrderRepository;
+pub use sales_change_submission::SalesChangeSubmissionRepository;
+pub use sales_change_submission_line::SalesChangeSubmissionLineRepository;
+pub use sales_order::SalesOrderRepository;
+pub use sales_order_goods_service_line_revision::SalesOrderGoodsServiceLineRevisionRepository;
+pub use sales_order_line::SalesOrderLineRepository;
+pub use sales_order_revision::SalesOrderRevisionRepository;
+pub use sales_order_revision_line::SalesOrderRevisionLineRepository;
+pub use sales_order_submission::SalesOrderSubmissionRepository;
+pub use sales_order_submission_line::SalesOrderSubmissionLineRepository;
+pub use sales_order_voucher_line_revision::SalesOrderVoucherLineRevisionRepository;
+pub use sales_order_working_copy::SalesOrderWorkingCopyRepository;
+pub use sales_order_working_copy_line::SalesOrderWorkingCopyLineRepository;

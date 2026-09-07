@@ -9,8 +9,7 @@ mod integration_ops;
 mod procurement_responsibility;
 mod purchase_order;
 mod returns;
-mod sales_order;
-mod sales_review;
+
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
@@ -40,8 +39,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<
     procurement_responsibility::ensure(db).await?;
     purchase_order::ensure(db).await?;
     returns::ensure(db).await?;
-    sales_order::ensure(db).await?;
-    sales_review::ensure(db).await?;
+    erp_sales::indexes::ensure(db).await?;
     erp_supplier::indexes::ensure(db).await?;
     supplier_api::ensure(db).await?;
     supplier_offering::ensure(db).await?;

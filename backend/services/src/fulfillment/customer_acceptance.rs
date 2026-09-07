@@ -406,7 +406,7 @@ async fn persist_unbound_customer_acceptance_document(
 ///
 /// # 错误
 /// 绑定端口或注册写入失败时返回错误。
-pub(super) async fn register_created_customer_acceptance_document(
+pub async fn register_created_customer_acceptance_document(
     db: &Database,
     rbac: &SharedRbacService,
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,

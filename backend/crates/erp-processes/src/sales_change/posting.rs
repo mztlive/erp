@@ -3,10 +3,12 @@
 use async_trait::async_trait;
 use erp_audit::AuditExt;
 use erp_core::ids::ReceivableAccountId;
-use erp_finance::repository::ReceivableExt;
+use erp_finance::service::receivable::sales_change::{
+    prepare_sales_change_receivable, SalesChangeReceivableInput, SalesChangeReceivableWrite,
+};
+use erp_sales::service::sales_review::EffectiveChangeWrite;
 use mongodb::Database;
 use persistence_core::Executor;
-use services::sales_review::EffectiveChangeWrite;
 use services::Result;
 
 /// 销售变更最终生效的最小写入能力；不得在实现内另开事务。
@@ -34,22 +36,23 @@ async fn post(port: &mut impl SalesChangePostingPort, executor: &mut dyn Executo
 struct DatabasePosting<'a> {
     db: &'a Database,
     write: EffectiveChangeWrite,
+    delta: Option<SalesChangeReceivableWrite>,
     audit: &'a erp_audit::AuditLog,
 }
 
 #[async_trait]
 impl SalesChangePostingPort for DatabasePosting<'_> {
     async fn revision(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.write.persist_revision(self.db, executor).await
+        Ok(self.write.persist_revision(self.db, executor).await?)
     }
     async fn receivable_and_tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        if let Some((account, entry)) = self.write.take_receivable_delta() {
-            write_receivable_delta(self.db, account, entry, executor).await?;
+        if let Some(delta) = self.delta.take() {
+            write_receivable_delta(self.db, delta, executor).await?;
         }
         Ok(())
     }
     async fn change(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.write.persist_change(self.db, executor).await
+        Ok(self.write.persist_change(self.db, executor).await?)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.db.audit_logs().create(self.audit, executor).await?;
@@ -61,10 +64,20 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
 pub(super) async fn persist_effective_writes(
     db: &Database,
     write: EffectiveChangeWrite,
+    delta: Option<SalesChangeReceivableWrite>,
     audit: &erp_audit::AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    post(&mut DatabasePosting { db, write, audit }, executor).await
+    post(
+        &mut DatabasePosting {
+            db,
+            write,
+            delta,
+            audit,
+        },
+        executor,
+    )
+    .await
 }
 
 /// 写入应收差额分录。
@@ -73,17 +86,16 @@ pub(super) async fn persist_effective_writes(
 /// 仓储失败时返回错误。
 async fn write_receivable_delta(
     db: &mongodb::Database,
-    mut account: erp_finance::entity::receivable::ReceivableAccount,
-    entry: erp_finance::entity::receivable::ReceivableEntry,
+    mut delta: SalesChangeReceivableWrite,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let subject_version = entry.source_revision_id.to_string();
-    db.receivable_entries().create(&entry, session).await?;
-    db.receivable_accounts().update(&mut account, session).await?;
+    delta.persist(db, session).await?;
+    let account = delta.account();
+    let subject_version = delta.subject_version();
     crate::finance_posting::receivable::card_funds_task::ensure_card_funds_review_task(
         db,
-        &account,
-        &subject_version,
+        account,
+        subject_version,
         session,
     )
     .await?;
@@ -95,6 +107,37 @@ async fn write_receivable_delta(
         session,
     )
     .await
+}
+
+/// 在原销售准备完成后读取主应收子账，保持 NoTransaction 和财务取时位置。
+pub(super) async fn prepare_receivable_delta(
+    db: &Database,
+    write: &EffectiveChangeWrite,
+    actor: &application_core::AuditActor,
+) -> Result<Option<SalesChangeReceivableWrite>> {
+    let fact = write.revision_fact()?;
+    let business_type = match fact.business_type {
+        erp_sales::entity::sales_order::BusinessType::GoodsService => {
+            erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
+        }
+        erp_sales::entity::sales_order::BusinessType::Voucher => {
+            erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
+        }
+    };
+    Ok(prepare_sales_change_receivable(
+        db,
+        SalesChangeReceivableInput {
+            sales_order_id: fact.sales_order_id,
+            revision_id: fact.revision_id,
+            business_type,
+            current_gross: fact.current_gross,
+            new_gross: fact.new_gross,
+            posted_at: fact.posted_at,
+            updated_by: actor.id().to_string(),
+        },
+        &mut persistence_core::NoTransaction,
+    )
+    .await?)
 }
 
 #[cfg(test)]

@@ -8,11 +8,14 @@ use entities::purchase_order::{
     BasisScope, CreationBasisFacts, FulfillmentResponsibility, LineSupply, PurchaseType,
     SalesProcurementCoverage, SalesProcurementCoverageLine, StockBasisGroup,
 };
-use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
 use entities::supplier_offering::{AvailabilityStatus, SupplierOffering};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
+use {
+    erp_sales::entity::sales_order::CommercialStatus, erp_sales::entity::sales_order::SalesOrder,
+    erp_sales::entity::sales_order::SalesOrderRevision,
+};
 
 use super::super::dto::{CreationBasisLineView, CreationBasisView, SupplySourceType};
 use super::super::shared::zero_amount;

@@ -1,11 +1,11 @@
 //! 应收往来子账列表、详情与创建编排。
 
-use database::SalesOrderExt;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderId};
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{EntryDirection, ReceivableEntry};
 use erp_finance::repository::ReceivableExt;
 use erp_identity::Permission;
+use erp_sales::repository::SalesOrderExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;

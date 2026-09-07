@@ -241,8 +241,6 @@ mod tests {
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
     };
     use crate::purchase_order::PurchaseLineType;
-    use crate::sales_order::revision::{SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
-    use crate::sales_order::{LineType, ProcurementCoverageSummary};
     use erp_catalog::ProductKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -251,6 +249,13 @@ mod tests {
         SkuRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use {
+        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
+        erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
+    };
+    use {
+        erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::ProcurementCoverageSummary,
+    };
 
     use super::{validate_draft_line_edits, DraftLineEdit, DraftLineEditViolation};
 

@@ -57,7 +57,7 @@ pub(crate) async fn next_purchase_receipt_no(db: &Database) -> Result<String> {
 ///
 /// # 关键业务约束
 /// 单号由服务端在登记时取得；浏览器提交的操作号不得充当业务单号。
-pub(crate) async fn next_customer_acceptance_no(db: &Database) -> Result<String> {
+pub async fn next_customer_acceptance_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::CustomerAcceptance).await
 }
 

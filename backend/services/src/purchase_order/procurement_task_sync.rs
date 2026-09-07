@@ -2,11 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::SalesOrderExt;
-use entities::sales_order::SalesOrder;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
+use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::repository::SalesOrderExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
@@ -103,7 +103,7 @@ fn validate_procurement_task_access(
 ///
 /// # 关键业务约束
 /// 开放任务归零后进入不可逆终态；历史终态范围重新出现剩余量时创建新任务，不重开旧任务。
-pub(crate) async fn sync_procurement_tasks_for_sales_order(
+pub async fn sync_procurement_tasks_for_sales_order(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     executor: &mut dyn Executor,

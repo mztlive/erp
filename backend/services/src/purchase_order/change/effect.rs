@@ -1,11 +1,11 @@
 use database::PurchaseOrderExt;
-use database::SalesOrderExt;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use erp_audit::AuditExt;
 use erp_finance::repository::CostExt;
 use erp_finance::repository::PayableExt;
+use erp_sales::repository::SalesOrderExt;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

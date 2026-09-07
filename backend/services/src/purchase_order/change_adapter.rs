@@ -8,10 +8,10 @@ use bpm::SubjectRef;
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
-use entities::sales_order::SalesOrder;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Quantity;
+use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
@@ -445,7 +445,6 @@ mod tests {
         PurchaseChangeSubmissionData, PurchaseChangeSubmissionLineData, PurchaseLineType, PurchaseType,
         SupplierSnapshot,
     };
-    use entities::sales_order::{BusinessType, OriginSystem, SalesOrderData};
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseChangeOrderId,
@@ -456,6 +455,10 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use erp_workflow::service::approval::binding::binding_from_published;
     use std::str::FromStr;
+    use {
+        erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::OriginSystem,
+        erp_sales::entity::sales_order::SalesOrderData,
+    };
 
     fn draft_order() -> PurchaseChangeOrder {
         PurchaseChangeOrder::new(

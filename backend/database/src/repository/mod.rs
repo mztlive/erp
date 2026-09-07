@@ -10,8 +10,7 @@ pub mod owned;
 mod procurement_responsibility;
 mod purchase_order;
 mod returns;
-mod sales_order;
-mod sales_review;
+
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_names;

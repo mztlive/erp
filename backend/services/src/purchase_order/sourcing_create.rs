@@ -7,7 +7,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
-use database::{FulfillmentExt, SalesOrderExt};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::purchase_order::{
     payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -30,6 +29,7 @@ use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use {database::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::creation_basis::{

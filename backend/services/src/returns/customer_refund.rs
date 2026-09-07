@@ -15,7 +15,6 @@ use super::dto::{
     CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
     CustomerRefundListParams, CustomerRefundView, PageView, SortDir, SubmitCustomerRefundRequest,
 };
-use super::offset_batch::load_receivable_offset_facts;
 use super::start_approval::{
     build_customer_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_bound_definition_graph,
@@ -39,6 +38,7 @@ use erp_core::ids::{
 };
 use erp_customer::CustomerExt;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::service::receivable::receipt_reversal::load_receivable_offset_facts;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::DocumentType;

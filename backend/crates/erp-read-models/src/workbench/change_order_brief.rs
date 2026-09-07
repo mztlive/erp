@@ -5,20 +5,24 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
-use entities::{
-    purchase_order::{
-        PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrderRevision,
-        PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
-    },
-    sales_order::{
-        SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
-        SalesOrderVoucherLineRevision,
-    },
-    sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine},
-};
 use erp_core::ids::{PurchaseOrderRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use persistence_core::Executor;
+use {
+    database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt, erp_sales::repository::SalesReviewExt,
+};
+use {
+    entities::purchase_order::PurchaseChangeOrder, entities::purchase_order::PurchaseChangeSubmission,
+    entities::purchase_order::PurchaseChangeSubmissionLine, entities::purchase_order::PurchaseOrderRevision,
+    entities::purchase_order::PurchaseOrderRevisionLine,
+    entities::purchase_order::PurchaseOrderSubmissionLine,
+    erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevision,
+    erp_sales::entity::sales_order::SalesOrderRevision,
+    erp_sales::entity::sales_order::SalesOrderRevisionLine,
+    erp_sales::entity::sales_order::SalesOrderVoucherLineRevision,
+    erp_sales::entity::sales_review::SalesChangeOrder,
+    erp_sales::entity::sales_review::SalesChangeSubmission,
+    erp_sales::entity::sales_review::SalesChangeSubmissionLine,
+};
 
 use super::brief::{
     format_instant_date, format_instant_datetime, format_quantity, join_list_summary, line_title, non_empty,

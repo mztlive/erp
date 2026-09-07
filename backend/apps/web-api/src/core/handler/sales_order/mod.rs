@@ -1,17 +1,22 @@
 //! 域 D13 `sales_order` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `services::sales_order` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 销售域和销售中心的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use services::sales_order::{
-    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, PageView, SalesOrderDetailView,
-    SalesOrderListParams, SalesOrderService, SalesOrderView, SaveWorkingCopyRequest, SubmissionView,
-    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+use erp_sales::dto::sales_order::{
+    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, PageView, SalesOrderListParams,
+    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+};
+
+use erp_processes::order_to_cash::SalesOrderCommandProcess;
+use erp_read_models::sales_center::order::{
+    dto::{SalesOrderDetailView, SalesOrderView},
+    SalesOrderReadService,
 };
 
 use crate::{
@@ -41,8 +46,7 @@ pub async fn sales_order_list(
     State(state): State<AppState>,
     Query(params): Query<SalesOrderListParams>,
 ) -> Result<PageView<SalesOrderView>> {
-    let page = SalesOrderService::new(state.db())
-        .with_object_read(state.approval_object_read())
+    let page = SalesOrderReadService::new(state.db())
         .sales_order_list(&params)
         .await?;
 
@@ -72,7 +76,7 @@ pub async fn sales_order_create(
     Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let service = SalesOrderService::with_rbac(state.db(), state.rbac());
+    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac());
     let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
     ensure_customer_access(&state, &subject, &user_id, customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
@@ -100,7 +104,7 @@ pub async fn sales_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
+    let view = SalesOrderReadService::with_rbac(state.db(), state.rbac())
         .sales_order_detail(&id, Some(&actor))
         .await?;
 
@@ -130,7 +134,7 @@ pub async fn sales_order_save_working_copy(
     Path(id): Path<String>,
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
-    let view = SalesOrderService::new(state.db())
+    let view = SalesOrderCommandProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .save_working_copy(&id, req, &actor)
         .await?;
@@ -161,7 +165,7 @@ pub async fn sales_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
-    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .submit_sales_order(&id, req, &actor)
         .await?;
 
@@ -191,7 +195,7 @@ pub async fn sales_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSalesOrderApprovalRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .cancel_approval_submission(&id, req, &actor)
         .await?;
 
@@ -221,7 +225,7 @@ pub async fn sales_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderService::new(state.db())
+    let view = SalesOrderCommandProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .void_sales_order(&id, req, &actor)
         .await?;

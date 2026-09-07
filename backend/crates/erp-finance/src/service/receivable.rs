@@ -32,3 +32,7 @@ impl ReceivableService {
 pub mod red_invoice_posting;
 
 pub mod initial_account;
+
+pub mod sales_change;
+
+pub mod receipt_reversal;

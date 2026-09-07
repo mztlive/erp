@@ -253,6 +253,26 @@ impl From<erp_finance::Error> for Error {
     }
 }
 
+impl From<erp_sales::Error> for Error {
+    /// 将销售领域错误映射为服务错误。
+    fn from(error: erp_sales::Error) -> Self {
+        match error {
+            erp_sales::Error::Internal(message) => Self::Internal(message),
+            erp_sales::Error::NotFound(message) => Self::NotFound(message),
+            erp_sales::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_sales::Error::BusinessLogicError(message) => Self::BusinessLogicError(message),
+            erp_sales::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_sales::Error::ReceiptDuplicate(error) => Self::ReceiptDuplicate(error),
+            erp_sales::Error::TransientTransaction(error) => Self::TransientTransaction(error),
+            erp_sales::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_sales::Error::Unauthenticated(message) => Self::Unauthenticated(message),
+            erp_sales::Error::Logic(error) => Self::Logic(error),
+            erp_sales::Error::OutcomeUnknown(error) => Self::OutcomeUnknown(error),
+            erp_sales::Error::RepositoryError(error) => Self::RepositoryError(error),
+        }
+    }
+}
+
 impl From<erp_import::Error> for Error {
     /// 将导入领域错误映射为服务错误。
     fn from(error: erp_import::Error) -> Self {

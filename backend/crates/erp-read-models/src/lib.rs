@@ -26,3 +26,5 @@ pub use workbench::{
 };
 
 pub mod finance;
+
+pub mod sales_center;

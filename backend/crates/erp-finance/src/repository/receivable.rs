@@ -76,3 +76,5 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
         .unwrap_or("created_at");
     doc! { field: direction }
 }
+
+pub mod money_progress;

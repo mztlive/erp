@@ -2,7 +2,6 @@
 
 use super::{card_funds_task, invoice_task, ReceivableProcess};
 use application_core::AuditActor;
-use database::SalesOrderExt;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderRevisionId};
@@ -14,6 +13,7 @@ use erp_finance::entity::receivable::{
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::zero_amount;
 use erp_read_models::finance::dto::ReceivableAccountView;
+use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use services::{Error, Result};
@@ -138,13 +138,13 @@ impl ReceivableProcess {
 ///
 /// All persisted source variants map explicitly; no fallback changes the review policy.
 fn sales_business_type_fact(
-    value: entities::sales_order::BusinessType,
+    value: erp_sales::entity::sales_order::BusinessType,
 ) -> erp_finance::entity::receivable::SalesBusinessTypeFact {
     match value {
-        entities::sales_order::BusinessType::GoodsService => {
+        erp_sales::entity::sales_order::BusinessType::GoodsService => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
         }
-        entities::sales_order::BusinessType::Voucher => {
+        erp_sales::entity::sales_order::BusinessType::Voucher => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
         }
     }

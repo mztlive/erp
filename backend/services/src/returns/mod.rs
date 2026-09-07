@@ -176,16 +176,6 @@ pub async fn finalize_approved_return_in_transaction(
             )
             .await
         }
-        DocumentType::ReceiptReversal => {
-            receipt_reversal::apply_receipt_reversal_final_post(
-                db,
-                business_object_id,
-                actor_id,
-                actor,
-                session,
-            )
-            .await
-        }
         other => Err(Error::BusinessLogicError(format!(
             "单据类型 {} 不属于退款冲正最终动作",
             other.label()

@@ -1,17 +1,16 @@
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     basis_id_for, stable_line_id, supply_cost, BasisGroup, BasisLine, BasisScope, CreationBasisFacts,
     FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     PurchaseLineType, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
     PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, SupplierSnapshot,
 };
-use entities::sales_order::SalesOrder;
 use erp_audit::AuditExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, WarehouseId,
 };
 use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
+use erp_sales::entity::sales_order::SalesOrder;
 use erp_supplier::SupplierExt;
 use erp_supplier::SupplierPaymentTerm;
 use erp_warehouse::WarehouseExt;
@@ -23,6 +22,7 @@ use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};

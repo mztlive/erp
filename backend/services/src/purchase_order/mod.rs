@@ -66,7 +66,7 @@ pub use self::dto::{
     SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, SupplySourceType, TotalsView,
     VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
-pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
+pub use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
 use crate::errors::{Error, Result};
 use application_core::AuditActor;

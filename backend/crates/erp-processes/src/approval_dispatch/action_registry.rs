@@ -102,9 +102,7 @@ async fn dispatch_action(
             )
             .await
         }
-        ApprovalDomainAction::CustomerRefundPost
-        | ApprovalDomainAction::SupplierRefundPost
-        | ApprovalDomainAction::ReceiptReversalPost => {
+        ApprovalDomainAction::CustomerRefundPost | ApprovalDomainAction::SupplierRefundPost => {
             let session = require_transaction(executor)?;
             services::returns::finalize_approved_return_in_transaction(
                 &registry.db,
@@ -115,6 +113,12 @@ async fn dispatch_action(
             )
             .await
         }
+        ApprovalDomainAction::ReceiptReversalPost => {
+            let session = require_transaction(executor)?;
+            crate::reverse_flow::ReceiptReversalProcess::new(registry.db.clone())
+                .post_receipt_reversal_in_transaction(context.business_object_id(), actor, session)
+                .await
+        }
         ApprovalDomainAction::PaymentReversalPost => {
             let session = require_transaction(executor)?;
             crate::reverse_flow::PaymentReversalProcess::new(registry.db.clone(), registry.rbac.clone())
@@ -123,7 +127,7 @@ async fn dispatch_action(
         }
         ApprovalDomainAction::SalesOrderCancelApprovalSubmission
         | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
-            services::sales_order::cancel_approval_in_transaction(
+            crate::order_to_cash::cancel_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 action,
@@ -133,7 +137,7 @@ async fn dispatch_action(
             .await
         }
         ApprovalDomainAction::SalesChangeOrderCancelApproval => {
-            services::sales_review::cancel_approval_in_transaction(
+            crate::sales_change::cancel_approval_in_transaction(
                 &registry.db,
                 context.business_object_id(),
                 action,

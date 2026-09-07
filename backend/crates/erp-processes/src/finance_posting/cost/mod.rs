@@ -11,7 +11,6 @@
 //! `CostExt` 直接写入）。
 
 use application_core::AuditActor;
-use database::SalesOrderExt;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::CostEntryId;
 use erp_finance::dto::cost::{CostEntryView, CreateCostEntryRequest};
@@ -19,6 +18,7 @@ use erp_finance::service::cost::{
     dedupe_order_ids, missing_order_id, persist_cost_entry_in_transaction, prepare_cost_entry,
     validate_create_cost_entry,
 };
+use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use services::{Error, Result};

@@ -1,6 +1,5 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{PurchaseOrderExt, SalesOrderExt};
 use entities::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
@@ -12,6 +11,7 @@ use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+use {database::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use super::adapter::{
     build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,

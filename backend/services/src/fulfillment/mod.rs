@@ -106,3 +106,11 @@ impl FulfillmentService {
         self
     }
 }
+
+// 窄事务合同供验收组合入口复用；其他履约入口继续使用同一实现。
+pub use customer_acceptance::register_created_customer_acceptance_document;
+pub use customer_acceptance_task::{
+    ensure_customer_acceptance_task, persist_customer_acceptance_task_after_posting,
+    prepare_customer_acceptance_task_command, CustomerAcceptanceTaskReason,
+};
+pub use document_number::next_customer_acceptance_no;
